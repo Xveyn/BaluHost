@@ -16,7 +16,8 @@ Owned paths:
 - `/.github/workflows/` — every workflow definition
 - `/.github/CODEOWNERS` — meta-protect the file itself
 - `/deploy/` — deploy scripts, systemd units, sudoers templates, nginx config
-- `/scripts/bootstrap-runner-ubuntu.sh` — runner provisioning
+- `/scripts/bootstrap-runner-ubuntu.sh` — VM runner provisioning (legacy)
+- `/scripts/bootstrap-ci-runner.sh` — sandbox CI runner provisioning (ci-sandbox label)
 - `/.claude/rules/ci-cd-security.md` — these rules
 - `/.claude/rules/security.md`, `/.claude/rules/security-agent.md`
 
@@ -25,7 +26,8 @@ Owned paths:
 | Workflow | Runner | Triggers |
 |---|---|---|
 | `auto-merge.yml` | `ubuntu-latest` | `workflow_run` (CI Check completed) |
-| `ci-check.yml` | `ubuntu-latest` | `pull_request`, `workflow_call` |
+| `ci-check.yml` `frontend-build` | `ubuntu-latest` | `pull_request`, `workflow_call` |
+| `ci-check.yml` `backend-tests` | **`self-hosted, ci-sandbox`** (rootless Podman) | `pull_request` (gated by `ci-tests` env), `workflow_call` (ungated) |
 | `create-release.yml` | `ubuntu-latest` | tag push (`v*-pre.*`) |
 | `deploy-pi.yml` | `ubuntu-latest` | `workflow_dispatch` |
 | `playwright-e2e.yml` | `ubuntu-latest` | `pull_request`, `push: main` |
@@ -33,7 +35,16 @@ Owned paths:
 | `deploy-production.yml` | **`self-hosted`** | `push: main`, `workflow_dispatch` |
 | `raid-mdadm-selfhosted.yml` | **`self-hosted, linux, mdadm`** | `workflow_dispatch` only |
 
-PR-triggered workflows MUST use GitHub-hosted runners — code from a fork PR could otherwise execute on the production host. Self-hosted runners only see code that has already landed on `main` (via auto-merge through Layer 4) or that an authorized actor explicitly dispatched.
+PR-triggered workflows MUST NOT use the production-privileged `BaluNode` runner. The `ci-sandbox` runner is the **only** self-hosted runner permitted to execute PR-triggered code, and only via the two-layer isolation described below.
+
+Self-hosted production runners (`BaluNode`) only see code that has already landed on `main` (via auto-merge through Layer 4) or that an authorized actor explicitly dispatched.
+
+**Sandbox runner: two-layer isolation.** The `ci-sandbox` runner (provisioned by `scripts/bootstrap-ci-runner.sh`) provides:
+
+- **Layer A — POSIX user isolation.** Runner agent runs as `ci-runner`, an unprivileged Linux user with no sudo entry, no membership in `docker`/`sudo`/`wheel` groups, and no read access to `/opt/baluhost`, `/etc/baluhost`, or any production secrets. Confirmed at provisioning time by self-tests in the bootstrap script.
+- **Layer B — Rootless Podman container.** Untrusted code (`pip install`, `pytest`, anything in the PR) never executes directly on the runner host. Workflows wrap the test invocation in `podman run --rm` against a pinned image (`docker.io/library/python:3.11-slim`), with only the workspace bind-mounted. The container sees no host filesystem outside the bind-mount; container-root is mapped to `ci-runner`'s subuid range. No Docker daemon, no `/var/run/docker.sock`, no `docker` group.
+
+A workflow on `ci-sandbox` that runs `pip install` directly on the runner host (instead of inside `podman run`) breaks Layer B. The Reviewer Checklist below catches this.
 
 **Stale-label gap (2026-05-12)**: `raid-mdadm-selfhosted.yml` requires the `mdadm` label, but the `BaluNode` runner only has `self-hosted, Linux, X64`. The workflow currently cannot acquire a runner and would hang indefinitely if dispatched. Either add the `mdadm` label to `BaluNode` (config in `/opt/actions-runner/.runner` or via the GitHub UI) or change the workflow to drop the label requirement.
 
@@ -64,6 +75,20 @@ Server-side protection (configured in GitHub repo settings, not in the repo):
 
 The deploy job declares `environment: production`, so any run pauses for reviewer approval before executing on the self-hosted runner. Even if Layers 1–3 are bypassed, this gate halts the deploy. Solo-dev workflow: Xveyn approves his own deploys — that's the intended gate (forces a manual click, not a second human).
 
+#### `ci-tests` Environment
+
+Gates PR-triggered backend test runs on `ci-sandbox`. Configured in GitHub repo settings.
+
+| Setting | Required value | Verified state |
+|---|---|---|
+| Required reviewers | `Xveyn` | check `gh api repos/Xveyn/BaluHost/environments/ci-tests` |
+| `prevent_self_review` | `false` (solo dev) | check above |
+| Wait timer | 0 | check above |
+| Deployment branches and tags | All branches | check above |
+| `can_admins_bypass` | `false` | check above |
+
+The `backend-tests` job declares `environment: ci-tests` conditionally on `github.event_name == 'pull_request'`. PR runs pause for Xveyn approval; `workflow_call` runs (from `deploy-production.yml` after auto-merge) execute immediately because the code is already trusted at that point.
+
 ---
 
 ## Repo Settings to Verify
@@ -74,7 +99,8 @@ These live as GitHub server-state and cannot be read from the repo. Verify perio
 |---|---|---|
 | Branch protection on `main` | `gh api repos/Xveyn/BaluHost/branches/main/protection` | Required status checks: `backend-tests`, `frontend-build` (jobs from `ci-check.yml`); `allow_force_pushes: false`; `allow_deletions: false`; `enforce_admins: false` (admin bypass — see Known Gaps) |
 | Production environment | `gh api repos/Xveyn/BaluHost/environments/production` | `protection_rules` includes `required_reviewers` (Xveyn), `deployment_branch_policy.protected_branches: true`, `can_admins_bypass: false` |
-| Self-hosted runner | `gh api repos/Xveyn/BaluHost/actions/runners` | Runner `BaluNode` online with labels `self-hosted, Linux, X64` |
+| `ci-tests` environment | `gh api repos/Xveyn/BaluHost/environments/ci-tests` | `protection_rules` includes `required_reviewers` (Xveyn), `can_admins_bypass: false` |
+| Self-hosted runners | `gh api repos/Xveyn/BaluHost/actions/runners` | `BaluNode` online (`self-hosted, Linux, X64`) and `BaluNode-ci-sandbox` online (`self-hosted, Linux, X64, ci-sandbox`) |
 | Default workflow permissions | `gh api repos/Xveyn/BaluHost/actions/permissions/workflow` | `default_workflow_permissions: read`, `can_approve_pull_request_reviews: false` |
 | `DEPLOY_PAT` secret | repo Settings → Secrets → Actions | Present, owned by Xveyn, has `repo` + `workflow` scopes only |
 
@@ -85,6 +111,8 @@ These live as GitHub server-state and cannot be read from the repo. Verify perio
 When reviewing changes that touch CI/CD, deploy scripts, or these rules:
 
 - [ ] **Runner change**: Is anything new switching to `runs-on: self-hosted`? If yes, does it trigger only on `push: main` or `workflow_dispatch`? PRs MUST never run on self-hosted.
+- [ ] **Sandbox host-direct execution**: Does a workflow on `ci-sandbox` run `pip install`, `npm install`, or any untrusted code directly on the runner host (not inside `podman run`)? If yes — block. That breaks Layer B isolation.
+- [ ] **PR gate**: Does a workflow on `ci-sandbox` triggered by `pull_request` have `environment: ci-tests` (or equivalent approval gate)? If yes — proceed. If no — block.
 - [ ] **Trigger change**: Does a self-hosted workflow gain a `pull_request` or `pull_request_target` trigger? If yes — block. That removes Layer 2.
 - [ ] **Actor gate**: Is `github.actor == 'Xveyn'` still on the deploy job in `deploy-production.yml`? If a change weakens or removes it, require explicit justification.
 - [ ] **Environment**: Does the deploy job still declare `environment: production`? If removed, Layer 4 is gone.
@@ -99,9 +127,13 @@ When reviewing changes that touch CI/CD, deploy scripts, or these rules:
 ## Known Gaps & Accepted Risks
 
 1. **`main` does not require PR approvals** — Required to keep `auto-merge.yml` functional. The `production` environment reviewer (Layer 4) is the compensating control.
-2. **Self-hosted runner is shared with the production host** — `runs-on: self-hosted` has full access to `/opt/baluhost`, `.env.production`, and `sudo` rules in `/etc/sudoers.d/baluhost-deploy`. There is no sandboxing. This is acceptable only because Layers 1–4 ensure no untrusted code ever reaches this runner.
+2. **Two self-hosted runners with different trust levels on one host**:
+    - `BaluNode` (`self-hosted, Linux, X64`) — runs production deploys. Full access to `/opt/baluhost`, `.env.production`, sudo entries. Never sees PR code (Layer 2 prohibition + workflows pin to label `ci-sandbox` for PR work).
+    - `BaluNode-ci-sandbox` (`self-hosted, Linux, X64, ci-sandbox`) — runs `backend-tests` for PRs. Runs as `ci-runner` (no sudo, no production read), wraps test execution in rootless Podman. Even if a PR is maliciously approved at the `ci-tests` gate, blast radius is limited to the container workdir and outbound network (see gap #11).
+    Both runners share the host kernel. A kernel-namespace escape from the Podman container would land as `ci-runner` on the host — still without sudo or production access. The bootstrap script's self-tests must pass for these guarantees to hold.
 3. **`DEPLOY_PAT` is a personal access token, not a fine-grained app token** — Rotation is manual. Track in [[project_baluhost_secrets_todo]].
 4. **CODEOWNERS is advisory on `main`** — See the deliberate gap above.
 5. **In-repo CODEOWNERS for paths outside the repo (e.g., GitHub environment settings) is impossible** — Layer 4 protections must be re-verified manually after any account/plan change (see Repo Settings table).
 6. **`enforce_admins: false` on main branch protection** — Xveyn (owner/admin) can bypass branch protection (force-push, skip status checks). Intentional for solo-dev emergency hotfix capability; the production environment reviewer (Layer 4) still gates the actual deploy.
 7. **`raid-mdadm-selfhosted.yml` runner label mismatch** — Workflow requires `mdadm` label, `BaluNode` runner only has `self-hosted, Linux, X64`. Not a security risk (workflow simply cannot acquire a runner); flagged for cleanup if/when the workflow is needed.
+11. **`ci-runner` and its containers have unrestricted egress** — A maliciously approved PR can exfiltrate the workdir contents and make outbound calls to arbitrary hosts. Mitigations: the `ci-tests` environment gate (manual approval), the limited blast radius (workdir contains only PR code), no production secrets reachable. Future tightening: egress firewall allowing only `pypi.org`, `files.pythonhosted.org`, `api.github.com`, `objects.githubusercontent.com`, `registry.docker.io`.
