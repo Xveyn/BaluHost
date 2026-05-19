@@ -19,6 +19,7 @@
 # Deploy scripts, systemd units, sudoers templates, runner bootstrap
 /deploy/             @Xveyn
 /scripts/bootstrap-runner-ubuntu.sh  @Xveyn
+/scripts/bootstrap-ci-runner.sh      @Xveyn
 
 # Security & CI/CD rules — changes here weaken or strengthen the trust model
 /.claude/rules/ci-cd-security.md  @Xveyn

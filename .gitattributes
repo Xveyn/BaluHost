@@ -4,3 +4,6 @@
 .github/ export-ignore
 .claude/ export-ignore
 *.log export-ignore
+
+# Shell scripts must use LF line endings (CRLF breaks the shebang on Linux)
+*.sh text eol=lf
