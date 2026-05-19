@@ -335,3 +335,62 @@ class GnomeAdapter:
         seconds = value.timeout_minutes * 60
         self._gsettings_set(_GNOME_KEY_TIMEOUT, str(seconds))
         self._gsettings_set(_GNOME_KEY_TYPE, gnome_type)
+
+
+# ---------------------------------------------------------------------------
+# Active-PM detection
+# ---------------------------------------------------------------------------
+import sys  # noqa: E402
+import threading  # noqa: E402
+from time import monotonic  # noqa: E402
+
+_SYSTEMD_DIR = Path("/etc/systemd")
+_DBUS_PROBE_TIMEOUT = 2.0
+_DETECT_CACHE_TTL = 30.0
+
+_detect_lock = threading.Lock()
+_detect_cache: tuple[Optional[OsAutoSuspendBackend], float] | None = None
+
+
+def _detector_cache_clear() -> None:
+    """Test helper."""
+    global _detect_cache
+    with _detect_lock:
+        _detect_cache = None
+
+
+def _probe_dbus_service(service: str) -> bool:
+    """True if `service` is reachable on the session bus."""
+    try:
+        proc = subprocess.run(
+            ["qdbus6", service],
+            capture_output=True, text=True,
+            timeout=_DBUS_PROBE_TIMEOUT, check=False,
+        )
+        return proc.returncode == 0
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return False
+    except OSError:
+        return False
+
+
+def detect_active_backend() -> Optional[OsAutoSuspendBackend]:
+    """Return an instance of the active backend, cached 30s."""
+    global _detect_cache
+    if sys.platform != "linux":
+        return None
+    with _detect_lock:
+        if _detect_cache is not None:
+            backend, stored_at = _detect_cache
+            if monotonic() - stored_at < _DETECT_CACHE_TTL:
+                return backend
+
+        backend: Optional[OsAutoSuspendBackend] = None
+        if _probe_dbus_service("org.kde.Solid.PowerManagement"):
+            backend = KdeAdapter()
+        elif _probe_dbus_service("org.gnome.SettingsDaemon.Power"):
+            backend = GnomeAdapter()
+        elif _SYSTEMD_DIR.is_dir():
+            backend = LogindAdapter()
+        _detect_cache = (backend, monotonic())
+        return backend
