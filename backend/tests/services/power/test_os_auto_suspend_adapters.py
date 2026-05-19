@@ -160,3 +160,48 @@ class TestLogindAdapterWrite:
             oas.LogindAdapter().write(
                 oas.AutoSuspendValue(enabled=True, timeout_minutes=15, action="suspend")
             )
+
+
+class TestKdeAdapterRead:
+    def _make_adapter(self, monkeypatch, tmp_path, rc_text=None):
+        rc = tmp_path / "powerdevilrc"
+        if rc_text is not None:
+            rc.write_text(rc_text)
+        monkeypatch.setattr(oas, "_KDE_POWERDEVIL_RC", rc)
+        return oas.KdeAdapter()
+
+    def test_read_file_missing_returns_defaults(self, monkeypatch, tmp_path):
+        a = self._make_adapter(monkeypatch, tmp_path, rc_text=None)
+        v = a.read()
+        assert v.enabled is False
+        assert v.action == "suspend"
+        assert v.timeout_minutes == 15
+
+    def test_read_basic_suspend_15min(self, monkeypatch, tmp_path):
+        rc = "[AC][SuspendSession]\nidleTime=900000\nsuspendType=1\n"
+        a = self._make_adapter(monkeypatch, tmp_path, rc)
+        v = a.read()
+        assert v.enabled is True
+        assert v.action == "suspend"
+        assert v.timeout_minutes == 15
+
+    def test_read_hibernate(self, monkeypatch, tmp_path):
+        rc = "[AC][SuspendSession]\nidleTime=1800000\nsuspendType=2\n"
+        a = self._make_adapter(monkeypatch, tmp_path, rc)
+        v = a.read()
+        assert v.action == "hibernate"
+        assert v.timeout_minutes == 30
+
+    def test_read_section_missing_means_disabled(self, monkeypatch, tmp_path):
+        rc = "[Migration]\nMigratedProfilesToPlasma6=powerdevilrc\n"
+        a = self._make_adapter(monkeypatch, tmp_path, rc)
+        v = a.read()
+        assert v.enabled is False
+
+    def test_read_unknown_suspend_type_maps_to_ignore(self, monkeypatch, tmp_path, caplog):
+        rc = "[AC][SuspendSession]\nidleTime=900000\nsuspendType=32\n"
+        a = self._make_adapter(monkeypatch, tmp_path, rc)
+        with caplog.at_level("WARNING"):
+            v = a.read()
+        assert v.action == "ignore"
+        assert any("KDE suspendType" in r.message for r in caplog.records)

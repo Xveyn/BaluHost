@@ -15,7 +15,7 @@ import logging
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, Protocol
+from typing import Literal, Optional, Protocol
 
 logger = logging.getLogger(__name__)
 
@@ -141,3 +141,79 @@ class LogindAdapter:
             ) from exc
         except subprocess.TimeoutExpired as exc:
             raise RuntimeError("logind helper timeout") from exc
+
+
+# ---------------------------------------------------------------------------
+# KDE constants
+# ---------------------------------------------------------------------------
+_KDE_POWERDEVIL_RC = Path.home() / ".config" / "powerdevilrc"
+_KDE_TARGET_SECTION = "[AC][SuspendSession]"
+_KDE_SUSPEND_TYPE_MAP = {1: "suspend", 2: "hibernate"}
+
+
+def _parse_kde_groups(text: str) -> dict[str, dict[str, str]]:
+    """Parse KDE-style INI: section headers can be '[A][B]'. Returns {section: {k: v}}."""
+    out: dict[str, dict[str, str]] = {}
+    current: Optional[str] = None
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or line.startswith(";"):
+            continue
+        if line.startswith("[") and line.endswith("]"):
+            current = line
+            out.setdefault(current, {})
+            continue
+        if current is None or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        out[current][key.strip()] = value.strip()
+    return out
+
+
+# ---------------------------------------------------------------------------
+# KdeAdapter
+# ---------------------------------------------------------------------------
+
+class KdeAdapter:
+    name = "kde"
+    label = "KDE PowerDevil"
+
+    def is_available(self) -> bool:
+        # Detection lives in ActivePmDetector; here just say "yes if rc OR D-Bus present"
+        # but is_available is the cheap probe. Real detection is in Task 8.
+        return True  # overridden by detector — keep cheap
+
+    def read(self) -> AutoSuspendValue:
+        if not _KDE_POWERDEVIL_RC.is_file():
+            return AutoSuspendValue(enabled=False, timeout_minutes=15, action="suspend")
+        try:
+            text = _KDE_POWERDEVIL_RC.read_text(encoding="utf-8")
+        except OSError as exc:
+            logger.warning("Cannot read %s: %s", _KDE_POWERDEVIL_RC, exc)
+            return AutoSuspendValue(enabled=False, timeout_minutes=15, action="suspend")
+        groups = _parse_kde_groups(text)
+        section = groups.get(_KDE_TARGET_SECTION)
+        if section is None:
+            return AutoSuspendValue(enabled=False, timeout_minutes=15, action="suspend")
+        try:
+            idle_ms = int(section.get("idleTime", "0"))
+        except ValueError:
+            idle_ms = 0
+        try:
+            stype = int(section.get("suspendType", "0"))
+        except ValueError:
+            stype = 0
+        action = _KDE_SUSPEND_TYPE_MAP.get(stype)
+        if action is None:
+            logger.warning("KDE suspendType=%d unknown — treating as ignore", stype)
+            action = "ignore"
+        timeout_minutes = max(0, idle_ms // 60000)
+        enabled = action != "ignore" and timeout_minutes > 0
+        return AutoSuspendValue(
+            enabled=enabled,
+            timeout_minutes=timeout_minutes if timeout_minutes > 0 else 15,
+            action=action,  # type: ignore[arg-type]
+        )
+
+    def write(self, value: AutoSuspendValue) -> None:
+        raise NotImplementedError  # Task 6
