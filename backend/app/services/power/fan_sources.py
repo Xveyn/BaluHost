@@ -104,3 +104,108 @@ class TempSourceRegistry:
         if ":" in sensor_id:
             return sensor_id
         return f"hwmon:{sensor_id}"
+
+
+class GpuTempSource:
+    """One temperature channel of the dedicated GPU (edge/junction/mem)."""
+
+    kind: SourceKind = "gpu"
+
+    def __init__(
+        self,
+        channel: str,                                  # "edge" | "junction" | "mem"
+        read_fn: Callable[[], Awaitable[Optional[float]]],
+        gpu_vendor: str = "amd",
+    ) -> None:
+        self.id = f"gpu:{channel}"
+        self.channel = channel
+        self.device_name = f"{gpu_vendor}gpu"
+        self.backend_label = channel
+        self.is_cpu_sensor = False
+        self._read = read_fn
+
+    async def current_temp(self) -> Optional[float]:
+        return await self._read()
+
+
+class DiskTempSource:
+    """SMART-reported disk temperature for one block device."""
+
+    kind: SourceKind = "disk"
+
+    def __init__(
+        self,
+        device: str,                                   # "sda", "nvme0n1"
+        read_fn: Callable[[], Awaitable[Optional[float]]],
+    ) -> None:
+        self.id = f"disk:{device}"
+        self.device = device
+        self.device_name = device
+        self.backend_label = None
+        self.is_cpu_sensor = False
+        self._read = read_fn
+
+    async def current_temp(self) -> Optional[float]:
+        return await self._read()
+
+
+class MixTempSource:
+    """Composite source combining N other sources via max/min/avg."""
+
+    kind: SourceKind = "mix"
+    _MAX_DEPTH = 5
+
+    def __init__(
+        self,
+        composite_id: str,                             # "mix:<uuid>"
+        name: str,
+        function: str,                                 # "max" | "min" | "avg"
+        source_ids: List[str],
+        registry: "TempSourceRegistry",
+    ) -> None:
+        if not composite_id.startswith("mix:"):
+            composite_id = f"mix:{composite_id}"
+        self.id = composite_id
+        self.composite_id = composite_id
+        self.name = name
+        self.function = function
+        self.source_ids = source_ids
+        self._registry = registry
+        self.device_name = "composite"
+        self.backend_label = name
+        self.is_cpu_sensor = False
+
+    async def current_temp(self, _depth: int = 0, _path: Optional[set] = None) -> Optional[float]:
+        if _depth >= self._MAX_DEPTH:
+            logger.warning("MixTempSource %s exceeded max depth", self.id)
+            return None
+        path = _path if _path is not None else set()
+        if self.id in path:
+            logger.warning("MixTempSource cycle detected at %s", self.id)
+            return None
+        path = path | {self.id}
+
+        values: List[float] = []
+        for sid in self.source_ids:
+            sub = self._registry._sources.get(self._registry._normalize_id(sid))
+            if isinstance(sub, MixTempSource):
+                v = await sub.current_temp(_depth + 1, path)
+            elif sub is not None:
+                try:
+                    v = await sub.current_temp()
+                except Exception:
+                    v = None
+            else:
+                v = None
+            if v is not None:
+                values.append(v)
+
+        if not values:
+            return None
+        if self.function == "max":
+            return max(values)
+        if self.function == "min":
+            return min(values)
+        if self.function == "avg":
+            return sum(values) / len(values)
+        return None
