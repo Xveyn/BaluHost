@@ -2,7 +2,7 @@
 Fan control API endpoints.
 """
 import logging
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy import select, func
@@ -685,6 +685,18 @@ async def update_fan_config(
             max_pwm_percent=body.max_pwm_percent,
             emergency_temp_celsius=body.emergency_temp_celsius,
             temp_sensor_id=body.temp_sensor_id,
+            curve_type=body.curve_type,
+            flat_pwm_percent=body.flat_pwm_percent,
+            target_temp_celsius=body.target_temp_celsius,
+            target_pwm_percent=body.target_pwm_percent,
+            mix_curve_a_id=body.mix_curve_a_id,
+            mix_curve_b_id=body.mix_curve_b_id,
+            mix_function=body.mix_function,
+            sync_fan_id=body.sync_fan_id,
+            start_pwm_percent=body.start_pwm_percent,
+            stop_below_temp_celsius=body.stop_below_temp_celsius,
+            response_time_seconds=body.response_time_seconds,
+            pwm_steps=body.pwm_steps,
         )
 
         if result is None:
@@ -1068,3 +1080,62 @@ async def get_active_schedule(
     except Exception as e:
         logger.error(f"Failed to get active schedule: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to get active schedule: {str(e)}")
+
+
+# --- GPU Manual-Mode Endpoint ---
+
+from pydantic import BaseModel as _PydanticBase
+from app.services.power.fan_gpu_manual import AmdManualState
+
+
+class GpuManualModeRequest(_PydanticBase):
+    enable: bool
+
+
+# Stash of state across enable/disable per fan
+_gpu_manual_state: Dict[str, AmdManualState] = {}
+
+
+@router.post("/{fan_id}/gpu-manual-mode")
+@user_limiter.limit(get_limit("admin_operations"))
+async def set_gpu_manual_mode(
+    request: Request, response: Response,
+    fan_id: str,
+    body: GpuManualModeRequest,
+    current_user: User = Depends(get_current_admin),
+    service: FanControlService = Depends(get_fan_service),
+):
+    """
+    Enable or disable AMD GPU manual fan control mode for a specific fan.
+
+    When enabled, sets power_dpm_force_performance_level=manual and pwm_enable=1
+    on the associated amdgpu hwmon device, allowing direct PWM writes.
+    When disabled, restores the previous values.
+
+    Only available for AMD GPU fans. Requires admin role.
+    """
+    from app.services.power.fan_gpu_manual import enable_amd_manual, disable_amd_manual
+
+    # Look up the fan's hwmon dir from the backend cache
+    backend = service._backend
+    if not hasattr(backend, "_fan_cache") or fan_id not in backend._fan_cache:
+        raise HTTPException(status_code=404, detail="Fan not found")
+    info = backend._fan_cache[fan_id]
+    if not info.get("is_gpu_fan") or info.get("gpu_vendor") != "amd":
+        raise HTTPException(status_code=400, detail="Only available on AMD GPU fans")
+
+    hwmon_dir = info["pwm_path"].parent
+
+    try:
+        if body.enable:
+            state = await enable_amd_manual(hwmon_dir=hwmon_dir, drm_root=None)
+            _gpu_manual_state[fan_id] = state
+        else:
+            state = _gpu_manual_state.pop(fan_id, None)
+            if state is None:
+                state = AmdManualState(previous_level="auto", previous_pwm_enable=2)
+            await disable_amd_manual(hwmon_dir=hwmon_dir, drm_root=None, state=state)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"GPU manual mode toggle failed: {exc}")
+
+    return {"success": True, "fan_id": fan_id, "enabled": body.enable}

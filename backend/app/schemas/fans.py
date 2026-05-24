@@ -85,6 +85,21 @@ class FanInfo(BaseModel):
     curve_points: List[FanCurvePoint] = Field(default_factory=list)
     hysteresis_celsius: float = Field(default=3.0, ge=0, le=15, description="Temperature hysteresis to prevent oscillation")
     active_schedule: Optional[FanActiveSchedule] = None
+    is_gpu_fan: bool = False
+    gpu_vendor: Optional[str] = None
+    last_write_error: Optional[str] = None
+    curve_type: str = "graph"
+    flat_pwm_percent: Optional[int] = None
+    target_temp_celsius: Optional[float] = None
+    target_pwm_percent: Optional[int] = None
+    mix_curve_a_id: Optional[int] = None
+    mix_curve_b_id: Optional[int] = None
+    mix_function: Optional[str] = None
+    sync_fan_id: Optional[str] = None
+    start_pwm_percent: Optional[int] = None
+    stop_below_temp_celsius: Optional[float] = None
+    response_time_seconds: float = 0.0
+    pwm_steps: int = 1
 
     class Config:
         json_schema_extra = {
@@ -336,6 +351,25 @@ class UpdateFanConfigRequest(BaseModel):
     max_pwm_percent: Optional[int] = Field(default=None, ge=0, le=100, description="Maximum PWM percentage")
     emergency_temp_celsius: Optional[float] = Field(default=None, ge=0, le=150, description="Emergency temperature threshold")
     temp_sensor_id: Optional[str] = Field(default=None, description="Temperature sensor ID to use for this fan")
+    curve_type: Optional[str] = Field(default=None, pattern=r"^(graph|flat|target|mix|sync)$")
+    flat_pwm_percent: Optional[int] = Field(default=None, ge=0, le=100)
+    target_temp_celsius: Optional[float] = Field(default=None, ge=0, le=150)
+    target_pwm_percent: Optional[int] = Field(default=None, ge=0, le=100)
+    mix_curve_a_id: Optional[int] = Field(default=None)
+    mix_curve_b_id: Optional[int] = Field(default=None)
+    mix_function: Optional[str] = Field(default=None, pattern=r"^(max|sum)$")
+    sync_fan_id: Optional[str] = Field(default=None)
+    start_pwm_percent: Optional[int] = Field(default=None, ge=0, le=100)
+    stop_below_temp_celsius: Optional[float] = Field(default=None, ge=0, le=100)
+    response_time_seconds: Optional[float] = Field(default=None, ge=0, le=60)
+    pwm_steps: Optional[int] = Field(default=None)
+
+    @field_validator("pwm_steps")
+    @classmethod
+    def _validate_pwm_steps(cls, v: Optional[int]) -> Optional[int]:
+        if v is not None and v not in (1, 5, 10, 25):
+            raise ValueError("pwm_steps must be one of 1, 5, 10, 25")
+        return v
 
     class Config:
         json_schema_extra = {

@@ -677,6 +677,21 @@ class FanControlService:
                         "temp_sensor_id": config.temp_sensor_id,
                         "curve_points": curve_points,
                         "hysteresis_celsius": getattr(config, 'hysteresis_celsius', 3.0),
+                        "is_gpu_fan": fan.is_gpu_fan,
+                        "gpu_vendor": fan.gpu_vendor,
+                        "last_write_error": fan.last_write_error,
+                        "curve_type": getattr(config, "curve_type", "graph"),
+                        "flat_pwm_percent": getattr(config, "flat_pwm_percent", None),
+                        "target_temp_celsius": getattr(config, "target_temp_celsius", None),
+                        "target_pwm_percent": getattr(config, "target_pwm_percent", None),
+                        "mix_curve_a_id": getattr(config, "mix_curve_a_id", None),
+                        "mix_curve_b_id": getattr(config, "mix_curve_b_id", None),
+                        "mix_function": getattr(config, "mix_function", None),
+                        "sync_fan_id": getattr(config, "sync_fan_id", None),
+                        "start_pwm_percent": getattr(config, "start_pwm_percent", None),
+                        "stop_below_temp_celsius": getattr(config, "stop_below_temp_celsius", None),
+                        "response_time_seconds": getattr(config, "response_time_seconds", 0.0),
+                        "pwm_steps": getattr(config, "pwm_steps", 1),
                     }
 
                     # Add schedule info for scheduled mode
@@ -710,6 +725,21 @@ class FanControlService:
                         "temp_sensor_id": fan.temp_sensor_id,
                         "curve_points": [],
                         "hysteresis_celsius": 3.0,
+                        "is_gpu_fan": fan.is_gpu_fan,
+                        "gpu_vendor": fan.gpu_vendor,
+                        "last_write_error": fan.last_write_error,
+                        "curve_type": "graph",
+                        "flat_pwm_percent": None,
+                        "target_temp_celsius": None,
+                        "target_pwm_percent": None,
+                        "mix_curve_a_id": None,
+                        "mix_curve_b_id": None,
+                        "mix_function": None,
+                        "sync_fan_id": None,
+                        "start_pwm_percent": None,
+                        "stop_below_temp_celsius": None,
+                        "response_time_seconds": 0.0,
+                        "pwm_steps": 1,
                     })
 
         # Determine permission status
@@ -906,6 +936,18 @@ class FanControlService:
         max_pwm_percent: Optional[int] = None,
         emergency_temp_celsius: Optional[float] = None,
         temp_sensor_id: Optional[str] = None,
+        curve_type: Optional[str] = None,
+        flat_pwm_percent: Optional[int] = None,
+        target_temp_celsius: Optional[float] = None,
+        target_pwm_percent: Optional[int] = None,
+        mix_curve_a_id: Optional[int] = None,
+        mix_curve_b_id: Optional[int] = None,
+        mix_function: Optional[str] = None,
+        sync_fan_id: Optional[str] = None,
+        start_pwm_percent: Optional[int] = None,
+        stop_below_temp_celsius: Optional[float] = None,
+        response_time_seconds: Optional[float] = None,
+        pwm_steps: Optional[int] = None,
     ) -> Optional[Dict]:
         """
         Update fan configuration.
@@ -917,6 +959,18 @@ class FanControlService:
             max_pwm_percent: Maximum PWM percentage
             emergency_temp_celsius: Emergency temperature threshold
             temp_sensor_id: Temperature sensor to use for this fan
+            curve_type: Curve type (graph|flat|target|mix|sync)
+            flat_pwm_percent: Fixed PWM percent for flat curve type
+            target_temp_celsius: Target temperature for target curve type
+            target_pwm_percent: Target PWM percent for target curve type
+            mix_curve_a_id: First profile ID for mix curve type
+            mix_curve_b_id: Second profile ID for mix curve type
+            mix_function: Mix function (max|sum)
+            sync_fan_id: Fan ID to sync with for sync curve type
+            start_pwm_percent: Minimum PWM at fan start
+            stop_below_temp_celsius: Temperature below which fan stops
+            response_time_seconds: PWM response time in seconds (0-60)
+            pwm_steps: PWM step size (1, 5, 10, or 25)
 
         Returns:
             Updated configuration dict or None if fan not found
@@ -948,9 +1002,45 @@ class FanControlService:
             if temp_sensor_id is not None:
                 config.temp_sensor_id = temp_sensor_id
 
+            if curve_type is not None:
+                config.curve_type = curve_type
+
+            if flat_pwm_percent is not None:
+                config.flat_pwm_percent = flat_pwm_percent
+
+            if target_temp_celsius is not None:
+                config.target_temp_celsius = target_temp_celsius
+
+            if target_pwm_percent is not None:
+                config.target_pwm_percent = target_pwm_percent
+
+            if mix_curve_a_id is not None:
+                config.mix_curve_a_id = mix_curve_a_id
+
+            if mix_curve_b_id is not None:
+                config.mix_curve_b_id = mix_curve_b_id
+
+            if mix_function is not None:
+                config.mix_function = mix_function
+
+            if sync_fan_id is not None:
+                config.sync_fan_id = sync_fan_id
+
+            if start_pwm_percent is not None:
+                config.start_pwm_percent = start_pwm_percent
+
+            if stop_below_temp_celsius is not None:
+                config.stop_below_temp_celsius = stop_below_temp_celsius
+
+            if response_time_seconds is not None:
+                config.response_time_seconds = response_time_seconds
+
+            if pwm_steps is not None:
+                config.pwm_steps = pwm_steps
+
             db.commit()
 
-            logger.info(f"Updated config for {fan_id}: hysteresis={config.hysteresis_celsius}°C")
+            logger.info(f"Updated config for {fan_id}: hysteresis={config.hysteresis_celsius}°C, curve_type={config.curve_type}")
 
             return {
                 "fan_id": fan_id,
@@ -959,6 +1049,18 @@ class FanControlService:
                 "max_pwm_percent": config.max_pwm_percent,
                 "emergency_temp_celsius": config.emergency_temp_celsius,
                 "temp_sensor_id": config.temp_sensor_id,
+                "curve_type": config.curve_type,
+                "flat_pwm_percent": config.flat_pwm_percent,
+                "target_temp_celsius": config.target_temp_celsius,
+                "target_pwm_percent": config.target_pwm_percent,
+                "mix_curve_a_id": config.mix_curve_a_id,
+                "mix_curve_b_id": config.mix_curve_b_id,
+                "mix_function": config.mix_function,
+                "sync_fan_id": config.sync_fan_id,
+                "start_pwm_percent": config.start_pwm_percent,
+                "stop_below_temp_celsius": config.stop_below_temp_celsius,
+                "response_time_seconds": config.response_time_seconds,
+                "pwm_steps": config.pwm_steps,
             }
 
 
