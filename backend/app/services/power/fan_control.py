@@ -288,10 +288,16 @@ class FanControlService:
         if not self._backend:
             return
 
-        # hwmon sensors (from backend)
+        # hwmon sensors (from backend). amdgpu/nouveau entries are skipped —
+        # the same physical sensors are exposed via the gpu:* namespace below,
+        # which is the canonical source. Listing both would show every GPU
+        # temperature twice in the SensorsPanel.
+        _GPU_DRIVERS = {"amdgpu", "nouveau"}
         try:
             hwmon_sensors = await self._backend.get_available_temp_sensors()
             for s in hwmon_sensors:
+                if s.device_name in _GPU_DRIVERS:
+                    continue
                 sid = s.sensor_id
                 src = HwmonTempSource(
                     sensor_id=sid,
