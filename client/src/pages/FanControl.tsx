@@ -12,7 +12,7 @@ import { LoadingOverlay } from '../components/ui/Spinner';
 import { setFanMode, setFanPWM, updateFanCurve, switchBackend, FanMode, listProfiles, applyProfileToFan } from '../api/fan-control';
 import type { FanCurvePoint, FanCurveProfile } from '../api/fan-control';
 import { useFanControl } from '../hooks/useFanControl';
-import { FanCard, FanDetails, FanSchedulePanel, ProfileManager } from '../components/fan-control';
+import { FanCard, FanDetails, FanSchedulePanel, ProfileManager, SensorsPanel } from '../components/fan-control';
 
 export default function FanControl() {
   const { t } = useTranslation(['system', 'common']);
@@ -226,6 +226,11 @@ export default function FanControl() {
           </div>
         </div>
       )}
+
+      {/* Temperature Sensors Panel */}
+      <div className="mb-6">
+        <SensorsPanel />
+      </div>
 
       {/* Fan Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">

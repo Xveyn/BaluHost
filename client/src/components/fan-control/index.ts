@@ -6,3 +6,5 @@ export { default as ScheduleTimeline } from './ScheduleTimeline';
 export { default as ScheduleEntryForm } from './ScheduleEntryForm';
 export { default as ProfileManager } from './ProfileManager';
 export { default as ProfileForm } from './ProfileForm';
+export { default as SensorsPanel } from './SensorsPanel';
+export { default as CompositeSensorModal } from './CompositeSensorModal';

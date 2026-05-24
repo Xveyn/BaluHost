@@ -198,12 +198,34 @@ export interface TempSensorInfo {
   sensor_id: string;
   device_name: string;
   label: string | null;
+  custom_label?: string | null;
+  kind: 'hwmon' | 'gpu' | 'disk' | 'mix';
+  gpu_vendor?: string | null;
   is_cpu_sensor: boolean;
   current_temp: number | null;
 }
 
 export interface TempSensorListResponse {
   sensors: TempSensorInfo[];
+  total_count: number;
+}
+
+export interface CompositeSensorInfo {
+  id: string;
+  name: string;
+  function: 'max' | 'min' | 'avg';
+  source_ids: string[];
+  current_temp: number | null;
+}
+
+export interface CompositeSensorCreate {
+  name: string;
+  function: 'max' | 'min' | 'avg';
+  source_ids: string[];
+}
+
+export interface CompositeSensorListResponse {
+  composites: CompositeSensorInfo[];
   total_count: number;
 }
 
@@ -514,4 +536,43 @@ export async function applyProfileToFan(profileId: number, fanId: string): Promi
     { fan_id: fanId }
   );
   return response.data;
+}
+
+/**
+ * Rename a temperature sensor (set custom label)
+ */
+export async function renameSensor(sensorId: string, label: string) {
+  const r = await apiClient.put(`/api/fans/sensors/${encodeURIComponent(sensorId)}/label`, { label });
+  return r.data;
+}
+
+/**
+ * Clear a temperature sensor custom label
+ */
+export async function clearSensorLabel(sensorId: string) {
+  const r = await apiClient.delete(`/api/fans/sensors/${encodeURIComponent(sensorId)}/label`);
+  return r.data;
+}
+
+/**
+ * List all composite sensors
+ */
+export async function listComposites(): Promise<CompositeSensorListResponse> {
+  const r = await apiClient.get<CompositeSensorListResponse>('/api/fans/composite-sensors');
+  return r.data;
+}
+
+/**
+ * Create a new composite sensor
+ */
+export async function createComposite(body: CompositeSensorCreate): Promise<CompositeSensorInfo> {
+  const r = await apiClient.post<CompositeSensorInfo>('/api/fans/composite-sensors', body);
+  return r.data;
+}
+
+/**
+ * Delete a composite sensor
+ */
+export async function deleteComposite(id: string): Promise<void> {
+  await apiClient.delete(`/api/fans/composite-sensors/${encodeURIComponent(id)}`);
 }
