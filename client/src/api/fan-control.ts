@@ -70,6 +70,22 @@ export interface FanInfo {
   curve_points: FanCurvePoint[];
   hysteresis_celsius: number;
   active_schedule?: FanActiveSchedule | null;
+  is_gpu_fan?: boolean;
+  gpu_vendor?: string | null;
+  last_write_error?: string | null;
+  // Curve type and tuning fields (Task 15)
+  curve_type?: 'graph' | 'flat' | 'target' | 'mix' | 'sync';
+  flat_pwm_percent?: number | null;
+  target_temp_celsius?: number | null;
+  target_pwm_percent?: number | null;
+  mix_curve_a_id?: number | null;
+  mix_curve_b_id?: number | null;
+  mix_function?: string | null;
+  sync_fan_id?: string | null;
+  start_pwm_percent?: number | null;
+  stop_below_temp_celsius?: number | null;
+  response_time_seconds?: number;
+  pwm_steps?: number;
 }
 
 export interface FanStatusResponse {
@@ -181,6 +197,15 @@ export interface UpdateFanConfigRequest {
   max_pwm_percent?: number;
   emergency_temp_celsius?: number;
   temp_sensor_id?: string;
+  // Curve type and tuning fields (Task 15)
+  curve_type?: 'graph' | 'flat' | 'target' | 'mix' | 'sync';
+  flat_pwm_percent?: number;
+  target_temp_celsius?: number;
+  target_pwm_percent?: number;
+  mix_curve_a_id?: number | null;
+  mix_curve_b_id?: number | null;
+  mix_function?: 'max' | 'sum';
+  sync_fan_id?: string | null;
 }
 
 export interface UpdateFanConfigResponse {
@@ -192,6 +217,7 @@ export interface UpdateFanConfigResponse {
   emergency_temp_celsius: number;
   temp_sensor_id: string | null;
   message?: string;
+  curve_type?: string;
 }
 
 export interface TempSensorInfo {

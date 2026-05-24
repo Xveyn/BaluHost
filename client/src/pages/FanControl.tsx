@@ -283,6 +283,7 @@ export default function FanControl() {
             onConfigUpdate={refetch}
             profiles={profiles}
             onApplyProfile={handleApplyProfile}
+            allFans={status?.fans ?? []}
           />
         </div>
       )}
