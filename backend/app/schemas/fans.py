@@ -85,6 +85,21 @@ class FanInfo(BaseModel):
     curve_points: List[FanCurvePoint] = Field(default_factory=list)
     hysteresis_celsius: float = Field(default=3.0, ge=0, le=15, description="Temperature hysteresis to prevent oscillation")
     active_schedule: Optional[FanActiveSchedule] = None
+    is_gpu_fan: bool = False
+    gpu_vendor: Optional[str] = None
+    last_write_error: Optional[str] = None
+    curve_type: str = "graph"
+    flat_pwm_percent: Optional[int] = None
+    target_temp_celsius: Optional[float] = None
+    target_pwm_percent: Optional[int] = None
+    mix_curve_a_id: Optional[int] = None
+    mix_curve_b_id: Optional[int] = None
+    mix_function: Optional[str] = None
+    sync_fan_id: Optional[str] = None
+    start_pwm_percent: Optional[int] = None
+    stop_below_temp_celsius: Optional[float] = None
+    response_time_seconds: float = 0.0
+    pwm_steps: int = 1
 
     class Config:
         json_schema_extra = {
@@ -336,6 +351,25 @@ class UpdateFanConfigRequest(BaseModel):
     max_pwm_percent: Optional[int] = Field(default=None, ge=0, le=100, description="Maximum PWM percentage")
     emergency_temp_celsius: Optional[float] = Field(default=None, ge=0, le=150, description="Emergency temperature threshold")
     temp_sensor_id: Optional[str] = Field(default=None, description="Temperature sensor ID to use for this fan")
+    curve_type: Optional[str] = Field(default=None, pattern=r"^(graph|flat|target|mix|sync)$")
+    flat_pwm_percent: Optional[int] = Field(default=None, ge=0, le=100)
+    target_temp_celsius: Optional[float] = Field(default=None, ge=0, le=150)
+    target_pwm_percent: Optional[int] = Field(default=None, ge=0, le=100)
+    mix_curve_a_id: Optional[int] = Field(default=None)
+    mix_curve_b_id: Optional[int] = Field(default=None)
+    mix_function: Optional[str] = Field(default=None, pattern=r"^(max|sum)$")
+    sync_fan_id: Optional[str] = Field(default=None)
+    start_pwm_percent: Optional[int] = Field(default=None, ge=0, le=100)
+    stop_below_temp_celsius: Optional[float] = Field(default=None, ge=0, le=100)
+    response_time_seconds: Optional[float] = Field(default=None, ge=0, le=60)
+    pwm_steps: Optional[int] = Field(default=None)
+
+    @field_validator("pwm_steps")
+    @classmethod
+    def _validate_pwm_steps(cls, v: Optional[int]) -> Optional[int]:
+        if v is not None and v not in (1, 5, 10, 25):
+            raise ValueError("pwm_steps must be one of 1, 5, 10, 25")
+        return v
 
     class Config:
         json_schema_extra = {
@@ -364,6 +398,9 @@ class TempSensorInfo(BaseModel):
     sensor_id: str = Field(..., description="Sensor identifier (e.g., hwmon2_temp1)")
     device_name: str = Field(..., description="Hardware device name (e.g., k10temp)")
     label: Optional[str] = Field(default=None, description="Sensor label (e.g., Tctl)")
+    custom_label: Optional[str] = Field(default=None, description="User-supplied custom label")
+    kind: str = Field(default="hwmon", description="Sensor kind: hwmon | gpu | disk | mix")
+    gpu_vendor: Optional[str] = Field(default=None, description="GPU vendor if kind=='gpu'")
     is_cpu_sensor: bool = Field(..., description="Whether this is a CPU temperature sensor")
     current_temp: Optional[float] = Field(default=None, description="Current temperature in Celsius")
 
@@ -585,3 +622,41 @@ class FanCurveProfileListResponse(BaseModel):
 class ApplyProfileRequest(BaseModel):
     """Request to apply a profile to a fan."""
     fan_id: str = Field(..., description="Fan identifier")
+
+
+# --- Sensor Label Schemas ---
+
+class TempSensorLabelUpdate(BaseModel):
+    """Request to set or update a custom label for a temperature sensor."""
+    label: str = Field(..., min_length=1, max_length=100)
+
+
+# --- Composite Sensor Schemas ---
+
+class CompositeSensorCreate(BaseModel):
+    """Request to create a new composite temperature sensor."""
+    name: str = Field(..., min_length=1, max_length=100)
+    function: str = Field(..., pattern=r"^(max|min|avg)$")
+    source_ids: List[str] = Field(..., min_length=2, max_length=6)
+
+
+class CompositeSensorUpdate(BaseModel):
+    """Request to update an existing composite temperature sensor."""
+    name: Optional[str] = Field(default=None, min_length=1, max_length=100)
+    function: Optional[str] = Field(default=None, pattern=r"^(max|min|avg)$")
+    source_ids: Optional[List[str]] = Field(default=None, min_length=2, max_length=6)
+
+
+class CompositeSensorInfo(BaseModel):
+    """Information about a composite temperature sensor."""
+    id: str
+    name: str
+    function: str
+    source_ids: List[str]
+    current_temp: Optional[float] = None
+
+
+class CompositeSensorListResponse(BaseModel):
+    """Response for listing composite temperature sensors."""
+    composites: List[CompositeSensorInfo]
+    total_count: int

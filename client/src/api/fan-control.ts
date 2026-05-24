@@ -70,6 +70,22 @@ export interface FanInfo {
   curve_points: FanCurvePoint[];
   hysteresis_celsius: number;
   active_schedule?: FanActiveSchedule | null;
+  is_gpu_fan?: boolean;
+  gpu_vendor?: string | null;
+  last_write_error?: string | null;
+  // Curve type and tuning fields (Task 15)
+  curve_type?: 'graph' | 'flat' | 'target' | 'mix' | 'sync';
+  flat_pwm_percent?: number | null;
+  target_temp_celsius?: number | null;
+  target_pwm_percent?: number | null;
+  mix_curve_a_id?: number | null;
+  mix_curve_b_id?: number | null;
+  mix_function?: string | null;
+  sync_fan_id?: string | null;
+  start_pwm_percent?: number | null;
+  stop_below_temp_celsius?: number | null;
+  response_time_seconds?: number;
+  pwm_steps?: number;
 }
 
 export interface FanStatusResponse {
@@ -181,6 +197,20 @@ export interface UpdateFanConfigRequest {
   max_pwm_percent?: number;
   emergency_temp_celsius?: number;
   temp_sensor_id?: string;
+  // Curve type and tuning fields (Task 15)
+  curve_type?: 'graph' | 'flat' | 'target' | 'mix' | 'sync';
+  flat_pwm_percent?: number;
+  target_temp_celsius?: number;
+  target_pwm_percent?: number;
+  mix_curve_a_id?: number | null;
+  mix_curve_b_id?: number | null;
+  mix_function?: 'max' | 'sum';
+  sync_fan_id?: string | null;
+  // Advanced settings (Task 16)
+  start_pwm_percent?: number | null;
+  stop_below_temp_celsius?: number | null;
+  response_time_seconds?: number | null;
+  pwm_steps?: number | null;
 }
 
 export interface UpdateFanConfigResponse {
@@ -192,18 +222,41 @@ export interface UpdateFanConfigResponse {
   emergency_temp_celsius: number;
   temp_sensor_id: string | null;
   message?: string;
+  curve_type?: string;
 }
 
 export interface TempSensorInfo {
   sensor_id: string;
   device_name: string;
   label: string | null;
+  custom_label?: string | null;
+  kind: 'hwmon' | 'gpu' | 'disk' | 'mix';
+  gpu_vendor?: string | null;
   is_cpu_sensor: boolean;
   current_temp: number | null;
 }
 
 export interface TempSensorListResponse {
   sensors: TempSensorInfo[];
+  total_count: number;
+}
+
+export interface CompositeSensorInfo {
+  id: string;
+  name: string;
+  function: 'max' | 'min' | 'avg';
+  source_ids: string[];
+  current_temp: number | null;
+}
+
+export interface CompositeSensorCreate {
+  name: string;
+  function: 'max' | 'min' | 'avg';
+  source_ids: string[];
+}
+
+export interface CompositeSensorListResponse {
+  composites: CompositeSensorInfo[];
   total_count: number;
 }
 
@@ -514,4 +567,50 @@ export async function applyProfileToFan(profileId: number, fanId: string): Promi
     { fan_id: fanId }
   );
   return response.data;
+}
+
+/**
+ * Rename a temperature sensor (set custom label)
+ */
+export async function renameSensor(sensorId: string, label: string) {
+  const r = await apiClient.put(`/api/fans/sensors/${encodeURIComponent(sensorId)}/label`, { label });
+  return r.data;
+}
+
+/**
+ * Clear a temperature sensor custom label
+ */
+export async function clearSensorLabel(sensorId: string) {
+  const r = await apiClient.delete(`/api/fans/sensors/${encodeURIComponent(sensorId)}/label`);
+  return r.data;
+}
+
+/**
+ * List all composite sensors
+ */
+export async function listComposites(): Promise<CompositeSensorListResponse> {
+  const r = await apiClient.get<CompositeSensorListResponse>('/api/fans/composite-sensors');
+  return r.data;
+}
+
+/**
+ * Create a new composite sensor
+ */
+export async function createComposite(body: CompositeSensorCreate): Promise<CompositeSensorInfo> {
+  const r = await apiClient.post<CompositeSensorInfo>('/api/fans/composite-sensors', body);
+  return r.data;
+}
+
+/**
+ * Delete a composite sensor
+ */
+export async function deleteComposite(id: string): Promise<void> {
+  await apiClient.delete(`/api/fans/composite-sensors/${encodeURIComponent(id)}`);
+}
+
+/**
+ * Set GPU manual PWM mode (AMD only)
+ */
+export async function setGpuManualMode(fanId: string, enabled: boolean): Promise<void> {
+  await apiClient.post(`/api/fans/${encodeURIComponent(fanId)}/gpu-manual-mode`, { enabled });
 }

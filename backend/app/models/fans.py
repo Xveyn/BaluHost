@@ -83,6 +83,24 @@ class FanConfig(Base):
     temp_sensor_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True)
     hysteresis_celsius: Mapped[float] = mapped_column(Float, default=3.0, nullable=False)
+    # --- Curve type & params ---
+    curve_type: Mapped[str] = mapped_column(String(20), default="graph", nullable=False)
+    flat_pwm_percent: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    target_temp_celsius: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    target_pwm_percent: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    mix_curve_a_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("fan_curve_profiles.id", ondelete="SET NULL"), nullable=True
+    )
+    mix_curve_b_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("fan_curve_profiles.id", ondelete="SET NULL"), nullable=True
+    )
+    mix_function: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
+    sync_fan_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    # --- Advanced tuning ---
+    start_pwm_percent: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    stop_below_temp_celsius: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    response_time_seconds: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    pwm_steps: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -113,3 +131,42 @@ class FanSample(Base):
 
     def __repr__(self) -> str:
         return f"<FanSample(fan_id='{self.fan_id}', rpm={self.rpm}, pwm={self.pwm_percent}%)>"
+
+
+class TempSensorLabel(Base):
+    """User-supplied custom label for a temperature sensor."""
+    __tablename__ = "temp_sensor_labels"
+
+    sensor_id: Mapped[str] = mapped_column(String(120), primary_key=True)
+    custom_label: Mapped[str] = mapped_column(String(100), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    def __repr__(self) -> str:
+        return f"<TempSensorLabel({self.sensor_id}='{self.custom_label}')>"
+
+
+class CompositeTempSensor(Base):
+    """Composite sensor combining N sources via max/min/avg."""
+    __tablename__ = "composite_temp_sensors"
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
+    function: Mapped[str] = mapped_column(String(10), nullable=False)  # "max" | "min" | "avg"
+    source_ids_json: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    def __repr__(self) -> str:
+        return f"<CompositeTempSensor(id={self.id}, function={self.function})>"

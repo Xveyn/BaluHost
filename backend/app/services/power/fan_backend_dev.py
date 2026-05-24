@@ -23,7 +23,7 @@ class DevFanControlBackend(FanControlBackend):
         self._initialize_simulated_fans()
 
     def _initialize_simulated_fans(self):
-        """Initialize 3 simulated PWM fans."""
+        """Initialize 4 simulated PWM fans (3 CPU + 1 GPU)."""
         self._fans = {
             "dev_cpu_fan": {
                 "name": "CPU Fan (Simulated)",
@@ -34,6 +34,9 @@ class DevFanControlBackend(FanControlBackend):
                 "max_rpm": 3000,
                 "temp_sensor_id": "dev_cpu_temp",
                 "last_update": time.time(),
+                "is_gpu_fan": False,
+                "gpu_vendor": None,
+                "device_driver": "dev",
             },
             "dev_case_fan_1": {
                 "name": "Case Fan 1 (Simulated)",
@@ -44,6 +47,9 @@ class DevFanControlBackend(FanControlBackend):
                 "max_rpm": 2000,
                 "temp_sensor_id": "dev_package_temp",
                 "last_update": time.time(),
+                "is_gpu_fan": False,
+                "gpu_vendor": None,
+                "device_driver": "dev",
             },
             "dev_case_fan_2": {
                 "name": "Case Fan 2 (Simulated)",
@@ -54,6 +60,22 @@ class DevFanControlBackend(FanControlBackend):
                 "max_rpm": 2000,
                 "temp_sensor_id": "dev_ambient_temp",
                 "last_update": time.time(),
+                "is_gpu_fan": False,
+                "gpu_vendor": None,
+                "device_driver": "dev",
+            },
+            "dev_gpu_pwm1": {
+                "name": "AMD GPU Fan (sim)",
+                "pwm_percent": 35,
+                "target_rpm": 1500,
+                "current_rpm": 1500,
+                "min_rpm": 500,
+                "max_rpm": 3000,
+                "temp_sensor_id": "dev_gpu_temp",
+                "last_update": time.time(),
+                "is_gpu_fan": True,
+                "gpu_vendor": "amd",
+                "device_driver": "amdgpu",
             },
         }
 
@@ -62,6 +84,7 @@ class DevFanControlBackend(FanControlBackend):
             "dev_cpu_temp": 45.0,
             "dev_package_temp": 42.0,
             "dev_ambient_temp": 35.0,
+            "dev_gpu_temp": 55.0,
         }
 
     async def is_available(self) -> bool:
@@ -90,6 +113,9 @@ class DevFanControlBackend(FanControlBackend):
                 temp_sensor_id=fan_data["temp_sensor_id"],
                 curve_points=curve_points,
                 is_active=True,
+                is_gpu_fan=fan_data.get("is_gpu_fan", False),
+                gpu_vendor=fan_data.get("gpu_vendor"),
+                device_driver=fan_data.get("device_driver"),
             ))
 
         return fans
@@ -141,6 +167,13 @@ class DevFanControlBackend(FanControlBackend):
                 is_cpu_sensor=False,
                 current_temp=self._temps.get("dev_ambient_temp"),
             ),
+            TempSensorData(
+                sensor_id="dev_gpu_temp",
+                device_name="amdgpu (Simulated)",
+                label="edge",
+                is_cpu_sensor=False,
+                current_temp=self._temps.get("dev_gpu_temp"),
+            ),
         ]
 
     def _update_simulated_state(self):
@@ -152,6 +185,7 @@ class DevFanControlBackend(FanControlBackend):
         self._temps["dev_cpu_temp"] = base_cpu_temp
         self._temps["dev_package_temp"] = base_cpu_temp - 3 + random.uniform(-2, 2)
         self._temps["dev_ambient_temp"] = 35.0 + random.uniform(-1, 2)
+        self._temps["dev_gpu_temp"] = 55.0 + random.uniform(-5, 10)
 
         # Update fan RPM with latency and fluctuation
         for fan_id, fan_data in self._fans.items():

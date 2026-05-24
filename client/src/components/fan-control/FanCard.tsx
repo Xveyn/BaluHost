@@ -1,8 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FanMode } from '../../api/fan-control';
-import type { FanInfo } from '../../api/fan-control';
+import type { FanInfo, TempSensorInfo } from '../../api/fan-control';
 import { formatNumber } from '../../lib/formatters';
+
+function sensorDisplayName(sensorId: string, sensors: TempSensorInfo[]): string {
+  // Accept both namespaced and legacy unprefixed IDs
+  const found = sensors.find((s) => s.sensor_id === sensorId || s.sensor_id === `hwmon:${sensorId}`);
+  if (!found) return sensorId;
+  return found.custom_label || found.label || found.device_name;
+}
 
 interface FanCardProps {
   fan: FanInfo;
@@ -12,6 +19,7 @@ interface FanCardProps {
   onPWMChange: (fanId: string, pwm: number) => void;
   isReadOnly: boolean;
   isLoading: boolean;
+  sensors: TempSensorInfo[];
 }
 
 export default function FanCard({
@@ -21,7 +29,8 @@ export default function FanCard({
   onModeChange,
   onPWMChange,
   isReadOnly,
-  isLoading
+  isLoading,
+  sensors
 }: FanCardProps) {
   const { t } = useTranslation(['system', 'common']);
   const [localPWM, setLocalPWM] = useState(fan.pwm_percent);
@@ -83,7 +92,22 @@ export default function FanCard({
       {/* Fan Name & Mode */}
       <div className="flex items-start justify-between mb-3">
         <div>
-          <h3 className="font-semibold text-white">{fan.name}</h3>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <h3 className="font-semibold text-white">{fan.name}</h3>
+            {fan.is_gpu_fan && (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-xs bg-purple-500/20 text-purple-300 rounded">
+                GPU{fan.gpu_vendor ? ` (${fan.gpu_vendor.toUpperCase()})` : ''}
+              </span>
+            )}
+            {fan.last_write_error && (
+              <span
+                className="inline-flex items-center px-1.5 py-0.5 text-xs bg-yellow-500/20 text-yellow-300 rounded"
+                title={fan.last_write_error}
+              >
+                {t('system:fanControl.card.pwmError', 'PWM Error')}
+              </span>
+            )}
+          </div>
           <p className="text-xs text-slate-400 mt-1">{fan.fan_id}</p>
         </div>
         <span className={`px-2 py-1 rounded-full border text-xs font-medium ${getModeColor(fan.mode)}`}>
@@ -108,12 +132,25 @@ export default function FanCard({
       </div>
 
       {/* Temperature */}
-      {fan.temperature_celsius !== null && (
+      {(fan.temperature_celsius !== null || !fan.temp_sensor_id) && (
         <div className="mb-3">
-          <p className="text-xs text-slate-400">{t('system:fanControl.card.temperature')}</p>
-          <p className="text-lg font-bold text-white">
-            {formatNumber(fan.temperature_celsius, 1)}°C
-          </p>
+          <div className="flex items-baseline justify-between">
+            <p className="text-xs text-slate-400">{t('system:fanControl.card.temperature')}</p>
+            {fan.temp_sensor_id && (
+              <p className="text-[10px] text-slate-500 truncate ml-2" title={fan.temp_sensor_id}>
+                {sensorDisplayName(fan.temp_sensor_id, sensors)}
+              </p>
+            )}
+          </div>
+          {fan.temperature_celsius !== null ? (
+            <p className="text-lg font-bold text-white">
+              {formatNumber(fan.temperature_celsius, 1)}°C
+            </p>
+          ) : (
+            <p className="text-sm text-amber-400">
+              {t('system:fanControl.card.noSensor')}
+            </p>
+          )}
         </div>
       )}
 

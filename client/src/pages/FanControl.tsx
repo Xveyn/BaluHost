@@ -9,10 +9,10 @@ import { Fan, Settings, AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { handleApiError } from '../lib/errorHandling';
 import { LoadingOverlay } from '../components/ui/Spinner';
-import { setFanMode, setFanPWM, updateFanCurve, switchBackend, FanMode, listProfiles, applyProfileToFan } from '../api/fan-control';
-import type { FanCurvePoint, FanCurveProfile } from '../api/fan-control';
+import { setFanMode, setFanPWM, updateFanCurve, switchBackend, FanMode, listProfiles, applyProfileToFan, listTempSensors, listComposites } from '../api/fan-control';
+import type { FanCurvePoint, FanCurveProfile, TempSensorInfo, CompositeSensorInfo } from '../api/fan-control';
 import { useFanControl } from '../hooks/useFanControl';
-import { FanCard, FanDetails, FanSchedulePanel, ProfileManager } from '../components/fan-control';
+import { FanCard, FanDetails, FanSchedulePanel, ProfileManager, SensorsPanel } from '../components/fan-control';
 
 export default function FanControl() {
   const { t } = useTranslation(['system', 'common']);
@@ -23,6 +23,8 @@ export default function FanControl() {
   const [selectedFan, setSelectedFan] = useState<string | null>(null);
   const [operationLoading, setOperationLoading] = useState<Record<string, boolean>>({});
   const [profiles, setProfiles] = useState<FanCurveProfile[]>([]);
+  const [sensors, setSensors] = useState<TempSensorInfo[]>([]);
+  const [composites, setComposites] = useState<CompositeSensorInfo[]>([]);
 
   const fetchProfiles = useCallback(async () => {
     try {
@@ -33,9 +35,23 @@ export default function FanControl() {
     }
   }, []);
 
+  const fetchSensors = useCallback(async () => {
+    try {
+      const [s, c] = await Promise.all([listTempSensors(), listComposites()]);
+      setSensors(s.sensors);
+      setComposites(c.composites);
+    } catch {
+      // Sensors are optional — fail silently
+    }
+  }, []);
+
   useEffect(() => {
     fetchProfiles();
   }, [fetchProfiles]);
+
+  useEffect(() => {
+    fetchSensors();
+  }, [fetchSensors]);
 
   // IMPORTANT: All hooks must be called before any conditional returns
   // Memoize selected fan data
@@ -227,6 +243,11 @@ export default function FanControl() {
         </div>
       )}
 
+      {/* Temperature Sensors Panel */}
+      <div className="mb-6">
+        <SensorsPanel sensors={sensors} composites={composites} onReload={fetchSensors} />
+      </div>
+
       {/* Fan Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
         {status.fans.map((fan) => (
@@ -239,6 +260,7 @@ export default function FanControl() {
             onPWMChange={handlePWMChange}
             isReadOnly={isReadOnly}
             isLoading={operationLoading[`mode-${fan.fan_id}`] || false}
+            sensors={sensors}
           />
         ))}
       </div>
@@ -278,6 +300,7 @@ export default function FanControl() {
             onConfigUpdate={refetch}
             profiles={profiles}
             onApplyProfile={handleApplyProfile}
+            allFans={status?.fans ?? []}
           />
         </div>
       )}

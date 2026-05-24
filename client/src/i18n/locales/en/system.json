@@ -797,7 +797,9 @@
       "auto": "Auto",
       "manual": "Manual",
       "scheduled": "Schedule",
-      "manualPwm": "Manual PWM"
+      "manualPwm": "Manual PWM",
+      "noSensor": "No sensor assigned",
+      "pwmError": "PWM error"
     },
     "details": {
       "temperatureCol": "Temperature (°C)",
@@ -891,6 +893,52 @@
         "updateFailed": "Failed to update profile",
         "deleteFailed": "Failed to delete profile",
         "applyFailed": "Failed to apply profile"
+      }
+    },
+    "sensors": {
+      "title": "Sensors",
+      "addComposite": "Mix sensor",
+      "compositeTitle": "Mix sensors",
+      "createComposite": "Create mix sensor",
+      "renamed": "Sensor renamed",
+      "compositeCreated": "Mix sensor created",
+      "loadFailed": "Failed to load sensors",
+      "function": "Function",
+      "functions": { "max": "Maximum", "min": "Minimum", "avg": "Average" },
+      "sources": "sources",
+      "selected": "selected"
+    },
+    "curveTypes": {
+      "graph": "Graph",
+      "flat": "Flat",
+      "flatLabel": "Constant PWM",
+      "target": "Target",
+      "targetDescription": "Hold PWM at the target temperature. Below it, ramp linearly down to 0.",
+      "targetTemp": "Target temperature",
+      "targetPwm": "Target PWM",
+      "mix": "Mix",
+      "mixDescription": "Combine two profiles by a function.",
+      "mixFn": { "max": "Maximum", "sum": "Sum (capped)" },
+      "selectCurve": "Select profile…",
+      "sync": "Sync",
+      "syncDescription": "Copy PWM from another fan.",
+      "selectFan": "Select fan…"
+    },
+    "advanced": {
+      "title": "Advanced settings",
+      "startPwm": "Start PWM (spin-up)",
+      "stopBelowTemp": "Stop below",
+      "responseTime": "Response time",
+      "pwmSteps": "PWM steps"
+    },
+    "gpu": {
+      "manualMode": {
+        "title": "Control GPU fan manually",
+        "warning": "Sets power_dpm_force_performance_level to 'manual' and pwm_enable to 1. May affect GPU performance.",
+        "enable": "Enable",
+        "disable": "Disable",
+        "enabled": "Manual mode enabled",
+        "disabled": "Manual mode disabled"
       }
     }
   },

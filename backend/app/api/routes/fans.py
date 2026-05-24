@@ -2,9 +2,10 @@
 Fan control API endpoints.
 """
 import logging
-from typing import Optional
+from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_current_admin, get_db
@@ -47,6 +48,11 @@ from app.schemas.fans import (
     ApplyProfileRequest,
     TempSensorInfo,
     TempSensorListResponse,
+    TempSensorLabelUpdate,
+    CompositeSensorCreate,
+    CompositeSensorUpdate,
+    CompositeSensorInfo,
+    CompositeSensorListResponse,
 )
 from app.services.power.fan_control import get_fan_control_service, FanControlService
 
@@ -364,25 +370,222 @@ async def list_temp_sensors(
     """
     List all available temperature sensors.
 
-    Returns sensors from all hwmon directories with CPU sensor identification.
+    Returns all sensors from the registry (hwmon, GPU, disk, composite) with
+    custom labels and CPU sensor identification.
     Requires admin role.
     """
     try:
-        sensors = await service.get_available_temp_sensors()
-        items = [
-            TempSensorInfo(
-                sensor_id=s.sensor_id,
+        sources = service._registry.all_sources()
+        items: List[TempSensorInfo] = []
+        for s in sources:
+            current = await service._registry.get_temp(s.id)
+            items.append(TempSensorInfo(
+                sensor_id=s.id,
                 device_name=s.device_name,
-                label=s.label,
+                label=s.backend_label,
+                custom_label=service._registry._labels.get(s.id),
+                kind=s.kind,
+                gpu_vendor=getattr(s, "gpu_vendor", None) if s.kind == "gpu" else None,
                 is_cpu_sensor=s.is_cpu_sensor,
-                current_temp=s.current_temp,
-            )
-            for s in sensors
-        ]
+                current_temp=current,
+            ))
         return TempSensorListResponse(sensors=items, total_count=len(items))
     except Exception as e:
         logger.error(f"Failed to list temp sensors: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to list temp sensors: {str(e)}")
+
+
+MAX_COMPOSITES_PER_SYSTEM = 5
+
+
+@router.put("/sensors/{sensor_id}/label")
+@user_limiter.limit(get_limit("admin_operations"))
+async def set_sensor_label(
+    request: Request, response: Response,
+    sensor_id: str,
+    body: TempSensorLabelUpdate,
+    current_user: User = Depends(get_current_admin),
+    service: FanControlService = Depends(get_fan_service),
+):
+    """
+    Set or update the custom label for a temperature sensor.
+
+    Persists the label to the database and updates the in-memory registry.
+    Requires admin role.
+    """
+    from app.models.fans import TempSensorLabel
+    with service.db_session_factory() as db:
+        existing = db.execute(select(TempSensorLabel).where(TempSensorLabel.sensor_id == sensor_id)).scalar_one_or_none()
+        if existing:
+            existing.custom_label = body.label
+        else:
+            db.add(TempSensorLabel(sensor_id=sensor_id, custom_label=body.label))
+        db.commit()
+    service._registry.set_label(sensor_id, body.label)
+    return {"success": True, "sensor_id": sensor_id, "custom_label": body.label}
+
+
+@router.delete("/sensors/{sensor_id}/label")
+@user_limiter.limit(get_limit("admin_operations"))
+async def clear_sensor_label(
+    request: Request, response: Response,
+    sensor_id: str,
+    current_user: User = Depends(get_current_admin),
+    service: FanControlService = Depends(get_fan_service),
+):
+    """
+    Remove the custom label for a temperature sensor.
+
+    Requires admin role.
+    """
+    from app.models.fans import TempSensorLabel
+    with service.db_session_factory() as db:
+        existing = db.execute(select(TempSensorLabel).where(TempSensorLabel.sensor_id == sensor_id)).scalar_one_or_none()
+        if existing:
+            db.delete(existing)
+            db.commit()
+    service._registry.clear_label(sensor_id)
+    return {"success": True, "sensor_id": sensor_id}
+
+
+@router.get("/composite-sensors", response_model=CompositeSensorListResponse)
+@user_limiter.limit(get_limit("admin_operations"))
+async def list_composite_sensors(
+    request: Request, response: Response,
+    current_user: User = Depends(get_current_user),
+    service: FanControlService = Depends(get_fan_service),
+):
+    """
+    List all composite temperature sensors.
+
+    Returns the configured composite sensors and their current temperatures.
+    Requires authentication.
+    """
+    from app.models.fans import CompositeTempSensor
+    import json as _json
+    items: List[CompositeSensorInfo] = []
+    with service.db_session_factory() as db:
+        rows = db.execute(select(CompositeTempSensor)).scalars().all()
+        for row in rows:
+            try:
+                sids = _json.loads(row.source_ids_json)
+            except Exception:
+                sids = []
+            current = await service._registry.get_temp(row.id)
+            items.append(CompositeSensorInfo(
+                id=row.id, name=row.name, function=row.function,
+                source_ids=sids, current_temp=current,
+            ))
+    return CompositeSensorListResponse(composites=items, total_count=len(items))
+
+
+@router.post("/composite-sensors", response_model=CompositeSensorInfo, status_code=201)
+@user_limiter.limit(get_limit("admin_operations"))
+async def create_composite_sensor(
+    request: Request, response: Response,
+    body: CompositeSensorCreate,
+    current_user: User = Depends(get_current_admin),
+    service: FanControlService = Depends(get_fan_service),
+):
+    """
+    Create a new composite temperature sensor.
+
+    Combines N source sensors via max/min/avg function.
+    Maximum 5 composite sensors per system.
+    Requires admin role.
+    """
+    from app.models.fans import CompositeTempSensor
+    import json as _json
+    import uuid as _uuid
+
+    with service.db_session_factory() as db:
+        count = db.execute(select(func.count(CompositeTempSensor.id))).scalar() or 0
+        if count >= MAX_COMPOSITES_PER_SYSTEM:
+            raise HTTPException(status_code=422, detail=f"Maximum {MAX_COMPOSITES_PER_SYSTEM} composite sensors")
+
+        new_id = f"mix:{_uuid.uuid4().hex[:12]}"
+        if new_id in body.source_ids:
+            raise HTTPException(status_code=422, detail="Composite cannot reference itself")
+
+        row = CompositeTempSensor(
+            id=new_id, name=body.name, function=body.function,
+            source_ids_json=_json.dumps(body.source_ids),
+        )
+        db.add(row)
+        db.commit()
+
+    # Rebuild registry to include the new composite
+    await service._rebuild_registry()
+
+    return CompositeSensorInfo(
+        id=new_id, name=body.name, function=body.function,
+        source_ids=body.source_ids, current_temp=None,
+    )
+
+
+@router.put("/composite-sensors/{composite_id}", response_model=CompositeSensorInfo)
+@user_limiter.limit(get_limit("admin_operations"))
+async def update_composite_sensor(
+    request: Request, response: Response,
+    composite_id: str,
+    body: CompositeSensorUpdate,
+    current_user: User = Depends(get_current_admin),
+    service: FanControlService = Depends(get_fan_service),
+):
+    """
+    Update an existing composite temperature sensor.
+
+    Requires admin role.
+    """
+    from app.models.fans import CompositeTempSensor
+    import json as _json
+    with service.db_session_factory() as db:
+        row = db.execute(select(CompositeTempSensor).where(CompositeTempSensor.id == composite_id)).scalar_one_or_none()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Composite sensor not found")
+        if body.name is not None:
+            row.name = body.name
+        if body.function is not None:
+            row.function = body.function
+        if body.source_ids is not None:
+            if composite_id in body.source_ids:
+                raise HTTPException(status_code=422, detail="Composite cannot reference itself")
+            row.source_ids_json = _json.dumps(body.source_ids)
+        db.commit()
+        sids = _json.loads(row.source_ids_json)
+
+    await service._rebuild_registry()
+    current = await service._registry.get_temp(composite_id)
+    return CompositeSensorInfo(id=composite_id, name=row.name, function=row.function,
+                               source_ids=sids, current_temp=current)
+
+
+@router.delete("/composite-sensors/{composite_id}")
+@user_limiter.limit(get_limit("admin_operations"))
+async def delete_composite_sensor(
+    request: Request, response: Response,
+    composite_id: str,
+    current_user: User = Depends(get_current_admin),
+    service: FanControlService = Depends(get_fan_service),
+):
+    """
+    Delete a composite temperature sensor.
+
+    Also unlinks any FanConfig pointing at this composite.
+    Requires admin role.
+    """
+    from app.models.fans import CompositeTempSensor, FanConfig
+    with service.db_session_factory() as db:
+        row = db.execute(select(CompositeTempSensor).where(CompositeTempSensor.id == composite_id)).scalar_one_or_none()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Composite sensor not found")
+        # Unlink any FanConfig pointing at this composite
+        for cfg in db.execute(select(FanConfig).where(FanConfig.temp_sensor_id == composite_id)).scalars():
+            cfg.temp_sensor_id = None
+        db.delete(row)
+        db.commit()
+    await service._rebuild_registry()
+    return {"success": True}
 
 
 @router.get("/presets", response_model=PresetsResponse)
@@ -482,6 +685,18 @@ async def update_fan_config(
             max_pwm_percent=body.max_pwm_percent,
             emergency_temp_celsius=body.emergency_temp_celsius,
             temp_sensor_id=body.temp_sensor_id,
+            curve_type=body.curve_type,
+            flat_pwm_percent=body.flat_pwm_percent,
+            target_temp_celsius=body.target_temp_celsius,
+            target_pwm_percent=body.target_pwm_percent,
+            mix_curve_a_id=body.mix_curve_a_id,
+            mix_curve_b_id=body.mix_curve_b_id,
+            mix_function=body.mix_function,
+            sync_fan_id=body.sync_fan_id,
+            start_pwm_percent=body.start_pwm_percent,
+            stop_below_temp_celsius=body.stop_below_temp_celsius,
+            response_time_seconds=body.response_time_seconds,
+            pwm_steps=body.pwm_steps,
         )
 
         if result is None:
@@ -865,3 +1080,62 @@ async def get_active_schedule(
     except Exception as e:
         logger.error(f"Failed to get active schedule: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to get active schedule: {str(e)}")
+
+
+# --- GPU Manual-Mode Endpoint ---
+
+from pydantic import BaseModel as _PydanticBase
+from app.services.power.fan_gpu_manual import AmdManualState
+
+
+class GpuManualModeRequest(_PydanticBase):
+    enable: bool
+
+
+# Stash of state across enable/disable per fan
+_gpu_manual_state: Dict[str, AmdManualState] = {}
+
+
+@router.post("/{fan_id}/gpu-manual-mode")
+@user_limiter.limit(get_limit("admin_operations"))
+async def set_gpu_manual_mode(
+    request: Request, response: Response,
+    fan_id: str,
+    body: GpuManualModeRequest,
+    current_user: User = Depends(get_current_admin),
+    service: FanControlService = Depends(get_fan_service),
+):
+    """
+    Enable or disable AMD GPU manual fan control mode for a specific fan.
+
+    When enabled, sets power_dpm_force_performance_level=manual and pwm_enable=1
+    on the associated amdgpu hwmon device, allowing direct PWM writes.
+    When disabled, restores the previous values.
+
+    Only available for AMD GPU fans. Requires admin role.
+    """
+    from app.services.power.fan_gpu_manual import enable_amd_manual, disable_amd_manual
+
+    # Look up the fan's hwmon dir from the backend cache
+    backend = service._backend
+    if not hasattr(backend, "_fan_cache") or fan_id not in backend._fan_cache:
+        raise HTTPException(status_code=404, detail="Fan not found")
+    info = backend._fan_cache[fan_id]
+    if not info.get("is_gpu_fan") or info.get("gpu_vendor") != "amd":
+        raise HTTPException(status_code=400, detail="Only available on AMD GPU fans")
+
+    hwmon_dir = info["pwm_path"].parent
+
+    try:
+        if body.enable:
+            state = await enable_amd_manual(hwmon_dir=hwmon_dir, drm_root=None)
+            _gpu_manual_state[fan_id] = state
+        else:
+            state = _gpu_manual_state.pop(fan_id, None)
+            if state is None:
+                state = AmdManualState(previous_level="auto", previous_pwm_enable=2)
+            await disable_amd_manual(hwmon_dir=hwmon_dir, drm_root=None, state=state)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"GPU manual mode toggle failed: {exc}")
+
+    return {"success": True, "fan_id": fan_id, "enabled": body.enable}
