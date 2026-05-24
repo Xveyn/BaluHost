@@ -364,6 +364,9 @@ class TempSensorInfo(BaseModel):
     sensor_id: str = Field(..., description="Sensor identifier (e.g., hwmon2_temp1)")
     device_name: str = Field(..., description="Hardware device name (e.g., k10temp)")
     label: Optional[str] = Field(default=None, description="Sensor label (e.g., Tctl)")
+    custom_label: Optional[str] = Field(default=None, description="User-supplied custom label")
+    kind: str = Field(default="hwmon", description="Sensor kind: hwmon | gpu | disk | mix")
+    gpu_vendor: Optional[str] = Field(default=None, description="GPU vendor if kind=='gpu'")
     is_cpu_sensor: bool = Field(..., description="Whether this is a CPU temperature sensor")
     current_temp: Optional[float] = Field(default=None, description="Current temperature in Celsius")
 
@@ -585,3 +588,41 @@ class FanCurveProfileListResponse(BaseModel):
 class ApplyProfileRequest(BaseModel):
     """Request to apply a profile to a fan."""
     fan_id: str = Field(..., description="Fan identifier")
+
+
+# --- Sensor Label Schemas ---
+
+class TempSensorLabelUpdate(BaseModel):
+    """Request to set or update a custom label for a temperature sensor."""
+    label: str = Field(..., min_length=1, max_length=100)
+
+
+# --- Composite Sensor Schemas ---
+
+class CompositeSensorCreate(BaseModel):
+    """Request to create a new composite temperature sensor."""
+    name: str = Field(..., min_length=1, max_length=100)
+    function: str = Field(..., pattern=r"^(max|min|avg)$")
+    source_ids: List[str] = Field(..., min_length=2, max_length=6)
+
+
+class CompositeSensorUpdate(BaseModel):
+    """Request to update an existing composite temperature sensor."""
+    name: Optional[str] = Field(default=None, min_length=1, max_length=100)
+    function: Optional[str] = Field(default=None, pattern=r"^(max|min|avg)$")
+    source_ids: Optional[List[str]] = Field(default=None, min_length=2, max_length=6)
+
+
+class CompositeSensorInfo(BaseModel):
+    """Information about a composite temperature sensor."""
+    id: str
+    name: str
+    function: str
+    source_ids: List[str]
+    current_temp: Optional[float] = None
+
+
+class CompositeSensorListResponse(BaseModel):
+    """Response for listing composite temperature sensors."""
+    composites: List[CompositeSensorInfo]
+    total_count: int
