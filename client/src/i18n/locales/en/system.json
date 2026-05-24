@@ -904,9 +904,14 @@
       "compositeCreated": "Mix sensor created",
       "loadFailed": "Failed to load sensors",
       "function": "Function",
-      "functions": { "max": "Maximum", "min": "Minimum", "avg": "Average" },
+      "functions": {
+        "max": "Maximum",
+        "min": "Minimum",
+        "avg": "Average"
+      },
       "sources": "sources",
-      "selected": "selected"
+      "selected": "selected",
+      "inactive": "Inactive ({{count}})"
     },
     "curveTypes": {
       "graph": "Graph",
@@ -918,7 +923,10 @@
       "targetPwm": "Target PWM",
       "mix": "Mix",
       "mixDescription": "Combine two profiles by a function.",
-      "mixFn": { "max": "Maximum", "sum": "Sum (capped)" },
+      "mixFn": {
+        "max": "Maximum",
+        "sum": "Sum (capped)"
+      },
       "selectCurve": "Select profile…",
       "sync": "Sync",
       "syncDescription": "Copy PWM from another fan.",
