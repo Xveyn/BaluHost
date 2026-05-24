@@ -792,7 +792,9 @@
       "auto": "Auto",
       "manual": "Manuell",
       "scheduled": "Zeitplan",
-      "manualPwm": "Manuelles PWM"
+      "manualPwm": "Manuelles PWM",
+      "noSensor": "Kein Sensor zugewiesen",
+      "pwmError": "PWM-Fehler"
     },
     "details": {
       "temperatureCol": "Temperatur (°C)",
@@ -886,6 +888,52 @@
         "updateFailed": "Profil konnte nicht aktualisiert werden",
         "deleteFailed": "Profil konnte nicht gelöscht werden",
         "applyFailed": "Profil konnte nicht angewendet werden"
+      }
+    },
+    "sensors": {
+      "title": "Sensoren",
+      "addComposite": "Mix-Sensor",
+      "compositeTitle": "Mix-Sensoren",
+      "createComposite": "Mix-Sensor erstellen",
+      "renamed": "Sensor umbenannt",
+      "compositeCreated": "Mix-Sensor erstellt",
+      "loadFailed": "Sensoren konnten nicht geladen werden",
+      "function": "Funktion",
+      "functions": { "max": "Maximum", "min": "Minimum", "avg": "Durchschnitt" },
+      "sources": "Quellen",
+      "selected": "ausgewählt"
+    },
+    "curveTypes": {
+      "graph": "Graph",
+      "flat": "Konstant",
+      "flatLabel": "Konstante PWM",
+      "target": "Ziel-Temp",
+      "targetDescription": "Halte PWM bei Zieltemperatur. Darunter wird linear bis 0 heruntergeregelt.",
+      "targetTemp": "Ziel-Temperatur",
+      "targetPwm": "Ziel-PWM",
+      "mix": "Mix",
+      "mixDescription": "Kombiniere zwei Profile per Funktion.",
+      "mixFn": { "max": "Maximum", "sum": "Summe (gedeckelt)" },
+      "selectCurve": "Profil wählen…",
+      "sync": "Sync",
+      "syncDescription": "Übernimm PWM von einem anderen Lüfter.",
+      "selectFan": "Lüfter wählen…"
+    },
+    "advanced": {
+      "title": "Erweiterte Einstellungen",
+      "startPwm": "Start-PWM (Anlauf)",
+      "stopBelowTemp": "Stop unterhalb",
+      "responseTime": "Antwortzeit",
+      "pwmSteps": "PWM-Stufen"
+    },
+    "gpu": {
+      "manualMode": {
+        "title": "GPU-Lüfter manuell steuern",
+        "warning": "Setzt power_dpm_force_performance_level auf 'manual' und pwm_enable auf 1. Kann GPU-Performance beeinflussen.",
+        "enable": "Aktivieren",
+        "disable": "Deaktivieren",
+        "enabled": "Manueller Modus aktiviert",
+        "disabled": "Manueller Modus deaktiviert"
       }
     }
   },
