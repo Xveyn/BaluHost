@@ -42,10 +42,11 @@ class TestDevFanControlBackend:
         """Test backend initialization."""
         backend = DevFanControlBackend(mock_settings)
 
-        assert len(backend._fans) == 3
+        assert len(backend._fans) == 4
         assert "dev_cpu_fan" in backend._fans
         assert "dev_case_fan_1" in backend._fans
         assert "dev_case_fan_2" in backend._fans
+        assert "dev_gpu_pwm1" in backend._fans
 
     def test_init_temperatures(self, mock_settings):
         """Test simulated temperatures are initialized."""
@@ -69,7 +70,7 @@ class TestDevFanControlBackend:
 
         fans = await backend.get_fans()
 
-        assert len(fans) == 3
+        assert len(fans) == 4
         assert all(isinstance(fan, FanData) for fan in fans)
 
     @pytest.mark.asyncio
@@ -368,7 +369,7 @@ class TestSimulatedStateUpdate:
 
         # RPM values may fluctuate
         # Just verify we get data
-        assert len(fans1) == len(fans2) == 3
+        assert len(fans1) == len(fans2) == 4
 
 
 class TestFanDataStructure:
@@ -527,11 +528,11 @@ class TestAvailableTempSensors:
         backend = DevFanControlBackend(mock_settings)
         sensors = await backend.get_available_temp_sensors()
 
-        assert len(sensors) == 3
+        assert len(sensors) == 4
         cpu_sensors = [s for s in sensors if s.is_cpu_sensor]
         non_cpu_sensors = [s for s in sensors if not s.is_cpu_sensor]
         assert len(cpu_sensors) == 2
-        assert len(non_cpu_sensors) == 1
+        assert len(non_cpu_sensors) == 2
         assert cpu_sensors[0].sensor_id == "dev_cpu_temp"
         assert non_cpu_sensors[0].sensor_id == "dev_ambient_temp"
 
