@@ -14,3 +14,5 @@ export { default as CurveEditorFlat } from './CurveEditorFlat';
 export { default as CurveEditorTarget } from './CurveEditorTarget';
 export { default as CurveEditorMix } from './CurveEditorMix';
 export { default as CurveEditorSync } from './CurveEditorSync';
+export { default as AdvancedFanSettings } from './AdvancedFanSettings';
+export { default as GpuManualModeToggle } from './GpuManualModeToggle';

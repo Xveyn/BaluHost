@@ -206,6 +206,11 @@ export interface UpdateFanConfigRequest {
   mix_curve_b_id?: number | null;
   mix_function?: 'max' | 'sum';
   sync_fan_id?: string | null;
+  // Advanced settings (Task 16)
+  start_pwm_percent?: number | null;
+  stop_below_temp_celsius?: number | null;
+  response_time_seconds?: number | null;
+  pwm_steps?: number | null;
 }
 
 export interface UpdateFanConfigResponse {
@@ -601,4 +606,11 @@ export async function createComposite(body: CompositeSensorCreate): Promise<Comp
  */
 export async function deleteComposite(id: string): Promise<void> {
   await apiClient.delete(`/api/fans/composite-sensors/${encodeURIComponent(id)}`);
+}
+
+/**
+ * Set GPU manual PWM mode (AMD only)
+ */
+export async function setGpuManualMode(fanId: string, enabled: boolean): Promise<void> {
+  await apiClient.post(`/api/fans/${encodeURIComponent(fanId)}/gpu-manual-mode`, { enabled });
 }

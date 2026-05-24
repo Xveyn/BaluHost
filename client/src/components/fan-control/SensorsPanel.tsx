@@ -1,10 +1,10 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
 import { Pencil, X, Plus, Cpu, MonitorSmartphone, HardDrive, Sigma } from 'lucide-react';
 import {
-  listTempSensors, renameSensor, clearSensorLabel,
-  listComposites, deleteComposite,
+  renameSensor, clearSensorLabel,
+  deleteComposite,
 } from '../../api/fan-control';
 import type { TempSensorInfo, CompositeSensorInfo } from '../../api/fan-control';
 import { handleApiError } from '../../lib/errorHandling';
@@ -17,25 +17,17 @@ const KIND_ICONS = {
   mix: Sigma,
 } as const;
 
-export default function SensorsPanel() {
+interface SensorsPanelProps {
+  sensors: TempSensorInfo[];
+  composites: CompositeSensorInfo[];
+  onReload: () => void;
+}
+
+export default function SensorsPanel({ sensors, composites, onReload }: SensorsPanelProps) {
   const { t } = useTranslation(['system', 'common']);
-  const [sensors, setSensors] = useState<TempSensorInfo[]>([]);
-  const [composites, setComposites] = useState<CompositeSensorInfo[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editLabel, setEditLabel] = useState('');
   const [showModal, setShowModal] = useState(false);
-
-  const reload = useCallback(async () => {
-    try {
-      const [s, c] = await Promise.all([listTempSensors(), listComposites()]);
-      setSensors(s.sensors);
-      setComposites(c.composites);
-    } catch (err) {
-      handleApiError(err, t('system:fanControl.sensors.loadFailed'));
-    }
-  }, [t]);
-
-  useEffect(() => { reload(); }, [reload]);
 
   const saveLabel = async (sensorId: string) => {
     if (!editLabel.trim()) {
@@ -46,7 +38,7 @@ export default function SensorsPanel() {
       await renameSensor(sensorId, editLabel.trim());
       toast.success(t('system:fanControl.sensors.renamed'));
       setEditingId(null);
-      reload();
+      onReload();
     } catch (err) {
       handleApiError(err, t('system:fanControl.sensors.renameFailed'));
     }
@@ -104,7 +96,7 @@ export default function SensorsPanel() {
                   onClick={async () => {
                     try {
                       await clearSensorLabel(s.sensor_id);
-                      reload();
+                      onReload();
                     } catch (err) {
                       handleApiError(err, t('system:fanControl.sensors.resetFailed'));
                     }
@@ -140,7 +132,7 @@ export default function SensorsPanel() {
                   onClick={async () => {
                     try {
                       await deleteComposite(c.id);
-                      reload();
+                      onReload();
                     } catch (err) {
                       handleApiError(err, t('system:fanControl.sensors.deleteFailed'));
                     }
@@ -159,7 +151,7 @@ export default function SensorsPanel() {
         <CompositeSensorModal
           availableSensors={sensors}
           onClose={() => setShowModal(false)}
-          onCreated={() => { setShowModal(false); reload(); }}
+          onCreated={() => { setShowModal(false); onReload(); }}
         />
       )}
     </div>

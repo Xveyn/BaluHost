@@ -12,6 +12,8 @@ import CurveEditorFlat from './CurveEditorFlat';
 import CurveEditorTarget from './CurveEditorTarget';
 import CurveEditorMix from './CurveEditorMix';
 import CurveEditorSync from './CurveEditorSync';
+import AdvancedFanSettings from './AdvancedFanSettings';
+import GpuManualModeToggle from './GpuManualModeToggle';
 
 interface FanDetailsProps {
   fan: FanInfo;
@@ -31,6 +33,7 @@ export default function FanDetails({ fan, onCurveUpdate, isReadOnly, onEditingCh
   const [hysteresis, setHysteresis] = useState<number>(fan.hysteresis_celsius ?? 3.0);
   const [isUpdatingHysteresis, setIsUpdatingHysteresis] = useState(false);
   const [curveType, setCurveType] = useState<CurveType>((fan.curve_type as CurveType) ?? 'graph');
+  const [localGpuManualEnabled, setLocalGpuManualEnabled] = useState(false);
 
   // Sync curveType from server when fan changes
   useEffect(() => {
@@ -245,6 +248,16 @@ export default function FanDetails({ fan, onCurveUpdate, isReadOnly, onEditingCh
   };
 
   const hysteresisChanged = hysteresis !== (fan.hysteresis_celsius ?? 3.0);
+
+  const handleAdvancedChange = async (patch: Partial<FanInfo>) => {
+    if (isReadOnly) return;
+    try {
+      await updateFanConfig(fan.fan_id, patch as Parameters<typeof updateFanConfig>[1]);
+      onConfigUpdate?.();
+    } catch (error: unknown) {
+      handleApiError(error, t('system:fanControl.messages.curveFailed'));
+    }
+  };
 
   return (
     <div className="card">
@@ -528,6 +541,22 @@ export default function FanDetails({ fan, onCurveUpdate, isReadOnly, onEditingCh
           />
         )}
       </div>
+
+      {/* Advanced Settings */}
+      <div className="mt-4">
+        <AdvancedFanSettings fan={fan} onChange={handleAdvancedChange} disabled={isReadOnly} />
+      </div>
+
+      {/* GPU Manual Mode Toggle (AMD GPU fans only) */}
+      {fan.is_gpu_fan && fan.gpu_vendor === 'amd' && (
+        <div className="mt-4">
+          <GpuManualModeToggle
+            fanId={fan.fan_id}
+            enabled={localGpuManualEnabled}
+            onChange={setLocalGpuManualEnabled}
+          />
+        </div>
+      )}
 
       {/* Fan Stats */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 pt-4 border-t border-slate-700">
