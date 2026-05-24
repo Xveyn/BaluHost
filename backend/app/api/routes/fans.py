@@ -375,6 +375,10 @@ async def list_temp_sensors(
     Requires admin role.
     """
     try:
+        # Refresh disk:* sources from the SMART summary SHM file before listing
+        # so newly-discovered disks show up without a service restart.
+        await service._refresh_disk_sources()
+
         sources = service._registry.all_sources()
         items: List[TempSensorInfo] = []
         for s in sources:

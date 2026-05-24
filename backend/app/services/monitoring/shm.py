@@ -33,6 +33,7 @@ COMMANDS_FILE = "commands.json"
 ORCHESTRATOR_DATA_FILE = "orchestrator_data.json"
 SMART_DEVICES_FILE = "smart_devices.json"
 SMART_DEVICES_CHANGES_FILE = "smart_devices_changes.json"
+SMART_SUMMARY_FILE = "smart_summary.json"
 
 
 def _ensure_dir() -> None:

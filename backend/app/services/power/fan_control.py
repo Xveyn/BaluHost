@@ -350,36 +350,57 @@ class FanControlService:
             return float(v) if v is not None else None
         return _read
 
+    def _read_smart_summary(self) -> Dict[str, float]:
+        """Read disk SMART summary from SHM, return {device_name: temp_celsius}.
+
+        Empty dict when SHM file missing, stale, or malformed. The monitoring
+        worker publishes this file every 60s via _write_smart_summary_snapshot.
+        """
+        try:
+            from app.services.monitoring.shm import read_shm, SMART_SUMMARY_FILE
+            payload = read_shm(SMART_SUMMARY_FILE, max_age_seconds=180.0)
+            if not payload:
+                return {}
+            out: Dict[str, float] = {}
+            for d in payload.get("devices", []) or []:
+                name = d.get("name")
+                temp = d.get("temperature_celsius")
+                if name and temp is not None:
+                    out[name] = float(temp)
+            return out
+        except Exception:
+            return {}
+
     def _make_disk_reader(self, device: str):
         async def _read():
-            try:
-                from app.services.hardware.smart.cache import get_cached_smart_status
-                payload = get_cached_smart_status()
-                if not payload:
-                    return None
-                for disk in getattr(payload, "disks", []) or []:
-                    if getattr(disk, "device", None) == device or getattr(disk, "name", None) == device:
-                        t = getattr(disk, "temperature_celsius", None) or getattr(disk, "temperature", None)
-                        return float(t) if t is not None else None
-            except Exception:
-                return None
-            return None
+            return self._read_smart_summary().get(device)
         return _read
 
     async def _list_smart_devices(self) -> List[str]:
-        try:
-            from app.services.hardware.smart.cache import get_cached_smart_status
-            payload = get_cached_smart_status()
-            if not payload:
-                return []
-            out: List[str] = []
-            for d in getattr(payload, "disks", []) or []:
-                name = getattr(d, "device", None) or getattr(d, "name", None)
-                if name:
-                    out.append(name)
-            return out
-        except Exception:
-            return []
+        return list(self._read_smart_summary().keys())
+
+    async def _refresh_disk_sources(self) -> None:
+        """Reconcile disk:* registry entries with the current SMART summary.
+
+        Adds new disks that appeared and removes ones that vanished, without
+        touching hwmon/gpu/mix sources. Called from the sensor-list endpoint
+        so the UI reflects fresh data without a full registry rebuild.
+        """
+        desired = set(self._read_smart_summary().keys())
+        current = {
+            s.id for s in self._registry.all_sources() if s.kind == "disk"
+        }
+
+        for device in desired:
+            sid = f"disk:{device}"
+            if sid not in current:
+                self._registry.register(DiskTempSource(
+                    device=device,
+                    read_fn=self._make_disk_reader(device),
+                ))
+
+        for sid in current - {f"disk:{d}" for d in desired}:
+            self._registry.unregister(sid)
 
     async def _register_composites_from_db(self) -> None:
         from app.models.fans import CompositeTempSensor
