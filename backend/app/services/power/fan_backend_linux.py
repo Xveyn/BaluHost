@@ -103,6 +103,10 @@ class LinuxFanControlBackend(FanControlBackend):
                 temp_sensor_id=fan_info.get("temp_sensor_id"),
                 curve_points=self._get_default_curve(),
                 is_active=True,
+                is_gpu_fan=fan_info.get("is_gpu_fan", False),
+                gpu_vendor=fan_info.get("gpu_vendor"),
+                device_driver=fan_info.get("device_driver"),
+                last_write_error=fan_info.get("last_write_error"),
             ))
 
         return fans
@@ -130,11 +134,22 @@ class LinuxFanControlBackend(FanControlBackend):
         # Write PWM value
         success = await self._write_hwmon_file(pwm_path, str(pwm_value))
         if success:
+            fan_info["last_write_error"] = None
             logger.debug(f"Set {fan_id} PWM to {pwm_percent}% ({pwm_value}/255)")
             return True
-        else:
-            logger.error(f"Failed to write PWM for {fan_id}")
-            return False
+
+        # Capture diagnostic
+        driver = fan_info.get("device_driver", "unknown")
+        enable_val = None
+        if pwm_enable_path:
+            v = await self._read_hwmon_file(pwm_enable_path)
+            enable_val = v if v is not None else "?"
+        fan_info["last_write_error"] = (
+            f"PWM write rejected by kernel (driver={driver}, pwm_enable={enable_val}). "
+            f"For AMD GPUs: enable manual mode in the UI."
+        )
+        logger.error(f"Failed to write PWM for {fan_id}: {fan_info['last_write_error']}")
+        return False
 
     # CPU temperature driver names (same keywords as hardware/sensors.py)
     _CPU_SENSOR_DRIVERS = {"k10temp", "coretemp", "cpu_thermal", "acpi"}
@@ -283,6 +298,13 @@ class LinuxFanControlBackend(FanControlBackend):
                 except Exception:
                     pass
 
+            # GPU recognition
+            is_gpu_fan = hwmon_name_value in {"amdgpu", "nouveau"}
+            gpu_vendor = (
+                "amd" if hwmon_name_value == "amdgpu"
+                else ("nvidia" if hwmon_name_value == "nouveau" else None)
+            )
+
             # Find PWM files
             for pwm_file in hwmon_dir.glob("pwm[0-9]*"):
                 if "_" in pwm_file.name:  # Skip pwm1_enable, etc
@@ -320,6 +342,9 @@ class LinuxFanControlBackend(FanControlBackend):
                     "fan_input_path": fan_input_path,
                     "temp_path": temp_path,
                     "temp_sensor_id": temp_sensor_id,
+                    "is_gpu_fan": is_gpu_fan,
+                    "gpu_vendor": gpu_vendor,
+                    "device_driver": hwmon_name_value,
                 }
 
         if new_cache or not self._fan_cache:

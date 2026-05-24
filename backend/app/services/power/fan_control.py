@@ -45,6 +45,11 @@ class FanData:
     curve_points: List[FanCurvePoint]
     is_active: bool
     hysteresis_celsius: float = 3.0
+    # GPU recognition + write diagnostics
+    is_gpu_fan: bool = False
+    gpu_vendor: Optional[str] = None
+    device_driver: Optional[str] = None
+    last_write_error: Optional[str] = None
 
 
 @dataclass
