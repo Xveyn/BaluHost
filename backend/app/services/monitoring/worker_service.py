@@ -209,10 +209,12 @@ class MonitoringWorker:
         """Write current telemetry data to SHM."""
         try:
             from app.services import telemetry
+            from app.services.monitoring.orchestrator import get_monitoring_orchestrator
 
             history = telemetry.get_history()
             latest_cpu = telemetry.get_latest_cpu_usage()
             latest_memory = telemetry.get_latest_memory_sample()
+            latest_gpu = get_monitoring_orchestrator().get_gpu_current()
 
             data = {
                 "cpu": [s.model_dump() for s in history.cpu],
@@ -220,6 +222,7 @@ class MonitoringWorker:
                 "network": [s.model_dump() for s in history.network],
                 "latest_cpu_usage": latest_cpu,
                 "latest_memory_sample": latest_memory.model_dump() if latest_memory else None,
+                "gpu": latest_gpu.model_dump(mode="json") if latest_gpu else None,
                 "timestamp": time.time(),
             }
             write_shm(TELEMETRY_FILE, data)
