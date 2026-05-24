@@ -8,6 +8,7 @@ import asyncio
 import json
 import logging
 import time
+import time as _time
 from abc import ABC, abstractmethod
 from collections import deque
 from dataclasses import dataclass
@@ -21,6 +22,10 @@ from app.models.fans import FanConfig, FanSample
 from app.schemas.fans import FanMode, FanCurvePoint
 from app.services.power.fan_schedule import FanScheduleService
 from app.services.power.fan_profiles import FanProfileService
+from app.services.power.fan_sources import (
+    TempSourceRegistry, HwmonTempSource, GpuTempSource, DiskTempSource, MixTempSource,
+)
+from app.services.power.fan_curve_eval import evaluate_curve
 
 logger = logging.getLogger(__name__)
 
@@ -141,6 +146,9 @@ class FanControlService:
         self._hysteresis_state: Dict[str, HysteresisState] = {}  # Track hysteresis per fan
         self._schedule = FanScheduleService(db_session_factory)
         self._profiles = FanProfileService(db_session_factory)
+        self._registry: TempSourceRegistry = TempSourceRegistry()
+        self._last_pwm_by_fan: Dict[str, int] = {}
+        self._last_tick_ts: float = 0.0
 
         FanControlService._instance = self
 
@@ -181,6 +189,8 @@ class FanControlService:
         if not self._backend:
             logger.warning("No fan control backend available")
             return
+
+        await self._rebuild_registry()
 
         # Load fan configs from database
         await self._load_fan_configs()
@@ -227,17 +237,17 @@ class FanControlService:
     async def _load_fan_configs(self):
         """Load fan configurations from database.
 
-        Also auto-corrects temp_sensor_id if it points to a non-CPU sensor
-        and a CPU sensor is available (fixes board sensor ~26°C bug).
+        For new fans (first discovery), assigns the best available CPU sensor
+        as the default temp_sensor_id. Existing configs are NOT modified —
+        user-chosen sensors (including composite sensors) survive service restarts.
         """
         if not self._backend:
             return
 
         fans = await self._backend.get_fans()
 
-        # Determine best CPU sensor for auto-correction
+        # Determine best CPU sensor for new fan defaults only
         cpu_sensor_id: Optional[str] = None
-        sensors: List[TempSensorData] = []
         try:
             sensors = await self._backend.get_available_temp_sensors()
             for s in sensors:
@@ -246,13 +256,6 @@ class FanControlService:
                     break
         except Exception:
             pass
-
-        # Build set of known CPU sensor IDs for checking existing configs
-        cpu_sensor_ids: set = set()
-        if cpu_sensor_id:
-            for s in sensors:
-                if s.is_cpu_sensor:
-                    cpu_sensor_ids.add(s.sensor_id)
 
         with self.db_session_factory() as db:
             for fan in fans:
@@ -274,18 +277,132 @@ class FanControlService:
                         is_active=True,
                     )
                     db.add(config)
-                elif cpu_sensor_id and existing.temp_sensor_id not in cpu_sensor_ids:
-                    # Auto-correct: existing config uses non-CPU sensor
-                    old_sensor = existing.temp_sensor_id
-                    existing.temp_sensor_id = cpu_sensor_id
-                    logger.info(
-                        f"Auto-corrected {fan.fan_id} temp sensor: "
-                        f"{old_sensor} → {cpu_sensor_id}"
-                    )
 
             db.commit()
 
         logger.info(f"Loaded {len(fans)} fan configuration(s)")
+
+    async def _rebuild_registry(self) -> None:
+        """(Re)populate the registry with all current sources."""
+        self._registry.clear()
+        if not self._backend:
+            return
+
+        # hwmon sensors (from backend)
+        try:
+            hwmon_sensors = await self._backend.get_available_temp_sensors()
+            for s in hwmon_sensors:
+                sid = s.sensor_id
+                src = HwmonTempSource(
+                    sensor_id=sid,
+                    device_name=s.device_name,
+                    backend_label=s.label,
+                    is_cpu_sensor=s.is_cpu_sensor,
+                    read_fn=self._make_hwmon_reader(sid),
+                )
+                self._registry.register(src)
+        except Exception as exc:
+            logger.debug("hwmon source registration failed: %s", exc)
+
+        # GPU sources from monitoring SHM
+        for channel in ("edge", "junction", "mem"):
+            self._registry.register(GpuTempSource(
+                channel=channel,
+                read_fn=self._make_gpu_reader(channel),
+            ))
+
+        # Disk sources from SMART cache
+        for device in await self._list_smart_devices():
+            self._registry.register(DiskTempSource(
+                device=device,
+                read_fn=self._make_disk_reader(device),
+            ))
+
+        # Composite sensors from DB
+        await self._register_composites_from_db()
+
+        # Custom labels from DB
+        await self._load_sensor_labels()
+
+    def _make_hwmon_reader(self, sensor_id: str):
+        async def _read():
+            try:
+                return await self._backend.get_temperature(sensor_id)
+            except Exception:
+                return None
+        return _read
+
+    def _make_gpu_reader(self, channel: str):
+        async def _read():
+            from app.services.monitoring.shm import read_shm, TELEMETRY_FILE
+            data = read_shm(TELEMETRY_FILE, max_age_seconds=30.0)
+            if not data:
+                return None
+            gpu = data.get("gpu") if isinstance(data, dict) else None
+            if not gpu:
+                return None
+            key = {
+                "edge": "temperature_edge_celsius",
+                "junction": "temperature_junction_celsius",
+                "mem": "temperature_memory_celsius",
+            }[channel]
+            v = gpu.get(key)
+            return float(v) if v is not None else None
+        return _read
+
+    def _make_disk_reader(self, device: str):
+        async def _read():
+            try:
+                from app.services.hardware.smart.cache import get_cached_smart_status
+                payload = get_cached_smart_status()
+                if not payload:
+                    return None
+                for disk in getattr(payload, "disks", []) or []:
+                    if getattr(disk, "device", None) == device or getattr(disk, "name", None) == device:
+                        t = getattr(disk, "temperature_celsius", None) or getattr(disk, "temperature", None)
+                        return float(t) if t is not None else None
+            except Exception:
+                return None
+            return None
+        return _read
+
+    async def _list_smart_devices(self) -> List[str]:
+        try:
+            from app.services.hardware.smart.cache import get_cached_smart_status
+            payload = get_cached_smart_status()
+            if not payload:
+                return []
+            out: List[str] = []
+            for d in getattr(payload, "disks", []) or []:
+                name = getattr(d, "device", None) or getattr(d, "name", None)
+                if name:
+                    out.append(name)
+            return out
+        except Exception:
+            return []
+
+    async def _register_composites_from_db(self) -> None:
+        from app.models.fans import CompositeTempSensor
+        with self.db_session_factory() as db:
+            rows = db.execute(select(CompositeTempSensor)).scalars().all()
+            for row in rows:
+                try:
+                    source_ids = json.loads(row.source_ids_json)
+                except Exception:
+                    continue
+                self._registry.register(MixTempSource(
+                    composite_id=row.id,
+                    name=row.name,
+                    function=row.function,
+                    source_ids=source_ids,
+                    registry=self._registry,
+                ))
+
+    async def _load_sensor_labels(self) -> None:
+        from app.models.fans import TempSensorLabel
+        with self.db_session_factory() as db:
+            for row in db.execute(select(TempSensorLabel)).scalars().all():
+                self._registry.set_label(row.sensor_id, row.custom_label)
 
     async def _monitoring_loop(self):
         """Background monitoring loop."""
@@ -316,82 +433,91 @@ class FanControlService:
             return
 
         fans = await self._backend.get_fans()
+        now_ts = _time.time()
+        dt = (now_ts - self._last_tick_ts) if self._last_tick_ts else self.config.fan_sample_interval_seconds
+        self._last_tick_ts = now_ts
+
+        # Map for sync curve type
+        other_fan_pwms = {f.fan_id: f.pwm_percent for f in fans}
 
         with self.db_session_factory() as db:
             for fan in fans:
-                # Get config from DB
                 config = db.execute(
                     select(FanConfig).where(FanConfig.fan_id == fan.fan_id)
                 ).scalar_one_or_none()
-
                 if not config or not config.is_active:
                     continue
 
                 mode = FanMode(config.mode)
-                temperature = await self._backend.get_temperature(config.temp_sensor_id)
+                temperature = await self._registry.get_temp(config.temp_sensor_id) if config.temp_sensor_id else None
 
-                # Determine target PWM
                 target_pwm = fan.pwm_percent
 
                 if mode in (FanMode.AUTO, FanMode.SCHEDULED):
-                    if temperature is not None:
-                        # Check emergency condition
-                        if temperature >= config.emergency_temp_celsius:
-                            target_pwm = 100
-                            mode = FanMode.EMERGENCY
-                            # Clear hysteresis state on emergency
-                            if fan.fan_id in self._hysteresis_state:
-                                del self._hysteresis_state[fan.fan_id]
-                            # Emit critical temperature notification
-                            try:
-                                from app.services.notifications.events import emit_temperature_critical_sync
-                                emit_temperature_critical_sync(
-                                    config.temp_sensor_id or fan.fan_id,
-                                    temperature,
-                                )
-                            except Exception:
-                                pass
-                        elif temperature >= config.emergency_temp_celsius - 10:
-                            # Warning threshold: 10 degrees below emergency
+                    if temperature is not None and temperature >= config.emergency_temp_celsius:
+                        target_pwm = 100
+                        mode = FanMode.EMERGENCY
+                        if fan.fan_id in self._hysteresis_state:
+                            del self._hysteresis_state[fan.fan_id]
+                        try:
+                            from app.services.notifications.events import emit_temperature_critical_sync
+                            emit_temperature_critical_sync(config.temp_sensor_id or fan.fan_id, temperature)
+                        except Exception:
+                            pass
+                    else:
+                        if temperature is not None and temperature >= config.emergency_temp_celsius - 10:
                             try:
                                 from app.services.notifications.events import emit_temperature_high_sync
-                                emit_temperature_high_sync(
-                                    config.temp_sensor_id or fan.fan_id,
-                                    temperature,
-                                )
+                                emit_temperature_high_sync(config.temp_sensor_id or fan.fan_id, temperature)
                             except Exception:
                                 pass
-                        else:
-                            # Resolve curve: scheduled mode uses time-based curve, auto uses default
-                            if FanMode(config.mode) == FanMode.SCHEDULED:
-                                curve_points, _ = self._schedule.resolve_active_curve(
-                                    fan.fan_id, config.curve_json, db
-                                )
-                            else:
-                                curve_points = json.loads(config.curve_json) if config.curve_json else []
 
-                            hysteresis = getattr(config, 'hysteresis_celsius', 3.0)
-                            target_pwm = self._calculate_pwm_with_hysteresis(
-                                fan.fan_id,
-                                temperature,
-                                curve_points,
-                                hysteresis,
-                                fan.pwm_percent
+                        # Schedule override of curve_json (graph mode only)
+                        curve_json = config.curve_json
+                        if FanMode(config.mode) == FanMode.SCHEDULED:
+                            scheduled_pts, _ = self._schedule.resolve_active_curve(
+                                fan.fan_id, config.curve_json, db
                             )
+                            curve_json = json.dumps([p if isinstance(p, dict) else p.model_dump() for p in scheduled_pts]) if scheduled_pts else config.curve_json
 
-                # Apply minimum PWM
+                        eval_cfg = type("CfgView", (), {
+                            **{c.name: getattr(config, c.name) for c in config.__table__.columns},
+                            "curve_json": curve_json,
+                        })()
+
+                        prev = self._last_pwm_by_fan.get(fan.fan_id, fan.pwm_percent)
+
+                        def _profile_loader(pid: Optional[int]) -> List[dict]:
+                            if pid is None:
+                                return []
+                            from app.models.fans import FanCurveProfile
+                            row = db.execute(select(FanCurveProfile).where(FanCurveProfile.id == pid)).scalar_one_or_none()
+                            if row is None or not row.curve_json:
+                                return []
+                            try:
+                                return json.loads(row.curve_json)
+                            except Exception:
+                                return []
+
+                        target_pwm = evaluate_curve(
+                            eval_cfg, temperature, prev, other_fan_pwms, _profile_loader, dt,
+                        )
+                        # Hysteresis layered on top (existing helper, only for graph-like outputs)
+                        target_pwm = self._calculate_pwm_with_hysteresis(
+                            fan.fan_id, temperature or 0.0, [],
+                            getattr(config, "hysteresis_celsius", 3.0), target_pwm,
+                        ) if eval_cfg.curve_type == "graph" else target_pwm
+
                 target_pwm = max(config.min_pwm_percent, min(config.max_pwm_percent, target_pwm))
 
-                # Set PWM if changed
                 if target_pwm != fan.pwm_percent:
                     await self._backend.set_pwm(fan.fan_id, target_pwm)
+                self._last_pwm_by_fan[fan.fan_id] = target_pwm
 
-                # Update mode in config if emergency
                 if mode == FanMode.EMERGENCY and config.mode != FanMode.EMERGENCY.value:
                     config.mode = FanMode.EMERGENCY.value
                     db.commit()
 
-                # Add sample to buffer
                 self._sample_buffer.append({
                     "timestamp": datetime.now(timezone.utc),
                     "fan_id": fan.fan_id,

@@ -573,15 +573,19 @@ class TestAvailableTempSensors:
 
 
 class TestDbAutoCorrection:
-    """Tests for DB auto-correction of temp_sensor_id in _load_fan_configs."""
+    """Tests that _load_fan_configs no longer auto-corrects temp_sensor_id.
+
+    The auto-correction was removed in Task 9 (Step 3b): user-chosen sensors
+    must survive service restarts unchanged, including composite sensors.
+    """
 
     @pytest.mark.asyncio
-    async def test_autocorrect_board_sensor_to_cpu(self, mock_settings):
-        """Test that _load_fan_configs corrects non-CPU sensor to CPU sensor."""
+    async def test_user_chosen_non_cpu_sensor_survives_reload(self, mock_settings):
+        """User's non-CPU sensor must NOT be overwritten even when a CPU sensor is present."""
         from unittest.mock import MagicMock, patch
         from app.models.fans import FanConfig
 
-        # Create a mock backend that returns fans and sensors
+        # Backend knows about a CPU sensor (hwmon1_temp1) and a board sensor (hwmon0_temp1)
         mock_backend = AsyncMock()
         mock_backend.get_fans.return_value = [
             FanData(
@@ -610,10 +614,10 @@ class TestDbAutoCorrection:
             ),
         ]
 
-        # Create a mock DB with an existing config using board sensor
+        # Existing DB config uses the board sensor (user's choice)
         mock_config = MagicMock(spec=FanConfig)
         mock_config.fan_id = "hwmon0_pwm1"
-        mock_config.temp_sensor_id = "hwmon0_temp1"  # Board sensor
+        mock_config.temp_sensor_id = "hwmon0_temp1"  # Board sensor — user's explicit choice
 
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = mock_config
@@ -625,7 +629,6 @@ class TestDbAutoCorrection:
         mock_session_factory.return_value.__enter__ = MagicMock(return_value=mock_db)
         mock_session_factory.return_value.__exit__ = MagicMock(return_value=False)
 
-        # Patch the singleton check
         with patch.object(FanControlService, '_instance', None):
             service = FanControlService.__new__(FanControlService)
             service.config = mock_settings
@@ -634,12 +637,72 @@ class TestDbAutoCorrection:
 
             await service._load_fan_configs()
 
-        # Verify the config was corrected to CPU sensor
-        assert mock_config.temp_sensor_id == "hwmon1_temp1"
+        # Auto-correction was REMOVED: sensor must stay as the user set it
+        assert mock_config.temp_sensor_id == "hwmon0_temp1", (
+            "Auto-correction must not overwrite user-chosen sensor on reload"
+        )
 
     @pytest.mark.asyncio
-    async def test_no_correction_when_already_cpu_sensor(self, mock_settings):
-        """Test that _load_fan_configs doesn't change when already using CPU sensor."""
+    async def test_composite_sensor_survives_reload(self, mock_settings):
+        """A composite (mix:) sensor ID must survive service reload unchanged."""
+        from unittest.mock import MagicMock, patch
+        from app.models.fans import FanConfig
+
+        mock_backend = AsyncMock()
+        mock_backend.get_fans.return_value = [
+            FanData(
+                fan_id="hwmon0_pwm1",
+                name="Case Fan",
+                rpm=900,
+                pwm_percent=40,
+                temperature_celsius=None,
+                mode=FanMode.AUTO,
+                min_pwm_percent=0,
+                max_pwm_percent=100,
+                emergency_temp_celsius=85.0,
+                temp_sensor_id=None,
+                curve_points=[FanCurvePoint(temp=35, pwm=30), FanCurvePoint(temp=70, pwm=80)],
+                is_active=True,
+            )
+        ]
+        mock_backend.get_available_temp_sensors.return_value = [
+            TempSensorData(
+                sensor_id="hwmon1_temp1", device_name="k10temp",
+                label="Tctl", is_cpu_sensor=True, current_temp=55.0,
+            ),
+        ]
+
+        # Existing config uses a composite sensor chosen by the user
+        mock_config = MagicMock(spec=FanConfig)
+        mock_config.fan_id = "hwmon0_pwm1"
+        mock_config.temp_sensor_id = "mix:user-choice"  # Composite sensor
+
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = mock_config
+
+        mock_db = MagicMock()
+        mock_db.execute.return_value = mock_result
+
+        mock_session_factory = MagicMock()
+        mock_session_factory.return_value.__enter__ = MagicMock(return_value=mock_db)
+        mock_session_factory.return_value.__exit__ = MagicMock(return_value=False)
+
+        with patch.object(FanControlService, '_instance', None):
+            service = FanControlService.__new__(FanControlService)
+            service.config = mock_settings
+            service.db_session_factory = mock_session_factory
+            service._backend = mock_backend
+
+            await service._load_fan_configs()
+
+        # Composite sensor must NOT be overwritten by CPU sensor
+        assert mock_config.temp_sensor_id == "mix:user-choice", (
+            "Composite (mix:) sensor must survive service reload unchanged"
+        )
+
+    @pytest.mark.asyncio
+    async def test_no_change_when_already_cpu_sensor(self, mock_settings):
+        """Existing CPU-sensor config also stays untouched on reload."""
         from unittest.mock import MagicMock, patch
         from app.models.fans import FanConfig
 
