@@ -64,6 +64,9 @@ class TempSourceRegistry:
     def register(self, source: TempSource) -> None:
         self._sources[source.id] = source
 
+    def unregister(self, sensor_id: str) -> None:
+        self._sources.pop(self._normalize_id(sensor_id), None)
+
     def clear(self) -> None:
         self._sources.clear()
 

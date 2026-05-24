@@ -899,9 +899,14 @@
       "compositeCreated": "Mix-Sensor erstellt",
       "loadFailed": "Sensoren konnten nicht geladen werden",
       "function": "Funktion",
-      "functions": { "max": "Maximum", "min": "Minimum", "avg": "Durchschnitt" },
+      "functions": {
+        "max": "Maximum",
+        "min": "Minimum",
+        "avg": "Durchschnitt"
+      },
       "sources": "Quellen",
-      "selected": "ausgewählt"
+      "selected": "ausgewählt",
+      "inactive": "Inaktiv ({{count}})"
     },
     "curveTypes": {
       "graph": "Graph",
@@ -913,7 +918,10 @@
       "targetPwm": "Ziel-PWM",
       "mix": "Mix",
       "mixDescription": "Kombiniere zwei Profile per Funktion.",
-      "mixFn": { "max": "Maximum", "sum": "Summe (gedeckelt)" },
+      "mixFn": {
+        "max": "Maximum",
+        "sum": "Summe (gedeckelt)"
+      },
       "selectCurve": "Profil wählen…",
       "sync": "Sync",
       "syncDescription": "Übernimm PWM von einem anderen Lüfter.",

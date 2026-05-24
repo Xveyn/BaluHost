@@ -26,6 +26,7 @@ from app.services.monitoring.shm import (
     ORCHESTRATOR_STATUS_FILE,
     ORCHESTRATOR_DATA_FILE,
     HEARTBEAT_FILE,
+    SMART_SUMMARY_FILE,
     write_shm,
     read_command,
     cleanup_shm,
@@ -45,6 +46,10 @@ _ORCHESTRATOR_SNAPSHOT_INTERVAL = 5.0
 _ORCHESTRATOR_DATA_SNAPSHOT_INTERVAL = 5.0
 _COMMAND_POLL_INTERVAL = 2.0
 _SMART_DEVICES_SNAPSHOT_INTERVAL = 5.0
+# Disk SMART scan is gated by a 120s cache in hardware/smart/cache.py.
+# Republishing the summary every 60s keeps the SHM fresh without forcing
+# extra smartctl invocations.
+_SMART_SUMMARY_SNAPSHOT_INTERVAL = 60.0
 
 
 class MonitoringWorker:
@@ -121,6 +126,7 @@ class MonitoringWorker:
         last_orchestrator_data = 0.0
         last_command_poll = 0.0
         last_smart_devices = 0.0
+        last_smart_summary = 0.0
 
         while self._running:
             now = time.time()
@@ -151,6 +157,11 @@ class MonitoringWorker:
                     if now - last_smart_devices >= _SMART_DEVICES_SNAPSHOT_INTERVAL:
                         self._write_smart_devices_snapshot()
                         last_smart_devices = now
+
+                    # Write SMART disk summary snapshot (for fan_control disk:* sources)
+                    if now - last_smart_summary >= _SMART_SUMMARY_SNAPSHOT_INTERVAL:
+                        self._write_smart_summary_snapshot()
+                        last_smart_summary = now
 
                 # Write heartbeat (always, even when paused)
                 if now - last_heartbeat >= _HEARTBEAT_INTERVAL:
@@ -209,10 +220,12 @@ class MonitoringWorker:
         """Write current telemetry data to SHM."""
         try:
             from app.services import telemetry
+            from app.services.monitoring.orchestrator import get_monitoring_orchestrator
 
             history = telemetry.get_history()
             latest_cpu = telemetry.get_latest_cpu_usage()
             latest_memory = telemetry.get_latest_memory_sample()
+            latest_gpu = get_monitoring_orchestrator().get_gpu_current()
 
             data = {
                 "cpu": [s.model_dump() for s in history.cpu],
@@ -220,6 +233,7 @@ class MonitoringWorker:
                 "network": [s.model_dump() for s in history.network],
                 "latest_cpu_usage": latest_cpu,
                 "latest_memory_sample": latest_memory.model_dump() if latest_memory else None,
+                "gpu": latest_gpu.model_dump(mode="json") if latest_gpu else None,
                 "timestamp": time.time(),
             }
             write_shm(TELEMETRY_FILE, data)
@@ -299,6 +313,33 @@ class MonitoringWorker:
             write_shm(ORCHESTRATOR_DATA_FILE, data)
         except Exception as exc:
             logger.debug("Orchestrator data snapshot failed: %s", exc)
+
+    def _write_smart_summary_snapshot(self) -> None:
+        """Publish disk SMART summary (name + temperature) to SHM.
+
+        Consumed by fan_control to register disk:<device> temperature sources
+        in every web worker. The 120s cache in hardware/smart/cache.py keeps
+        smartctl invocations bounded.
+        """
+        try:
+            from app.services.hardware.smart.api import get_smart_status
+
+            status = get_smart_status()
+            devices = []
+            for d in getattr(status, "devices", []) or []:
+                temp = getattr(d, "temperature", None)
+                if temp is None:
+                    continue
+                devices.append({
+                    "name": d.name,
+                    "temperature_celsius": float(temp),
+                })
+            write_shm(SMART_SUMMARY_FILE, {
+                "devices": devices,
+                "timestamp": time.time(),
+            })
+        except Exception as exc:
+            logger.debug("SMART summary snapshot failed: %s", exc)
 
     def _write_smart_devices_snapshot(self) -> None:
         """Write current smart devices snapshot to SHM (if poller is running)."""
