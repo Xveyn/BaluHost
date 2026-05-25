@@ -8,7 +8,7 @@ Type=simple
 User=baluhost
 Group=baluhost
 WorkingDirectory=/opt/baluhost/backend
-EnvironmentFile=/etc/baluhost/.env.production
+EnvironmentFile=/opt/baluhost/.env.production
 Environment="BALUHOST_CHANNEL=local"
 ExecStart=/opt/baluhost/venv/bin/uvicorn app.main:app \
     --fd 3 \
