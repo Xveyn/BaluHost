@@ -10,7 +10,7 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 
-from app.api.deps import get_current_admin
+from app.api.deps import get_current_admin, require_local_admin
 from app.core.rate_limiter import get_limit, user_limiter
 from app.models.user import User
 from app.plugins.installer import (
@@ -124,7 +124,7 @@ async def install_plugin(
     response: Response,
     plugin_name: str,
     payload: InstallRequest,
-    current_user: User = Depends(get_current_admin),
+    current_user: User = Depends(require_local_admin),
     service: MarketplaceService = Depends(get_marketplace_service),
 ) -> InstallResponse:
     """Install a plugin from the marketplace by name + optional version."""
@@ -189,7 +189,7 @@ async def uninstall_plugin(
     request: Request,
     response: Response,
     plugin_name: str,
-    current_user: User = Depends(get_current_admin),
+    current_user: User = Depends(require_local_admin),
     service: MarketplaceService = Depends(get_marketplace_service),
 ) -> Response:
     """Remove an installed marketplace plugin from the filesystem."""
