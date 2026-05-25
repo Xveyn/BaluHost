@@ -1,0 +1,33 @@
+{
+  "$schema": "https://schema.tauri.app/config/2.0.0",
+  "productName": "BaluHost Companion",
+  "version": "0.1.0",
+  "identifier": "com.baluhost.companion",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": "npm run dev -- --mode tauri",
+    "beforeBuildCommand": "npm run build -- --mode tauri"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "BaluHost Companion",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 1024,
+        "minHeight": 600,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; connect-src 'self' http://127.0.0.1:*; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["deb", "appimage"],
+    "icon": ["icons/icon.png"],
+    "category": "Utility"
+  }
+}
