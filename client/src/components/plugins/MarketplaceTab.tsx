@@ -30,6 +30,7 @@ import {
 import { usePlugins } from '../../contexts/PluginContext';
 import { useConfirmDialog } from '../../hooks/useConfirmDialog';
 import { getApiErrorMessage } from '../../lib/errorHandling';
+import { LocalOnlyAction } from '../LocalOnlyAction';
 
 interface ConflictState {
   plugin: MarketplacePlugin;
@@ -297,25 +298,29 @@ export default function MarketplaceTab() {
 
                 <div className="mt-4 flex justify-end gap-2">
                   {isInstalled ? (
-                    <button
-                      onClick={() => void handleUninstall(plugin)}
-                      disabled={isBusy}
-                      className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs sm:text-sm font-medium border border-red-500/30 text-red-400 hover:bg-red-500/10 disabled:opacity-50 transition-all touch-manipulation active:scale-95"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      {t('buttons.uninstall')}
-                    </button>
+                    <LocalOnlyAction>
+                      <button
+                        onClick={() => void handleUninstall(plugin)}
+                        disabled={isBusy}
+                        className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs sm:text-sm font-medium border border-red-500/30 text-red-400 hover:bg-red-500/10 disabled:opacity-50 transition-all touch-manipulation active:scale-95"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        {t('buttons.uninstall')}
+                      </button>
+                    </LocalOnlyAction>
                   ) : (
-                    <button
-                      onClick={() => void handleInstall(plugin)}
-                      disabled={isBusy}
-                      className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs sm:text-sm font-medium bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 border border-blue-500/30 disabled:opacity-50 transition-all touch-manipulation active:scale-95"
-                    >
-                      <Download className="h-4 w-4" />
-                      {isBusy
-                        ? t('marketplace.installing')
-                        : t('marketplace.install')}
-                    </button>
+                    <LocalOnlyAction>
+                      <button
+                        onClick={() => void handleInstall(plugin)}
+                        disabled={isBusy}
+                        className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs sm:text-sm font-medium bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 border border-blue-500/30 disabled:opacity-50 transition-all touch-manipulation active:scale-95"
+                      >
+                        <Download className="h-4 w-4" />
+                        {isBusy
+                          ? t('marketplace.installing')
+                          : t('marketplace.install')}
+                      </button>
+                    </LocalOnlyAction>
                   )}
                 </div>
               </div>
@@ -381,13 +386,15 @@ export default function MarketplaceTab() {
               >
                 {t('buttons.cancel')}
               </button>
-              <button
-                onClick={() => void handleInstall(conflictState.plugin, true)}
-                disabled={installingName === conflictState.plugin.name}
-                className="flex-1 px-4 py-2 text-sm font-medium rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 disabled:opacity-50 transition-all touch-manipulation active:scale-95"
-              >
-                {t('marketplace.forceInstall')}
-              </button>
+              <LocalOnlyAction>
+                <button
+                  onClick={() => void handleInstall(conflictState.plugin, true)}
+                  disabled={installingName === conflictState.plugin.name}
+                  className="flex-1 px-4 py-2 text-sm font-medium rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 disabled:opacity-50 transition-all touch-manipulation active:scale-95"
+                >
+                  {t('marketplace.forceInstall')}
+                </button>
+              </LocalOnlyAction>
             </div>
           </div>
         </div>
