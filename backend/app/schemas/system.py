@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 import re
 
@@ -215,6 +216,10 @@ class SystemHealthResponse(BaseModel):
     smart: SmartStatusResponse | None = None
     raid: RaidStatusResponse | None = None
     disk_io: dict | None = None
+
+
+class ChannelStatusResponse(BaseModel):
+    channel: Literal["local", "remote"]
 
 
 class RaidSimulationRequest(BaseModel):

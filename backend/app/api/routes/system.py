@@ -11,6 +11,7 @@ from app.core.rate_limiter import limiter, user_limiter, get_limit
 from app.schemas.system import (
     AuditLoggingStatus,
     AuditLoggingToggle,
+    ChannelStatusResponse,
     ProcessListResponse,
     QuotaStatus,
     SmartStatusResponse,
@@ -46,6 +47,19 @@ async def get_system_mode(request: Request, response: Response) -> dict:
             "password": settings.admin_password,
         }
     return payload
+
+
+@router.get("/channel-status", response_model=ChannelStatusResponse)
+async def get_channel_status(
+    request: Request,
+    _: UserPublic = Depends(deps.get_current_user),
+) -> ChannelStatusResponse:
+    """Returns whether the current connection is via the local channel.
+
+    Used by the web UI to disable destructive-action buttons and show a
+    hint that the Companion app is required. Auth: any authenticated user.
+    """
+    return ChannelStatusResponse(channel=getattr(request.state, "channel", "remote"))
 
 
 @router.get("/info", response_model=SystemInfo)
