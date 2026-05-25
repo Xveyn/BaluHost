@@ -161,7 +161,7 @@ async def format_disk(
     request: Request,
     response: Response,
     payload: FormatDiskRequest,
-    _: UserPublic = Depends(deps.get_current_admin),
+    _: UserPublic = Depends(deps.require_local_admin),
 ) -> RaidActionResponse:
     """Format a disk with the specified filesystem."""
     try:
@@ -179,7 +179,7 @@ async def create_array(
     request: Request,
     response: Response,
     payload: CreateArrayRequest,
-    current_admin: UserPublic = Depends(deps.get_current_admin),
+    current_admin: UserPublic = Depends(deps.require_local_admin),
 ) -> RaidActionResponse:
     """Create a new RAID array."""
     audit_logger = get_audit_logger_db()
@@ -228,7 +228,7 @@ async def delete_array(
     request: Request,
     response: Response,
     payload: DeleteArrayRequest,
-    current_admin: UserPublic = Depends(deps.get_current_admin),
+    current_admin: UserPublic = Depends(deps.require_local_admin),
 ) -> RaidActionResponse:
     """Delete a RAID array."""
     audit_logger = get_audit_logger_db()
