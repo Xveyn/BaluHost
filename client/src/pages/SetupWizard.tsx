@@ -22,6 +22,7 @@ import { SetupManualDrawer } from '../components/setup/SetupManualDrawer';
 import { Spinner } from '../components/ui/Spinner';
 import { getSetupStatus, completeSetup } from '../api/setup';
 import { handleApiError } from '../lib/errorHandling';
+import { useChannelStatus } from '../hooks/useChannelStatus';
 
 export interface SetupWizardProps {
   onComplete: () => void;
@@ -68,6 +69,8 @@ const ALL_FEATURE_KEYS = new Set([
 
 export default function SetupWizard({ onComplete }: SetupWizardProps) {
   const { t } = useTranslation('setup');
+  const { t: tCommon } = useTranslation('common');
+  const { isLocal, isLoading: channelLoading } = useChannelStatus();
   const [showWelcome, setShowWelcome] = useState(true);
   const [currentStep, setCurrentStep] = useState(STEP_ADMIN);
   const [setupToken, setSetupToken] = useState<string>('');
@@ -230,6 +233,32 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
     return (
       <div className="relative flex min-h-screen items-center justify-center overflow-hidden text-slate-100">
         <Spinner size="xl" label={t('initializing')} />
+      </div>
+    );
+  }
+
+  // Setup wizard endpoints are backend-gated to the local channel (Tauri
+  // Companion app). Block the wizard UI on a remote channel with a banner so
+  // users don't fill out forms and hit a 403 on submit.
+  if (!channelLoading && !isLocal) {
+    return (
+      <div className="relative min-h-screen flex flex-col overflow-hidden text-slate-100">
+        <div className="pointer-events-none absolute inset-0">
+          <div className="absolute -left-24 top-[-120px] h-[420px] w-[420px] rounded-full bg-sky-500/10 blur-3xl" />
+          <div className="absolute right-[-120px] top-[18%] h-[460px] w-[460px] rounded-full bg-indigo-500/10 blur-[140px]" />
+        </div>
+        <div className="relative z-10 flex-1 flex items-center justify-center px-4">
+          <div className="w-full max-w-xl">
+            <div className="card p-6 sm:p-8">
+              <h2 className="text-xl font-semibold text-amber-300">
+                {tCommon('local_only_banner')}
+              </h2>
+              <p className="mt-3 text-sm text-slate-300">
+                Please open the BaluHost Companion app on the BaluNode to complete setup.
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
