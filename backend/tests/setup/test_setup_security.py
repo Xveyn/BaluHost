@@ -99,35 +99,31 @@ class TestSetupEndpointSecurity:
         )
         assert resp.status_code == 401
 
-    def test_admin_endpoint_allows_remote_with_correct_secret(self, client: TestClient, db_session: Session):
-        """Admin creation works when the correct setup secret is provided."""
+    def test_admin_endpoint_allows_remote_with_correct_secret(self, remote_client, db_session: Session, monkeypatch):
+        """Admin creation works on remote when the correct setup secret is provided."""
+        from app.core.config import settings as _settings
+        monkeypatch.setattr(_settings, "setup_secret", "my-secret")
         db_session.query(User).delete()
         db_session.commit()
-        with patch("app.api.routes.setup.settings") as mock_settings:
-            mock_settings.setup_secret = "my-secret"
-            mock_settings.skip_setup = False
-            mock_settings.is_dev_mode = True
-            resp = client.post("/api/setup/admin", json={
-                "username": "admin",
-                "password": "SecurePass123!",
-                "setup_secret": "my-secret",
-            })
-            assert resp.status_code == 201
+        resp = remote_client.post("/api/setup/admin", json={
+            "username": "admin",
+            "password": "SecurePass123!",
+            "setup_secret": "my-secret",
+        })
+        assert resp.status_code == 201
 
-    def test_admin_endpoint_rejects_wrong_secret(self, client: TestClient, db_session: Session):
-        """Admin creation rejects a wrong setup secret with 403."""
+    def test_admin_endpoint_rejects_wrong_secret(self, remote_client, db_session: Session, monkeypatch):
+        """Admin creation rejects a wrong setup secret on remote with 403."""
+        from app.core.config import settings as _settings
+        monkeypatch.setattr(_settings, "setup_secret", "correct-secret")
         db_session.query(User).delete()
         db_session.commit()
-        with patch("app.api.routes.setup.settings") as mock_settings:
-            mock_settings.setup_secret = "correct-secret"
-            mock_settings.skip_setup = False
-            mock_settings.is_dev_mode = True
-            resp = client.post("/api/setup/admin", json={
-                "username": "admin",
-                "password": "SecurePass123!",
-                "setup_secret": "wrong-secret",
-            })
-            assert resp.status_code == 403
+        resp = remote_client.post("/api/setup/admin", json={
+            "username": "admin",
+            "password": "SecurePass123!",
+            "setup_secret": "wrong-secret",
+        })
+        assert resp.status_code == 403
 
     def test_setup_token_cannot_be_used_after_setup_complete(self, client: TestClient, db_session: Session):
         """A valid setup token is rejected by /users once setup is marked complete."""

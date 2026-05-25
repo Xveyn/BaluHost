@@ -15,7 +15,6 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.api import deps
-from app.core.config import settings
 from app.core.database import get_db
 from app.core.rate_limiter import limiter, get_limit
 from app.core.security import create_setup_token
@@ -79,36 +78,12 @@ async def get_setup_status(db: Session = Depends(get_db)) -> SetupStatusResponse
 async def create_admin(
     request: Request,
     payload: SetupAdminRequest,
+    _: None = Depends(deps.require_local_or_setup_secret),
     db: Session = Depends(get_db),
 ) -> SetupAdminResponse:
-    """Create the initial admin account (Step 1). Protected by multiple security layers."""
+    """Create the initial admin account (Step 1). Gated by local channel
+    OR BALUHOST_SETUP_SECRET (see require_local_or_setup_secret)."""
     _require_setup_mode(db)
-
-    # Setup secret check
-    if settings.setup_secret:
-        if payload.setup_secret != settings.setup_secret:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Invalid setup secret",
-            )
-    else:
-        # No secret configured — enforce local-network-only access (production only).
-        # In dev mode this check is skipped to keep tests and local development simple.
-        # In prod mode any non-private IP address is rejected; a None client (proxy
-        # misconfiguration) is also rejected to fail securely rather than silently bypass.
-        if not settings.is_dev_mode:
-            client_ip = request.client.host if request.client else None
-            if client_ip is None:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Setup is only available from the local network",
-                )
-            from app.core.network_utils import is_private_or_local_ip
-            if not is_private_or_local_ip(client_ip):
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Setup is only available from the local network",
-                )
 
     existing = user_service.get_user_by_username(payload.username, db=db)
     if existing:
@@ -150,6 +125,7 @@ async def create_admin(
 @router.post("/users", response_model=SetupUserResponse, status_code=status.HTTP_201_CREATED)
 async def create_user(
     payload: SetupUserRequest,
+    _: None = Depends(deps.require_local_or_setup_secret),
     _setup_user=Depends(deps.get_setup_user),
     db: Session = Depends(get_db),
 ) -> SetupUserResponse:
@@ -185,6 +161,7 @@ async def create_user(
 @router.delete("/users/{user_id}")
 async def delete_setup_user(
     user_id: int,
+    _: None = Depends(deps.require_local_or_setup_secret),
     _setup_user=Depends(deps.get_setup_user),
     db: Session = Depends(get_db),
 ):
@@ -207,6 +184,7 @@ async def delete_setup_user(
 @router.post("/file-access", response_model=SetupFileAccessResponse)
 async def configure_file_access(
     payload: SetupFileAccessRequest,
+    _: None = Depends(deps.require_local_or_setup_secret),
     _setup_user=Depends(deps.get_setup_user),
     db: Session = Depends(get_db),
 ) -> SetupFileAccessResponse:
@@ -241,6 +219,7 @@ async def configure_file_access(
 
 @router.post("/complete", response_model=SetupCompleteResponse)
 async def complete_setup(
+    _: None = Depends(deps.require_local_or_setup_secret),
     _setup_user=Depends(deps.get_setup_user),
     db: Session = Depends(get_db),
 ) -> SetupCompleteResponse:
