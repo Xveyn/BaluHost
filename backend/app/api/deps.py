@@ -184,6 +184,49 @@ async def get_current_admin(
     return user
 
 
+async def require_local_admin(
+    request: Request,
+    user: UserPublic = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+) -> UserPublic:
+    """Combined gate: admin role AND local channel.
+
+    Returns the authenticated admin user on success. On failure:
+      - 401 if no JWT (handled by the get_current_admin → get_current_user chain)
+      - 403 "Admin required" if user is not admin (get_current_admin)
+      - 403 with structured local_channel_required detail if admin but remote
+
+    Failed local-channel checks are audit-logged with the resolved username.
+    """
+    channel = getattr(request.state, "channel", "remote")
+    if channel != "local":
+        audit_logger = get_audit_logger_db()
+        audit_logger.log_security_event(
+            action="local_channel_required_denied",
+            user=user.username,
+            details={"path": request.url.path, "role": user.role},
+            success=False,
+            db=db,
+        )
+        logger.warning(
+            "local_channel_required: user=%s path=%s client=%s",
+            user.username,
+            request.url.path,
+            request.client.host if request.client else "unknown",
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "error": "local_channel_required",
+                "message": (
+                    "This operation can only be performed from the BaluHost "
+                    "Companion app running on the server itself."
+                ),
+            },
+        )
+    return user
+
+
 async def get_setup_user(
     request: Request,
     token: Optional[str] = Depends(oauth2_scheme),
