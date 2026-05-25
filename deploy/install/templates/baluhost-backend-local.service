@@ -1,0 +1,21 @@
+[Unit]
+Description=BaluHost backend (local channel, Unix socket)
+Requires=baluhost-backend-local.socket
+After=baluhost-backend-local.socket network.target postgresql.service
+
+[Service]
+Type=simple
+User=baluhost
+Group=baluhost
+WorkingDirectory=/opt/baluhost/backend
+EnvironmentFile=/etc/baluhost/.env.production
+Environment="BALUHOST_CHANNEL=local"
+ExecStart=/opt/baluhost/venv/bin/uvicorn app.main:app \
+    --fd 3 \
+    --workers 2 \
+    --log-level info
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
