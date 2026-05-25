@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.models.vpn import VPNClient
 from app.core.rate_limiter import user_limiter, get_limit
-from app.api.deps import get_current_user, get_current_admin
+from app.api.deps import get_current_user, get_current_admin, require_local_admin
 from app.schemas.user import UserPublic
 from app.schemas.vpn import (
     VPNClient as VPNClientSchema,
@@ -422,7 +422,7 @@ async def sync_server_keys(
     request: Request,
     response: Response,
     db: Session = Depends(get_db),
-    current_user: UserPublic = Depends(get_current_admin),
+    current_user: UserPublic = Depends(require_local_admin),
 ):
     """Sync server keys in DB from the running wg0 interface (admin only).
 
