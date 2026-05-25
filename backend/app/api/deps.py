@@ -380,6 +380,45 @@ require_power_suspend = _make_power_dependency("suspend")
 require_power_wol = _make_power_dependency("wol")
 
 
+async def require_local_or_setup_secret(
+    request: Request,
+) -> None:
+    """Setup-wizard gate: requires local channel OR a matching setup_secret.
+
+    The setup secret is read from the JSON body field 'setup_secret' (also
+    looked up under settings.setup_secret server-side). This lets the wizard
+    work over the local channel (Tauri app) by default while preserving an
+    Ansible/provisioning bypass when an operator sets BALUHOST_SETUP_SECRET.
+    """
+    channel = getattr(request.state, "channel", "remote")
+    if channel == "local":
+        return
+
+    # Remote: require setup_secret in body
+    body_secret: Optional[str] = None
+    if settings.setup_secret:
+        try:
+            body = await request.json()
+            if isinstance(body, dict):
+                body_secret = body.get("setup_secret")
+        except Exception:
+            body_secret = None
+
+        if body_secret and body_secret == settings.setup_secret:
+            return
+
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail={
+            "error": "local_channel_required",
+            "message": (
+                "Initial setup is only available from the BaluHost Companion app "
+                "or with a valid BALUHOST_SETUP_SECRET."
+            ),
+        },
+    )
+
+
 async def require_sync_allowed(request: Request) -> None:
     """Dependency that blocks automatic sync requests during sleep mode.
 
