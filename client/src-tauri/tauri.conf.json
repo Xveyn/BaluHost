@@ -10,16 +10,7 @@
     "beforeBuildCommand": "npm run build -- --mode tauri"
   },
   "app": {
-    "windows": [
-      {
-        "title": "BaluHost Companion",
-        "width": 1280,
-        "height": 800,
-        "minWidth": 1024,
-        "minHeight": 600,
-        "resizable": true
-      }
-    ],
+    "windows": [],
     "security": {
       "csp": "default-src 'self'; connect-src 'self' http://127.0.0.1:*; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'"
     }
