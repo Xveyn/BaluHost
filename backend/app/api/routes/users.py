@@ -197,7 +197,7 @@ async def bulk_delete_users(
     request: Request,
     response: Response,
     user_ids: list[str],
-    current_admin: UserPublic = Depends(deps.get_current_admin),
+    current_admin: UserPublic = Depends(deps.require_local_admin),
     db: Session = Depends(get_db)
 ) -> dict:
     """Delete multiple users at once."""
