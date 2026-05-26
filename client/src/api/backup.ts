@@ -2,7 +2,7 @@
  * API client for backup functionality
  */
 
-import { apiClient, memoizedApiRequest } from '../lib/api';
+import { apiClient, memoizedApiRequest, buildApiUrl } from '../lib/api';
 
 export interface Backup {
   id: number;
@@ -103,9 +103,8 @@ export async function restoreBackup(request: RestoreBackupRequest): Promise<Rest
  * Download backup file
  */
 export function getBackupDownloadUrl(backupId: number): string {
-  const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
   const token = localStorage.getItem('token');
-  return `${baseUrl}/api/backups/${backupId}/download?token=${token}`;
+  return `${buildApiUrl(`/api/backups/${backupId}/download`)}?token=${token}`;
 }
 
 /**

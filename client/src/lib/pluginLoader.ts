@@ -2,6 +2,7 @@
  * Plugin Loader for dynamically loading plugin UI bundles
  */
 import React from 'react';
+import { buildApiUrl } from './api';
 
 // Cache for loaded plugin modules
 const moduleCache = new Map<string, Record<string, unknown>>();
@@ -33,7 +34,7 @@ export async function loadPluginBundle(
     try {
       // Add cache-buster to force fresh load
       const cacheBuster = `?v=${Date.now()}`;
-      const bundleUrl = `/api/plugins/${pluginName}/ui/${bundlePath}${cacheBuster}`;
+      const bundleUrl = `${buildApiUrl(`/api/plugins/${pluginName}/ui/${bundlePath}`)}${cacheBuster}`;
 
       // Dynamically import the bundle
       // Using dynamic import with webpackIgnore to prevent bundler interference

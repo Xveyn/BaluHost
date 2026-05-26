@@ -7,11 +7,17 @@
  */
 
 import { getToken, storeToken, clearToken } from './secureStore';
+import { buildApiUrl } from './api';
 
-// In production: use same origin (via Nginx proxy)
-// In development: use localhost:3001
+// In Tauri Companion: window.__BALU_API_BASE__ points at the local HTTP-to-UDS
+// proxy injected by the Rust shell. In dev: hit the backend directly. In a
+// regular web build: same origin (Vite/nginx proxies relative /api).
 const isDevelopment = import.meta.env.DEV;
-const LOCAL_API_BASE = isDevelopment ? 'http://127.0.0.1:8000' : '';
+const tauriApiBase =
+  typeof window !== 'undefined' && window.__BALU_API_BASE__
+    ? window.__BALU_API_BASE__
+    : undefined;
+const LOCAL_API_BASE = tauriApiBase ?? (isDevelopment ? 'http://127.0.0.1:8000' : '');
 const API_PREFIX = '/api';
 
 export interface LocalApiConfig {
@@ -279,7 +285,7 @@ export class LocalApi {
       // Fallback for dev setup where backend runs on same origin (uvicorn on :8000)
       // or when the local HTTP proxy is not available. Attempt a same-origin call.
       try {
-        const res = await fetch(`${API_PREFIX}/system/shutdown`, {
+        const res = await fetch(buildApiUrl(`${API_PREFIX}/system/shutdown`), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -311,7 +317,7 @@ export class LocalApi {
       return await this.request('/system/restart', { method: 'POST' });
     } catch (err) {
       try {
-        const res = await fetch(`${API_PREFIX}/system/restart`, {
+        const res = await fetch(buildApiUrl(`${API_PREFIX}/system/restart`), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
