@@ -4,6 +4,7 @@ import { Eye, EyeOff } from 'lucide-react';
 import type { User } from '../types/auth';
 import logoMark from '../assets/baluhost-logo.png';
 import { localApi } from '../lib/localApi';
+import { buildApiUrl } from '../lib/api';
 import { useVersion } from '../contexts/VersionContext';
 import { DeveloperBadge } from '../components/ui/DeveloperBadge';
 import { useAuth } from '../contexts/AuthContext';
@@ -41,7 +42,7 @@ export default function Login() {
 
   // Check if running in dev mode (for showing default credentials)
   useEffect(() => {
-    fetch('/api/system/mode')
+    fetch(buildApiUrl('/api/system/mode'))
       .then(res => res.json())
       .then(data => {
         if (data.dev_mode === true && data.dev_credentials) {
@@ -93,7 +94,7 @@ export default function Login() {
       }
 
       // Strategy 2: Fall back to regular fetch (via proxy or IPC)
-      const response = await fetch('/api/auth/login', {
+      const response = await fetch(buildApiUrl('/api/auth/login'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -148,7 +149,7 @@ export default function Login() {
     setLoading(true);
 
     try {
-      const response = await fetch('/api/auth/verify-2fa', {
+      const response = await fetch(buildApiUrl('/api/auth/verify-2fa'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pending_token: pendingToken, code: totpCode }),
