@@ -25,8 +25,11 @@ pub fn run() {
         .block_on(async { proxy::start(uds_path).await })
         .expect("proxy startup failed");
 
+    // No `/api` suffix: the React client already prefixes paths with `/api`
+    // (see api.ts), so the base URL must be the proxy origin only, otherwise
+    // axios produces `/api/api/...` and the backend returns 404.
     let init_script = format!(
-        "window.__BALU_API_BASE__ = 'http://127.0.0.1:{}/api';",
+        "window.__BALU_API_BASE__ = 'http://127.0.0.1:{}';",
         proxy_port,
     );
 
