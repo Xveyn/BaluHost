@@ -67,6 +67,18 @@ async fn forward(
     let target_uri: hyper::Uri = UnixUri::new(&uds_path, &path_and_query).into();
 
     let (parts, body) = req.into_parts();
+
+    // The webview runs at tauri://localhost, which is not in the backend's
+    // CORS whitelist. Override Origin to http://localhost (whitelisted) for
+    // the upstream call so the backend's CORSMiddleware accepts the request
+    // (especially preflight OPTIONS), then echo the original Origin back in
+    // the response's Access-Control-Allow-Origin so the webview's CORS check
+    // sees a matching value.
+    let original_origin = parts
+        .headers
+        .get(hyper::header::ORIGIN)
+        .cloned();
+
     let body_bytes = match body.collect().await {
         Ok(c) => c.to_bytes(),
         Err(_) => Bytes::new(),
@@ -76,8 +88,15 @@ async fn forward(
         .method(parts.method)
         .uri(target_uri);
     for (k, v) in parts.headers.iter() {
+        if k == hyper::header::ORIGIN {
+            continue;
+        }
         new_req_builder = new_req_builder.header(k, v);
     }
+    new_req_builder = new_req_builder.header(
+        hyper::header::ORIGIN,
+        hyper::header::HeaderValue::from_static("http://localhost"),
+    );
     let new_req = match new_req_builder.body(Full::new(body_bytes)) {
         Ok(r) => r,
         Err(_) => {
@@ -100,7 +119,18 @@ async fn forward(
                 body.collect().await.map(|c| c.to_bytes()).unwrap_or_default();
             let mut out = Response::builder().status(parts.status);
             for (k, v) in parts.headers.iter() {
+                // Drop the upstream Allow-Origin so we can echo the webview's
+                // real Origin (the backend saw our spoofed http://localhost).
+                if k == hyper::header::ACCESS_CONTROL_ALLOW_ORIGIN {
+                    continue;
+                }
                 out = out.header(k, v);
+            }
+            if let Some(origin) = original_origin {
+                out = out.header(
+                    hyper::header::ACCESS_CONTROL_ALLOW_ORIGIN,
+                    origin,
+                );
             }
             Ok(out.body(Full::new(bytes)).unwrap())
         }
