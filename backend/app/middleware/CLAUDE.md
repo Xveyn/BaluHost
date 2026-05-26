@@ -7,6 +7,7 @@ Starlette `BaseHTTPMiddleware` classes applied to all requests. Registered in `m
 | File | Purpose | Runs on |
 |---|---|---|
 | `security_headers.py` | CSP, X-Frame-Options, HSTS, Referrer-Policy, Permissions-Policy. Dev mode allows `unsafe-inline`/`unsafe-eval` for Vite HMR; prod restricts `script-src` to `'self'`. HSTS only sent over HTTPS | All responses |
+| `channel_marker.py` | Sets `request.state.channel` from `settings.channel` (provider-callable injection for test monkeypatch). The TCP-bound backend process gets `remote`; the UDS-bound process gets `local`. Used by `require_local_admin` (Task 5) to gate destructive admin endpoints behind physical presence. **The `request.state.channel` attribute is reserved for this purpose — other middleware/routes must not overwrite it.** | All requests |
 | `error_counter.py` | Thread-safe counters for 4xx/5xx responses. Read via `ErrorCounterMiddleware.get_counts()` or `get_error_counts()`. Used by admin metrics dashboard | All responses |
 | `device_tracking.py` | Updates `MobileDevice.last_seen` timestamp when `X-Device-ID` header is present. DB write runs in worker thread via `asyncio.to_thread()` | Requests with X-Device-ID |
 | `local_only.py` | Blocks non-local-network requests to protected prefixes when `ENFORCE_LOCAL_ONLY=true`. Protected: `/api/server-profiles`, `/api/auth/login`, `/api/auth/register` | Configurable endpoints |

@@ -14,7 +14,9 @@ Owner-flag security-sensitive paths so any change surfaces in the GitHub UI as o
 
 Owned paths:
 - `/.github/workflows/` — every workflow definition
+- `/.github/workflows/tauri-build.yml` — Tauri build workflow
 - `/.github/CODEOWNERS` — meta-protect the file itself
+- `/client/src-tauri/` — Tauri Companion app source (Rust shell + config)
 - `/deploy/` — deploy scripts, systemd units, sudoers templates, nginx config
 - `/scripts/bootstrap-runner-ubuntu.sh` — VM runner provisioning (legacy)
 - `/scripts/bootstrap-ci-runner.sh` — sandbox CI runner provisioning (ci-sandbox label)
@@ -34,6 +36,7 @@ Owned paths:
 | `release-stable.yml` | `ubuntu-latest` | `workflow_dispatch` |
 | `deploy-production.yml` | **`self-hosted, prod`** | `push: main`, `workflow_dispatch` |
 | `raid-mdadm-selfhosted.yml` | **`self-hosted, linux, mdadm`** | `workflow_dispatch` only |
+| `tauri-build.yml` | `ubuntu-latest` | `push: main`, tag, `workflow_dispatch` |
 
 PR-triggered workflows MUST NOT use the production-privileged `BaluNode` runner. The `ci-sandbox` runner is the **only** self-hosted runner permitted to execute PR-triggered code, and only via the two-layer isolation described below.
 

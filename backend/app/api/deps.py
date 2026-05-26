@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from typing import Optional
 import logging
+import secrets
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
@@ -184,6 +185,49 @@ async def get_current_admin(
     return user
 
 
+async def require_local_admin(
+    request: Request,
+    user: UserPublic = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+) -> UserPublic:
+    """Combined gate: admin role AND local channel.
+
+    Returns the authenticated admin user on success. On failure:
+      - 401 if no JWT (handled by the get_current_admin → get_current_user chain)
+      - 403 "Admin required" if user is not admin (get_current_admin)
+      - 403 with structured local_channel_required detail if admin but remote
+
+    Failed local-channel checks are audit-logged with the resolved username.
+    """
+    channel = getattr(request.state, "channel", "remote")
+    if channel != "local":
+        audit_logger = get_audit_logger_db()
+        audit_logger.log_security_event(
+            action="local_channel_required_denied",
+            user=user.username,
+            details={"path": request.url.path, "role": user.role},
+            success=False,
+            db=db,
+        )
+        logger.warning(
+            "local_channel_required: user=%s path=%s client=%s",
+            user.username,
+            request.url.path,
+            request.client.host if request.client else "unknown",
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "error": "local_channel_required",
+                "message": (
+                    "This operation can only be performed from the BaluHost "
+                    "Companion app running on the server itself."
+                ),
+            },
+        )
+    return user
+
+
 async def get_setup_user(
     request: Request,
     token: Optional[str] = Depends(oauth2_scheme),
@@ -335,6 +379,83 @@ require_power_soft_sleep = _make_power_dependency("soft_sleep")
 require_power_wake = _make_power_dependency("wake")
 require_power_suspend = _make_power_dependency("suspend")
 require_power_wol = _make_power_dependency("wol")
+
+
+async def require_local_or_setup_secret(
+    request: Request,
+    db: Session = Depends(get_db),
+) -> None:
+    """Setup-wizard gate: requires local channel OR a matching setup_secret.
+
+    The setup secret is read from the JSON body field 'setup_secret'. This lets
+    the wizard work over the local channel (Tauri app) by default while
+    preserving an Ansible/provisioning bypass when an operator sets
+    BALUHOST_SETUP_SECRET.
+
+    Failed attempts (wrong secret on remote, no secret + remote channel) emit
+    audit log entries so brute-force attempts are visible. The setup_secret
+    comparison uses secrets.compare_digest to avoid timing oracles.
+    """
+    channel = getattr(request.state, "channel", "remote")
+    if channel == "local":
+        return
+
+    audit_logger = get_audit_logger_db()
+    client_host = request.client.host if request.client else "unknown"
+
+    # Remote: require setup_secret in body
+    if settings.setup_secret:
+        body_secret: Optional[str] = None
+        try:
+            body = await request.json()
+            if isinstance(body, dict):
+                body_secret = body.get("setup_secret")
+        except Exception:
+            body_secret = None
+
+        if body_secret and secrets.compare_digest(
+            body_secret, settings.setup_secret
+        ):
+            return
+
+        # Wrong / missing secret on remote — audit
+        audit_logger.log_security_event(
+            action="setup_secret_invalid",
+            user="anonymous",
+            details={"path": request.url.path, "client_host": client_host},
+            success=False,
+            db=db,
+        )
+        logger.warning(
+            "setup_secret_invalid: path=%s client=%s",
+            request.url.path,
+            client_host,
+        )
+    else:
+        # No bypass configured — straight reject + audit
+        audit_logger.log_security_event(
+            action="setup_local_channel_required",
+            user="anonymous",
+            details={"path": request.url.path, "client_host": client_host},
+            success=False,
+            db=db,
+        )
+        logger.warning(
+            "setup_local_channel_required: path=%s client=%s",
+            request.url.path,
+            client_host,
+        )
+
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail={
+            "error": "local_channel_required",
+            "message": (
+                "Initial setup is only available from the BaluHost Companion app "
+                "or with a valid BALUHOST_SETUP_SECRET."
+            ),
+        },
+    )
 
 
 async def require_sync_allowed(request: Request) -> None:

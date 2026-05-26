@@ -255,6 +255,8 @@
     "suspendFailed": "Failed to suspend system"
   },
   "adminOnly": "Admin only",
+  "local_only_action_hint": "Only available via the BaluHost Companion app running on the server itself.",
+  "local_only_banner": "This action requires physical presence at the BaluNode.",
   "ssdCache": {
     "migration": {
       "title": "Data Migration",

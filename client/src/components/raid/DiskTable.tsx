@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 import type { AvailableDisk, RaidArray } from '../../api/raid';
 import { formatBytes } from '../../lib/formatters';
 import { Monitor, Zap } from 'lucide-react';
+import { LocalOnlyAction } from '../LocalOnlyAction';
 
 export interface DiskTableProps {
   availableDisks: AvailableDisk[];
@@ -60,18 +61,20 @@ export const DiskTable: React.FC<DiskTableProps> = ({
                 🧪 <span className="hidden sm:inline">{t('system:raid.actions.addMock')}</span>
               </button>
             )}
-            <button
-              onClick={onShowCreateArray}
-              disabled={busy || availableDisks.filter(d => !d.in_raid && !d.is_os_disk).length < 2}
-              className={`whitespace-nowrap rounded-xl border px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm transition touch-manipulation active:scale-95 ${
-                busy || availableDisks.filter(d => !d.in_raid && !d.is_os_disk).length < 2
-                  ? 'cursor-not-allowed border-slate-800 bg-slate-900/60 text-slate-500'
-                  : 'border-emerald-500/40 bg-emerald-500/15 text-emerald-100 hover:border-emerald-500/60'
-              }`}
-              title={availableDisks.filter(d => !d.in_raid && !d.is_os_disk).length < 2 ? t('system:raid.diskManagement.minDisksRequired') : ''}
-            >
-              {t('system:raid.actions.createNewArray')}
-            </button>
+            <LocalOnlyAction>
+              <button
+                onClick={onShowCreateArray}
+                disabled={busy || availableDisks.filter(d => !d.in_raid && !d.is_os_disk).length < 2}
+                className={`whitespace-nowrap rounded-xl border px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm transition touch-manipulation active:scale-95 ${
+                  busy || availableDisks.filter(d => !d.in_raid && !d.is_os_disk).length < 2
+                    ? 'cursor-not-allowed border-slate-800 bg-slate-900/60 text-slate-500'
+                    : 'border-emerald-500/40 bg-emerald-500/15 text-emerald-100 hover:border-emerald-500/60'
+                }`}
+                title={availableDisks.filter(d => !d.in_raid && !d.is_os_disk).length < 2 ? t('system:raid.diskManagement.minDisksRequired') : ''}
+              >
+                {t('system:raid.actions.createNewArray')}
+              </button>
+            </LocalOnlyAction>
           </div>
         </div>
       </div>
@@ -155,17 +158,19 @@ export const DiskTable: React.FC<DiskTableProps> = ({
                       </div>
                     </td>
                     <td className="px-5 py-4">
-                      <button
-                        onClick={() => onFormatDisk(disk)}
-                        disabled={busy || disk.in_raid || disk.is_os_disk || !!disk.is_cache_device}
-                        className={`rounded-lg border px-3 py-1.5 text-xs transition ${
-                          busy || disk.in_raid || disk.is_os_disk || disk.is_cache_device
-                            ? 'cursor-not-allowed border-slate-800 bg-slate-900/60 text-slate-500'
-                            : 'border-rose-500/40 bg-rose-500/10 text-rose-200 hover:border-rose-500/60'
-                        }`}
-                      >
-                        {t('system:raid.actions.format')}
-                      </button>
+                      <LocalOnlyAction>
+                        <button
+                          onClick={() => onFormatDisk(disk)}
+                          disabled={busy || disk.in_raid || disk.is_os_disk || !!disk.is_cache_device}
+                          className={`rounded-lg border px-3 py-1.5 text-xs transition ${
+                            busy || disk.in_raid || disk.is_os_disk || disk.is_cache_device
+                              ? 'cursor-not-allowed border-slate-800 bg-slate-900/60 text-slate-500'
+                              : 'border-rose-500/40 bg-rose-500/10 text-rose-200 hover:border-rose-500/60'
+                          }`}
+                        >
+                          {t('system:raid.actions.format')}
+                        </button>
+                      </LocalOnlyAction>
                     </td>
                   </tr>
                 ))
@@ -237,17 +242,19 @@ export const DiskTable: React.FC<DiskTableProps> = ({
                       </span>
                     )}
                     {!disk.in_raid && !disk.is_os_disk && (
-                      <button
-                        onClick={() => onFormatDisk(disk)}
-                        disabled={busy}
-                        className={`ml-auto rounded-lg border px-2 py-1 text-[10px] transition touch-manipulation active:scale-95 ${
-                          busy
-                            ? 'cursor-not-allowed border-slate-800 bg-slate-900/60 text-slate-500'
-                            : 'border-rose-500/40 bg-rose-500/10 text-rose-200'
-                        }`}
-                      >
-                        {t('system:raid.actions.format')}
-                      </button>
+                      <LocalOnlyAction>
+                        <button
+                          onClick={() => onFormatDisk(disk)}
+                          disabled={busy}
+                          className={`ml-auto rounded-lg border px-2 py-1 text-[10px] transition touch-manipulation active:scale-95 ${
+                            busy
+                              ? 'cursor-not-allowed border-slate-800 bg-slate-900/60 text-slate-500'
+                              : 'border-rose-500/40 bg-rose-500/10 text-rose-200'
+                          }`}
+                        >
+                          {t('system:raid.actions.format')}
+                        </button>
+                      </LocalOnlyAction>
                     )}
                   </div>
                 </div>

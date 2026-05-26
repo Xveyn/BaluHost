@@ -81,18 +81,22 @@ class TestSetupAdmin:
         })
         assert resp.status_code == 422
 
-    def test_create_admin_requires_secret_when_configured(self, client: TestClient, db_session: Session):
-        """Requires setup_secret when BALUHOST_SETUP_SECRET is set."""
+    def test_create_admin_requires_secret_when_configured(self, remote_client, db_session: Session, monkeypatch):
+        """Requires setup_secret when BALUHOST_SETUP_SECRET is set on a remote channel.
+
+        On the local channel the gate passes without a secret; the secret is the
+        bypass for remote (Ansible/provisioning) callers. The `remote_client`
+        fixture monkeypatches settings.channel to 'remote' to simulate that path.
+        """
+        from app.core.config import settings as _settings
+        monkeypatch.setattr(_settings, "setup_secret", "my-secret-123")
         db_session.query(User).delete()
         db_session.commit()
-        with patch("app.api.routes.setup.settings") as mock_settings:
-            mock_settings.setup_secret = "my-secret-123"
-            mock_settings.skip_setup = False
-            resp = client.post("/api/setup/admin", json={
-                "username": "admin",
-                "password": "SecurePass123!",
-            })
-            assert resp.status_code == 403
+        resp = remote_client.post("/api/setup/admin", json={
+            "username": "admin",
+            "password": "SecurePass123!",
+        })
+        assert resp.status_code == 403
 
 
 class TestSetupUsers:

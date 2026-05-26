@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import Literal
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import AnyHttpUrl, Field, field_validator, model_validator
 import logging
@@ -15,6 +16,24 @@ class Settings(BaseSettings):
 
     nas_mode: str = "dev"
     is_dev_mode: bool = True  # Added as a field for Pydantic compatibility
+
+    channel: Literal["local", "remote"] = Field(
+        default="remote",
+        validation_alias="BALUHOST_CHANNEL",
+        description=(
+            "Trust channel of this backend process. Set to 'local' only in the "
+            "UDS-bound systemd unit (baluhost-backend-local.service)."
+        ),
+    )
+    local_loopback_fallback: bool = Field(
+        default=False,
+        validation_alias="BALUHOST_LOCAL_LOOPBACK_FALLBACK",
+        description=(
+            "Dev-only escape hatch: treat 127.0.0.1 TCP as local when no UDS is "
+            "bound. Validator blocks this in production."
+        ),
+    )
+
     api_prefix: str = "/api"
     api_version: str = "1"  # Current API version
     api_min_version: str = "1"  # Minimum supported API version
@@ -269,6 +288,15 @@ class Settings(BaseSettings):
             import secrets
             self.scheduler_service_token = secrets.token_urlsafe(32)
 
+        return self
+
+    @model_validator(mode="after")
+    def _validate_loopback_fallback_only_in_dev(self) -> "Settings":
+        if self.local_loopback_fallback and not self.is_dev_mode:
+            raise ValueError(
+                "BALUHOST_LOCAL_LOOPBACK_FALLBACK is dev-only — "
+                "never set this in production"
+            )
         return self
 
     @field_validator("SECRET_KEY")

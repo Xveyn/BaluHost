@@ -353,6 +353,11 @@ def main() -> int:
         os.environ.setdefault("NAS_MODE", "dev")
         os.environ.setdefault("NAS_QUOTA_BYTES", str(5 * 1024 * 1024 * 1024))  # 5 GB effektiv (RAID1: 2x5GB)
 
+        # Enable loopback fallback for the local-channel gate so the Tauri
+        # Companion can talk to the dev backend via plain HTTP without UDS.
+        # This is dev-only — settings validator blocks it in production.
+        os.environ.setdefault("BALUHOST_LOCAL_LOOPBACK_FALLBACK", "true")
+
         if setup_mode:
             _prepare_setup_mode()
 

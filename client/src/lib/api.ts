@@ -6,7 +6,18 @@ export const API_VERSION = '1';
 // which trigger the Vite proxy. Only set baseURL for production builds.
 const isDevelopment = import.meta.env.DEV;
 
-export const API_BASE_URL = isDevelopment ? '' : (import.meta.env.VITE_API_BASE_URL || '');
+// Tauri Companion shell injects window.__BALU_API_BASE__ before the bundle
+// loads, pointing at its local HTTP-to-UDS proxy (e.g.,
+// "http://127.0.0.1:<port>/api"). When present it overrides dev/prod
+// resolution so all requests flow through the Tauri Rust proxy. Read
+// synchronously at module load — not set in regular Web builds.
+const tauriApiBase =
+  typeof window !== 'undefined' && window.__BALU_API_BASE__
+    ? window.__BALU_API_BASE__
+    : undefined;
+
+export const API_BASE_URL =
+  tauriApiBase ?? (isDevelopment ? '' : (import.meta.env.VITE_API_BASE_URL || ''));
 
 export const buildApiUrl = (path: string): string => {
   if (!API_BASE_URL) {
@@ -19,10 +30,11 @@ export const buildApiUrl = (path: string): string => {
 }
 
 // Create axios instance with default config
+// In Tauri: uses window.__BALU_API_BASE__ injected by the Rust shell
 // In development: NO baseURL -> uses relative URLs -> triggers Vite proxy
 // In production: uses VITE_API_BASE_URL from environment
 export const apiClient = axios.create({
-  baseURL: isDevelopment ? undefined : API_BASE_URL,
+  baseURL: tauriApiBase ?? (isDevelopment ? undefined : API_BASE_URL),
   headers: {
     'Content-Type': 'application/json'
   }

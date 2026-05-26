@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { Search, Trash2 } from 'lucide-react';
+import { LocalOnlyAction } from '../LocalOnlyAction';
 
 interface UserFiltersProps {
   searchTerm: string;
@@ -68,13 +69,15 @@ export function UserFilters({
           <span className="text-sm text-rose-200">
             {t('users.bulk.selected', { count: selectedCount })}
           </span>
-          <button
-            onClick={onBulkDelete}
-            className="flex items-center gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-1.5 text-xs font-medium text-rose-200 transition hover:border-rose-500/50 hover:bg-rose-500/20"
-          >
-            <Trash2 className="h-4 w-4" />
-            {t('users.buttons.deleteSelected')}
-          </button>
+          <LocalOnlyAction>
+            <button
+              onClick={onBulkDelete}
+              className="flex items-center gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-1.5 text-xs font-medium text-rose-200 transition hover:border-rose-500/50 hover:bg-rose-500/20"
+            >
+              <Trash2 className="h-4 w-4" />
+              {t('users.buttons.deleteSelected')}
+            </button>
+          </LocalOnlyAction>
         </div>
       )}
     </div>

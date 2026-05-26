@@ -23,6 +23,7 @@ import { resolvePluginString } from '../lib/pluginI18n';
 import PluginDocumentation from '../components/plugins/PluginDocumentation';
 import { PluginSettingsSection } from '../components/plugins/PluginSettingsSection';
 import MarketplaceTab from '../components/plugins/MarketplaceTab';
+import { LocalOnlyAction } from '../components/LocalOnlyAction';
 import { useConfirmDialog } from '../hooks/useConfirmDialog';
 
 type TabType = 'plugins' | 'marketplace' | 'documentation';
@@ -449,14 +450,16 @@ export default function PluginsPage() {
                   <Settings className="h-4 w-4" />
                   {t('buttons.configure')}
                 </button>
-                <button
-                  onClick={() => handleUninstall(selectedPlugin.name)}
-                  disabled={actionLoading || selectedPlugin.is_enabled}
-                  className="w-full px-4 py-2 text-sm font-medium rounded-lg border border-red-500/30 text-red-400 hover:bg-red-500/10 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all touch-manipulation active:scale-95"
-                >
-                  <Trash2 className="h-4 w-4" />
-                  {t('buttons.uninstall')}
-                </button>
+                <LocalOnlyAction>
+                  <button
+                    onClick={() => handleUninstall(selectedPlugin.name)}
+                    disabled={actionLoading || selectedPlugin.is_enabled}
+                    className="w-full px-4 py-2 text-sm font-medium rounded-lg border border-red-500/30 text-red-400 hover:bg-red-500/10 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all touch-manipulation active:scale-95"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    {t('buttons.uninstall')}
+                  </button>
+                </LocalOnlyAction>
                 {selectedPlugin.is_enabled && (
                   <p className="text-xs text-slate-500 text-center">
                     {t('confirm.disableFirst')}

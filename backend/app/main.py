@@ -20,6 +20,7 @@ from app import __version__
 from app.core.config import settings
 from app.core.rate_limiter import limiter, rate_limit_exceeded_handler
 from app.core.lifespan import lifespan
+from app.middleware.channel_marker import ChannelMarkerMiddleware
 from app.middleware.device_tracking import DeviceTrackingMiddleware
 from app.middleware.local_only import LocalOnlyMiddleware
 from app.middleware.security_headers import SecurityHeadersMiddleware
@@ -100,6 +101,16 @@ def create_app() -> FastAPI:
 
     # Security headers: CSP, X-Frame-Options, X-Content-Type-Options, HSTS
     app.add_middleware(SecurityHeadersMiddleware)
+
+    # Mark each request with its trust channel (local|remote) for downstream
+    # gating (e.g. require_local_admin). Provider-callable injection lets tests
+    # monkeypatch settings without rebuilding the app.
+    app.add_middleware(
+        ChannelMarkerMiddleware,
+        channel_provider=lambda: settings.channel,
+        loopback_fallback_provider=lambda: settings.local_loopback_fallback,
+        is_dev_provider=lambda: settings.is_dev_mode,
+    )
 
     # Add API version headers (X-API-Version, X-API-Min-Version) to /api/ responses
     app.add_middleware(ApiVersionMiddleware)

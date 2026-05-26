@@ -25,6 +25,10 @@ os.environ.setdefault("NAS_QUOTA_BYTES", str(10 * 1024 * 1024 * 1024))
 # Prevent the application startup lifecycle from performing full DB init/seed during tests
 # Tests create an in-memory DB and manage schema; skip app-level init to avoid touching production DB.
 os.environ.setdefault("SKIP_APP_INIT", "1")
+# Ensure existing tests see channel=local by default (Tauri-like environment).
+# Tests that verify the local-channel gate use the `remote_client` fixture
+# below, which monkeypatches settings.channel to "remote".
+os.environ.setdefault("BALUHOST_CHANNEL", "local")
 # Per-worker isolation for storage directories and the SQLite DB. xdist
 # workers inherit env vars from the controller, so plain `setdefault` would
 # keep all workers pointing at the controller's path and they'd race on the
@@ -260,9 +264,23 @@ def client(db_session: Session) -> Generator[TestClient, None, None]:
         # Assign a unique per-test header so rate limiting buckets are separated
         test_client.headers.setdefault("X-Test-Client", str(uuid4()))
         yield test_client
-    
+
     # Clean up dependency overrides
     app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def remote_client(client, monkeypatch):
+    """TestClient with channel=remote — for verifying the local-channel gate.
+
+    Uses the existing `client` fixture but monkeypatches settings.channel to
+    'remote' for the lifetime of the test. Combine with `admin_headers` to
+    verify that destructive endpoints return 403 local_channel_required when
+    called via the (simulated) TCP path.
+    """
+    from app.core.config import settings as _settings
+    monkeypatch.setattr(_settings, "channel", "remote")
+    yield client
 
 
 @pytest_asyncio.fixture

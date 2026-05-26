@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_admin, get_current_user, get_db
+from app.api.deps import get_current_admin, get_current_user, get_db, require_local_admin
 from app.core.rate_limiter import user_limiter, get_limit
 from app.models.user import User
 from app.middleware.plugin_gate import invalidate_plugin_cache
@@ -506,7 +506,7 @@ async def uninstall_plugin(
     request: Request, response: Response,
     name: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_admin),
+    current_user: User = Depends(require_local_admin),
     plugin_manager: PluginManager = Depends(get_plugin_manager),
 ):
     """Uninstall a plugin (remove from database, files remain).

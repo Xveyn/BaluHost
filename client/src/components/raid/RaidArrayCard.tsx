@@ -2,6 +2,7 @@ import type { FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { RaidArray, RaidDevice, RaidSpeedLimits } from '../../api/raid';
 import { formatBytes, formatNumber } from '../../lib/formatters';
+import { LocalOnlyAction } from '../LocalOnlyAction';
 import RaidCacheStatus from './RaidCacheStatus';
 import {
   getStatusStyle,
@@ -142,18 +143,20 @@ export const RaidArrayCard: React.FC<RaidArrayCardProps> = ({
                 <span className="sm:hidden">Rebuild</span>
               </button>
             )}
-            <button
-              onClick={() => onDeleteArray(array.name)}
-              disabled={busy}
-              className={`whitespace-nowrap rounded-xl border px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm transition touch-manipulation active:scale-95 ${
-                busy
-                  ? 'cursor-not-allowed border-slate-800 bg-slate-900/60 text-slate-500'
-                  : 'border-rose-500/40 bg-rose-500/15 text-rose-200 hover:border-rose-500/60'
-              }`}
-            >
-              <span className="hidden sm:inline">{t('system:raid.deleteArray')}</span>
-              <span className="sm:hidden">Delete</span>
-            </button>
+            <LocalOnlyAction>
+              <button
+                onClick={() => onDeleteArray(array.name)}
+                disabled={busy}
+                className={`whitespace-nowrap rounded-xl border px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm transition touch-manipulation active:scale-95 ${
+                  busy
+                    ? 'cursor-not-allowed border-slate-800 bg-slate-900/60 text-slate-500'
+                    : 'border-rose-500/40 bg-rose-500/15 text-rose-200 hover:border-rose-500/60'
+                }`}
+              >
+                <span className="hidden sm:inline">{t('system:raid.deleteArray')}</span>
+                <span className="sm:hidden">Delete</span>
+              </button>
+            </LocalOnlyAction>
           </div>
         </div>
       </div>
