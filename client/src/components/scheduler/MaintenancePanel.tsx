@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { buildApiUrl } from '../../lib/api';
 import { getRaidStatus } from '../../api/raid';
 import { fetchSmartStatus, getSmartMode, toggleSmartMode, runSmartTest } from '../../api/smart';
 import type { RaidStatusResponse, RaidArray, RaidDevice } from '../../api/raid';
@@ -119,7 +120,7 @@ export function MaintenancePanel({ addToast, schedulers, onRunNow }: Maintenance
 
   // Dev-mode detection
   const { data: modeData } = useAsyncData<{ dev_mode: boolean }>(
-    () => fetch('/api/system/mode').then(r => r.json()),
+    () => fetch(buildApiUrl('/api/system/mode')).then(r => r.json()),
   );
   const isDevMode = modeData?.dev_mode === true;
 

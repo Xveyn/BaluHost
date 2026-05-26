@@ -1,6 +1,7 @@
 import { type FormEvent, useState } from 'react';
 import toast from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
+import { buildApiUrl } from '../lib/api';
 
 interface MockDiskWizardProps {
   onClose: () => void;
@@ -26,7 +27,7 @@ export default function MockDiskWizard({ onClose, onSuccess }: MockDiskWizardPro
 
     try {
       // Dev-Mode API Call (to be implemented in backend)
-      const response = await fetch('/api/system/raid/dev/add-mock-disk', {
+      const response = await fetch(buildApiUrl('/api/system/raid/dev/add-mock-disk'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
