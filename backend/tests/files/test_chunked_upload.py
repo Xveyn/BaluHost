@@ -26,8 +26,15 @@ def manager():
     """Create a fresh ChunkedUploadManager for each test."""
     mgr = ChunkedUploadManager()
     yield mgr
-    # Clean up any temp files
-    asyncio.get_event_loop().run_until_complete(mgr.shutdown())
+    # Clean up any temp files. asyncio.get_event_loop() raises in Py 3.11+
+    # when no loop is current in the main thread (which happens when a prior
+    # test on the same xdist worker closed its loop), so explicitly create a
+    # fresh one for the shutdown coroutine.
+    loop = asyncio.new_event_loop()
+    try:
+        loop.run_until_complete(mgr.shutdown())
+    finally:
+        loop.close()
 
 
 # ============================================================================
