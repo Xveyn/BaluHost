@@ -11,7 +11,9 @@ import { useMemoryMonitoring } from '../../hooks/useMonitoring';
 import { formatBytes, formatNumber } from '../../lib/formatters';
 import { StatCard } from '../ui/StatCard';
 
-// Display order of units in the breakdown (matches BALUHOST_PROCESS_PATTERNS in backend).
+// Display order of units in the breakdown.
+// Note: baluhost-backend precedes baluhost-backend-local here for user readability;
+// the backend BALUHOST_PROCESS_PATTERNS list has the opposite order (first-match-wins routing).
 const UNIT_DISPLAY_ORDER = [
   'baluhost-backend',
   'baluhost-backend-local',

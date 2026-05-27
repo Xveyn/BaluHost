@@ -89,3 +89,25 @@ def test_collect_samples_routes_backend_local_to_its_own_bucket():
     assert by_pid[302].process_name == "baluhost-backend-local"
     # The same PID is NOT duplicated under two names
     assert sum(1 for s in samples if s.pid == 302) == 1
+
+
+def test_collect_samples_emits_stopped_sample_for_vanished_unit():
+    """When a previously-seen unit disappears, emit a synthetic is_alive=False sample."""
+    tracker = ProcessTracker()
+    proc = _fake_proc(501, "python", "python scripts/scheduler_worker.py")
+
+    # Prime _known_pids with one alive sample
+    with patch.object(process_tracker.psutil, "process_iter", return_value=[proc]):
+        tracker.collect_samples()
+
+    # Next tick: process gone
+    with patch.object(process_tracker.psutil, "process_iter", return_value=[]):
+        samples = tracker.collect_samples()
+
+    stopped = [s for s in samples if not s.is_alive]
+    assert len(stopped) == 1
+    assert stopped[0].process_name == "baluhost-scheduler"
+    assert stopped[0].pid == 501
+    assert stopped[0].status == "stopped"
+    assert stopped[0].cpu_percent == 0.0
+    assert stopped[0].memory_mb == 0.0
