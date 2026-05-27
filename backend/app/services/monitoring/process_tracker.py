@@ -65,66 +65,81 @@ class ProcessTracker:
         """
         Collect samples for all BaluHost processes.
 
-        Returns:
-            List of process samples
+        Iterates processes once and classifies each PID under the first pattern
+        whose tokens all match. This prevents double-counting when a process
+        matches multiple patterns (e.g. backend-local also matches backend).
         """
-        samples = []
+        samples: List[ProcessSampleSchema] = []
         timestamp = datetime.now(timezone.utc)
+        seen_names: set[str] = set()
 
-        for process_def in BALUHOST_PROCESS_PATTERNS:
-            process_name = process_def["name"]
-            patterns = process_def["patterns"]
+        try:
+            for proc in psutil.process_iter(
+                ["pid", "name", "cmdline", "cpu_percent", "memory_info", "status"]
+            ):
+                try:
+                    info = proc.info
+                    name = (info.get("name") or "").lower()
+                    cmdline = " ".join(info.get("cmdline") or []).lower()
 
-            # Find matching processes
-            matching_procs = self._find_processes(patterns)
+                    matched_name: Optional[str] = None
+                    for entry in BALUHOST_PROCESS_PATTERNS:
+                        patterns = entry["patterns"]
+                        if all(p.lower() in name or p.lower() in cmdline for p in patterns):
+                            matched_name = entry["name"]
+                            break
 
-            if matching_procs:
-                for proc_info in matching_procs:
+                    if matched_name is None:
+                        continue
+
+                    memory_mb = 0.0
+                    if info.get("memory_info"):
+                        memory_mb = info["memory_info"].rss / (1024 * 1024)
+
                     sample = ProcessSampleSchema(
                         timestamp=timestamp,
-                        process_name=process_name,
-                        pid=proc_info["pid"],
-                        cpu_percent=round(proc_info["cpu_percent"], 2),
-                        memory_mb=round(proc_info["memory_mb"], 2),
-                        status=proc_info["status"],
+                        process_name=matched_name,
+                        pid=info["pid"],
+                        cpu_percent=round(info.get("cpu_percent", 0.0) or 0.0, 2),
+                        memory_mb=round(memory_mb, 2),
+                        status=info.get("status", "unknown"),
                         is_alive=True,
                     )
                     samples.append(sample)
+                    seen_names.add(matched_name)
 
-                    # Store in buffer
                     with self._lock:
-                        if process_name not in self._process_buffers:
-                            self._process_buffers[process_name] = []
-                        self._process_buffers[process_name].append(sample)
-                        if len(self._process_buffers[process_name]) > self.buffer_size:
-                            self._process_buffers[process_name].pop(0)
+                        self._process_buffers.setdefault(matched_name, []).append(sample)
+                        if len(self._process_buffers[matched_name]) > self.buffer_size:
+                            self._process_buffers[matched_name].pop(0)
+                        self._known_pids[matched_name] = info["pid"]
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+        except Exception as e:
+            logger.error(f"Error iterating processes: {e}")
 
-                        # Track PID for crash detection
-                        self._known_pids[process_name] = proc_info["pid"]
-            else:
-                # Process not found - check if it crashed
-                with self._lock:
-                    if process_name in self._known_pids:
-                        # Was running before, now gone = crash or stop
-                        sample = ProcessSampleSchema(
-                            timestamp=timestamp,
-                            process_name=process_name,
-                            pid=self._known_pids[process_name],
-                            cpu_percent=0.0,
-                            memory_mb=0.0,
-                            status="stopped",
-                            is_alive=False,
-                        )
-                        samples.append(sample)
-
-                        if process_name not in self._process_buffers:
-                            self._process_buffers[process_name] = []
-                        self._process_buffers[process_name].append(sample)
-                        if len(self._process_buffers[process_name]) > self.buffer_size:
-                            self._process_buffers[process_name].pop(0)
-
-                        logger.warning(f"Process '{process_name}' (PID {self._known_pids[process_name]}) stopped or crashed")
-                        del self._known_pids[process_name]
+        # Emit synthetic "stopped" samples for previously seen names that are now gone
+        with self._lock:
+            gone = set(self._known_pids.keys()) - seen_names
+            for matched_name in gone:
+                last_pid = self._known_pids[matched_name]
+                sample = ProcessSampleSchema(
+                    timestamp=timestamp,
+                    process_name=matched_name,
+                    pid=last_pid,
+                    cpu_percent=0.0,
+                    memory_mb=0.0,
+                    status="stopped",
+                    is_alive=False,
+                )
+                samples.append(sample)
+                self._process_buffers.setdefault(matched_name, []).append(sample)
+                if len(self._process_buffers[matched_name]) > self.buffer_size:
+                    self._process_buffers[matched_name].pop(0)
+                logger.warning(
+                    f"Process '{matched_name}' (PID {last_pid}) stopped or crashed"
+                )
+                del self._known_pids[matched_name]
 
         return samples
 
