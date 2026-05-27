@@ -106,6 +106,7 @@ class MemorySampleSchema(BaseModel):
     percent: float
     available_bytes: Optional[int] = None
     baluhost_memory_bytes: Optional[int] = None  # Memory used by BaluHost processes
+    baluhost_memory_breakdown: Optional[Dict[str, int]] = None  # Per-unit memory breakdown
 
     class Config:
         from_attributes = True
@@ -213,6 +214,7 @@ class CurrentMemoryResponse(BaseModel):
     percent: float
     available_bytes: Optional[int] = None
     baluhost_memory_bytes: Optional[int] = None  # Memory used by BaluHost processes
+    baluhost_memory_breakdown: Optional[Dict[str, int]] = None  # Per-unit memory breakdown
 
 
 class CurrentNetworkResponse(BaseModel):
