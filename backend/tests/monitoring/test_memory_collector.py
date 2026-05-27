@@ -13,6 +13,7 @@ from app.services.monitoring.process_tracker import BALUHOST_PROCESS_PATTERNS
 
 
 def _fake_proc(pid: int, cmdline_str: str, rss_bytes: int):
+    """Build a MagicMock matching the .info dict shape requested by get_baluhost_memory_breakdown (pid/name/cmdline/memory_info)."""
     proc = MagicMock()
     proc.info = {
         "pid": pid,

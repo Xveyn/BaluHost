@@ -120,6 +120,8 @@ class MemoryMetricCollector(MetricCollector[MemorySampleSchema]):
 
     def db_to_sample(self, db_record: MemorySample) -> MemorySampleSchema:
         """Convert database record to schema."""
+        # baluhost_memory_breakdown is live-only (no DB column); defaults to None.
+        # Frontend consumers must handle null for history endpoints.
         return MemorySampleSchema(
             timestamp=db_record.timestamp,
             used_bytes=db_record.used_bytes,
