@@ -1,8 +1,9 @@
 """
 Process tracker for BaluHost-related processes.
 
-Tracks backend (uvicorn), frontend (node), and other BaluHost processes
-for historical analysis and crash detection.
+Tracks the BaluHost systemd units (backend, backend-local, scheduler, webdav,
+monitoring) plus optional dev/operator processes (TUI, frontend-dev) for
+historical analysis and crash detection.
 """
 
 from __future__ import annotations
@@ -132,7 +133,9 @@ class ProcessTracker:
         Find processes matching the given patterns.
 
         Args:
-            patterns: List of substrings to match in process name or cmdline
+            patterns: List of substrings — ALL must appear in process name or
+                combined cmdline (all-of semantics; supports multi-token patterns
+                like ["uvicorn app.main", "--fd 3"] to disambiguate units).
 
         Returns:
             List of process info dicts

@@ -26,7 +26,10 @@ def _fake_proc(pid: int, name: str, cmdline_str: str, rss_bytes: int = 1024 * 10
 
 
 def test_patterns_include_all_five_systemd_units():
-    """All five prod systemd units have a process_name entry."""
+    """All five production systemd units are present in BALUHOST_PROCESS_PATTERNS.
+
+    (TUI and frontend-dev are optional/dev-only and not asserted here.)
+    """
     names = {entry["name"] for entry in BALUHOST_PROCESS_PATTERNS}
     assert "baluhost-backend" in names
     assert "baluhost-backend-local" in names
@@ -45,7 +48,7 @@ def test_find_processes_requires_all_patterns_to_match():
     """Multi-token pattern: all tokens must be in cmdline."""
     tracker = ProcessTracker()
     procs = [
-        # Has only first token → should NOT match a two-token pattern
+        # Has "uvicorn app.main" but not "--fd 3" → should NOT match a two-token pattern
         _fake_proc(101, "python", "python -m uvicorn app.main --port 8000"),
         # Has both tokens → should match
         _fake_proc(102, "python", "python -m uvicorn app.main --fd 3 --workers 2"),
