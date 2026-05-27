@@ -154,6 +154,10 @@ class ProcessTracker:
 
         Returns:
             List of process info dicts
+
+        Note:
+            This is a standalone utility; `collect_samples` no longer calls it.
+            For tracked, crash-detecting sampling use `collect_samples` instead.
         """
         matching = []
 
