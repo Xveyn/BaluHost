@@ -53,9 +53,20 @@ export function BackendLogsTab() {
   const connectSSE = useCallback(() => {
     const token = localStorage.getItem('token');
     if (!token) return;
+    // Tauri Companion: SSE not proxied yet; skip to avoid constructor throw.
+    if (typeof window !== 'undefined' && window.__BALU_API_BASE__) {
+      setConnected(false);
+      return;
+    }
 
     const url = backendLogsApi.getStreamUrl(token);
-    const es = new EventSource(url);
+    let es: EventSource;
+    try {
+      es = new EventSource(url);
+    } catch {
+      setConnected(false);
+      return;
+    }
     eventSourceRef.current = es;
 
     es.addEventListener('log', (e) => {

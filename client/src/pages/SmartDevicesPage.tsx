@@ -62,6 +62,8 @@ export default function SmartDevicesPage() {
 
   useEffect(() => {
     if (!token) return;
+    // Tauri Companion: WS not proxied yet; skip to avoid constructor throw.
+    if (typeof window !== 'undefined' && window.__BALU_API_BASE__) return;
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.host;
@@ -69,7 +71,12 @@ export default function SmartDevicesPage() {
     // smart_device_update messages on the same channel.
     const wsUrl = `${protocol}//${host}${buildApiUrl('/api/notifications/ws')}?token=${token}`;
 
-    const ws = new WebSocket(wsUrl);
+    let ws: WebSocket;
+    try {
+      ws = new WebSocket(wsUrl);
+    } catch {
+      return;
+    }
     wsRef.current = ws;
 
     ws.onmessage = (event) => {

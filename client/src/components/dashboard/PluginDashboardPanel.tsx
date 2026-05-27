@@ -64,12 +64,38 @@ export const PluginDashboardPanel: React.FC = () => {
   // WebSocket subscription for live updates
   useEffect(() => {
     if (!token) return;
+    // Tauri Companion: the Rust HTTP→UDS proxy can't relay WebSocket
+    // upgrades yet, and `window.location.host` resolves to `tauri.localhost`
+    // which produces a malformed WS URL that crashes the constructor.
+    // Fall through to REST polling (started below) instead.
+    if (typeof window !== 'undefined' && window.__BALU_API_BASE__) {
+      pollRef.current = setInterval(fetchPanel, REST_POLL_INTERVAL);
+      return () => {
+        if (pollRef.current) {
+          clearInterval(pollRef.current);
+          pollRef.current = null;
+        }
+      };
+    }
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.host;
     const wsUrl = `${protocol}//${host}${buildApiUrl('/api/notifications/ws')}?token=${token}`;
 
-    const ws = new WebSocket(wsUrl);
+    let ws: WebSocket;
+    try {
+      ws = new WebSocket(wsUrl);
+    } catch {
+      // Constructor can throw (malformed URL, insecure context). Degrade
+      // to REST polling instead of bubbling to the ErrorBoundary.
+      pollRef.current = setInterval(fetchPanel, REST_POLL_INTERVAL);
+      return () => {
+        if (pollRef.current) {
+          clearInterval(pollRef.current);
+          pollRef.current = null;
+        }
+      };
+    }
     wsRef.current = ws;
 
     ws.onmessage = (event) => {
