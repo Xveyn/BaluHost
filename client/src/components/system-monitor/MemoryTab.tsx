@@ -1,8 +1,9 @@
 /**
- * MemoryTab -- RAM monitoring tab with usage chart.
+ * MemoryTab -- RAM monitoring tab with usage chart and BaluHost per-unit breakdown.
  */
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { MetricChart } from '../monitoring';
 import type { TimeRange } from '../../api/monitoring';
@@ -10,17 +11,38 @@ import { useMemoryMonitoring } from '../../hooks/useMonitoring';
 import { formatBytes, formatNumber } from '../../lib/formatters';
 import { StatCard } from '../ui/StatCard';
 
+// Display order of units in the breakdown (matches BALUHOST_PROCESS_PATTERNS in backend).
+const UNIT_DISPLAY_ORDER = [
+  'baluhost-backend',
+  'baluhost-backend-local',
+  'baluhost-scheduler',
+  'baluhost-webdav',
+  'baluhost-monitoring',
+  'baluhost-tui',
+  'baluhost-frontend-dev',
+] as const;
+
+// i18n key per unit (under `system:monitor.units.*`).
+const UNIT_LABEL_KEY: Record<string, string> = {
+  'baluhost-backend':       'monitor.units.backend',
+  'baluhost-backend-local': 'monitor.units.backendLocal',
+  'baluhost-scheduler':     'monitor.units.scheduler',
+  'baluhost-webdav':        'monitor.units.webdav',
+  'baluhost-monitoring':    'monitor.units.monitoring',
+  'baluhost-tui':           'monitor.units.tui',
+  'baluhost-frontend-dev':  'monitor.units.frontendDev',
+};
+
 export function MemoryTab({ timeRange }: { timeRange: TimeRange }) {
   const { t } = useTranslation(['system', 'common']);
   const { current, history, loading, error } = useMemoryMonitoring({ historyDuration: timeRange });
+  const [breakdownOpen, setBreakdownOpen] = useState(false);
 
-  // Calculate total RAM in GB for chart domain
   const totalGb = current ? current.total_bytes / (1024 * 1024 * 1024) : 16;
 
-  // Filter out samples with invalid data and convert to GB
   const chartData = useMemo(() => {
     return history
-      .filter((s) => s.used_bytes > 0 && s.total_bytes > 0) // Only valid samples
+      .filter((s) => s.used_bytes > 0 && s.total_bytes > 0)
       .map((s) => ({
         time: s.timestamp,
         usedGb: s.used_bytes / (1024 * 1024 * 1024),
@@ -32,13 +54,21 @@ export function MemoryTab({ timeRange }: { timeRange: TimeRange }) {
 
   const hasBaluhostData = chartData.some((d) => d.baluhostGb !== null);
 
+  // Visible units = units with > 0 bytes, in canonical order.
+  const visibleUnits = useMemo(() => {
+    const breakdown = current?.baluhost_memory_breakdown;
+    if (!breakdown) return [];
+    return UNIT_DISPLAY_ORDER
+      .filter((name) => (breakdown[name] ?? 0) > 0)
+      .map((name) => ({ name, bytes: breakdown[name] }));
+  }, [current]);
+
   if (error) {
     return <div className="text-red-400 text-center py-8">{error}</div>;
   }
 
   return (
     <div className="space-y-4 sm:space-y-6 min-w-0">
-      {/* Current Stats */}
       <div className="grid grid-cols-1 min-[400px]:grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-5">
         <StatCard
           label={t('monitor.used')}
@@ -65,15 +95,46 @@ export function MemoryTab({ timeRange }: { timeRange: TimeRange }) {
           color="orange"
           icon={<span className="text-orange-400 text-base sm:text-xl">%</span>}
         />
-        <StatCard
-          label="BaluHost"
-          value={current?.baluhost_memory_bytes ? formatBytes(current.baluhost_memory_bytes) : '-'}
-          color="cyan"
-          icon={<span className="text-cyan-400 text-base sm:text-xl">🏠</span>}
-        />
+
+        {/* BaluHost breakdown card */}
+        <div className="card border-slate-800/60 bg-slate-900/55 p-3 sm:p-4 flex flex-col">
+          <button
+            type="button"
+            onClick={() => setBreakdownOpen((v) => !v)}
+            className="flex items-center justify-between gap-2 text-left"
+            aria-expanded={breakdownOpen}
+          >
+            <span className="flex items-center gap-2 text-xs sm:text-sm text-slate-400">
+              <span className="text-cyan-400 text-base sm:text-xl">🏠</span>
+              BaluHost
+            </span>
+            {visibleUnits.length > 0 && (
+              breakdownOpen
+                ? <ChevronDown className="h-4 w-4 text-slate-500" />
+                : <ChevronRight className="h-4 w-4 text-slate-500" />
+            )}
+          </button>
+          <div className="mt-1 text-xl sm:text-2xl font-semibold text-white tabular-nums">
+            {current?.baluhost_memory_bytes ? formatBytes(current.baluhost_memory_bytes) : '-'}
+          </div>
+
+          {breakdownOpen && visibleUnits.length > 0 && (
+            <ul className="mt-3 space-y-1 text-xs sm:text-sm">
+              {visibleUnits.map((unit) => (
+                <li key={unit.name} className="flex justify-between gap-2">
+                  <span className="text-slate-400 truncate">
+                    {t(UNIT_LABEL_KEY[unit.name] ?? unit.name)}
+                  </span>
+                  <span className="text-slate-200 tabular-nums shrink-0">
+                    {formatBytes(unit.bytes)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
 
-      {/* Chart - Absolute values in GB */}
       <div className="card border-slate-800/60 bg-slate-900/55 p-4 sm:p-6">
         <h3 className="mb-3 sm:mb-4 text-base sm:text-lg font-semibold text-white">{t('monitor.ramHistory')}</h3>
         <MetricChart

@@ -258,3 +258,25 @@ class TestConstants:
     def test_default_persist_interval(self):
         """Test default persist interval value."""
         assert DEFAULT_PERSIST_INTERVAL == 12  # Every minute at 5s
+
+
+def test_memory_sample_model_dump_includes_breakdown():
+    """SHM serialization (model_dump) must include the new breakdown field."""
+    from datetime import datetime, timezone
+    from app.schemas.monitoring import MemorySampleSchema
+
+    sample = MemorySampleSchema(
+        timestamp=datetime.now(timezone.utc),
+        used_bytes=8_000_000_000,
+        total_bytes=16_000_000_000,
+        percent=50.0,
+        available_bytes=8_000_000_000,
+        baluhost_memory_bytes=300_000_000,
+        baluhost_memory_breakdown={
+            "baluhost-backend": 200_000_000,
+            "baluhost-scheduler": 100_000_000,
+        },
+    )
+    dumped = sample.model_dump(mode="json")
+    assert "baluhost_memory_breakdown" in dumped
+    assert dumped["baluhost_memory_breakdown"]["baluhost-backend"] == 200_000_000

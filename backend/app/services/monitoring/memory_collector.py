@@ -20,34 +20,43 @@ from app.services.monitoring.process_tracker import BALUHOST_PROCESS_PATTERNS
 logger = logging.getLogger(__name__)
 
 
-def get_baluhost_memory_bytes() -> int:
+def get_baluhost_memory_breakdown() -> dict[str, int]:
     """
-    Get total memory used by BaluHost processes.
+    Get RSS memory per BaluHost systemd unit.
 
-    Returns:
-        Total memory in bytes used by all BaluHost processes.
+    Returns a dict keyed by ``process_name`` from ``BALUHOST_PROCESS_PATTERNS``.
+    All defined unit names appear as keys; missing units have value 0 so the
+    UI can distinguish "unit not defined" (key absent) from "unit not running"
+    (key present, value 0).
+
+    Routing is first-match-wins (same order as BALUHOST_PROCESS_PATTERNS) so
+    a process matching multiple patterns is counted under the first.
     """
-    total_memory = 0
+    breakdown: dict[str, int] = {entry["name"]: 0 for entry in BALUHOST_PROCESS_PATTERNS}
 
     try:
         for proc in psutil.process_iter(["pid", "name", "cmdline", "memory_info"]):
             try:
-                proc_info = proc.info
-                name = proc_info.get("name", "").lower()
-                cmdline = " ".join(proc_info.get("cmdline") or []).lower()
+                info = proc.info
+                name = (info.get("name") or "").lower()
+                cmdline = " ".join(info.get("cmdline") or []).lower()
 
-                # Check if any pattern matches
                 for entry in BALUHOST_PROCESS_PATTERNS:
-                    if any(p.lower() in name or p.lower() in cmdline for p in entry["patterns"]):
-                        if proc_info.get("memory_info"):
-                            total_memory += proc_info["memory_info"].rss
-                        break  # Don't count same process twice
+                    if all(p.lower() in name or p.lower() in cmdline for p in entry["patterns"]):
+                        if info.get("memory_info"):
+                            breakdown[entry["name"]] += info["memory_info"].rss
+                        break
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 continue
     except Exception as e:
-        logger.debug(f"Error getting BaluHost memory: {e}")
+        logger.debug(f"Error getting BaluHost memory breakdown: {e}")
 
-    return total_memory
+    return breakdown
+
+
+def get_baluhost_memory_bytes() -> int:
+    """Backward-compat: total memory across all BaluHost processes."""
+    return sum(get_baluhost_memory_breakdown().values())
 
 
 class MemoryMetricCollector(MetricCollector[MemorySampleSchema]):
@@ -77,11 +86,9 @@ class MemoryMetricCollector(MetricCollector[MemorySampleSchema]):
         try:
             timestamp = datetime.now(timezone.utc)
 
-            # Get memory info
             mem = psutil.virtual_memory()
-
-            # Get BaluHost process memory
-            baluhost_memory = get_baluhost_memory_bytes()
+            breakdown = get_baluhost_memory_breakdown()
+            total_baluhost = sum(breakdown.values())
 
             return MemorySampleSchema(
                 timestamp=timestamp,
@@ -89,7 +96,8 @@ class MemoryMetricCollector(MetricCollector[MemorySampleSchema]):
                 total_bytes=mem.total,
                 percent=round(mem.percent, 2),
                 available_bytes=mem.available,
-                baluhost_memory_bytes=baluhost_memory,
+                baluhost_memory_bytes=total_baluhost,
+                baluhost_memory_breakdown=breakdown,
             )
         except Exception as e:
             logger.error(f"Failed to collect memory sample: {e}")
@@ -112,6 +120,8 @@ class MemoryMetricCollector(MetricCollector[MemorySampleSchema]):
 
     def db_to_sample(self, db_record: MemorySample) -> MemorySampleSchema:
         """Convert database record to schema."""
+        # baluhost_memory_breakdown is live-only (no DB column); defaults to None.
+        # Frontend consumers must handle null for history endpoints.
         return MemorySampleSchema(
             timestamp=db_record.timestamp,
             used_bytes=db_record.used_bytes,

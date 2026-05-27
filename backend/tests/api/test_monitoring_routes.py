@@ -103,6 +103,27 @@ class TestMemoryEndpoints:
         assert "samples" in data
         assert "sample_count" in data
 
+    def test_memory_current_includes_breakdown_field(self, client: TestClient, user_headers: dict):
+        """Memory current response carries baluhost_memory_breakdown (may be null on cold start)."""
+        response = client.get("/api/monitoring/memory/current", headers=user_headers)
+        assert response.status_code in [200, 503]
+        if response.status_code == 200:
+            data = response.json()
+            assert "baluhost_memory_breakdown" in data
+            # Either None (no sample yet on this worker) or a dict
+            breakdown = data["baluhost_memory_breakdown"]
+            assert breakdown is None or isinstance(breakdown, dict)
+            if isinstance(breakdown, dict):
+                # All defined units should be keys
+                for name in [
+                    "baluhost-backend",
+                    "baluhost-backend-local",
+                    "baluhost-scheduler",
+                    "baluhost-webdav",
+                    "baluhost-monitoring",
+                ]:
+                    assert name in breakdown
+
 
 class TestNetworkEndpoints:
     """Tests for Network monitoring endpoints."""

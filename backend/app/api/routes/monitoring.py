@@ -217,6 +217,7 @@ async def get_memory_current(
         percent=sample.percent,
         available_bytes=sample.available_bytes,
         baluhost_memory_bytes=sample.baluhost_memory_bytes,
+        baluhost_memory_breakdown=sample.baluhost_memory_breakdown,
     )
 
 

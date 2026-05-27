@@ -195,6 +195,15 @@
       "avgPower": "Avg. Power",
       "maxPower": "Max. Power",
       "minPower": "Min. Power"
+    },
+    "units": {
+      "backend": "Backend (HTTP)",
+      "backendLocal": "Backend (Local)",
+      "scheduler": "Scheduler",
+      "webdav": "WebDAV",
+      "monitoring": "Monitoring",
+      "tui": "TUI",
+      "frontendDev": "Frontend (dev)"
     }
   },
   "logging": {
