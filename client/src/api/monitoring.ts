@@ -63,7 +63,8 @@ export interface MemorySample {
   total_bytes: number;
   percent: number;
   available_bytes?: number;
-  baluhost_memory_bytes?: number;  // Memory used by BaluHost processes
+  baluhost_memory_bytes?: number;  // Total memory used by BaluHost processes
+  baluhost_memory_breakdown?: Record<string, number>;  // RSS bytes per systemd unit; null for DB-historical rows and on cold start (live-only)
 }
 
 export interface NetworkSample {
