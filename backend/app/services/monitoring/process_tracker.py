@@ -21,11 +21,19 @@ from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
-# Process patterns to track
+# Process patterns to track.
+#
+# Order matters: more-specific patterns first so first-match-wins routes
+# baluhost-backend-local before baluhost-backend (both match "uvicorn app.main").
+# `_find_processes` uses all-of matching — every token must appear in name or cmdline.
 BALUHOST_PROCESS_PATTERNS = [
-    {"name": "baluhost-backend", "patterns": ["uvicorn", "app.main"]},
-    {"name": "baluhost-frontend", "patterns": ["node", "vite"]},
-    {"name": "baluhost-tui", "patterns": ["baluhost-tui", "baluhost_tui"]},
+    {"name": "baluhost-backend-local",  "patterns": ["uvicorn app.main", "--fd 3"]},
+    {"name": "baluhost-backend",        "patterns": ["uvicorn app.main"]},
+    {"name": "baluhost-scheduler",      "patterns": ["scheduler_worker.py"]},
+    {"name": "baluhost-webdav",         "patterns": ["webdav_worker.py"]},
+    {"name": "baluhost-monitoring",     "patterns": ["monitoring_worker.py"]},
+    {"name": "baluhost-tui",            "patterns": ["baluhost_tui"]},
+    {"name": "baluhost-frontend-dev",   "patterns": ["vite"]},
 ]
 
 
@@ -138,8 +146,8 @@ class ProcessTracker:
                     name = proc_info.get("name", "").lower()
                     cmdline = " ".join(proc_info.get("cmdline") or []).lower()
 
-                    # Check if any pattern matches
-                    if any(p.lower() in name or p.lower() in cmdline for p in patterns):
+                    # All patterns must match (in name or cmdline)
+                    if all(p.lower() in name or p.lower() in cmdline for p in patterns):
                         memory_mb = 0.0
                         if proc_info.get("memory_info"):
                             memory_mb = proc_info["memory_info"].rss / (1024 * 1024)
