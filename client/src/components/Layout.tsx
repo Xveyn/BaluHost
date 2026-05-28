@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { type ReactNode, useState } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import logoMark from '../assets/baluhost-logo.png';
 import { localApi } from '../lib/localApi';
@@ -15,6 +15,7 @@ import NotificationCenter from './NotificationCenter';
 import PowerMenu from './PowerMenu';
 import { UploadProgressBar } from './UploadProgressBar';
 import { TopbarStatusStrip } from './topbar/TopbarStatusStrip';
+import { getStatusBarState } from '../api/statusBar';
 import { isPi } from '../lib/features';
 import UserMenu from './UserMenu';
 import ImpersonationBanner from './ImpersonationBanner';
@@ -123,6 +124,15 @@ export default function Layout({ children }: LayoutProps) {
   const [pendingMessage, setPendingMessage] = useState<string | null>(null);
   const { pluginNavItems } = usePlugins();
   const formattedVersion = useFormattedVersion('');
+  const [showUploadBar, setShowUploadBar] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    getStatusBarState()
+      .then((s) => { if (!cancelled) setShowUploadBar(s.show_bottom_upload); })
+      .catch(() => { /* default to showing on error */ });
+    return () => { cancelled = true; };
+  }, []);
 
   // Icons for navigation items
   const schedulerIcon = (
@@ -601,7 +611,7 @@ export default function Layout({ children }: LayoutProps) {
               {children}
             </div>
           </main>
-          {!isPi && <UploadProgressBar />}
+          {!isPi && showUploadBar && <UploadProgressBar />}
         </div>
       </div>
     </div>
