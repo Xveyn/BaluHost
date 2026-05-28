@@ -416,3 +416,7 @@ async def toggle_audit_logging(
 # Include RAID sub-router
 from app.api.routes.system_raid import router as raid_router
 router.include_router(raid_router)
+
+# Include status-strip sub-router (serves /api/system/statusbar/...)
+from app.api.routes.status_bar import router as status_bar_router
+router.include_router(status_bar_router)
