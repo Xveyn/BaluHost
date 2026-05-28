@@ -44,7 +44,9 @@ export function StatusBarConfigTab() {
       .filter(p => p.enabled)
       .map(p => ({
         id: p.pill_id, kind: 'state' as const, tone: 'neutral' as const,
-        label: t(p.name_key), href: p.href, value: null, icon: null, extra: null,
+        // Strip the backend-sent "statusBar." ns prefix; useTranslation('statusBar')
+        // already binds the namespace, so t() needs the ns-relative key.
+        label: t(p.name_key.replace(/^statusBar\./, '')), href: p.href, value: null, icon: null, extra: null,
       })),
     show_bottom_upload: cfg.showBottomUpload,
   }), [cfg.pills, cfg.showBottomUpload, t]);

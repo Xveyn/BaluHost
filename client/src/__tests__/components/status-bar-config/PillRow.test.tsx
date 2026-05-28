@@ -28,7 +28,7 @@ const base: PillCatalogEntry = {
 describe('PillRow', () => {
   it('renders the pill name', () => {
     wrap(base);
-    expect(screen.getByText('statusBar.pills.power.name')).toBeInTheDocument();
+    expect(screen.getByText('pills.power.name')).toBeInTheDocument();
   });
 
   it('calls onToggleEnabled when the enabled switch is clicked', () => {

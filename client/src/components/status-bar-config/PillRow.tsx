@@ -38,7 +38,10 @@ export function PillRow({ entry, onToggleEnabled, onSetVisibility }: Props) {
         <GripVertical className="h-4 w-4" />
       </button>
 
-      <span className="flex-1 text-sm text-slate-200">{t(entry.name_key)}</span>
+      {/* Backend sends name_key as a fully-qualified i18next key with a dot-prefixed
+          namespace ("statusBar.pills.power.name"). useTranslation('statusBar') already
+          binds the namespace, so strip the leading "statusBar." to pass the ns-relative key. */}
+      <span className="flex-1 text-sm text-slate-200">{t(entry.name_key.replace(/^statusBar\./, ''))}</span>
 
       {entry.visibility_locked ? (
         <span className="inline-flex items-center gap-1 rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-400">

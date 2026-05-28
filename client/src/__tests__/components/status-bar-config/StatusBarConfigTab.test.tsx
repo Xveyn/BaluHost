@@ -34,8 +34,8 @@ function renderTab() {
 describe('StatusBarConfigTab', () => {
   it('lists all pills after load', async () => {
     renderTab();
-    await waitFor(() => expect(screen.getByText('statusBar.pills.power.name')).toBeInTheDocument());
-    expect(screen.getByText('statusBar.pills.raid.name')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('pills.power.name')).toBeInTheDocument());
+    expect(screen.getByText('pills.raid.name')).toBeInTheDocument();
   });
 
   it('save button calls updateStatusBarConfig', async () => {
