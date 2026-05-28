@@ -24,8 +24,8 @@ jobs:
     # Skip deploy for automated version bump commits and stable-release commits
     # (the code is already on production from the prior pre-release deploy).
     # Actor allowlist (Layer 3 in .claude/rules/ci-cd-security.md): only Xveyn
-    # may trigger a self-hosted production deploy. Auto-merged PRs land on
-    # main via secrets.DEPLOY_PAT (owned by Xveyn), so github.actor is Xveyn.
+    # may trigger a self-hosted production deploy. Xveyn merges PRs to main
+    # manually, so the resulting push:main event has github.actor == Xveyn.
     if: >-
       !startsWith(github.event.head_commit.message, 'chore: bump version')
       && !startsWith(github.event.head_commit.message, 'chore: release v')
@@ -48,3 +48,39 @@ jobs:
       - name: Show deploy state
         if: always()
         run: cat /opt/baluhost/.deploy-state 2>/dev/null || echo "No deploy state file"
+
+      # Pre-release tag is created here (not in a separate merge workflow) so it
+      # only lands after a successful production deploy — a tag therefore always
+      # corresponds to code that is actually running on prod. Pushed with
+      # DEPLOY_PAT (not GITHUB_TOKEN) so the tag-push event triggers
+      # create-release.yml. Number is derived from existing tags to stay
+      # monotonic per version, independent of any workflow run_number.
+      - name: Checkout repo for tagging
+        if: success()
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Auto-tag pre-release
+        if: success()
+        env:
+          DEPLOY_PAT: ${{ secrets.DEPLOY_PAT }}
+        run: |
+          VERSION=$(grep -oP '^version\s*=\s*"\K[^"]+' backend/pyproject.toml || true)
+          if [ -z "$VERSION" ]; then
+            echo "Could not read version from pyproject.toml -- skipping pre-release tag"
+            exit 0
+          fi
+          LATEST=$(git tag -l "v${VERSION}-pre.*" | sed -E 's/.*-pre\.//' | sort -n | tail -1)
+          NEXT=$(( ${LATEST:-0} + 1 ))
+          TAG="v${VERSION}-pre.${NEXT}"
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            echo "Tag $TAG already exists -- skipping"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "Pre-release $TAG"
+          git push "https://x-access-token:${DEPLOY_PAT}@github.com/${GITHUB_REPOSITORY}.git" "$TAG"
+          echo "Tag $TAG pushed -- create-release.yml will create the GitHub pre-release"
