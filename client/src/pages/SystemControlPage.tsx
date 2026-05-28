@@ -8,7 +8,7 @@
 
 import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Zap, Fan, HardDrive, Archive, Shield, Server, History, Plug, Gauge, FolderOpen, Share2, Cpu, Globe, Settings, Moon, Variable, Bell, CircuitBoard } from 'lucide-react';
+import { Zap, Fan, HardDrive, Archive, Shield, Server, History, Plug, Gauge, FolderOpen, Share2, Cpu, Globe, Settings, Moon, Variable, Bell, CircuitBoard, LayoutPanelTop } from 'lucide-react';
 import PowerManagement from './PowerManagement';
 import FanControl from './FanControl';
 import RaidManagement from './RaidManagement';
@@ -25,8 +25,9 @@ import SsdFileCacheTab from '../components/ssd-cache/SsdFileCacheTab';
 import { SystemVariablesTab } from '../components/env-config';
 import FirebaseManagementCard from '../components/firebase/FirebaseManagementCard';
 import BaluPiSetup from '../components/balupi/BaluPiSetup';
+import { StatusBarConfigTab } from '../components/status-bar-config';
 
-type TabType = 'energy' | 'fan' | 'sleep' | 'raid' | 'backup' | 'ssdcache' | 'vpn' | 'webdav' | 'samba' | 'firebase' | 'services' | 'vcl' | 'smart' | 'ratelimits' | 'envconfig' | 'balupi';
+type TabType = 'energy' | 'fan' | 'sleep' | 'raid' | 'backup' | 'ssdcache' | 'vpn' | 'webdav' | 'samba' | 'firebase' | 'services' | 'vcl' | 'smart' | 'ratelimits' | 'envconfig' | 'balupi' | 'statusbar';
 type CategoryType = 'hardware' | 'storage' | 'network' | 'system';
 
 interface TabConfig {
@@ -85,6 +86,7 @@ const CATEGORIES: CategoryConfig[] = [
       { id: 'ratelimits', labelKey: 'systemControl.tabs.rateLimits', icon: <Gauge className="h-5 w-5" /> },
       { id: 'envconfig', labelKey: 'systemControl.tabs.envConfig', icon: <Variable className="h-5 w-5" /> },
       { id: 'balupi', labelKey: 'systemControl.tabs.balupi', icon: <CircuitBoard className="h-5 w-5" /> },
+      { id: 'statusbar', labelKey: 'systemControl.tabs.statusBar', icon: <LayoutPanelTop className="h-5 w-5" /> },
     ],
   },
 ];
@@ -208,6 +210,7 @@ export default function SystemControlPage() {
         {activeTab === 'firebase' && <FirebaseManagementCard />}
         {activeTab === 'envconfig' && <SystemVariablesTab />}
         {activeTab === 'balupi' && <BaluPiSetup />}
+        {activeTab === 'statusbar' && <StatusBarConfigTab />}
       </div>
     </div>
   );
