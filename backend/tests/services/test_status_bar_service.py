@@ -82,3 +82,33 @@ def test_get_config_is_idempotent(db_session):
     svc.get_config()
     from app.models.status_bar import StatusBarPillConfig
     assert db_session.query(StatusBarPillConfig).count() == 11
+
+
+# ── Task 10: config update (locked guard + diff) ────────────────────────
+def test_update_config_persists_enabled_and_order(db_session):
+    from app.schemas.status_bar import StatusBarConfigUpdate, PillConfigItem
+    svc = StatusBarService(db_session)
+    svc.get_config()  # seed
+    update = StatusBarConfigUpdate(
+        pills=[PillConfigItem(pill_id="power", enabled=True, visibility="all", sort_order=5)],
+        show_bottom_upload=False,
+    )
+    svc.update_config(update)
+    config = svc.get_config()
+    power = next(p for p in config.pills if p.pill_id == "power")
+    assert power.enabled is True
+    assert power.visibility == "all"
+    assert power.sort_order == 5
+    assert config.show_bottom_upload is False
+
+
+def test_update_config_rejects_all_visibility_for_locked_pill(db_session):
+    from app.schemas.status_bar import StatusBarConfigUpdate, PillConfigItem
+    svc = StatusBarService(db_session)
+    svc.get_config()
+    update = StatusBarConfigUpdate(
+        pills=[PillConfigItem(pill_id="raid", enabled=True, visibility="all", sort_order=0)],
+        show_bottom_upload=True,
+    )
+    with pytest.raises(ValueError, match="visibility_locked"):
+        svc.update_config(update)
