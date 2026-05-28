@@ -24,17 +24,17 @@ def upgrade() -> None:
     op.create_table('status_bar_pill_config',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('pill_id', sa.String(length=32), nullable=False),
-    sa.Column('enabled', sa.Boolean(), nullable=False),
-    sa.Column('visibility', sa.String(length=8), nullable=False),
-    sa.Column('sort_order', sa.Integer(), nullable=False),
-    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
+    sa.Column('enabled', sa.Boolean(), nullable=False, server_default='0'),
+    sa.Column('visibility', sa.String(length=8), nullable=False, server_default='admin'),
+    sa.Column('sort_order', sa.Integer(), nullable=False, server_default='0'),
+    sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('CURRENT_TIMESTAMP'), nullable=False),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('pill_id')
     )
     op.create_index(op.f('ix_status_bar_pill_config_id'), 'status_bar_pill_config', ['id'], unique=False)
     op.create_table('status_bar_settings',
     sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('show_bottom_upload', sa.Boolean(), nullable=False),
+    sa.Column('show_bottom_upload', sa.Boolean(), nullable=False, server_default='1'),
     sa.PrimaryKeyConstraint('id')
     )
     # ### end Alembic commands ###
