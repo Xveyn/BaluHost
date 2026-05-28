@@ -74,3 +74,37 @@ async def test_collect_sync_warns_on_conflicts():
     assert result is not None
     assert result["tone"] == "warning"
     assert "3" in result["value"]
+
+
+@pytest.mark.asyncio
+async def test_always_awake_silent_when_disabled():
+    from app.services.status_bar import collectors
+    fake_status = MagicMock()
+    fake_status.always_awake = MagicMock(enabled=False, until=None, expires_in_seconds=None)
+    mgr = MagicMock(); mgr.get_status = MagicMock(return_value=fake_status)
+    with patch.object(collectors, "get_sleep_manager", return_value=mgr):
+        assert await collectors.collect_always_awake(MagicMock(), "admin") is None
+
+
+@pytest.mark.asyncio
+async def test_always_awake_permanent_has_permanent_value():
+    from app.services.status_bar import collectors
+    fake_status = MagicMock()
+    fake_status.always_awake = MagicMock(enabled=True, until=None, expires_in_seconds=None)
+    mgr = MagicMock(); mgr.get_status = MagicMock(return_value=fake_status)
+    with patch.object(collectors, "get_sleep_manager", return_value=mgr):
+        result = await collectors.collect_always_awake(MagicMock(), "admin")
+    assert result["value"] == "permanent"
+    assert result["tone"] == "warning"
+
+
+@pytest.mark.asyncio
+async def test_always_awake_with_expiry_exposes_seconds():
+    from app.services.status_bar import collectors
+    fake_status = MagicMock()
+    fake_status.always_awake = MagicMock(enabled=True, until="2026-05-28T12:00:00Z", expires_in_seconds=3600.0)
+    mgr = MagicMock(); mgr.get_status = MagicMock(return_value=fake_status)
+    with patch.object(collectors, "get_sleep_manager", return_value=mgr):
+        result = await collectors.collect_always_awake(MagicMock(), "admin")
+    assert result["extra"]["expires_in_seconds"] == 3600.0
+    assert result["value"] == "01:00:00"

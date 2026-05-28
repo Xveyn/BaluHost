@@ -7,6 +7,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from app.services.pihole.service import get_pihole_service  # module-level so tests can patch collectors.get_pihole_service
+from app.services.power.sleep import get_sleep_manager  # module-level so tests can patch collectors.get_sleep_manager
 
 logger = logging.getLogger(__name__)
 
@@ -131,7 +132,6 @@ async def collect_raid(db: Session, role: str) -> Optional[dict]:
 # ── sleep (schedule status) ──────────────────────────────────────────
 @_safe()
 async def collect_sleep(db: Session, role: str) -> Optional[dict]:
-    from app.services.power.sleep import get_sleep_manager
     manager = get_sleep_manager()
     if manager is None:
         return None
@@ -148,6 +148,36 @@ async def collect_sleep(db: Session, role: str) -> Optional[dict]:
         sleep_time = None
     return {"kind": "state", "tone": "neutral", "label": "Sleep",
             "value": sleep_time, "icon": "Moon"}
+
+
+# ── always-awake (with countdown) ────────────────────────────────────
+def _format_countdown(seconds: float) -> str:
+    """Format remaining seconds as MM:SS (<1h) or HH:MM:SS (>=1h)."""
+    total = max(0, int(seconds))
+    h, rem = divmod(total, 3600)
+    m, s = divmod(rem, 60)
+    if h:
+        return f"{h:02d}:{m:02d}:{s:02d}"
+    return f"{m:02d}:{s:02d}"
+
+
+@_safe()
+async def collect_always_awake(db: Session, role: str) -> Optional[dict]:
+    manager = get_sleep_manager()
+    if manager is None:
+        return None
+    status = manager.get_status()
+    aa = getattr(status, "always_awake", None)
+    if aa is None or not aa.enabled:
+        return None
+    out = {"kind": "state", "tone": "warning", "label": "Always Awake", "icon": "Coffee"}
+    if aa.until is None:
+        out["value"] = "permanent"
+    else:
+        secs = aa.expires_in_seconds or 0.0
+        out["value"] = _format_countdown(secs)
+        out["extra"] = {"expires_in_seconds": secs}
+    return out
 
 
 # ── vpn ──────────────────────────────────────────────────────────────
