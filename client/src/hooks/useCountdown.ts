@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 export function formatCountdown(seconds: number): string {
   const total = Math.max(0, Math.floor(seconds));
@@ -15,11 +15,9 @@ export function formatCountdown(seconds: number): string {
  */
 export function useCountdown(seconds: number | null): string | null {
   const [remaining, setRemaining] = useState<number | null>(seconds);
-  const anchorRef = useRef<number | null>(seconds);
 
   // Re-anchor on input change.
   useEffect(() => {
-    anchorRef.current = seconds;
     setRemaining(seconds);
   }, [seconds]);
 
