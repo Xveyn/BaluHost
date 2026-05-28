@@ -1,7 +1,8 @@
 import {
   Zap, Shield, Upload, RefreshCw, HardDrive, Moon, Lock, Thermometer,
-  Coffee, Clock, Save, LucideIcon,
+  Coffee, Clock, Save,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 
 const ICONS: Record<string, LucideIcon> = {
   Zap, Shield, Upload, RefreshCw, HardDrive, Moon, Lock, Thermometer, Coffee, Clock, Save,

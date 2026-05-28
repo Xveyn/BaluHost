@@ -1,4 +1,3 @@
-import React from 'react';
 import { useStatusBarState } from '../../hooks/useStatusBarState';
 import { PillRenderer } from './pillRenderers';
 import type { StatusBarStateResponse } from '../../api/statusBar';

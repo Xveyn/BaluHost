@@ -1,4 +1,3 @@
-import React from 'react';
 import { Pill } from '../../ui/Pill';
 import { useCountdown } from '../../../hooks/useCountdown';
 import { resolveIcon } from '../iconMap';

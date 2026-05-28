@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { getStatusBarState, StatusBarStateResponse } from '../api/statusBar';
+import { getStatusBarState } from '../api/statusBar';
+import type { StatusBarStateResponse } from '../api/statusBar';
 
 const POLL_MS = 10_000;
 const MAX_FAILURES = 3;

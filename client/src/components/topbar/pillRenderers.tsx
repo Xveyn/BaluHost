@@ -1,4 +1,3 @@
-import React from 'react';
 import { Pill } from '../ui/Pill';
 import { AlwaysAwakePill } from './pills/AlwaysAwakePill';
 import { resolveIcon } from './iconMap';
