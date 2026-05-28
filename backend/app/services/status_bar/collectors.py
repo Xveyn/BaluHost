@@ -191,6 +191,45 @@ async def collect_vpn(db: Session, role: str) -> Optional[dict]:
             "value": str(count), "icon": "Lock"}
 
 
+# ── scheduler ────────────────────────────────────────────────────────
+def _active_executions(db: Session):
+    """RUNNING + REQUESTED scheduler executions, newest-started first."""
+    from app.models.scheduler_history import SchedulerExecution, SchedulerStatus
+    from sqlalchemy import desc
+    return (
+        db.query(SchedulerExecution)
+        .filter(SchedulerExecution.status.in_([
+            SchedulerStatus.RUNNING.value, SchedulerStatus.REQUESTED.value,
+        ]))
+        .order_by(desc(SchedulerExecution.started_at))
+        .all()
+    )
+
+
+def _scheduler_display_name(name: str) -> str:
+    from app.schemas.scheduler import SCHEDULER_REGISTRY
+    info = SCHEDULER_REGISTRY.get(name)
+    if info and info.get("display_name"):
+        return info["display_name"]
+    return name
+
+
+@_safe()
+async def collect_scheduler(db: Session, role: str) -> Optional[dict]:
+    rows = _active_executions(db)
+    if not rows:
+        return None
+    jobs = [_scheduler_display_name(r.scheduler_name) for r in rows[:3]]
+    return {
+        "kind": "activity",
+        "tone": "info",
+        "label": "Scheduler",
+        "value": str(len(rows)),
+        "icon": "Clock",
+        "extra": {"jobs": jobs},
+    }
+
+
 # ── temp / fans ──────────────────────────────────────────────────────
 @_safe()
 async def collect_temp(db: Session, role: str) -> Optional[dict]:

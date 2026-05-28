@@ -108,3 +108,45 @@ async def test_always_awake_with_expiry_exposes_seconds():
         result = await collectors.collect_always_awake(MagicMock(), "admin")
     assert result["extra"]["expires_in_seconds"] == 3600.0
     assert result["value"] == "01:00:00"
+
+
+def _exec(name, status, started_at):
+    m = MagicMock()
+    m.scheduler_name = name
+    m.status = status
+    m.started_at = started_at
+    return m
+
+
+@pytest.mark.asyncio
+async def test_scheduler_silent_when_no_active():
+    from app.services.status_bar import collectors
+    with patch.object(collectors, "_active_executions", return_value=[]):
+        assert await collectors.collect_scheduler(MagicMock(), "admin") is None
+
+
+@pytest.mark.asyncio
+async def test_scheduler_counts_active_and_lists_names():
+    from datetime import datetime, timezone
+    from app.services.status_bar import collectors
+    rows = [
+        _exec("backup", "running", datetime(2026, 5, 28, 10, tzinfo=timezone.utc)),
+        _exec("smart_scan", "running", datetime(2026, 5, 28, 11, tzinfo=timezone.utc)),
+        _exec("sync_check", "requested", datetime(2026, 5, 28, 12, tzinfo=timezone.utc)),
+    ]
+    with patch.object(collectors, "_active_executions", return_value=rows):
+        result = await collectors.collect_scheduler(MagicMock(), "admin")
+    assert result["value"] == "3"
+    assert result["tone"] == "info"
+    assert len(result["extra"]["jobs"]) == 3
+
+
+@pytest.mark.asyncio
+async def test_scheduler_caps_jobs_at_three_newest_first():
+    from datetime import datetime, timezone
+    from app.services.status_bar import collectors
+    rows = [_exec(f"job{i}", "running", datetime(2026, 5, 28, i, tzinfo=timezone.utc)) for i in range(5)]
+    with patch.object(collectors, "_active_executions", return_value=rows):
+        result = await collectors.collect_scheduler(MagicMock(), "admin")
+    assert result["value"] == "5"
+    assert len(result["extra"]["jobs"]) == 3
