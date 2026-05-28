@@ -60,3 +60,25 @@ def test_locked_set_matches_spec():
     from app.services.status_bar.catalog import CATALOG
     locked = {p.id for p in CATALOG if p.visibility_locked}
     assert locked == {"raid", "sleep", "vpn", "temp", "always_awake", "scheduler", "backup"}
+
+
+# ── Task 9: config read (seed-on-read) ──────────────────────────────────
+from app.services.status_bar.service import StatusBarService
+
+
+def test_get_config_seeds_all_catalog_pills(db_session):
+    svc = StatusBarService(db_session)
+    config = svc.get_config()
+    assert len(config.pills) == 11
+    raid = next(p for p in config.pills if p.pill_id == "raid")
+    assert raid.enabled is False
+    assert raid.visibility_locked is True
+    assert config.show_bottom_upload is True
+
+
+def test_get_config_is_idempotent(db_session):
+    svc = StatusBarService(db_session)
+    svc.get_config()
+    svc.get_config()
+    from app.models.status_bar import StatusBarPillConfig
+    assert db_session.query(StatusBarPillConfig).count() == 11
