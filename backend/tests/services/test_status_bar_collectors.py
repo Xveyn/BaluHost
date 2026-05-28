@@ -54,3 +54,23 @@ async def test_collector_never_raises_returns_none():
     with patch.object(collectors, "get_pihole_service", return_value=fake_service):
         result = await collectors.collect_pihole(MagicMock(), "admin")
     assert result is None
+
+
+@pytest.mark.asyncio
+async def test_collect_sync_silent_without_conflicts():
+    from app.services.status_bar import collectors
+    fake_db = MagicMock()
+    fake_db.query.return_value.filter.return_value.count.return_value = 0
+    result = await collectors.collect_sync(fake_db, "admin")
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_collect_sync_warns_on_conflicts():
+    from app.services.status_bar import collectors
+    fake_db = MagicMock()
+    fake_db.query.return_value.filter.return_value.count.return_value = 3
+    result = await collectors.collect_sync(fake_db, "admin")
+    assert result is not None
+    assert result["tone"] == "warning"
+    assert "3" in result["value"]

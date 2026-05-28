@@ -1,11 +1,12 @@
 """Collectors: thin async wrappers over existing services that produce a
 partial PillState dict (or None to stay silent). Collectors must not raise."""
+import functools
 import logging
 from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from app.services.pihole.service import get_pihole_service
+from app.services.pihole.service import get_pihole_service  # module-level so tests can patch collectors.get_pihole_service
 
 logger = logging.getLogger(__name__)
 
@@ -13,13 +14,13 @@ logger = logging.getLogger(__name__)
 def _safe(default=None):
     """Decorator: swallow any exception in a collector and return `default`."""
     def deco(fn):
+        @functools.wraps(fn)
         async def wrapper(db: Session, role: str):
             try:
                 return await fn(db, role)
             except Exception as exc:  # noqa: BLE001 - collectors must never 5xx
                 logger.debug("collector %s failed: %s", fn.__name__, exc)
                 return default
-        wrapper.__name__ = fn.__name__
         return wrapper
     return deco
 
@@ -66,7 +67,7 @@ async def collect_pihole(db: Session, role: str) -> Optional[dict]:
 async def collect_uploads(db: Session, role: str) -> Optional[dict]:
     from app.services.upload_progress import get_upload_progress_manager
     mgr = get_upload_progress_manager()
-    active = [p for p in mgr._progress.values() if getattr(p, "status", None) in ("uploading", "in_progress", "pending")]
+    active = [p for p in mgr._progress.values() if getattr(p, "status", None) == "uploading"]
     if not active:
         return None
     return {
@@ -82,23 +83,15 @@ async def collect_uploads(db: Session, role: str) -> Optional[dict]:
 @_safe()
 async def collect_sync(db: Session, role: str) -> Optional[dict]:
     from app.models.sync_state import SyncMetadata
-    pending = (
-        db.query(SyncMetadata)
-        .filter(SyncMetadata.conflict_detected.is_(False))
-        .count()
-    )
     conflicts = (
         db.query(SyncMetadata)
         .filter(SyncMetadata.conflict_detected.is_(True))
         .count()
     )
-    if pending == 0 and conflicts == 0:
+    if conflicts == 0:
         return None
-    if conflicts:
-        return {"kind": "activity", "tone": "warning", "label": "Sync",
-                "value": f"{conflicts} conflicts", "icon": "RefreshCw"}
-    return {"kind": "activity", "tone": "info", "label": "Sync",
-            "value": str(pending), "icon": "RefreshCw"}
+    return {"kind": "activity", "tone": "warning", "label": "Sync",
+            "value": f"{conflicts} conflicts", "icon": "RefreshCw"}
 
 
 # ── raid ─────────────────────────────────────────────────────────────
