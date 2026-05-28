@@ -61,6 +61,9 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
+          # Do not persist GITHUB_TOKEN as http.extraheader — it would override
+          # the inline DEPLOY_PAT URL on push and 403 as github-actions[bot].
+          persist-credentials: false
 
       - name: Auto-tag pre-release
         if: success()
