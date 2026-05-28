@@ -36,7 +36,7 @@ CATALOG: list[PillDefinition] = [
     PillDefinition("always_awake", "statusBar.pills.alwaysAwake.name", "admin", True, True,
                    "/admin/system-control?tab=sleep"),
     PillDefinition("scheduler", "statusBar.pills.scheduler.name", "admin", True, True,
-                   "/admin/schedulers"),
+                   "/schedulers"),
     PillDefinition("backup", "statusBar.pills.backup.name", "admin", True, True,
                    "/admin/system-control?tab=backup"),
 ]
