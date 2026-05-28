@@ -40,3 +40,21 @@ def test_put_config_as_user_forbidden(client: TestClient, user_headers):
     payload = {"pills": [], "show_bottom_upload": True}
     r = client.put("/api/system/statusbar/config", json=payload, headers=user_headers)
     assert r.status_code == 403
+
+
+def test_put_config_writes_audit_log(client: TestClient, admin_headers, db_session):
+    from app.models.audit_log import AuditLog
+
+    payload = {
+        "pills": [{"pill_id": "power", "enabled": True, "visibility": "all", "sort_order": 0}],
+        "show_bottom_upload": True,
+    }
+    r = client.put("/api/system/statusbar/config", json=payload, headers=admin_headers)
+    assert r.status_code == 200
+
+    logged = (
+        db_session.query(AuditLog)
+        .filter(AuditLog.action == "status_bar.config_changed")
+        .count()
+    )
+    assert logged >= 1
