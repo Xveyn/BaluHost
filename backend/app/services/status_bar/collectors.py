@@ -230,6 +230,50 @@ async def collect_scheduler(db: Session, role: str) -> Optional[dict]:
     }
 
 
+# ── backup ───────────────────────────────────────────────────────────
+def _running_backup(db: Session):
+    from app.models.backup import Backup
+    return (
+        db.query(Backup)
+        .filter(Backup.status.in_(["in_progress", "requested"]))
+        .order_by(Backup.created_at.desc())
+        .first()
+    )
+
+
+def _last_finished_backup(db: Session):
+    from app.models.backup import Backup
+    return (
+        db.query(Backup)
+        .filter(Backup.status.in_(["completed", "failed"]))
+        .order_by(Backup.created_at.desc())
+        .first()
+    )
+
+
+@_safe()
+async def collect_backup(db: Session, role: str) -> Optional[dict]:
+    from datetime import datetime, timezone, timedelta
+
+    running = _running_backup(db)
+    if running is not None:
+        return {"kind": "activity", "tone": "info", "label": "Backup",
+                "value": "läuft", "icon": "Save"}
+
+    last = _last_finished_backup(db)
+    if last is None or last.status != "failed":
+        return None
+
+    finished = last.completed_at or last.created_at
+    if finished is not None:
+        if finished.tzinfo is None:
+            finished = finished.replace(tzinfo=timezone.utc)
+        if datetime.now(timezone.utc) - finished > timedelta(hours=24):
+            return None
+    return {"kind": "alert", "tone": "danger", "label": "Backup",
+            "value": "fehlgeschlagen", "icon": "Save"}
+
+
 # ── temp / fans ──────────────────────────────────────────────────────
 @_safe()
 async def collect_temp(db: Session, role: str) -> Optional[dict]:

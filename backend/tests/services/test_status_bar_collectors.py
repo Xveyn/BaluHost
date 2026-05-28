@@ -150,3 +150,70 @@ async def test_scheduler_caps_jobs_at_three_newest_first():
         result = await collectors.collect_scheduler(MagicMock(), "admin")
     assert result["value"] == "5"
     assert len(result["extra"]["jobs"]) == 3
+
+
+def _backup(status, created_at, completed_at=None):
+    m = MagicMock()
+    m.status = status
+    m.created_at = created_at
+    m.completed_at = completed_at
+    return m
+
+
+@pytest.mark.asyncio
+async def test_backup_in_progress_shows_laeuft():
+    from datetime import datetime, timezone
+    from app.services.status_bar import collectors
+    running = _backup("in_progress", datetime(2026, 5, 28, 10, tzinfo=timezone.utc))
+    with patch.object(collectors, "_running_backup", return_value=running), \
+         patch.object(collectors, "_last_finished_backup", return_value=None):
+        result = await collectors.collect_backup(MagicMock(), "admin")
+    assert result["tone"] == "info"
+    assert result["value"] == "läuft"
+
+
+@pytest.mark.asyncio
+async def test_backup_failed_within_24h_is_danger():
+    from datetime import datetime, timezone, timedelta
+    from app.services.status_bar import collectors
+    finished = datetime.now(timezone.utc) - timedelta(hours=2)
+    failed = _backup("failed", finished - timedelta(minutes=5), finished)
+    with patch.object(collectors, "_running_backup", return_value=None), \
+         patch.object(collectors, "_last_finished_backup", return_value=failed):
+        result = await collectors.collect_backup(MagicMock(), "admin")
+    assert result["tone"] == "danger"
+
+
+@pytest.mark.asyncio
+async def test_backup_failed_older_than_24h_is_silent():
+    from datetime import datetime, timezone, timedelta
+    from app.services.status_bar import collectors
+    finished = datetime.now(timezone.utc) - timedelta(hours=25)
+    failed = _backup("failed", finished - timedelta(minutes=5), finished)
+    with patch.object(collectors, "_running_backup", return_value=None), \
+         patch.object(collectors, "_last_finished_backup", return_value=failed):
+        assert await collectors.collect_backup(MagicMock(), "admin") is None
+
+
+@pytest.mark.asyncio
+async def test_backup_completed_is_silent():
+    from datetime import datetime, timezone
+    from app.services.status_bar import collectors
+    done = _backup("completed", datetime(2026, 5, 28, 9, tzinfo=timezone.utc),
+                   datetime(2026, 5, 28, 10, tzinfo=timezone.utc))
+    with patch.object(collectors, "_running_backup", return_value=None), \
+         patch.object(collectors, "_last_finished_backup", return_value=done):
+        assert await collectors.collect_backup(MagicMock(), "admin") is None
+
+
+@pytest.mark.asyncio
+async def test_backup_running_beats_recent_failure():
+    from datetime import datetime, timezone, timedelta
+    from app.services.status_bar import collectors
+    running = _backup("in_progress", datetime.now(timezone.utc))
+    finished = datetime.now(timezone.utc) - timedelta(hours=1)
+    failed = _backup("failed", finished, finished)
+    with patch.object(collectors, "_running_backup", return_value=running), \
+         patch.object(collectors, "_last_finished_backup", return_value=failed):
+        result = await collectors.collect_backup(MagicMock(), "admin")
+    assert result["value"] == "läuft"
