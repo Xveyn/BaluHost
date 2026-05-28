@@ -32,3 +32,31 @@ def test_pill_state_minimal_construction():
     from app.schemas.status_bar import PillState
     s = PillState(id="raid", kind="alert", tone="warning", label="RAID", href="/x")
     assert s.value is None and s.extra is None
+
+
+def test_catalog_has_eleven_pills_with_unique_ids():
+    from app.services.status_bar.catalog import CATALOG
+    ids = [p.id for p in CATALOG]
+    assert len(ids) == 11
+    assert len(set(ids)) == 11
+
+
+def test_locked_pills_default_to_admin_visibility():
+    from app.services.status_bar.catalog import CATALOG
+    for p in CATALOG:
+        if p.visibility_locked:
+            assert p.default_visibility == "admin"
+
+
+def test_pill_id_literal_matches_catalog():
+    """Drift detection: PILL_IDS Literal must equal the catalog ids exactly."""
+    from typing import get_args
+    from app.schemas.status_bar import PILL_IDS
+    from app.services.status_bar.catalog import CATALOG
+    assert set(get_args(PILL_IDS)) == {p.id for p in CATALOG}
+
+
+def test_locked_set_matches_spec():
+    from app.services.status_bar.catalog import CATALOG
+    locked = {p.id for p in CATALOG if p.visibility_locked}
+    assert locked == {"raid", "sleep", "vpn", "temp", "always_awake", "scheduler", "backup"}
