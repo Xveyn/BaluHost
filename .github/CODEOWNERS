@@ -7,9 +7,9 @@
 #
 # Note: CODEOWNERS only blocks merges when the target branch has
 # "Require review from Code Owners" enabled. On `main`, branch protection
-# does NOT require approvals (would deadlock auto-merge.yml). CODEOWNERS
-# here still surfaces these paths as owner-flagged in the GitHub UI and
-# documents the trust boundary; the hard gate is the `production`
+# does NOT require approvals (solo-dev workflow: Xveyn merges manually).
+# CODEOWNERS here still surfaces these paths as owner-flagged in the GitHub
+# UI and documents the trust boundary; the hard gate is the `production`
 # environment reviewer.
 
 # CI/CD workflow definitions
