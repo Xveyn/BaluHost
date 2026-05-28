@@ -184,7 +184,8 @@
       "ssdCache": "SSD Cache",
       "envConfig": "Systemvariablen",
       "firebase": "Firebase",
-      "balupi": "BaluPi"
+      "balupi": "BaluPi",
+      "statusBar": "Statusleiste"
     }
   },
   "devices": {
