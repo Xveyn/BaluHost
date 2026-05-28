@@ -14,6 +14,7 @@ import { resolvePluginString } from '../lib/pluginI18n';
 import NotificationCenter from './NotificationCenter';
 import PowerMenu from './PowerMenu';
 import { UploadProgressBar } from './UploadProgressBar';
+import { TopbarStatusStrip } from './topbar/TopbarStatusStrip';
 import { isPi } from '../lib/features';
 import UserMenu from './UserMenu';
 import ImpersonationBanner from './ImpersonationBanner';
@@ -513,8 +514,10 @@ export default function Layout({ children }: LayoutProps) {
                 </div>
               </div>
 
-              {/* Spacer to push right section */}
-              <div className="hidden lg:block flex-1" />
+              {/* Status strip (desktop only, hidden in Pi mode) */}
+              <div className="hidden lg:flex flex-1 items-center justify-center px-6">
+                {!isPi && <TopbarStatusStrip />}
+              </div>
 
               {/* Header Right */}
               <div className="flex items-center gap-3">
