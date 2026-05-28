@@ -112,3 +112,74 @@ def test_update_config_rejects_all_visibility_for_locked_pill(db_session):
     )
     with pytest.raises(ValueError, match="visibility_locked"):
         svc.update_config(update)
+
+
+# ── Task 11: collect_state (role filter + sort) ─────────────────────────
+@pytest.mark.asyncio
+async def test_collect_state_only_includes_enabled_pills(db_session, monkeypatch):
+    from app.schemas.status_bar import StatusBarConfigUpdate, PillConfigItem
+    import app.services.status_bar.service as service_mod
+
+    async def fake_power(db, role):
+        return {"kind": "state", "tone": "info", "label": "Performance"}
+
+    monkeypatch.setitem(service_mod.COLLECTORS, "power", fake_power)
+
+    svc = StatusBarService(db_session)
+    svc.get_config()
+    svc.update_config(StatusBarConfigUpdate(
+        pills=[PillConfigItem(pill_id="power", enabled=True, visibility="all", sort_order=0)],
+        show_bottom_upload=True,
+    ))
+    state = await svc.collect_state(role="admin")
+    ids = [p.id for p in state.pills]
+    assert ids == ["power"]
+    assert state.pills[0].href == "/admin/system-control?tab=energy"
+
+
+@pytest.mark.asyncio
+async def test_collect_state_filters_admin_pills_for_user(db_session, monkeypatch):
+    from app.schemas.status_bar import StatusBarConfigUpdate, PillConfigItem
+    import app.services.status_bar.service as service_mod
+
+    async def fake(db, role):
+        return {"kind": "state", "tone": "info", "label": "X"}
+
+    monkeypatch.setitem(service_mod.COLLECTORS, "power", fake)
+    monkeypatch.setitem(service_mod.COLLECTORS, "uploads", fake)
+
+    svc = StatusBarService(db_session)
+    svc.get_config()
+    svc.update_config(StatusBarConfigUpdate(
+        pills=[
+            PillConfigItem(pill_id="power", enabled=True, visibility="admin", sort_order=0),
+            PillConfigItem(pill_id="uploads", enabled=True, visibility="all", sort_order=1),
+        ],
+        show_bottom_upload=True,
+    ))
+    user_state = await svc.collect_state(role="user")
+    assert [p.id for p in user_state.pills] == ["uploads"]
+
+
+@pytest.mark.asyncio
+async def test_collect_state_respects_sort_order(db_session, monkeypatch):
+    from app.schemas.status_bar import StatusBarConfigUpdate, PillConfigItem
+    import app.services.status_bar.service as service_mod
+
+    async def fake(db, role):
+        return {"kind": "state", "tone": "info", "label": "X"}
+
+    for pid in ("power", "pihole"):
+        monkeypatch.setitem(service_mod.COLLECTORS, pid, fake)
+
+    svc = StatusBarService(db_session)
+    svc.get_config()
+    svc.update_config(StatusBarConfigUpdate(
+        pills=[
+            PillConfigItem(pill_id="power", enabled=True, visibility="all", sort_order=9),
+            PillConfigItem(pill_id="pihole", enabled=True, visibility="all", sort_order=1),
+        ],
+        show_bottom_upload=True,
+    ))
+    state = await svc.collect_state(role="admin")
+    assert [p.id for p in state.pills] == ["pihole", "power"]
