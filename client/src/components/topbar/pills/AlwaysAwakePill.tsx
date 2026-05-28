@@ -4,7 +4,7 @@ import { useCountdown } from '../../../hooks/useCountdown';
 import { resolveIcon } from '../iconMap';
 import type { PillState } from '../../../api/statusBar';
 
-export function AlwaysAwakePill({ pill }: { pill: PillState }) {
+export function AlwaysAwakePill({ pill, flat }: { pill: PillState; flat?: boolean }) {
   const expires = typeof pill.extra?.expires_in_seconds === 'number'
     ? (pill.extra!.expires_in_seconds as number)
     : null;
@@ -20,6 +20,7 @@ export function AlwaysAwakePill({ pill }: { pill: PillState }) {
       value={value}
       href={pill.href}
       icon={icon}
+      flat={flat}
     />
   );
 }

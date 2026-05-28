@@ -4,9 +4,9 @@ import { AlwaysAwakePill } from './pills/AlwaysAwakePill';
 import { resolveIcon } from './iconMap';
 import type { PillState } from '../../api/statusBar';
 
-export function PillRenderer({ pill }: { pill: PillState }) {
+export function PillRenderer({ pill, flat }: { pill: PillState; flat?: boolean }) {
   if (pill.id === 'always_awake') {
-    return <AlwaysAwakePill pill={pill} />;
+    return <AlwaysAwakePill pill={pill} flat={flat} />;
   }
   const iconComp = resolveIcon(pill.icon);
   const icon = iconComp ? createElement(iconComp, { className: 'h-3.5 w-3.5' }) : undefined;
@@ -17,6 +17,7 @@ export function PillRenderer({ pill }: { pill: PillState }) {
       value={pill.value ?? undefined}
       href={pill.href}
       icon={icon}
+      flat={flat}
     />
   );
 }

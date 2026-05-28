@@ -31,4 +31,26 @@ describe('TopbarStatusStrip', () => {
     expect(links[0]).toHaveTextContent('Pi-hole');
     expect(links[1]).toHaveTextContent('Power');
   });
+
+  it('renders a divider between pills but not before the first', () => {
+    const twoPills = [
+      { id: 'pihole', kind: 'state', tone: 'success', label: 'Pi-hole', value: 'on', href: '/pihole', icon: 'Shield', extra: null },
+      { id: 'power', kind: 'state', tone: 'info', label: 'Power', value: null, href: '/x', icon: 'Zap', extra: null },
+    ];
+    const { container } = render(
+      <MemoryRouter><TopbarStatusStrip previewState={preview(twoPills)} /></MemoryRouter>,
+    );
+    // one divider for two pills (n-1)
+    expect(container.querySelectorAll('span[aria-hidden="true"]')).toHaveLength(1);
+  });
+
+  it('renders no divider for a single pill', () => {
+    const onePill = [
+      { id: 'power', kind: 'state', tone: 'info', label: 'Power', value: null, href: '/x', icon: 'Zap', extra: null },
+    ];
+    const { container } = render(
+      <MemoryRouter><TopbarStatusStrip previewState={preview(onePill)} /></MemoryRouter>,
+    );
+    expect(container.querySelectorAll('span[aria-hidden="true"]')).toHaveLength(0);
+  });
 });

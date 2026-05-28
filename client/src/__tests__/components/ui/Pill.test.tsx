@@ -34,4 +34,12 @@ describe('Pill', () => {
     renderPill({ label: 'RAID', value: 'degraded' });
     expect(screen.getByLabelText('RAID: degraded')).toBeInTheDocument();
   });
+
+  it('flat variant uses tone text color and drops the chip border/bg', () => {
+    renderPill({ tone: 'warning', flat: true });
+    const link = screen.getByRole('link');
+    expect(link.className).toContain('text-amber-300');
+    // flat pills have no own chip border (the container provides it)
+    expect(link.className).not.toContain('border');
+  });
 });

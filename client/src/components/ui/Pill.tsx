@@ -10,6 +10,8 @@ export interface PillProps {
   href: string;
   icon?: React.ReactNode;
   ariaLabel?: string;
+  /** Flat = no own chip border/bg (just tone-colored text); used inside the status-strip container. */
+  flat?: boolean;
 }
 
 const TONE_CLASSES: Record<PillTone, string> = {
@@ -20,15 +22,22 @@ const TONE_CLASSES: Record<PillTone, string> = {
   neutral: 'border-slate-700 bg-slate-800/60 text-slate-300 hover:bg-slate-800',
 };
 
-export function Pill({ tone, label, value, href, icon, ariaLabel }: PillProps) {
+const TONE_TEXT: Record<PillTone, string> = {
+  success: 'text-emerald-300 hover:text-emerald-200',
+  info: 'text-sky-300 hover:text-sky-200',
+  warning: 'text-amber-300 hover:text-amber-200',
+  danger: 'text-rose-300 hover:text-rose-200',
+  neutral: 'text-slate-300 hover:text-slate-100',
+};
+
+export function Pill({ tone, label, value, href, icon, ariaLabel, flat = false }: PillProps) {
   const aria = ariaLabel ?? (value ? `${label}: ${value}` : label);
+  const base = 'inline-flex items-center gap-1.5 text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/60';
+  const className = flat
+    ? `${base} rounded px-1.5 py-0.5 ${TONE_TEXT[tone]}`
+    : `${base} rounded-full border px-2.5 py-1 ${TONE_CLASSES[tone]}`;
   return (
-    <Link
-      to={href}
-      aria-label={aria}
-      title={aria}
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/60 ${TONE_CLASSES[tone]}`}
-    >
+    <Link to={href} aria-label={aria} title={aria} className={className}>
       {icon}
       <span>{label}</span>
       {value != null && value !== '' && <span className="opacity-80">{value}</span>}
