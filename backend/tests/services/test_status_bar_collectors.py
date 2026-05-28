@@ -217,3 +217,9 @@ async def test_backup_running_beats_recent_failure():
          patch.object(collectors, "_last_finished_backup", return_value=failed):
         result = await collectors.collect_backup(MagicMock(), "admin")
     assert result["value"] == "läuft"
+
+
+def test_collectors_registry_covers_full_catalog():
+    from app.services.status_bar.collectors import COLLECTORS
+    from app.services.status_bar.catalog import CATALOG
+    assert set(COLLECTORS.keys()) == {p.id for p in CATALOG}

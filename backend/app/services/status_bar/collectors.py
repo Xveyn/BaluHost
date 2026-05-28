@@ -303,3 +303,19 @@ async def collect_temp(db: Session, role: str) -> Optional[dict]:
     name, temp = hot[0]
     return {"kind": "alert", "tone": "danger", "label": "Temp",
             "value": f"{int(temp)}°C", "icon": "Thermometer"}
+
+
+# ── registry ─────────────────────────────────────────────────────────
+COLLECTORS = {
+    "power": collect_power,
+    "pihole": collect_pihole,
+    "uploads": collect_uploads,
+    "sync": collect_sync,
+    "raid": collect_raid,
+    "sleep": collect_sleep,
+    "vpn": collect_vpn,
+    "temp": collect_temp,
+    "always_awake": collect_always_awake,
+    "scheduler": collect_scheduler,
+    "backup": collect_backup,
+}
