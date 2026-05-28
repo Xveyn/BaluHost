@@ -183,3 +183,32 @@ async def test_collect_state_respects_sort_order(db_session, monkeypatch):
     ))
     state = await svc.collect_state(role="admin")
     assert [p.id for p in state.pills] == ["pihole", "power"]
+
+
+@pytest.mark.asyncio
+async def test_collect_state_skips_collector_with_malformed_output(db_session, monkeypatch):
+    """A collector returning an invalid partial dict must be skipped, not 500 the endpoint."""
+    from app.schemas.status_bar import StatusBarConfigUpdate, PillConfigItem
+    import app.services.status_bar.service as service_mod
+
+    async def bad(db, role):
+        return {"tone": "info"}  # missing required kind/label -> PillState ValidationError
+
+    async def good(db, role):
+        return {"kind": "state", "tone": "info", "label": "OK"}
+
+    monkeypatch.setitem(service_mod.COLLECTORS, "power", bad)
+    monkeypatch.setitem(service_mod.COLLECTORS, "pihole", good)
+
+    svc = StatusBarService(db_session)
+    svc.get_config()
+    svc.update_config(StatusBarConfigUpdate(
+        pills=[
+            PillConfigItem(pill_id="power", enabled=True, visibility="all", sort_order=0),
+            PillConfigItem(pill_id="pihole", enabled=True, visibility="all", sort_order=1),
+        ],
+        show_bottom_upload=True,
+    ))
+    state = await svc.collect_state(role="admin")
+    # The malformed "power" pill is skipped; the good "pihole" pill still renders.
+    assert [p.id for p in state.pills] == ["pihole"]

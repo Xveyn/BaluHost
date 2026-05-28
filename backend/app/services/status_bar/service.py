@@ -133,6 +133,10 @@ class StatusBarService:
             partial = await collector(self.db, role)
             if partial is None:
                 continue
-            pills.append(PillState(id=definition.id, href=definition.href, **partial))
+            try:
+                pills.append(PillState(id=definition.id, href=definition.href, **partial))
+            except Exception as exc:  # noqa: BLE001 - one bad pill must not 5xx the strip
+                logger.warning("status bar pill %s produced invalid output: %s", definition.id, exc)
+                continue
 
         return StatusBarStateResponse(pills=pills, show_bottom_upload=settings.show_bottom_upload)
