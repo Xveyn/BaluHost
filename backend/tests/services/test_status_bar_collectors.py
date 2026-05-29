@@ -92,6 +92,7 @@ async def test_always_awake_permanent_has_permanent_value():
     from app.services.status_bar import collectors
     fake_status = MagicMock()
     fake_status.always_awake = MagicMock(enabled=True, until=None, expires_in_seconds=None)
+    fake_status.core_uptime = MagicMock(active=False)
     mgr = MagicMock(); mgr.get_status = MagicMock(return_value=fake_status)
     with patch.object(collectors, "get_sleep_manager", return_value=mgr):
         result = await collectors.collect_always_awake(MagicMock(), "admin")
@@ -104,6 +105,7 @@ async def test_always_awake_with_expiry_exposes_seconds():
     from app.services.status_bar import collectors
     fake_status = MagicMock()
     fake_status.always_awake = MagicMock(enabled=True, until="2026-05-28T12:00:00Z", expires_in_seconds=3600.0)
+    fake_status.core_uptime = MagicMock(active=False)
     mgr = MagicMock(); mgr.get_status = MagicMock(return_value=fake_status)
     with patch.object(collectors, "get_sleep_manager", return_value=mgr):
         result = await collectors.collect_always_awake(MagicMock(), "admin")
