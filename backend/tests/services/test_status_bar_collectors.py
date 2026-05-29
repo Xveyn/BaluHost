@@ -81,6 +81,7 @@ async def test_always_awake_silent_when_disabled():
     from app.services.status_bar import collectors
     fake_status = MagicMock()
     fake_status.always_awake = MagicMock(enabled=False, until=None, expires_in_seconds=None)
+    fake_status.core_uptime = MagicMock(active=False)
     mgr = MagicMock(); mgr.get_status = MagicMock(return_value=fake_status)
     with patch.object(collectors, "get_sleep_manager", return_value=mgr):
         assert await collectors.collect_always_awake(MagicMock(), "admin") is None
@@ -91,6 +92,7 @@ async def test_always_awake_permanent_has_permanent_value():
     from app.services.status_bar import collectors
     fake_status = MagicMock()
     fake_status.always_awake = MagicMock(enabled=True, until=None, expires_in_seconds=None)
+    fake_status.core_uptime = MagicMock(active=False)
     mgr = MagicMock(); mgr.get_status = MagicMock(return_value=fake_status)
     with patch.object(collectors, "get_sleep_manager", return_value=mgr):
         result = await collectors.collect_always_awake(MagicMock(), "admin")
@@ -103,6 +105,7 @@ async def test_always_awake_with_expiry_exposes_seconds():
     from app.services.status_bar import collectors
     fake_status = MagicMock()
     fake_status.always_awake = MagicMock(enabled=True, until="2026-05-28T12:00:00Z", expires_in_seconds=3600.0)
+    fake_status.core_uptime = MagicMock(active=False)
     mgr = MagicMock(); mgr.get_status = MagicMock(return_value=fake_status)
     with patch.object(collectors, "get_sleep_manager", return_value=mgr):
         result = await collectors.collect_always_awake(MagicMock(), "admin")
@@ -223,3 +226,49 @@ def test_collectors_registry_covers_full_catalog():
     from app.services.status_bar.collectors import COLLECTORS
     from app.services.status_bar.catalog import CATALOG
     assert set(COLLECTORS.keys()) == {p.id for p in CATALOG}
+
+
+@pytest.mark.asyncio
+async def test_always_awake_falls_back_to_core_uptime():
+    from datetime import datetime
+    from app.services.status_bar import collectors
+    fake_status = MagicMock()
+    fake_status.always_awake = MagicMock(enabled=False, until=None, expires_in_seconds=None)
+    fake_status.core_uptime = MagicMock(
+        active=True, current_window_ends_at=datetime(2026, 5, 29, 22, 0))
+    mgr = MagicMock(); mgr.get_status = MagicMock(return_value=fake_status)
+    with patch.object(collectors, "get_sleep_manager", return_value=mgr):
+        result = await collectors.collect_always_awake(MagicMock(), "admin")
+    assert result is not None
+    assert result["icon"] == "Shield"
+    assert result["tone"] == "success"
+    assert result["value"] == "bis 22:00"
+    assert result["extra"]["variant"] == "core_uptime"
+    assert result["extra"]["until"] == "22:00"
+
+
+@pytest.mark.asyncio
+async def test_always_awake_takes_precedence_over_core_uptime():
+    from datetime import datetime
+    from app.services.status_bar import collectors
+    fake_status = MagicMock()
+    fake_status.always_awake = MagicMock(enabled=True, until=None, expires_in_seconds=None)
+    fake_status.core_uptime = MagicMock(
+        active=True, current_window_ends_at=datetime(2026, 5, 29, 22, 0))
+    mgr = MagicMock(); mgr.get_status = MagicMock(return_value=fake_status)
+    with patch.object(collectors, "get_sleep_manager", return_value=mgr):
+        result = await collectors.collect_always_awake(MagicMock(), "admin")
+    assert result["tone"] == "warning"
+    assert result["extra"]["variant"] == "always_awake"
+    assert result["value"] == "permanent"
+
+
+@pytest.mark.asyncio
+async def test_always_awake_and_core_uptime_both_off_silent():
+    from app.services.status_bar import collectors
+    fake_status = MagicMock()
+    fake_status.always_awake = MagicMock(enabled=False, until=None, expires_in_seconds=None)
+    fake_status.core_uptime = MagicMock(active=False)
+    mgr = MagicMock(); mgr.get_status = MagicMock(return_value=fake_status)
+    with patch.object(collectors, "get_sleep_manager", return_value=mgr):
+        assert await collectors.collect_always_awake(MagicMock(), "admin") is None

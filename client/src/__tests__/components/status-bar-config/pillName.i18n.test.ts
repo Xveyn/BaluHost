@@ -16,7 +16,7 @@ describe('statusBar pill name i18n resolution', () => {
   it('resolves the ns-relative key to the real English translation', () => {
     // This is the form the component must pass after stripping the backend "statusBar." prefix.
     expect(i18n.t('pills.power.name', { ns: 'statusBar' })).toBe('Power Profile');
-    expect(i18n.t('pills.alwaysAwake.name', { ns: 'statusBar' })).toBe('Always Awake');
+    expect(i18n.t('pills.alwaysAwake.name', { ns: 'statusBar' })).toBe('Always Awake / Core Hours');
   });
 
   it('does NOT resolve the raw backend key (regression guard for the namespace bug)', () => {

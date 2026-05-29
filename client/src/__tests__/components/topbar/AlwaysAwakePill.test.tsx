@@ -17,15 +17,28 @@ function renderPill(pill: PillState) {
 }
 
 describe('AlwaysAwakePill', () => {
-  it('renders permanent label when no expiry', () => {
-    renderPill(base(null, 'permanent'));
-    expect(screen.getByText('permanent')).toBeInTheDocument();
+  // i18n is not initialized in component tests, so t() returns the raw key.
+  it('renders the permanent label key when no expiry', () => {
+    renderPill(base({ variant: 'always_awake' }, 'permanent'));
+    expect(screen.getByText('pills.alwaysAwake.live')).toBeInTheDocument();
+    expect(screen.getByText('pills.alwaysAwake.permanent')).toBeInTheDocument();
   });
 
   it('counts down from extra.expires_in_seconds', () => {
-    renderPill(base({ expires_in_seconds: 120 }, '02:00'));
+    renderPill(base({ variant: 'always_awake', expires_in_seconds: 120 }, '02:00'));
     expect(screen.getByText('02:00')).toBeInTheDocument();
     act(() => { vi.advanceTimersByTime(5000); });
     expect(screen.getByText('01:55')).toBeInTheDocument();
+  });
+
+  it('renders the core-uptime variant with the Kernbetriebszeit label + until value', () => {
+    const pill: PillState = {
+      id: 'always_awake', kind: 'state', tone: 'success', label: 'Kernbetriebszeit',
+      value: 'bis 22:00', href: '/admin/system-control?tab=sleep', icon: 'Shield',
+      extra: { variant: 'core_uptime', until: '22:00' },
+    };
+    renderPill(pill);
+    expect(screen.getByText('pills.alwaysAwake.coreUptimeLive')).toBeInTheDocument();
+    expect(screen.getByText('pills.alwaysAwake.coreUptimeUntil')).toBeInTheDocument();
   });
 });

@@ -18,7 +18,10 @@ describe('PillRenderer', () => {
 
   it('routes always_awake to the countdown pill', () => {
     renderPill({ id: 'always_awake', kind: 'state', tone: 'warning', label: 'Always Awake',
-                 value: '02:00', href: '/x', icon: 'Coffee', extra: { expires_in_seconds: 120 } });
-    expect(screen.getByText('Always Awake')).toBeInTheDocument();
+                 value: '02:00', href: '/x', icon: 'Coffee',
+                 extra: { variant: 'always_awake', expires_in_seconds: 120 } });
+    // i18n is not initialized in component tests, so t() returns the raw key.
+    expect(screen.getByText('pills.alwaysAwake.live')).toBeInTheDocument();
+    expect(screen.getByText('02:00')).toBeInTheDocument();
   });
 });

@@ -10,7 +10,13 @@
     "sleep": { "name": "Sleep-Modus" },
     "vpn": { "name": "VPN-Clients" },
     "temp": { "name": "Temperatur / Lüfter" },
-    "alwaysAwake": { "name": "Immer wach" },
+    "alwaysAwake": {
+      "name": "Immer wach / Kernbetriebszeit",
+      "live": "Immer wach",
+      "permanent": "Dauerhaft",
+      "coreUptimeLive": "Kernbetriebszeit",
+      "coreUptimeUntil": "bis {{time}}"
+    },
     "scheduler": { "name": "Scheduler" },
     "backup": { "name": "Backup" }
   },
