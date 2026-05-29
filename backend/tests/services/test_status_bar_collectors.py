@@ -222,6 +222,55 @@ async def test_backup_running_beats_recent_failure():
     assert result["value"] == "läuft"
 
 
+@pytest.mark.asyncio
+async def test_vpn_silent_without_active_clients():
+    from app.services.status_bar import collectors
+    with patch.object(collectors, "_vpn_peer_counts", return_value=(0, 0)):
+        assert await collectors.collect_vpn(MagicMock(), "admin") is None
+
+
+@pytest.mark.asyncio
+async def test_vpn_neutral_when_configured_but_none_connected():
+    from app.services.status_bar import collectors
+    with patch.object(collectors, "_vpn_peer_counts", return_value=(0, 4)):
+        result = await collectors.collect_vpn(MagicMock(), "admin")
+    assert result is not None
+    assert result["tone"] == "neutral"
+    assert result["value"] == "0 verbunden"
+
+
+@pytest.mark.asyncio
+async def test_vpn_success_when_peers_connected():
+    from app.services.status_bar import collectors
+    with patch.object(collectors, "_vpn_peer_counts", return_value=(2, 4)):
+        result = await collectors.collect_vpn(MagicMock(), "admin")
+    assert result["tone"] == "success"
+    assert result["value"] == "2 verbunden"
+    assert result["label"] == "VPN"
+
+
+def test_vpn_peer_counts_only_counts_recent_handshakes():
+    from datetime import datetime, timezone, timedelta
+    from app.services.status_bar import collectors
+
+    def _client(handshake):
+        m = MagicMock()
+        m.last_handshake = handshake
+        return m
+
+    now = datetime.now(timezone.utc)
+    clients = [
+        _client(now - timedelta(seconds=30)),    # connected
+        _client(now - timedelta(minutes=10)),    # stale
+        _client(None),                            # never connected
+    ]
+    fake_db = MagicMock()
+    fake_db.query.return_value.filter.return_value.all.return_value = clients
+    connected, active_total = collectors._vpn_peer_counts(fake_db)
+    assert connected == 1
+    assert active_total == 3
+
+
 def test_collectors_registry_covers_full_catalog():
     from app.services.status_bar.collectors import COLLECTORS
     from app.services.status_bar.catalog import CATALOG
