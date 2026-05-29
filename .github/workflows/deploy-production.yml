@@ -70,9 +70,24 @@ jobs:
         env:
           DEPLOY_PAT: ${{ secrets.DEPLOY_PAT }}
         run: |
-          VERSION=$(grep -oP '^version\s*=\s*"\K[^"]+' backend/pyproject.toml || true)
+          # Derive the prerelease base from the last STABLE tag + a patch bump so
+          # the prerelease always sorts ABOVE the latest stable. pyproject.toml
+          # holds the last RELEASED version (release-stable.yml does not advance it
+          # afterwards), so reading it directly produced v<released>-pre.N tags that
+          # sort BELOW the stable of the same number (semver: 1.33.0-pre.1 < 1.33.0).
+          # Bumping the patch is safe regardless of the eventual stable bump type:
+          # v1.33.1-pre.N stays below both v1.33.1 and v1.34.0, and above v1.33.0.
+          LAST_STABLE=$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' | grep -Ev -- '-(pre|rc|alpha|beta|unstable)' | sort -V | tail -1)
+          if [ -n "$LAST_STABLE" ]; then
+            BASE=${LAST_STABLE#v}
+            IFS=. read -r MAJ MIN PAT <<< "$BASE"
+            VERSION="${MAJ}.${MIN}.$((PAT + 1))"
+          else
+            # No stable release yet -- fall back to the pyproject version.
+            VERSION=$(grep -oP '^version\s*=\s*"\K[^"]+' backend/pyproject.toml || true)
+          fi
           if [ -z "$VERSION" ]; then
-            echo "Could not read version from pyproject.toml -- skipping pre-release tag"
+            echo "Could not determine prerelease base version -- skipping pre-release tag"
             exit 0
           fi
           LATEST=$(git tag -l "v${VERSION}-pre.*" | sed -E 's/.*-pre\.//' | sort -n | tail -1)
