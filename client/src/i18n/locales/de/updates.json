@@ -32,6 +32,7 @@
     "devVersionAvailable": "Dev-Version verfügbar",
     "devCommitsAhead": "{{count}} Commit(s) voraus",
     "devBuild": "Dev Build",
+    "stable": "Stabil",
     "devUpToDate": "Dev-Branch ist aktuell",
     "devWarning": "Development-Versionen können instabil sein. Vor dem Update wird ein Backup erstellt."
   },
