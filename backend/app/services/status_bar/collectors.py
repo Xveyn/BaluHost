@@ -205,14 +205,47 @@ async def collect_always_awake(db: Session, role: str) -> Optional[dict]:
 
 
 # ── vpn ──────────────────────────────────────────────────────────────
+# A WireGuard peer counts as "connected" if its last handshake is within this
+# window (WireGuard rekeys roughly every 2 min; ~3 min marks a peer as stale).
+_VPN_HANDSHAKE_TIMEOUT_SECONDS = 180
+
+
+def _vpn_peer_counts(db: Session) -> tuple[int, int]:
+    """Return (connected, active_total) WireGuard peers.
+
+    `connected` = active clients whose last handshake is within
+    `_VPN_HANDSHAKE_TIMEOUT_SECONDS`. `active_total` = clients with is_active=True.
+    Sync helper so tests can patch it without mocking the SQLAlchemy query chain.
+    """
+    from datetime import datetime, timezone, timedelta
+    from app.models.vpn import VPNClient
+
+    clients = db.query(VPNClient).filter(VPNClient.is_active.is_(True)).all()
+    cutoff = datetime.now(timezone.utc) - timedelta(seconds=_VPN_HANDSHAKE_TIMEOUT_SECONDS)
+    connected = 0
+    for c in clients:
+        hs = c.last_handshake
+        if hs is None:
+            continue
+        if hs.tzinfo is None:  # naive timestamps are stored as UTC
+            hs = hs.replace(tzinfo=timezone.utc)
+        if hs >= cutoff:
+            connected += 1
+    return connected, len(clients)
+
+
 @_safe()
 async def collect_vpn(db: Session, role: str) -> Optional[dict]:
-    from app.models.vpn import VPNClient
-    count = db.query(VPNClient).count()
-    if count == 0:
-        return None
-    return {"kind": "state", "tone": "success", "label": "VPN",
-            "value": str(count), "icon": "Lock"}
+    connected, active_total = _vpn_peer_counts(db)
+    if active_total == 0:
+        return None  # no VPN clients configured → stay silent
+    return {
+        "kind": "state",
+        "tone": "success" if connected > 0 else "neutral",
+        "label": "VPN",
+        "value": f"{connected} verbunden",
+        "icon": "Lock",
+    }
 
 
 # ── scheduler ────────────────────────────────────────────────────────
