@@ -125,15 +125,19 @@ export default function UpdateOverviewTab({
                   </span>
                 )}
               </div>
-              <div className="flex items-center gap-2 text-sm">
-                {checkResult.current_version.is_dev_build ? (
+              {checkResult.current_version.is_dev_build ? (
+                <div className="flex items-center gap-2 text-sm">
                   <span className="px-2 py-0.5 bg-amber-500/20 text-amber-400 rounded text-xs font-medium">
                     {t('version.devBuild')}
                   </span>
-                ) : (
-                  <span className="text-emerald-400">Stable</span>
-                )}
-              </div>
+                </div>
+              ) : !checkResult.current_version.is_prerelease ? (
+                /* Pre-releases are already flagged by the amber badge next to the
+                   version; only genuine stable builds get the "Stable" indicator. */
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="text-emerald-400">{t('version.stable')}</span>
+                </div>
+              ) : null}
             </div>
           )}
         </div>
