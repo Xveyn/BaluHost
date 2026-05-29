@@ -161,23 +161,47 @@ def _format_countdown(seconds: float) -> str:
     return f"{m:02d}:{s:02d}"
 
 
+def _format_until(dt) -> Optional[str]:
+    """Format a window-end datetime as 24h HH:MM (server-local). None-safe."""
+    if dt is None:
+        return None
+    try:
+        return dt.strftime("%H:%M")
+    except Exception:  # noqa: BLE001 - value is optional, never block the pill
+        return None
+
+
 @_safe()
 async def collect_always_awake(db: Session, role: str) -> Optional[dict]:
     manager = get_sleep_manager()
     if manager is None:
         return None
     status = manager.get_status()
+
     aa = getattr(status, "always_awake", None)
-    if aa is None or not aa.enabled:
-        return None
-    out = {"kind": "state", "tone": "warning", "label": "Always Awake", "icon": "Coffee"}
-    if aa.until is None:
-        out["value"] = "permanent"
-    else:
-        secs = aa.expires_in_seconds or 0.0
-        out["value"] = _format_countdown(secs)
-        out["extra"] = {"expires_in_seconds": secs}
-    return out
+    if aa is not None and aa.enabled:
+        out = {"kind": "state", "tone": "warning", "label": "Always Awake",
+               "icon": "Coffee", "extra": {"variant": "always_awake"}}
+        if aa.until is None:
+            out["value"] = "permanent"
+        else:
+            secs = aa.expires_in_seconds or 0.0
+            out["value"] = _format_countdown(secs)
+            out["extra"]["expires_in_seconds"] = secs
+        return out
+
+    # Fallback: Kernbetriebszeit window currently active (always-awake overrides it)
+    cu = getattr(status, "core_uptime", None)
+    if cu is not None and getattr(cu, "active", False):
+        out = {"kind": "state", "tone": "success", "label": "Kernbetriebszeit",
+               "icon": "Shield", "extra": {"variant": "core_uptime"}}
+        until = _format_until(getattr(cu, "current_window_ends_at", None))
+        if until:
+            out["value"] = f"bis {until}"
+            out["extra"]["until"] = until
+        return out
+
+    return None
 
 
 # ── vpn ──────────────────────────────────────────────────────────────
