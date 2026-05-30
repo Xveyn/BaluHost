@@ -547,7 +547,18 @@ async def update_authority(
         and body.external_authority_enabled != cfg["external_authority_enabled"]
     ):
         if body.external_authority_enabled:
-            await ppd_authority.acquire()
+            # Only flip the flag if PPD was actually stood down. Otherwise the
+            # enforcement loop and power-profiles-daemon would race for the CPU
+            # registers — the exact split-authority state this guards against.
+            acquired = await ppd_authority.acquire()
+            if not acquired:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=(
+                        "Failed to acquire CPU authority: could not stop/mask "
+                        "power-profiles-daemon (check sudoers provisioning)."
+                    ),
+                )
             try:
                 await get_power_manager()._enforce_current_profile()
             except Exception:

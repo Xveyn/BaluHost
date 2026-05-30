@@ -1,7 +1,7 @@
 """Tests for PPD authority service + authority config."""
 import pytest
 
-from app.services.power import config_store
+from app.services.power import config_store, ppd_authority
 
 
 def test_authority_config_roundtrip():
@@ -10,9 +10,6 @@ def test_authority_config_roundtrip():
     assert cfg["external_authority_enabled"] is True
     assert cfg["boost_rules_enabled"] is False
     config_store.save_authority_config({"external_authority_enabled": False, "boost_rules_enabled": True})
-
-
-from app.services.power import ppd_authority
 
 
 @pytest.mark.asyncio

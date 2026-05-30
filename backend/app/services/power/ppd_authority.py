@@ -48,7 +48,7 @@ async def acquire() -> bool:
                     (res.stderr or b"").decode(errors="ignore").strip(),
                 )
         return ok
-    return await asyncio.get_event_loop().run_in_executor(None, _do)
+    return await asyncio.get_running_loop().run_in_executor(None, _do)
 
 
 async def release() -> bool:
@@ -59,19 +59,23 @@ async def release() -> bool:
         res = _run(["sudo", "-n", "systemctl", "unmask", UNIT])
         if res.returncode != 0:
             ok = False
+            logger.warning("PPD unmask failed (rc=%s): %s", res.returncode,
+                           (res.stderr or b"").decode(errors="ignore").strip())
         if cfg.get("ppd_prev_active"):
             res = _run(["sudo", "-n", "systemctl", "start", UNIT])
             if res.returncode != 0:
                 ok = False
+                logger.warning("PPD start failed (rc=%s): %s", res.returncode,
+                               (res.stderr or b"").decode(errors="ignore").strip())
         return ok
-    return await asyncio.get_event_loop().run_in_executor(None, _do)
+    return await asyncio.get_running_loop().run_in_executor(None, _do)
 
 
 def status() -> dict:
     """Return current PPD daemon state."""
     return {
         "ppd_active": _systemctl_state("is-active"),
-        "ppd_masked": not _systemctl_state("is-enabled") and _is_masked(),
+        "ppd_masked": _is_masked(),
     }
 
 
