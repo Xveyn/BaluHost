@@ -711,6 +711,54 @@ class PowerManagerService:
 
         return False, error_msg
 
+    async def _enforce_current_profile(self) -> None:
+        """Re-assert the desired hardware state; correct + log external drift.
+
+        Runs every enforcement tick (primary only). Does NOT change the logical
+        profile or write profile-change history — it only keeps the hardware
+        aligned with what the current profile demands.
+        """
+        if self._backend is None or self._dynamic_mode_enabled:
+            return
+
+        desired = await self._desired_config_for(self._current_profile)
+        if desired is None:
+            return
+
+        found_gov, found_max = await self._backend.read_enforcement_state()
+        gov_drift = found_gov is not None and found_gov != desired.governor
+        max_drift = (
+            desired.max_freq_mhz is not None
+            and found_max is not None
+            and found_max != desired.max_freq_mhz
+        )
+
+        if not gov_drift and not max_drift:
+            self._cap_unenforceable = False
+            return
+
+        self._last_drift = {
+            "at": datetime.now(timezone.utc).isoformat(),
+            "field": "governor" if gov_drift else "max_freq",
+            "expected": f"{desired.governor}/{desired.max_freq_mhz}",
+            "found": f"{found_gov}/{found_max}",
+        }
+        logger.warning(
+            "CPU cap drift detected (external override?): expected %s/%s, found %s/%s — re-asserting",
+            desired.governor, desired.max_freq_mhz, found_gov, found_max,
+        )
+
+        success, _ = await self._backend.apply_profile(desired)
+
+        if success:
+            vg, vm = await self._backend.read_enforcement_state()
+            still_off = (vg is not None and vg != desired.governor) or (
+                desired.max_freq_mhz is not None and vm is not None and vm != desired.max_freq_mhz
+            )
+            self._cap_unenforceable = bool(still_off)
+            if still_off:
+                logger.warning("CPU cap still not enforced after re-write (kernel clamp?)")
+
     async def _get_profile_config_from_preset(
         self,
         power_property: ServicePowerProperty
