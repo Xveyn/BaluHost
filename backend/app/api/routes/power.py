@@ -67,6 +67,11 @@ from app.schemas.power import (
     AutoScalingConfigResponse,
     AuthorityStatusResponse,
     AuthorityUpdateRequest,
+    BoostNowRequest,
+    BoostRule,
+    BoostRuleCreateRequest,
+    BoostRulesResponse,
+    BoostRuleUpdateRequest,
     DynamicModeConfig,
     DynamicModeConfigResponse,
     DynamicModeUpdateRequest,
@@ -578,3 +583,59 @@ async def update_authority(
         success=True,
     )
     return await get_authority_status(request, response, user)
+
+
+@router.get("/boost-rules", response_model=BoostRulesResponse)
+@user_limiter.limit(get_limit("admin_operations"))
+async def list_boost_rules_route(request: Request, response: Response,
+        _: UserPublic = Depends(deps.get_current_admin)) -> BoostRulesResponse:
+    """List all boost rules (admin only)."""
+    return BoostRulesResponse(rules=config_store.list_boost_rules())
+
+
+@router.post("/boost-rules", response_model=BoostRule)
+@user_limiter.limit(get_limit("admin_operations"))
+async def create_boost_rule_route(request: Request, response: Response, body: BoostRuleCreateRequest,
+        _: UserPublic = Depends(deps.require_local_admin)) -> BoostRule:
+    """Create a new boost rule (local channel + admin only)."""
+    rule = config_store.create_boost_rule(body.kind, body.label, body.pattern, body.target_max_mhz)
+    if rule is None:
+        raise HTTPException(status_code=500, detail="Failed to create boost rule")
+    return BoostRule(**rule)
+
+
+@router.put("/boost-rules/{rule_id}", response_model=BoostRule)
+@user_limiter.limit(get_limit("admin_operations"))
+async def update_boost_rule_route(request: Request, response: Response, rule_id: int,
+        body: BoostRuleUpdateRequest, _: UserPublic = Depends(deps.require_local_admin)) -> BoostRule:
+    """Update a boost rule by ID (local channel + admin only)."""
+    fields = {k: v for k, v in body.model_dump().items() if v is not None}
+    if not config_store.update_boost_rule(rule_id, fields):
+        raise HTTPException(status_code=404, detail="Boost rule not found")
+    rule = next((r for r in config_store.list_boost_rules() if r["id"] == rule_id), None)
+    return BoostRule(**rule)
+
+
+@router.delete("/boost-rules/{rule_id}")
+@user_limiter.limit(get_limit("admin_operations"))
+async def delete_boost_rule_route(request: Request, response: Response, rule_id: int,
+        _: UserPublic = Depends(deps.require_local_admin)):
+    """Delete a boost rule by ID (local channel + admin only)."""
+    if not config_store.delete_boost_rule(rule_id):
+        raise HTTPException(status_code=404, detail="Boost rule not found")
+    return {"success": True}
+
+
+@router.post("/boost-now")
+@user_limiter.limit(get_limit("admin_operations"))
+async def boost_now_route(request: Request, response: Response, body: BoostNowRequest,
+        _: UserPublic = Depends(deps.require_local_admin)):
+    """Trigger a manual SURGE boost for the given duration (local channel + admin only)."""
+    mgr = get_power_manager()
+    await mgr.register_demand(
+        "manual-boost",
+        PowerProfile.SURGE,
+        timeout_seconds=body.duration_seconds,
+        description="Manueller Boost",
+    )
+    return {"success": True, "duration_seconds": body.duration_seconds}

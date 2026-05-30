@@ -475,6 +475,53 @@ def list_boost_rules(enabled_only: bool = False) -> list[dict]:
         return []
 
 
+def create_boost_rule(kind: str, label: str, pattern: Optional[str],
+                      target_max_mhz: Optional[int]) -> Optional[dict]:
+    from app.models.power_boost_rule import PowerBoostRule
+    db = SessionLocal()
+    try:
+        row = PowerBoostRule(kind=kind, label=label, pattern=pattern,
+                             target_max_mhz=target_max_mhz, enabled=True)
+        db.add(row); db.commit(); db.refresh(row)
+        return {"id": row.id, "kind": row.kind, "pattern": row.pattern,
+                "label": row.label, "target_max_mhz": row.target_max_mhz, "enabled": True}
+    except Exception as exc:
+        db.rollback(); logger.warning(f"create boost rule failed: {exc}"); return None
+    finally:
+        db.close()
+
+
+def update_boost_rule(rule_id: int, fields: dict) -> bool:
+    from app.models.power_boost_rule import PowerBoostRule
+    db = SessionLocal()
+    try:
+        row = db.query(PowerBoostRule).filter(PowerBoostRule.id == rule_id).first()
+        if row is None:
+            return False
+        for k, v in fields.items():
+            if hasattr(row, k) and k in {"kind", "pattern", "label", "target_max_mhz", "enabled"}:
+                setattr(row, k, v)
+        db.commit(); return True
+    except Exception as exc:
+        db.rollback(); logger.warning(f"update boost rule failed: {exc}"); return False
+    finally:
+        db.close()
+
+
+def delete_boost_rule(rule_id: int) -> bool:
+    from app.models.power_boost_rule import PowerBoostRule
+    db = SessionLocal()
+    try:
+        row = db.query(PowerBoostRule).filter(PowerBoostRule.id == rule_id).first()
+        if row is None:
+            return False
+        db.delete(row); db.commit(); return True
+    except Exception as exc:
+        db.rollback(); logger.warning(f"delete boost rule failed: {exc}"); return False
+    finally:
+        db.close()
+
+
 def save_authority_config(fields: dict[str, Any]) -> bool:
     """Update fields on the singleton power_authority_config row (id=1).
 

@@ -31,3 +31,39 @@ def test_enable_authority_fails_when_acquire_fails(client, admin_headers, monkey
 
     assert r.status_code == 500
     assert config_store.load_authority_config()["external_authority_enabled"] is False
+
+
+def test_boost_rule_crud_local(client, admin_headers):
+    """Local channel: full CRUD cycle for boost rules must succeed."""
+    r = client.post("/api/power/boost-rules",
+                    json={"kind": "process_glob", "pattern": "lutris*", "label": "Lutris", "target_max_mhz": 3000},
+                    headers=admin_headers)
+    assert r.status_code == 200
+    rule_id = r.json()["id"]
+
+    r = client.get("/api/power/boost-rules", headers=admin_headers)
+    assert any(x["id"] == rule_id for x in r.json()["rules"])
+
+    r = client.delete(f"/api/power/boost-rules/{rule_id}", headers=admin_headers)
+    assert r.status_code == 200
+
+
+def test_boost_rule_create_remote_blocked(remote_client, admin_headers):
+    """Remote channel: POST /boost-rules must be blocked with 403."""
+    r = remote_client.post("/api/power/boost-rules",
+                           json={"kind": "process_glob", "pattern": "lutris*", "label": "Lutris"},
+                           headers=admin_headers)
+    assert r.status_code == 403
+
+
+def test_boost_now_local(client, admin_headers):
+    """Local channel: POST /boost-now must succeed."""
+    r = client.post("/api/power/boost-now", json={"duration_seconds": 60}, headers=admin_headers)
+    assert r.status_code == 200
+    assert r.json()["success"] is True
+
+
+def test_boost_now_remote_blocked(remote_client, admin_headers):
+    """Remote channel: POST /boost-now must be blocked with 403."""
+    r = remote_client.post("/api/power/boost-now", json={"duration_seconds": 60}, headers=admin_headers)
+    assert r.status_code == 403

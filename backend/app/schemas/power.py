@@ -349,3 +349,35 @@ class ServiceIntensityResponse(BaseModel):
     total_services: int = Field(default=0, description="Total number of services")
     active_demands_count: int = Field(default=0, description="Number of services with active power demands")
     highest_intensity: ServicePowerProperty = Field(default=ServicePowerProperty.IDLE, description="Highest intensity across all services")
+
+
+class BoostRule(BaseModel):
+    id: int
+    kind: str
+    pattern: Optional[str] = None
+    label: str
+    target_max_mhz: Optional[int] = None
+    enabled: bool
+
+
+class BoostRulesResponse(BaseModel):
+    rules: list[BoostRule]
+
+
+class BoostRuleCreateRequest(BaseModel):
+    kind: str = Field(..., pattern="^(process_glob|game_session)$")
+    label: str = Field(..., min_length=1, max_length=120)
+    pattern: Optional[str] = Field(None, max_length=200)
+    target_max_mhz: Optional[int] = Field(None, ge=400, le=6000)
+
+
+class BoostRuleUpdateRequest(BaseModel):
+    label: Optional[str] = Field(None, min_length=1, max_length=120)
+    pattern: Optional[str] = Field(None, max_length=200)
+    target_max_mhz: Optional[int] = Field(None, ge=400, le=6000)
+    enabled: Optional[bool] = None
+
+
+class BoostNowRequest(BaseModel):
+    duration_seconds: int = Field(1800, ge=30, le=86400)
+    target_max_mhz: Optional[int] = Field(None, ge=400, le=6000)
