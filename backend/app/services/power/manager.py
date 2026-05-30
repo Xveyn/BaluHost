@@ -122,6 +122,7 @@ class PowerManagerService:
         self._in_drift: bool = False                      # within a drift episode (log-once guard)
         self._enforcement_task: Optional[asyncio.Task] = None
         self._watcher_absent_ticks: int = 0
+        self._game_demand_active: bool = False
 
         logger.info("PowerManagerService initialized")
 
@@ -789,20 +790,54 @@ class PowerManagerService:
         except Exception:
             return False
 
+    def _active_boost_rules(self) -> list[dict]:
+        """Return enabled boost rules from config_store, or [] if boost rules are disabled."""
+        from app.services.power.config_store import load_authority_config, list_boost_rules
+        if not load_authority_config().get("boost_rules_enabled", True):
+            return []
+        return list_boost_rules(enabled_only=True)
+
+    async def _watch_tick(self) -> None:
+        """One enforcement tick: check running processes against boost rules and update game-session demand."""
+        from app.services.power import process_watcher
+        rules = self._active_boost_rules()
+        if not rules:
+            if self._game_demand_active:
+                await self.unregister_demand("game-session")
+                self._game_demand_active = False
+                self._boost_max_override = None
+            return
+
+        procs = process_watcher.snapshot_processes()
+        hit, target = process_watcher.match_boost_rules(procs, rules)
+
+        if hit:
+            self._watcher_absent_ticks = 0
+            if not self._game_demand_active or self._boost_max_override != target:
+                self._boost_max_override = target
+                await self.register_demand(
+                    "game-session", PowerProfile.SURGE,
+                    max_freq_override=target, description="Boost-Allowlist",
+                )
+                self._game_demand_active = True
+        elif self._game_demand_active:
+            self._watcher_absent_ticks += 1
+            if self._watcher_absent_ticks >= 2:
+                await self.unregister_demand("game-session")
+                self._game_demand_active = False
+                self._boost_max_override = None
+                self._watcher_absent_ticks = 0
+
     async def _enforcement_loop(self) -> None:
         """2-second primary-only loop: enforce cap + watch for boost processes."""
         while self._is_running:
             try:
                 if self._primary and self._authority_active():
-                    self._run_process_watcher()
+                    await self._watch_tick()
                     await self._enforce_current_profile()
             except Exception as e:
                 logger.error(f"Error in enforcement loop: {e}")
             await asyncio.sleep(2)
-
-    def _run_process_watcher(self) -> None:
-        """Filled in by the process-watcher task (Task 8). No-op until then."""
-        return None
 
     async def _get_profile_config_from_preset(
         self,
@@ -941,7 +976,8 @@ class PowerManagerService:
         level: PowerProfile,
         power_property: Optional[ServicePowerProperty] = None,
         timeout_seconds: Optional[int] = None,
-        description: Optional[str] = None
+        description: Optional[str] = None,
+        max_freq_override: Optional[int] = None,
     ) -> str:
         """
         Register a power demand from a source.
@@ -967,6 +1003,9 @@ class PowerManagerService:
             expires_at=expires_at,
             description=description,
         )
+
+        if max_freq_override is not None or level == PowerProfile.SURGE:
+            self._boost_max_override = max_freq_override
 
         upsert_demand(
             source=source,

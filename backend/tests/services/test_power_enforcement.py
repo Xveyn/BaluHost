@@ -249,7 +249,7 @@ async def test_enforcement_loop_calls_enforce_when_enabled(monkeypatch):
             mgr._is_running = False
 
     monkeypatch.setattr(mgr, "_enforce_current_profile", fake_enforce)
-    monkeypatch.setattr(mgr, "_run_process_watcher", lambda: None)
+    monkeypatch.setattr(mgr, "_watch_tick", fake_enforce)
     monkeypatch.setattr(mgr, "_authority_active", lambda: True)
 
     async def no_sleep(_):

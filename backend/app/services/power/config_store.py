@@ -454,6 +454,27 @@ def load_authority_config() -> dict[str, Any]:
         return defaults
 
 
+def list_boost_rules(enabled_only: bool = False) -> list[dict]:
+    """Return all boost rules as dicts, optionally filtered to enabled-only rows."""
+    from app.models.power_boost_rule import PowerBoostRule
+    try:
+        db = SessionLocal()
+        try:
+            q = db.query(PowerBoostRule)
+            if enabled_only:
+                q = q.filter(PowerBoostRule.enabled == True)  # noqa: E712
+            return [
+                {"id": r.id, "kind": r.kind, "pattern": r.pattern, "label": r.label,
+                 "target_max_mhz": r.target_max_mhz, "enabled": bool(r.enabled)}
+                for r in q.order_by(PowerBoostRule.id).all()
+            ]
+        finally:
+            db.close()
+    except Exception as exc:
+        logger.warning(f"Failed to list boost rules: {exc}")
+        return []
+
+
 def save_authority_config(fields: dict[str, Any]) -> bool:
     """Update fields on the singleton power_authority_config row (id=1).
 

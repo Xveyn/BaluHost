@@ -45,6 +45,21 @@ def _glob_match(procs: List[ProcInfo], pattern: str) -> bool:
     return False
 
 
+def snapshot_processes() -> List[ProcInfo]:
+    """Live process list via psutil (name + cmdline). Best-effort."""
+    import psutil
+    out: List[ProcInfo] = []
+    for proc in psutil.process_iter(["name", "cmdline"]):
+        try:
+            info = proc.info
+            name = info.get("name") or ""
+            cmd = " ".join(info.get("cmdline") or [])
+            out.append(ProcInfo(name=name, cmdline=cmd))
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            continue
+    return out
+
+
 def match_boost_rules(procs: List[ProcInfo], rules: List[dict]) -> Tuple[bool, Optional[int]]:
     """Return (any_hit, effective_target_mhz).
 

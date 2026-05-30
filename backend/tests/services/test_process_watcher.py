@@ -53,3 +53,48 @@ def test_highest_target_wins_none_beats_all():
 def test_disabled_rule_ignored():
     hit, _ = match_boost_rules([WRAPPER], [_rule("game_session", enabled=False)])
     assert hit is False
+
+
+import pytest
+from app.schemas.power import PowerProfile
+from app.services.power.manager import PowerManagerService
+from app.services.power import process_watcher as pw
+
+
+@pytest.mark.asyncio
+async def test_watcher_registers_then_releases_after_two_absent_ticks(monkeypatch):
+    mgr = PowerManagerService()
+    mgr._primary = True
+    mgr._watcher_absent_ticks = 0
+    mgr._game_demand_active = False
+    mgr._boost_max_override = None
+    events = []
+
+    async def fake_register(source, level, **kw):
+        events.append(("register", kw.get("max_freq_override")))
+        return source
+
+    async def fake_unregister(source):
+        events.append(("unregister", source))
+        return True
+
+    monkeypatch.setattr(mgr, "register_demand", fake_register)
+    monkeypatch.setattr(mgr, "unregister_demand", fake_unregister)
+    monkeypatch.setattr(mgr, "_active_boost_rules",
+                        lambda: [{"kind": "game_session", "enabled": True, "pattern": None, "target_max_mhz": None}])
+
+    # Tick 1: game present -> register
+    monkeypatch.setattr(pw, "snapshot_processes", lambda: [pw.ProcInfo(name="pressure-vessel")])
+    await mgr._watch_tick()
+    assert ("register", None) in events
+    assert mgr._game_demand_active is True
+
+    # Tick 2: game gone (1 absent) -> still active (hysteresis)
+    monkeypatch.setattr(pw, "snapshot_processes", lambda: [])
+    await mgr._watch_tick()
+    assert mgr._game_demand_active is True
+
+    # Tick 3: (2 absent) -> release
+    await mgr._watch_tick()
+    assert ("unregister", "game-session") in events
+    assert mgr._game_demand_active is False
