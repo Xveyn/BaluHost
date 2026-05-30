@@ -1,13 +1,13 @@
 """Tests for CPU cap enforcement (re-assert + drift detection)."""
 import pytest
 
-from app.schemas.power import PowerProfile, PowerProfileConfig
+from app.schemas.power import PowerProfile, PowerProfileConfig, ServicePowerProperty
 from app.services.power.cpu_dev_backend import DevCpuPowerBackend
+from app.services.power.manager import PowerManagerService
 
 
 @pytest.fixture(autouse=True)
 def _reset_override():
-    from app.services.power.manager import PowerManagerService
     mgr = PowerManagerService()
     mgr._boost_max_override = None
     yield
@@ -31,10 +31,6 @@ async def test_dev_backend_reports_enforcement_state_after_apply():
 
     assert governor == "powersave"
     assert max_mhz == 400
-
-
-from app.schemas.power import ServicePowerProperty
-from app.services.power.manager import PowerManagerService
 
 
 @pytest.mark.asyncio
