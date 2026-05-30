@@ -1084,12 +1084,12 @@ class PowerManagerService:
         if self._backend:
             freq = await self._backend.get_current_frequency_mhz()
 
-        config = self._profiles.get(self._current_profile)
+        desired = await self._desired_config_for(self._current_profile)
         freq_range = None
-        if config and config.min_freq_mhz and config.max_freq_mhz:
-            freq_range = f"{config.min_freq_mhz}-{config.max_freq_mhz} MHz"
+        if desired and desired.min_freq_mhz and desired.max_freq_mhz:
+            freq_range = f"{desired.min_freq_mhz}-{desired.max_freq_mhz} MHz"
         elif self._current_profile == PowerProfile.SURGE:
-            freq_range = "Full boost (4.6 GHz)"
+            freq_range = "Full boost"
 
         cooldown_remaining = None
         if self._cooldown_until:

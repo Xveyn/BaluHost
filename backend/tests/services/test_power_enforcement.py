@@ -259,3 +259,20 @@ async def test_enforcement_loop_calls_enforce_when_enabled(monkeypatch):
     await mgr._enforcement_loop()
 
     assert calls["n"] >= 2
+
+
+@pytest.mark.asyncio
+async def test_status_freq_range_uses_desired_config(monkeypatch):
+    mgr = PowerManagerService()
+    mgr._current_profile = PowerProfile.IDLE
+    mgr._backend = DevCpuPowerBackend()
+
+    async def desired(profile):
+        return PowerProfileConfig(
+            profile=PowerProfile.IDLE, governor="powersave",
+            energy_performance_preference="power",
+            min_freq_mhz=510, max_freq_mhz=600, description="preset")
+    monkeypatch.setattr(mgr, "_desired_config_for", desired)
+
+    status = await mgr.get_power_status()
+    assert status.target_frequency_range == "510-600 MHz"
