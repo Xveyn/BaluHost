@@ -206,3 +206,28 @@ async def test_enforce_flags_unenforceable_when_apply_fails(monkeypatch):
     await mgr._enforce_current_profile()
 
     assert mgr._cap_unenforceable is True
+
+
+@pytest.mark.asyncio
+async def test_enforcement_loop_calls_enforce_when_enabled(monkeypatch):
+    mgr = PowerManagerService()
+    mgr._is_running = True
+    mgr._primary = True
+    calls = {"n": 0}
+
+    async def fake_enforce():
+        calls["n"] += 1
+        if calls["n"] >= 2:
+            mgr._is_running = False
+
+    monkeypatch.setattr(mgr, "_enforce_current_profile", fake_enforce)
+    monkeypatch.setattr(mgr, "_run_process_watcher", lambda: None)
+    monkeypatch.setattr(mgr, "_authority_active", lambda: True)
+
+    async def no_sleep(_):
+        return None
+    monkeypatch.setattr("app.services.power.manager.asyncio.sleep", no_sleep)
+
+    await mgr._enforcement_loop()
+
+    assert calls["n"] >= 2

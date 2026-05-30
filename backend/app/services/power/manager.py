@@ -424,6 +424,7 @@ class PowerManagerService:
 
         # Start background monitor for demand expiration
         self._monitor_task = asyncio.create_task(self._monitor_loop())
+        self._enforcement_task = asyncio.create_task(self._enforcement_loop())
         # Start command queue poll loop for cross-worker mutations
         self._command_poll_task = asyncio.create_task(command_queue.run_poll_loop(self))
         logger.info("PowerManagerService started (primary mode)")
@@ -459,6 +460,14 @@ class PowerManagerService:
             except asyncio.CancelledError:
                 pass
             self._monitor_task = None
+
+        if self._enforcement_task:
+            self._enforcement_task.cancel()
+            try:
+                await self._enforcement_task
+            except asyncio.CancelledError:
+                pass
+            self._enforcement_task = None
 
         if self._command_poll_task:
             self._command_poll_task.cancel()
@@ -764,6 +773,29 @@ class PowerManagerService:
         self._cap_unenforceable = bool(still_off)
         if still_off:
             logger.warning("CPU cap still not enforced after re-write (kernel clamp?)")
+
+    def _authority_active(self) -> bool:
+        """True when BaluHost should enforce the cap (external authority enabled)."""
+        try:
+            from app.services.power.config_store import load_authority_config
+            return bool(load_authority_config().get("external_authority_enabled"))
+        except Exception:
+            return False
+
+    async def _enforcement_loop(self) -> None:
+        """2-second primary-only loop: enforce cap + watch for boost processes."""
+        while self._is_running:
+            try:
+                if self._primary and self._authority_active():
+                    self._run_process_watcher()
+                    await self._enforce_current_profile()
+            except Exception as e:
+                logger.error(f"Error in enforcement loop: {e}")
+            await asyncio.sleep(2)
+
+    def _run_process_watcher(self) -> None:
+        """Filled in by the process-watcher task (Task 8). No-op until then."""
+        return None
 
     async def _get_profile_config_from_preset(
         self,
