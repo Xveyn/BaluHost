@@ -84,6 +84,14 @@ class CpuPowerBackend(ABC):
         pass
 
     @abstractmethod
+    async def read_enforcement_state(self) -> Tuple[Optional[str], Optional[int]]:
+        """Read back (governor, scaling_max_mhz) for drift comparison.
+
+        Returns (None, None) when the state cannot be read.
+        """
+        pass
+
+    @abstractmethod
     def is_available(self) -> bool:
         """Check if this backend can be used on the current system."""
         pass
