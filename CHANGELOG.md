@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.33.1] - 2026-05-30
+
+### Added
+
+- **(statusbar)** i18n-driven wake pill (always-awake + core-hours variants)
+- **(statusbar)** always-awake pill falls back to active Kernbetriebszeit
+
+### Fixed
+
+- **(updates)** don't label pre-release builds as "Stable"
+- **(deps)** bump axios to ^1.16.0 to patch 4 advisories
+- **(ci)** derive pre-release tag from last stable + patch bump
+- **(statusbar)** VPN-Pill zeigt verbundene Peers statt roher Client-Anzahl
+
+### Documentation
+
+- **(plan)** status-strip wake pill implementation plan (2026-05-29)
+- **(spec)** status-strip wake pill — always-awake + kernbetriebszeit fallback (2026-05-29)
+
+---
+
 ## [1.33.0] - 2026-05-28
 
 ### Added
