@@ -1,7 +1,7 @@
 """add power_authority_config table
 
 Revision ID: a3ef59de2014
-Revises: 37ae61688702
+Revises: b48340a96a5a
 Create Date: 2026-05-30 12:00:00.000000
 
 """
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = 'a3ef59de2014'
-down_revision: Union[str, Sequence[str], None] = '37ae61688702'
+down_revision: Union[str, Sequence[str], None] = 'b48340a96a5a'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
