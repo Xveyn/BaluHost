@@ -1,0 +1,35 @@
+{
+  "tabTitle": "Topbar-Statusleiste",
+  "description": "Lege fest, welche Status-Pills in der Topbar erscheinen, wer sie sieht und in welcher Reihenfolge.",
+  "pills": {
+    "power": { "name": "Energieprofil" },
+    "pihole": { "name": "Pi-hole DNS" },
+    "uploads": { "name": "Uploads / Downloads" },
+    "sync": { "name": "Sync" },
+    "raid": { "name": "RAID-Zustand" },
+    "sleep": { "name": "Sleep-Modus" },
+    "vpn": { "name": "VPN-Clients" },
+    "temp": { "name": "Temperatur / Lüfter" },
+    "alwaysAwake": {
+      "name": "Immer wach / Kernbetriebszeit",
+      "live": "Immer wach",
+      "permanent": "Dauerhaft",
+      "coreUptimeLive": "Kernbetriebszeit",
+      "coreUptimeUntil": "bis {{time}}"
+    },
+    "scheduler": { "name": "Scheduler" },
+    "backup": { "name": "Backup" }
+  },
+  "visibility": { "admin": "Nur Admin", "all": "Alle Nutzer", "locked": "Nur Admin (gesperrt)" },
+  "enabled": "Aktiv",
+  "uploadBar": {
+    "title": "Untere Upload-Leiste anzeigen",
+    "desc": "Unabhängig vom Uploads-Pill in der Topbar."
+  },
+  "preview": { "title": "Live-Vorschau", "empty": "Keine Pills aktiv — die Leiste bleibt leer." },
+  "save": "Speichern",
+  "reset": "Auf Standard zurücksetzen",
+  "saved": "Statusleisten-Einstellungen gespeichert",
+  "saveFailed": "Speichern fehlgeschlagen",
+  "loadFailed": "Laden fehlgeschlagen"
+}

@@ -1,0 +1,35 @@
+{
+  "tabTitle": "Topbar Status Strip",
+  "description": "Choose which status pills appear in the topbar, who can see them, and their order.",
+  "pills": {
+    "power": { "name": "Power Profile" },
+    "pihole": { "name": "Pi-hole DNS" },
+    "uploads": { "name": "Uploads / Downloads" },
+    "sync": { "name": "Sync" },
+    "raid": { "name": "RAID Health" },
+    "sleep": { "name": "Sleep Mode" },
+    "vpn": { "name": "VPN Clients" },
+    "temp": { "name": "Temperature / Fans" },
+    "alwaysAwake": {
+      "name": "Always Awake / Core Hours",
+      "live": "Always Awake",
+      "permanent": "Permanent",
+      "coreUptimeLive": "Core Hours",
+      "coreUptimeUntil": "until {{time}}"
+    },
+    "scheduler": { "name": "Scheduler" },
+    "backup": { "name": "Backup" }
+  },
+  "visibility": { "admin": "Admin only", "all": "All Users", "locked": "Admin only (locked)" },
+  "enabled": "Enabled",
+  "uploadBar": {
+    "title": "Show bottom upload bar",
+    "desc": "Independent from the Uploads pill in the topbar."
+  },
+  "preview": { "title": "Live Preview", "empty": "No pills enabled — the strip will be empty." },
+  "save": "Save",
+  "reset": "Reset to defaults",
+  "saved": "Status bar settings saved",
+  "saveFailed": "Failed to save status bar settings",
+  "loadFailed": "Failed to load status bar settings"
+}

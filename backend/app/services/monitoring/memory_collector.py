@@ -15,7 +15,7 @@ import psutil
 from app.models.monitoring import MemorySample
 from app.schemas.monitoring import MemorySampleSchema
 from app.services.monitoring.base import MetricCollector
-from app.services.monitoring.process_tracker import BALUHOST_PROCESS_PATTERNS
+from app.services.monitoring.process_tracker import get_baluhost_process_patterns
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +32,8 @@ def get_baluhost_memory_breakdown() -> dict[str, int]:
     Routing is first-match-wins (same order as BALUHOST_PROCESS_PATTERNS) so
     a process matching multiple patterns is counted under the first.
     """
-    breakdown: dict[str, int] = {entry["name"]: 0 for entry in BALUHOST_PROCESS_PATTERNS}
+    patterns = get_baluhost_process_patterns()
+    breakdown: dict[str, int] = {entry["name"]: 0 for entry in patterns}
 
     try:
         for proc in psutil.process_iter(["pid", "name", "cmdline", "memory_info"]):
@@ -41,7 +42,7 @@ def get_baluhost_memory_breakdown() -> dict[str, int]:
                 name = (info.get("name") or "").lower()
                 cmdline = " ".join(info.get("cmdline") or []).lower()
 
-                for entry in BALUHOST_PROCESS_PATTERNS:
+                for entry in patterns:
                     if all(p.lower() in name or p.lower() in cmdline for p in entry["patterns"]):
                         if info.get("memory_info"):
                             breakdown[entry["name"]] += info["memory_info"].rss

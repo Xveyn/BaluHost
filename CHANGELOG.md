@@ -7,6 +7,184 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.33.1] - 2026-05-30
+
+### Added
+
+- **(statusbar)** i18n-driven wake pill (always-awake + core-hours variants)
+- **(statusbar)** always-awake pill falls back to active Kernbetriebszeit
+
+### Fixed
+
+- **(updates)** don't label pre-release builds as "Stable"
+- **(deps)** bump axios to ^1.16.0 to patch 4 advisories
+- **(ci)** derive pre-release tag from last stable + patch bump
+- **(statusbar)** VPN-Pill zeigt verbundene Peers statt roher Client-Anzahl
+
+### Documentation
+
+- **(plan)** status-strip wake pill implementation plan (2026-05-29)
+- **(spec)** status-strip wake pill — always-awake + kernbetriebszeit fallback (2026-05-29)
+
+---
+
+## [1.33.0] - 2026-05-28
+
+### Added
+
+- **(statusbar)** gate bottom upload bar by show_bottom_upload setting
+- **(statusbar)** register Status Bar tab under System Control
+- **(statusbar)** admin config tab with dnd reorder + live preview
+- **(statusbar)** sortable PillRow with locked-visibility handling
+- **(statusbar)** usePillConfig admin config hook
+- **(statusbar)** i18n statusBar namespace (de/en) + tab label
+- **(statusbar)** mount TopbarStatusStrip in the desktop topbar
+- **(statusbar)** TopbarStatusStrip container with preview support
+- **(statusbar)** pill renderer switch
+- **(statusbar)** always-awake pill with live countdown
+- **(statusbar)** lucide icon-name resolver
+- **(statusbar)** native polling hook with pause-when-hidden
+- **(statusbar)** useCountdown hook with re-anchor
+- **(statusbar)** tone-aware Pill primitive
+- **(statusbar)** typed frontend API client
+- **(statusbar)** API router for config + state with audit logging
+- **(statusbar)** add status_polling rate-limit key
+- **(statusbar)** collect_state with role filter and sort order
+- **(statusbar)** config update with locked-visibility guard + diff
+- **(statusbar)** aggregator service config read with seed-on-read
+- **(statusbar)** collector registry covering the full catalog
+- **(statusbar)** backup collector (in-progress + 24h failure window)
+- **(statusbar)** scheduler collector (active count + job names)
+- **(statusbar)** always-awake collector with countdown formatting
+- **(statusbar)** collectors for power/pihole/uploads/sync/raid/sleep/vpn/temp
+- **(statusbar)** 11-pill catalog with drift test
+- **(statusbar)** pydantic schemas for config and state
+- **(statusbar)** add status_bar_pill_config and status_bar_settings tables
+- **(i18n)** BaluHost memory unit labels (en/de)
+- **(ui)** per-unit BaluHost memory breakdown in MemoryTab
+- **(client)** MemorySample.baluhost_memory_breakdown type
+- **(api)** expose baluhost_memory_breakdown in /monitoring/memory/current
+- **(monitoring)** get_baluhost_memory_breakdown() per-unit RSS map
+- **(monitoring)** first-match-wins routing in process_tracker.collect_samples
+- **(monitoring)** expand BaluHost process patterns to all systemd units
+- **(setup-ui)** show remote-channel banner when not local
+- **(tauri)** main entry + window-global injection for api.ts
+- **(tauri)** proxy.rs forwarding HTTP to /run/baluhost/local.sock
+- **(tauri)** scaffold src-tauri/ with Cargo + tauri.conf
+- **(client)** Tauri-aware API base URL via window global injection
+- **(users-ui)** gate bulk-delete via LocalOnlyAction
+- **(plugins-ui)** gate install/uninstall via LocalOnlyAction
+- **(raid-ui)** gate destructive buttons via LocalOnlyAction
+- **(client)** add LocalOnlyAction component + i18n keys
+- **(client)** add useChannelStatus hook (no react-query, follows useGpuPresence pattern)
+- **(client)** add getChannelStatus API client
+- **(users)** gate bulk-delete via require_local_admin
+- **(vpn)** gate sync-server-keys via require_local_admin
+- **(raid)** gate destructive array operations via require_local_admin
+- **(plugins)** gate install/uninstall via require_local_admin
+- **(setup)** gate wizard endpoints via require_local_or_setup_secret
+- **(backend)** add require_local_or_setup_secret for setup wizard
+- **(backend)** add require_local_admin dependency with audit logging
+- **(backend)** add GET /api/system/channel-status endpoint
+- **(backend)** wire ChannelMarkerMiddleware into app factory
+- **(backend)** add ChannelMarkerMiddleware with provider injection
+- **(backend)** add channel + loopback-fallback settings fields
+- **(client)** hide 0°C dead sensors + clarify renamed sensors
+- **(client)** advanced settings, GPU manual-mode toggle, GPU badge, sensor label
+- **(client)** curve type selector + 5 typed curve editors
+- **(power-dev)** add simulated AMD GPU fan to dev backend
+- **(client)** SensorsPanel with rename + composite sensor modal
+- **(api)** extended FanInfo schema + GPU manual-mode endpoint
+- **(api)** sensor label + composite sensor endpoints
+- **(power)** wire TempSourceRegistry + evaluate_curve into FanControlService
+- **(power)** AMD GPU manual-mode unlock helper with state restore
+- **(power)** GPU fan recognition + EINVAL diagnostic capture
+- **(power)** add fan_curve_eval with 5 curve types and post-processing
+- **(power)** add GPU, Disk, and Mix temperature sources
+- **(power)** add TempSource protocol + registry with hwmon source
+- **(models)** add TempSensorLabel, CompositeTempSensor; extend FanConfig
+- **(db)** add fan overhaul migration (labels, composites, fan_config columns)
+- **(ci)** bootstrap script for ci-runner sandbox
+- **(client)** render OsAutoSuspendCard on Sleep page
+- **(client)** OsAutoSuspendCard component
+- **(client)** i18n keys for OsAutoSuspend (de + en)
+- **(client)** sleep.ts adds getOsAutoSuspend / setOsAutoSuspend
+- **(sleep)** inspector surfaces KDE/GNOME idle suspend as info issue
+- **(deploy)** install module 13-power-helpers (helper + sudoers)
+- **(deploy)** sudoers template + logind idle helper script
+- **(sleep)** add GET/PUT /os-auto-suspend routes with audit log
+- **(sleep)** os_auto_suspend service-layer get/set
+- **(sleep)** ActivePmDetector with D-Bus probes and 30s cache
+- **(sleep)** GnomeAdapter via gsettings
+- **(sleep)** KdeAdapter.write (atomic, preserves other sections)
+- **(sleep)** KdeAdapter.read parses ~/.config/powerdevilrc
+- **(sleep)** LogindAdapter.write via sudo helper
+- **(sleep)** LogindAdapter.read with drop-in merge
+- **(sleep)** scaffold os_auto_suspend module with shared protocol
+- **(sleep)** add OsAutoSuspend schemas (response, update, action enum)
+- **(nginx)** opencode reverse-proxy site (LAN-only HTTPS on :8443)
+- **(sleep)** add _reconcile_sleep_inhibitor helper covering always-awake
+
+### Changed
+
+- **(statusbar)** drop unused anchorRef in useCountdown
+- **(sleep)** schedule loop delegates inhibitor management to reconcile helper
+
+### Fixed
+
+- **(statusbar)** scheduler pill click-through to /schedulers (was dead /admin/schedulers)
+- **(statusbar)** resolve pill name i18n key (strip namespace prefix) in config tab
+- **(statusbar)** render dynamic pill icon via createElement (lint: static-components)
+- **(statusbar)** satisfy verbatimModuleSyntax and react-jsx in build
+- **(statusbar)** skip malformed collector output instead of failing /state
+- **(statusbar)** sync collector reports only conflicts + collector polish
+- **(statusbar)** add server_default to status bar migration columns
+- **(ci)** don't persist GITHUB_TOKEN in tagging checkout
+- **(client)** add baluhost_memory_breakdown to CurrentMemoryResponse type
+- **(tauri)** skip WS/SSE in Companion to prevent ErrorBoundary on login
+- **(tauri)** route remaining proxy-bypassing URL constructions through buildApiUrl
+- **(tauri)** route bare fetch('/api/...') calls through buildApiUrl
+- **(tauri)** rewrite Origin header so backend CORS accepts proxy calls
+- **(tauri)** drop /api from injected base URL; restore CSP
+- **(tauri)** drop strict CSP that blocked initialization_script
+- **(tauri)** regenerate icon as RGBA
+- **(tests)** use new event loop in chunked_upload fixture teardown
+- **(deploy)** align local-channel service EnvironmentFile with existing convention
+- **(backend)** audit-log + constant-time compare in setup-secret gate
+- **(fans)** suppress amdgpu/nouveau hwmon duplicates of gpu:* sources
+- **(fans)** SMART summary in SHM; disk:* sources fed from there
+- **(monitoring)** publish GPU sample in telemetry SHM snapshot
+- **(ci)** target deploy-production on 'prod'-labeled runner only
+- **(ci)** install passt for rootless Podman bridge networking
+- **(security)** renumber new ci-runner gap to 8 (was 11)
+- **(sleep)** detect KDE/GNOME via pgrep instead of session-bus probe
+- **(ci)** address code review on bootstrap script
+- **(sleep)** release inhibitor synchronously when manual sleep/suspend clears always-awake
+- **(sleep)** reconcile inhibitor at startup also when always-awake is active
+
+### Documentation
+
+- **(plan)** topbar status strip — phase 2 (frontend strip) + phase 3 (config tab)
+- **(plan)** topbar status strip — phase 1 backend implementation plan
+- clarify live-only contract for baluhost_memory_breakdown
+- note that _find_processes is no longer called by collect_samples
+- clarify process_tracker docstrings + test comments (Task 1 follow-up)
+- **(spec)** topbar status strip refresh — 11 pills incl. Always Awake/Scheduler/Backup (2026-05-27)
+- **(plan)** RAM per-unit breakdown implementation plan
+- **(spec)** RAM per-unit breakdown design (2026-05-27)
+- companion app install guide
+- **(plan)** tauri companion + local-channel gate implementation plan
+- **(spec)** tauri companion app + local-channel gate
+- add fan overhaul design spec and implementation plan
+- **(security)** document ci-sandbox runner and ci-tests environment
+- implementation plan for self-hosted backend tests
+- spec for self-hosted backend tests with rootless Podman sandbox
+- **(plan)** OS auto-suspend bidirectional implementation plan
+- **(spec)** OS auto-suspend bidirectional design
+- **(sleep)** document dual purpose of core_uptime_inhibitor field
+
+---
+
 ## [1.32.0] - 2026-05-12
 
 ### Added

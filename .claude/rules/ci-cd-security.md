@@ -2,7 +2,9 @@
 
 Trust model for the self-hosted production runner. Four independent layers; **never weaken any one in isolation** — they compensate for each other.
 
-The deliberate gap: `main` does not require PR approvals (would deadlock `auto-merge.yml`, which uses `secrets.DEPLOY_PAT` to merge once `ci-check` passes). The `production` environment reviewer is the safety net that holds even if a malicious PR sneaks through CI on a GitHub-hosted runner.
+The deliberate gap: `main` does not require PR approvals. Xveyn (the sole maintainer) merges PRs manually after CI passes; there is no auto-merge bot. The `production` environment reviewer is the safety net that holds even if a malicious PR sneaks through CI on a GitHub-hosted runner.
+
+Pre-release tags (`v*-pre.*`) are created by `deploy-production.yml` as the final step of a successful prod deploy (see Layer 3), not by a merge bot — so a tag always corresponds to code that actually reached production.
 
 ---
 
@@ -27,7 +29,6 @@ Owned paths:
 
 | Workflow | Runner | Triggers |
 |---|---|---|
-| `auto-merge.yml` | `ubuntu-latest` | `workflow_run` (CI Check completed) |
 | `ci-check.yml` `frontend-build` | `ubuntu-latest` | `pull_request`, `workflow_call` |
 | `ci-check.yml` `backend-tests` | **`self-hosted, ci-sandbox`** (rootless Podman) | `pull_request` (gated by `ci-tests` env), `workflow_call` (ungated) |
 | `create-release.yml` | `ubuntu-latest` | tag push (`v*-pre.*`) |
@@ -40,7 +41,7 @@ Owned paths:
 
 PR-triggered workflows MUST NOT use the production-privileged `BaluNode` runner. The `ci-sandbox` runner is the **only** self-hosted runner permitted to execute PR-triggered code, and only via the two-layer isolation described below.
 
-Self-hosted production runners (`BaluNode`) only see code that has already landed on `main` (via auto-merge through Layer 4) or that an authorized actor explicitly dispatched.
+Self-hosted production runners (`BaluNode`) only see code that has already landed on `main` (via a manual merge by Xveyn, gated by Layer 4) or that an authorized actor explicitly dispatched.
 
 **Sandbox runner: two-layer isolation.** The `ci-sandbox` runner (provisioned by `scripts/bootstrap-ci-runner.sh`) provides:
 
@@ -62,7 +63,9 @@ if: >-
   && github.actor == 'Xveyn'
 ```
 
-Why it works with auto-merge: `auto-merge.yml` uses `secrets.DEPLOY_PAT` (Xveyn's PAT) to perform the merge, so the resulting `push: main` event has `github.actor == 'Xveyn'`. A direct push by anyone else, or a `workflow_dispatch` triggered by another collaborator, is silently skipped.
+Why it works: Xveyn merges PRs manually, so the resulting `push: main` event has `github.actor == 'Xveyn'`. A direct push by anyone else, or a `workflow_dispatch` triggered by another collaborator, is silently skipped.
+
+**Pre-release tagging.** After the deploy steps succeed, the same `deploy` job creates the pre-release tag (`v<version>-pre.<n>`, where `<n>` is the next integer above the highest existing `pre.*` tag for that version) and pushes it with `secrets.DEPLOY_PAT`. The PAT (not the job's `GITHUB_TOKEN`) is required so the tag-push event triggers `create-release.yml`. Because this step runs inside the gated `deploy` job, the tag is only ever created after Layer 4 approval + a successful deploy. The PAT is exposed only to the already-maximally-trusted `prod` runner, and only in that single step's env — not persisted into git config (push uses an inline `x-access-token` URL).
 
 ### Layer 4 — `production` Environment
 
@@ -90,7 +93,7 @@ Gates PR-triggered backend test runs on `ci-sandbox`. Configured in GitHub repo 
 | Deployment branches and tags | All branches | check above |
 | `can_admins_bypass` | `false` | check above |
 
-The `backend-tests` job declares `environment: ci-tests` conditionally on `github.event_name == 'pull_request'`. PR runs pause for Xveyn approval; `workflow_call` runs (from `deploy-production.yml` after auto-merge) execute immediately because the code is already trusted at that point.
+The `backend-tests` job declares `environment: ci-tests` conditionally on `github.event_name == 'pull_request'`. PR runs pause for Xveyn approval; `workflow_call` runs (from `deploy-production.yml` after a manual merge to `main`) execute immediately because the code is already trusted at that point.
 
 ---
 
@@ -120,7 +123,7 @@ When reviewing changes that touch CI/CD, deploy scripts, or these rules:
 - [ ] **Actor gate**: Is `github.actor == 'Xveyn'` still on the deploy job in `deploy-production.yml`? If a change weakens or removes it, require explicit justification.
 - [ ] **Environment**: Does the deploy job still declare `environment: production`? If removed, Layer 4 is gone.
 - [ ] **CODEOWNERS**: Does the change touch `.github/workflows/`, `deploy/`, or `.claude/rules/security*`? Confirm CODEOWNERS still maps these to `@Xveyn`.
-- [ ] **PAT scope**: Does any new workflow use `secrets.DEPLOY_PAT`? If yes, confirm it's only used for `gh pr merge` (auto-merge) or release tagging — never for arbitrary code execution on self-hosted.
+- [ ] **PAT scope**: Does any new workflow use `secrets.DEPLOY_PAT`? If yes, confirm it's only used for release tagging (the `deploy-production.yml` pre-release tag push) — never for arbitrary code execution. When used on the `prod` runner, confirm it's passed only to the single tag-push step's env and not persisted into git config.
 - [ ] **Sudoers / systemd**: Changes under `deploy/install/templates/` to sudoers or service units? Verify the new rules are scoped to specific binaries with explicit args (no `ALL`, no globs that match user-controlled paths).
 - [ ] **Deploy script**: Changes to `deploy/scripts/ci-deploy.sh`? Verify no new shell injection surfaces (user-controlled env vars interpolated into commands), no new `sudo` invocations without sudoers entries, rollback path still works.
 - [ ] **Workflow secrets**: New `secrets.*` references? Confirm the secret exists, is scoped correctly, and is not echoed/logged.
@@ -129,7 +132,7 @@ When reviewing changes that touch CI/CD, deploy scripts, or these rules:
 
 ## Known Gaps & Accepted Risks
 
-1. **`main` does not require PR approvals** — Required to keep `auto-merge.yml` functional. The `production` environment reviewer (Layer 4) is the compensating control.
+1. **`main` does not require PR approvals** — Solo-dev workflow: Xveyn merges manually after CI passes (no auto-merge bot). The `production` environment reviewer (Layer 4) is the compensating control.
 2. **Two self-hosted runners with different trust levels on one host**:
     - `BaluNode` (`self-hosted, Linux, X64, prod`) — runs production deploys. Full access to `/opt/baluhost`, `.env.production`, sudo entries. Never sees PR code (Layer 2 prohibition + workflows pin to label `ci-sandbox` for PR work). The `prod` label is what `deploy-production.yml` targets — removing it from `BaluNode` would route deploys to the sandbox and break them (caught 2026-05-19).
     - `BaluNode-ci-sandbox` (`self-hosted, Linux, X64, ci-sandbox`) — runs `backend-tests` for PRs. Runs as `ci-runner` (no sudo, no production read), wraps test execution in rootless Podman. Even if a PR is maliciously approved at the `ci-tests` gate, blast radius is limited to the container workdir and outbound network (see gap #8).

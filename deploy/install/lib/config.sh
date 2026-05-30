@@ -8,8 +8,15 @@ BALUHOST_CONFIG="${BALUHOST_CONFIG:-/etc/baluhost/install.conf}"
 # ─── Default Values ──────────────────────────────────────────────────
 
 : "${INSTALL_DIR:=/opt/baluhost}"
-: "${BALUHOST_USER:=baluhost}"
-: "${BALUHOST_GROUP:=baluhost}"
+# Derive the service user/group from the install directory owner when not
+# explicitly set (env or install.conf). Without this, a host installed under a
+# different account (e.g. "sven") falls back to a non-existent "baluhost" user,
+# and every in-app update fails at the first `sudo -u "$BALUHOST_USER" ...`.
+_balu_dir_owner="$(stat -c '%U' "$INSTALL_DIR" 2>/dev/null || true)"
+_balu_dir_group="$(stat -c '%G' "$INSTALL_DIR" 2>/dev/null || true)"
+: "${BALUHOST_USER:=${_balu_dir_owner:-baluhost}}"
+: "${BALUHOST_GROUP:=${_balu_dir_group:-baluhost}}"
+unset _balu_dir_owner _balu_dir_group
 : "${FRONTEND_STATIC_DIR:=/var/www/baluhost}"
 : "${POSTGRES_DB:=baluhost}"
 : "${POSTGRES_USER:=baluhost}"

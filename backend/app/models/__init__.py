@@ -99,6 +99,7 @@ from app.models.power_boost_rule import PowerBoostRule
 from app.models.notification_routing import UserNotificationRouting
 from app.models.sync_progress import ChunkedUpload, SyncBandwidthLimit, SyncSchedule, SelectiveSync
 from app.models.sync_state import SyncState, SyncMetadata, SyncFileVersion
+from app.models.status_bar import StatusBarPillConfig, StatusBarSettings
 
 __all__ = [
     "Base",
@@ -207,4 +208,6 @@ __all__ = [
     "SyncState",
     "SyncMetadata",
     "SyncFileVersion",
+    "StatusBarPillConfig",
+    "StatusBarSettings",
 ]

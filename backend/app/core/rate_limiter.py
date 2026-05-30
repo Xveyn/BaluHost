@@ -90,7 +90,10 @@ RATE_LIMITS = {
     
     # System monitoring - generous limits
     "system_monitor": "120/minute",
-    
+
+    # Status bar polling — every 10s per logged-in user
+    "status_polling": "60/minute",
+
     # Mobile device registration - strict limits
     "mobile_register": "3/minute",
     
