@@ -1,4 +1,6 @@
 """Tests for CPU cap enforcement (re-assert + drift detection)."""
+import logging
+
 import pytest
 
 from app.schemas.power import PowerProfile, PowerProfileConfig, ServicePowerProperty
@@ -12,10 +14,12 @@ def _reset_override():
     mgr._boost_max_override = None
     mgr._last_drift = None
     mgr._cap_unenforceable = False
+    mgr._in_drift = False
     yield
     mgr._boost_max_override = None
     mgr._last_drift = None
     mgr._cap_unenforceable = False
+    mgr._in_drift = False
 
 
 @pytest.mark.asyncio
@@ -206,6 +210,30 @@ async def test_enforce_flags_unenforceable_when_apply_fails(monkeypatch):
     await mgr._enforce_current_profile()
 
     assert mgr._cap_unenforceable is True
+
+
+@pytest.mark.asyncio
+async def test_enforce_logs_drift_once_per_episode_but_reasserts_each_tick(monkeypatch, caplog):
+    mgr = PowerManagerService()
+    mgr._current_profile = PowerProfile.IDLE
+    mgr._in_drift = False
+    backend = _DriftBackend(drift_governor="performance", drift_max=4668)  # never heals
+    mgr._backend = backend
+
+    async def desired(profile):
+        return PowerProfileConfig(
+            profile=PowerProfile.IDLE, governor="powersave",
+            energy_performance_preference="power",
+            min_freq_mhz=340, max_freq_mhz=400, description="hold")
+    monkeypatch.setattr(mgr, "_desired_config_for", desired)
+
+    with caplog.at_level(logging.WARNING, logger="app.services.power.manager"):
+        await mgr._enforce_current_profile()
+        await mgr._enforce_current_profile()
+
+    drift_logs = [r for r in caplog.records if "drift detected" in r.getMessage()]
+    assert len(drift_logs) == 1          # logged once per episode, not per tick
+    assert len(backend.apply_calls) == 2  # but re-asserted every tick
 
 
 @pytest.mark.asyncio

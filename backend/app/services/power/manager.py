@@ -119,6 +119,7 @@ class PowerManagerService:
         self._boost_max_override: Optional[int] = None  # per-rule SURGE cap (MHz); None = full boost
         self._last_drift: Optional[dict] = None          # {"at", "field", "expected", "found"}
         self._cap_unenforceable: bool = False
+        self._in_drift: bool = False                      # within a drift episode (log-once guard)
         self._enforcement_task: Optional[asyncio.Task] = None
         self._watcher_absent_ticks: int = 0
 
@@ -744,6 +745,7 @@ class PowerManagerService:
 
         if not gov_drift and not max_drift:
             self._cap_unenforceable = False
+            self._in_drift = False
             return
 
         self._last_drift = {
@@ -752,10 +754,15 @@ class PowerManagerService:
             "expected": f"{desired.governor}/{desired.max_freq_mhz}",
             "found": f"{found_gov}/{found_max}",
         }
-        logger.warning(
-            "CPU cap drift detected (external override?): expected %s/%s, found %s/%s — re-asserting",
-            desired.governor, desired.max_freq_mhz, found_gov, found_max,
-        )
+        # Keep re-asserting every tick (authority must win), but log only once
+        # per drift episode so a persistent external override / kernel clamp
+        # does not spam the log every 2 seconds.
+        if not self._in_drift:
+            logger.warning(
+                "CPU cap drift detected (external override?): expected %s/%s, found %s/%s — re-asserting",
+                desired.governor, desired.max_freq_mhz, found_gov, found_max,
+            )
+        self._in_drift = True
 
         success, error_msg = await self._backend.apply_profile(desired)
 
