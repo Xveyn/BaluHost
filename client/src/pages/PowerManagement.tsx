@@ -26,6 +26,7 @@ import { DemandList } from '../components/power/DemandList';
 import { HistoryTable } from '../components/power/HistoryTable';
 import { DynamicModeSection } from '../components/power/DynamicModeSection';
 import { GpuPowerCard } from '../components/power/GpuPowerCard';
+import { AuthorityPanel } from '../components/power/AuthorityPanel';
 import { getPresetIcon } from '../components/power/utils';
 import {
   getPowerStatus,
@@ -486,6 +487,9 @@ export default function PowerManagement({ isAdmin }: PowerManagementProps) {
 
       {/* GPU Power Management */}
       <GpuPowerCard isAdmin={isAdmin} />
+
+      {/* CPU Authority */}
+      <AuthorityPanel isAdmin={isAdmin} />
 
       {/* Auto-Scaling Config (Admin only) */}
       {isAdmin && autoScaling && (

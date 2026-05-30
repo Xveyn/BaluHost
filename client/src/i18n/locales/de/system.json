@@ -550,6 +550,21 @@
       "warningMessage": "Der Server hat keinen Schreibzugriff auf die CPU-Frequenzeinstellungen. CPU-Profile können nicht geändert werden. Starten Sie den Server mit Administratorrechten (sudo) für volle Kontrolle.",
       "suggestions": "Vorschläge:"
     },
+    "authority": {
+      "title": "CPU-Autorität",
+      "externalAuthorityLabel": "BaluHost steuert CPU allein (power-profiles-daemon stilllegen)",
+      "localOnlyHint": "Nur aus der Companion-App am Server änderbar",
+      "ppdActive": "ppd aktiv",
+      "ppdMasked": "ppd maskiert",
+      "capUnenforceableTitle": "Cap nicht durchsetzbar (Kernel/Treiber)",
+      "driftBadge": "Extern überschrieben — korrigiert",
+      "driftTooltipExpected": "Erwartet",
+      "driftTooltipFound": "Gefunden",
+      "driftTooltipAt": "Zeitpunkt",
+      "enableFailed": "Aktivierung fehlgeschlagen — prüfe sudoers",
+      "saveFailed": "Speichern fehlgeschlagen",
+      "loadFailed": "Laden fehlgeschlagen"
+    },
     "toasts": {
       "statusUpdated": "Status aktualisiert",
       "loadFailed": "Laden fehlgeschlagen",

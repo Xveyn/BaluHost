@@ -467,6 +467,21 @@
       "highest": "Highest",
       "none": "None"
     },
+    "authority": {
+      "title": "CPU Authority",
+      "externalAuthorityLabel": "BaluHost controls CPU exclusively (mask power-profiles-daemon)",
+      "localOnlyHint": "Can only be changed from the Companion app on the server",
+      "ppdActive": "ppd active",
+      "ppdMasked": "ppd masked",
+      "capUnenforceableTitle": "Cap unenforceable (Kernel/Driver)",
+      "driftBadge": "Externally overridden — corrected",
+      "driftTooltipExpected": "Expected",
+      "driftTooltipFound": "Found",
+      "driftTooltipAt": "At",
+      "enableFailed": "Activation failed — check sudoers",
+      "saveFailed": "Save failed",
+      "loadFailed": "Load failed"
+    },
     "backend": {
       "linux": "Linux Backend",
       "linuxShort": "Linux",

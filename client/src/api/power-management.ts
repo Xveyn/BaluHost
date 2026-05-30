@@ -503,3 +503,47 @@ export function formatClockSpeed(mhz: number): string {
   }
   return `${mhz} MHz`;
 }
+
+// ============================================================================
+// Power Authority (new: /api/power/authority)
+// ============================================================================
+
+export interface PowerDriftInfo {
+  at: string;
+  field: string;
+  expected: string;
+  found: string;
+}
+
+export interface PowerAuthorityResponse {
+  external_authority_enabled: boolean;
+  boost_rules_enabled: boolean;
+  ppd_active: boolean;
+  ppd_masked: boolean;
+  cap_unenforceable: boolean;
+  last_drift: PowerDriftInfo | null;
+}
+
+export interface UpdateAuthorityRequest {
+  external_authority_enabled?: boolean;
+  boost_rules_enabled?: boolean;
+}
+
+/**
+ * Get the current power authority status (admin, any channel).
+ */
+export async function getAuthority(): Promise<PowerAuthorityResponse> {
+  const response = await apiClient.get<PowerAuthorityResponse>('/api/power/authority');
+  return response.data;
+}
+
+/**
+ * Update power authority settings (admin, local channel only).
+ */
+export async function updateAuthority(
+  request: UpdateAuthorityRequest
+): Promise<PowerAuthorityResponse> {
+  const response = await apiClient.put<PowerAuthorityResponse>('/api/power/authority', request);
+  return response.data;
+}
+
