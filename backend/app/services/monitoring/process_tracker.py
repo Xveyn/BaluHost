@@ -38,6 +38,22 @@ BALUHOST_PROCESS_PATTERNS = [
 ]
 
 
+def get_baluhost_process_patterns() -> List[Dict]:
+    """Return the process patterns that are meaningful for the current run mode.
+
+    The ``baluhost-frontend-dev`` unit only exists while the Vite dev server is
+    running (started by ``start_dev.py``). In production the frontend is a
+    static build served by nginx — there is no BaluHost frontend process — so
+    the fragile ``vite`` substring match is dropped to avoid mislabelling an
+    unrelated process as "Frontend (dev)".
+    """
+    from app.core.config import settings
+
+    if getattr(settings, "is_dev_mode", False):
+        return BALUHOST_PROCESS_PATTERNS
+    return [p for p in BALUHOST_PROCESS_PATTERNS if p["name"] != "baluhost-frontend-dev"]
+
+
 class ProcessTracker:
     """
     Tracks BaluHost-related processes.
@@ -72,6 +88,7 @@ class ProcessTracker:
         samples: List[ProcessSampleSchema] = []
         timestamp = datetime.now(timezone.utc)
         seen_names: set[str] = set()
+        active_patterns = get_baluhost_process_patterns()
 
         try:
             for proc in psutil.process_iter(
@@ -83,7 +100,7 @@ class ProcessTracker:
                     cmdline = " ".join(info.get("cmdline") or []).lower()
 
                     matched_name: Optional[str] = None
-                    for entry in BALUHOST_PROCESS_PATTERNS:
+                    for entry in active_patterns:
                         patterns = entry["patterns"]
                         if all(p.lower() in name or p.lower() in cmdline for p in patterns):
                             matched_name = entry["name"]

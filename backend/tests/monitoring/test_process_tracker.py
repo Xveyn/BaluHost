@@ -8,6 +8,7 @@ from app.services.monitoring import process_tracker
 from app.services.monitoring.process_tracker import (
     BALUHOST_PROCESS_PATTERNS,
     ProcessTracker,
+    get_baluhost_process_patterns,
 )
 
 
@@ -70,6 +71,28 @@ def test_find_processes_single_pattern_still_matches():
         matched = tracker._find_processes(["scheduler_worker.py"])
     pids = [m["pid"] for m in matched]
     assert pids == [201]
+
+
+def test_frontend_dev_pattern_dropped_in_prod_mode(monkeypatch):
+    """In production there is no BaluHost frontend process (static build served
+    by nginx), so the fragile ``vite`` match must not surface as 'Frontend (dev)'."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "is_dev_mode", False, raising=False)
+    names = {entry["name"] for entry in get_baluhost_process_patterns()}
+    assert "baluhost-frontend-dev" not in names
+    # The real units are still tracked.
+    assert "baluhost-backend" in names
+    assert "baluhost-scheduler" in names
+
+
+def test_frontend_dev_pattern_present_in_dev_mode(monkeypatch):
+    """The Vite dev server is a real process under start_dev.py, so dev keeps it."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "is_dev_mode", True, raising=False)
+    names = {entry["name"] for entry in get_baluhost_process_patterns()}
+    assert "baluhost-frontend-dev" in names
 
 
 def test_collect_samples_routes_backend_local_to_its_own_bucket():
