@@ -748,16 +748,22 @@ class PowerManagerService:
             desired.governor, desired.max_freq_mhz, found_gov, found_max,
         )
 
-        success, _ = await self._backend.apply_profile(desired)
+        success, error_msg = await self._backend.apply_profile(desired)
 
-        if success:
-            vg, vm = await self._backend.read_enforcement_state()
-            still_off = (vg is not None and vg != desired.governor) or (
-                desired.max_freq_mhz is not None and vm is not None and vm != desired.max_freq_mhz
-            )
-            self._cap_unenforceable = bool(still_off)
-            if still_off:
-                logger.warning("CPU cap still not enforced after re-write (kernel clamp?)")
+        if not success:
+            # Write rejected outright (permission/I-O error) — cap is not enforceable.
+            logger.warning("CPU cap re-assert failed (backend error): %s", error_msg)
+            self._cap_unenforceable = True
+            return
+
+        # Write accepted — verify it actually stuck (kernel may silently clamp).
+        vg, vm = await self._backend.read_enforcement_state()
+        still_off = (vg is not None and vg != desired.governor) or (
+            desired.max_freq_mhz is not None and vm is not None and vm != desired.max_freq_mhz
+        )
+        self._cap_unenforceable = bool(still_off)
+        if still_off:
+            logger.warning("CPU cap still not enforced after re-write (kernel clamp?)")
 
     async def _get_profile_config_from_preset(
         self,

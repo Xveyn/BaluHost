@@ -137,3 +137,72 @@ async def test_enforce_noop_when_in_sync(monkeypatch):
     await mgr._enforce_current_profile()
 
     assert backend.apply_calls == []
+
+
+class _SelfHealingDriftBackend(DevCpuPowerBackend):
+    """Drifts once, then the re-assert sticks (happy path)."""
+    def __init__(self, drift_governor=None, drift_max=None):
+        super().__init__()
+        self._drift_governor = drift_governor
+        self._drift_max = drift_max
+        self.apply_calls = []
+
+    async def apply_profile(self, config):
+        self.apply_calls.append(config)
+        # Kernel accepts the re-assert — clear the simulated drift.
+        self._drift_governor = None
+        self._drift_max = None
+        return await super().apply_profile(config)
+
+    async def read_enforcement_state(self):
+        if self._drift_governor is not None or self._drift_max is not None:
+            return self._drift_governor, self._drift_max
+        return await super().read_enforcement_state()
+
+
+@pytest.mark.asyncio
+async def test_enforce_clears_unenforceable_when_rewrite_sticks(monkeypatch):
+    mgr = PowerManagerService()
+    mgr._current_profile = PowerProfile.IDLE
+    mgr._cap_unenforceable = True  # stale flag from a previous tick
+    backend = _SelfHealingDriftBackend(drift_governor="performance", drift_max=4668)
+    mgr._backend = backend
+
+    async def desired(profile):
+        return PowerProfileConfig(
+            profile=PowerProfile.IDLE, governor="powersave",
+            energy_performance_preference="power",
+            min_freq_mhz=340, max_freq_mhz=400, description="hold")
+    monkeypatch.setattr(mgr, "_desired_config_for", desired)
+
+    await mgr._enforce_current_profile()
+
+    assert len(backend.apply_calls) == 1
+    assert mgr._cap_unenforceable is False
+
+
+class _FailingApplyBackend(DevCpuPowerBackend):
+    """Read-back drifts and apply_profile is rejected (permission/I-O error)."""
+    async def apply_profile(self, config):
+        return False, "permission denied"
+
+    async def read_enforcement_state(self):
+        return "performance", 4668
+
+
+@pytest.mark.asyncio
+async def test_enforce_flags_unenforceable_when_apply_fails(monkeypatch):
+    mgr = PowerManagerService()
+    mgr._current_profile = PowerProfile.IDLE
+    mgr._backend = _FailingApplyBackend()
+
+    async def desired(profile):
+        return PowerProfileConfig(
+            profile=PowerProfile.IDLE, governor="powersave",
+            energy_performance_preference="power",
+            min_freq_mhz=340, max_freq_mhz=400, description="hold")
+    monkeypatch.setattr(mgr, "_desired_config_for", desired)
+
+    await mgr._enforce_current_profile()
+
+    assert mgr._cap_unenforceable is True
