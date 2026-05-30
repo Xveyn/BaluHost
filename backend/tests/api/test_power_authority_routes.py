@@ -67,3 +67,26 @@ def test_boost_now_remote_blocked(remote_client, admin_headers):
     """Remote channel: POST /boost-now must be blocked with 403."""
     r = remote_client.post("/api/power/boost-now", json={"duration_seconds": 60}, headers=admin_headers)
     assert r.status_code == 403
+
+
+def test_boost_now_passes_target_override(client, admin_headers, monkeypatch):
+    """boost-now must forward the chosen target_max_mhz to register_demand."""
+    from app.services.power.manager import get_power_manager
+
+    captured = {}
+
+    async def fake_register(source, level, **kw):
+        captured["source"] = source
+        captured.update(kw)
+        return source
+
+    monkeypatch.setattr(get_power_manager(), "register_demand", fake_register)
+
+    r = client.post("/api/power/boost-now",
+                    json={"duration_seconds": 120, "target_max_mhz": 2500},
+                    headers=admin_headers)
+
+    assert r.status_code == 200
+    assert captured["source"] == "manual-boost"
+    assert captured.get("max_freq_override") == 2500
+    assert captured.get("timeout_seconds") == 120

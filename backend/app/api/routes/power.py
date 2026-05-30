@@ -635,6 +635,7 @@ async def boost_now_route(request: Request, response: Response, body: BoostNowRe
     await mgr.register_demand(
         "manual-boost",
         PowerProfile.SURGE,
+        max_freq_override=body.target_max_mhz,
         timeout_seconds=body.duration_seconds,
         description="Manueller Boost",
     )
