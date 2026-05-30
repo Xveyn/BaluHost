@@ -806,6 +806,7 @@ class PowerManagerService:
                 await self.unregister_demand("game-session")
                 self._game_demand_active = False
                 self._boost_max_override = None
+            self._watcher_absent_ticks = 0
             return
 
         procs = process_watcher.snapshot_processes()
@@ -1004,7 +1005,10 @@ class PowerManagerService:
             description=description,
         )
 
-        if max_freq_override is not None or level == PowerProfile.SURGE:
+        # The override only feeds _desired_config_for / enforcement, which run
+        # on the primary worker only. Setting it on a follower would leave
+        # stale in-memory state on a singleton that never enforces.
+        if self._primary and (max_freq_override is not None or level == PowerProfile.SURGE):
             self._boost_max_override = max_freq_override
 
         upsert_demand(
