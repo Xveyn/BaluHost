@@ -348,14 +348,18 @@ export default function PowerManagement({ isAdmin }: PowerManagementProps) {
         <StatCard
           label={t('system:power.statusCards.currentProperty')}
           value={currentProperty ? PROPERTY_INFO[currentProperty].name : '-'}
-          subValue={status?.target_frequency_range}
+          subValue={currentProperty ? t(`system:power.propertyDescription.${currentProperty}`) : undefined}
           color={PROFILE_INFO[currentProperty || 'idle']?.color || 'slate'}
           icon={<span className="text-2xl">{currentProperty ? PROPERTY_INFO[currentProperty].icon : '⚡'}</span>}
         />
         <StatCard
           label={t('system:power.statusCards.cpuFrequency')}
           value={status?.current_frequency_mhz ? formatClockSpeed(status.current_frequency_mhz) : '-'}
-          subValue={lastUpdated ? `${t('system:power.statusCards.updated')}: ${lastUpdated.toLocaleTimeString()}` : undefined}
+          subValue={status?.target_frequency_range
+            ? `${t('system:power.statusCards.targetBand')}: ${status.target_frequency_range}`
+            : lastUpdated
+              ? `${t('system:power.statusCards.updated')}: ${lastUpdated.toLocaleTimeString()}`
+              : undefined}
           color="blue"
           icon={
             <svg className="h-6 w-6 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">

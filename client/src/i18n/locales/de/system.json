@@ -455,7 +455,8 @@
     "statusCards": {
       "activePreset": "Aktives Preset",
       "currentProperty": "Aktuelle Property",
-      "cpuFrequency": "CPU-Frequenz",
+      "cpuFrequency": "CPU-Frequenz (Live)",
+      "targetBand": "Zielband",
       "activeDemands": "Aktive Anforderungen",
       "updated": "Aktualisiert",
       "highest": "Höchste",
