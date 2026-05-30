@@ -301,6 +301,22 @@ class ActivatePresetResponse(BaseModel):
 
 # Service Intensity Schemas
 
+class AuthorityStatusResponse(BaseModel):
+    """Response for the /authority endpoint showing CPU authority state."""
+    external_authority_enabled: bool
+    boost_rules_enabled: bool
+    ppd_active: bool
+    ppd_masked: bool
+    cap_unenforceable: bool
+    last_drift: Optional[dict] = None
+
+
+class AuthorityUpdateRequest(BaseModel):
+    """Request to update CPU authority configuration."""
+    external_authority_enabled: Optional[bool] = None
+    boost_rules_enabled: Optional[bool] = None
+
+
 class ServiceIntensityInfo(BaseModel):
     """
     Information about a service/process and its power intensity.

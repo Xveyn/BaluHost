@@ -30,6 +30,7 @@ from app.models.power import (
     PowerRuntimeState,
     PowerDemand,
     PowerCommand,
+    PowerAuthorityConfig,
 )
 from app.models.gpu_power import (
     GpuPowerLog,
@@ -132,6 +133,7 @@ __all__ = [
     "PowerRuntimeState",
     "PowerDemand",
     "PowerCommand",
+    "PowerAuthorityConfig",
     "GpuPowerLog",
     "GpuPowerConfigDb",
     "GpuPowerRuntimeState",

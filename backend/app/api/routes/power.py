@@ -65,6 +65,8 @@ async def _get_admin_or_service_token(
 from app.schemas.power import (
     AutoScalingConfig,
     AutoScalingConfigResponse,
+    AuthorityStatusResponse,
+    AuthorityUpdateRequest,
     DynamicModeConfig,
     DynamicModeConfigResponse,
     DynamicModeUpdateRequest,
@@ -85,6 +87,8 @@ from app.schemas.power import (
     UnregisterDemandResponse,
 )
 from app.schemas.user import UserPublic
+from app.services.audit.logger_db import get_audit_logger_db
+from app.services.power import config_store, ppd_authority
 from app.services.power.manager import get_power_manager
 
 router = APIRouter(prefix="/power", tags=["power-management"])
@@ -494,3 +498,72 @@ async def switch_power_backend(
         previous_backend=previous,
         new_backend=new
     )
+
+
+@router.get("/authority", response_model=AuthorityStatusResponse)
+@user_limiter.limit(get_limit("admin_operations"))
+async def get_authority_status(
+    request: Request,
+    response: Response,
+    _: UserPublic = Depends(deps.get_current_admin),
+) -> AuthorityStatusResponse:
+    """
+    Get current CPU authority configuration and PPD daemon state.
+
+    Returns whether BaluHost has exclusive CPU authority, whether boost
+    rules are active, and the current state of power-profiles-daemon.
+    """
+    cfg = config_store.load_authority_config()
+    ppd = ppd_authority.status()
+    mgr = get_power_manager()
+    return AuthorityStatusResponse(
+        external_authority_enabled=cfg["external_authority_enabled"],
+        boost_rules_enabled=cfg["boost_rules_enabled"],
+        ppd_active=ppd["ppd_active"],
+        ppd_masked=ppd["ppd_masked"],
+        cap_unenforceable=getattr(mgr, "_cap_unenforceable", False),
+        last_drift=getattr(mgr, "_last_drift", None),
+    )
+
+
+@router.put("/authority", response_model=AuthorityStatusResponse)
+@user_limiter.limit(get_limit("admin_operations"))
+async def update_authority(
+    request: Request,
+    response: Response,
+    body: AuthorityUpdateRequest,
+    user: UserPublic = Depends(deps.require_local_admin),
+) -> AuthorityStatusResponse:
+    """
+    Toggle CPU authority mode and/or boost rules (local channel + admin only).
+
+    When enabling external authority, stops and masks power-profiles-daemon
+    so BaluHost becomes the sole CPU frequency authority. When disabling,
+    unmasks and optionally restarts the daemon.
+    """
+    cfg = config_store.load_authority_config()
+    if (
+        body.external_authority_enabled is not None
+        and body.external_authority_enabled != cfg["external_authority_enabled"]
+    ):
+        if body.external_authority_enabled:
+            await ppd_authority.acquire()
+            try:
+                await get_power_manager()._enforce_current_profile()
+            except Exception:
+                pass
+        else:
+            await ppd_authority.release()
+        config_store.save_authority_config({"external_authority_enabled": body.external_authority_enabled})
+    if body.boost_rules_enabled is not None:
+        config_store.save_authority_config({"boost_rules_enabled": body.boost_rules_enabled})
+    get_audit_logger_db().log_security_event(
+        action="power_authority_update",
+        user=user.username,
+        details={
+            "external_authority_enabled": body.external_authority_enabled,
+            "boost_rules_enabled": body.boost_rules_enabled,
+        },
+        success=True,
+    )
+    return await get_authority_status(request, response, user)
