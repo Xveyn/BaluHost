@@ -92,10 +92,15 @@ Fünf Bausteine, integriert in den bestehenden `PowerManagerService` und sein De
 
 ### 4.1 CPU-Enforcement-Loop (Root-Cause-Fix)
 
-Erweitert den bestehenden `_monitor_loop` (5 s). Pro Tick **wenn das Feature aktiv ist**:
+Läuft in einem **eigenen 2-s-Tick** (`_enforcement_loop`, primary-only) gemeinsam mit dem
+Game-Session-Watcher. Der bestehende `_monitor_loop` (5 s) bleibt unverändert für
+Demand-Expiry / Auto-Scaling / SHM-Write. Pro 2-s-Tick **wenn das Feature aktiv ist**:
 
 1. Soll-Config des aktuellen Profils ermitteln (aus Preset, wie heute via
-   `_get_profile_config_from_preset`, Fallback `_profiles`).
+   `_get_profile_config_from_preset`, Fallback `_profiles`). **Der Halten-Cap kommt immer
+   aus dem aktiven Preset** (Wert der aktuellen Service-Property), mit hartem **400-MHz-Floor**
+   (`scaling_max = max(preset_clock, 400)`). Ändert sich das aktive Preset, übernimmt der
+   nächste Tick den neuen Cap automatisch — kein separater `idle_cap`-Wert wird gehalten.
 2. Pro Kern `scaling_governor` + `scaling_max_freq` zurücklesen (`_read_sysfs`).
 3. Bei Abweichung vom Soll: **neu schreiben** (Governor, EPP, `scaling_min`, `scaling_max`)
    und **WARNING loggen** inkl. des extern vorgefundenen Werts (Drift sichtbar machen).
@@ -127,7 +132,7 @@ Alle `subprocess.run`-Aufrufe mit **expliziten Argumentlisten**, kein `shell=Tru
 
 ### 4.3 Game-Session-Watcher
 
-Im `_monitor_loop` (oder dediziertem Tick), psutil-basiert:
+Im **eigenen 2-s-Tick** (zusammen mit 4.1), psutil-basiert:
 
 - **`process_glob`-Regeln:** `fnmatch.fnmatchcase(name.lower(), pattern.lower())` gegen
   `proc.name()`/`comm`. Wegen der 15-Zeichen-`comm`-Kürzung zusätzlich Prefix-Match.
@@ -139,8 +144,13 @@ Im `_monitor_loop` (oder dediziertem Tick), psutil-basiert:
 - **Hysterese:** Demand wird registriert beim ersten Treffer; **freigegeben erst, wenn der
   Trigger 2 aufeinanderfolgende Ticks weg ist** (Anti-Flacker). Zusätzlich greift der
   bestehende `cooldown_seconds`-Mechanismus beim Runterstufen.
-- Bei Treffer → `register_demand("game-session", PowerProfile.SURGE, description=<rule label>)`;
-  bei Wegfall → `unregister_demand("game-session")`. Der bestehende Manager hebt/senkt den Cap.
+- **Pro-Regel-Ziel:** Jede Regel hat ein eigenes `target_max_mhz` (null = voller Boost =
+  `cpuinfo_max`). Matchen mehrere Regeln gleichzeitig, gilt das **höchste** Ziel (null
+  schlägt alles, da voller Boost). Dieses effektive Ziel wird als `max_freq`-Override mit dem
+  Demand mitgeführt.
+- Bei Treffer → `register_demand("game-session", PowerProfile.SURGE, max_freq_override=<eff. target>,
+  description=<rule label>)`; bei Wegfall → `unregister_demand("game-session")`. Der Manager
+  wendet eine SURGE-Config an, deren `scaling_max` = effektives Ziel ist (statt fix `cpuinfo_max`).
 
 ### 4.4 Allowlist + Feature-Config
 
@@ -152,15 +162,18 @@ Im `_monitor_loop` (oder dediziertem Tick), psutil-basiert:
 | `kind` | str | `process_glob` \| `game_session` |
 | `pattern` | str nullable | nur bei `process_glob` (z. B. `lutris*`, `*.x86_64`) |
 | `label` | str | Anzeigename |
+| `target_max_mhz` | int nullable | Boost-Ziel dieser Regel; **null = voller Boost** (`cpuinfo_max`) |
 | `enabled` | bool | |
 | `created_at` | datetime | |
 
-Seed: eine `game_session`-Regel (enabled, Label „Steam/Proton-Spielsitzung").
+Seed: eine `game_session`-Regel (enabled, `target_max_mhz=null`, Label „Steam/Proton-Spielsitzung").
 
 **Feature-Config** (in bestehender Power-Runtime-State/-Config, `config_store.py`):
 - `external_authority_enabled: bool` — PPD gemaskt, BaluHost = alleinige Autorität.
 - `boost_rules_enabled: bool` — Allowlist-Watcher aktiv.
-- `idle_cap_mhz: int` — Cap-Wert für den Halten-Zustand (Default aus aktivem Preset/IDLE).
+
+Der **Halten-Cap** ist *kein* eigener Config-Wert, sondern wird pro Tick aus dem aktiven
+Preset abgeleitet (Floor 400 MHz, siehe 4.1).
 
 ### 4.5 UI (System Control → Hardware → Energy)
 
@@ -179,15 +192,15 @@ Seed: eine `game_session`-Regel (enabled, Label „Steam/Proton-Spielsitzung").
 ## 5. Datenfluss
 
 ```
-Watcher erkennt Spiel/Allowlist-Prozess
-   → register_demand("game-session", SURGE)
+Watcher erkennt Spiel/Allowlist-Prozess (2-s-Tick)
+   → register_demand("game-session", SURGE, max_freq_override=eff. Regel-Ziel)
       → Manager: highest demand = SURGE
-         → backend.apply_profile(governor=performance, EPP=performance, max=cpuinfo_max)
+         → backend.apply_profile(governor=performance, EPP=performance, max=eff. Ziel|cpuinfo_max)
 Spiel endet (2 Ticks weg)
    → unregister_demand("game-session")
       → Manager: highest demand = IDLE
-         → backend.apply_profile(governor=powersave, EPP=power, max=idle_cap)
-Jeder 5-s-Tick (Feature aktiv)
+         → backend.apply_profile(governor=powersave, EPP=power, max=max(preset_clock,400))
+Jeder 2-s-Tick (Feature aktiv)
    → _enforce_current_profile(): read-back governor+max; bei Drift → re-write + WARNING
 ```
 
@@ -197,12 +210,15 @@ Jeder 5-s-Tick (Feature aktiv)
 
 | Zustand | governor | EPP | scaling_min | scaling_max | boost |
 |---|---|---|---|---|---|
-| Halten (idle/low/medium) | `powersave` | `power` | ≈ Cap·0,85 | `idle_cap` | unverändert (1) |
-| Heben (SURGE/Spiel) | `performance` | `performance` | hoch | `cpuinfo_max` | unverändert (1) |
+| Halten (idle/low/medium) | `powersave` | `power` | ≈ Cap·0,85 | `max(preset_clock, 400)` | unverändert (1) |
+| Heben (SURGE/Spiel) | `performance` | `performance` | hoch | effektives Regel-Ziel (null → `cpuinfo_max`) | unverändert (1) |
 
 Governor/EPP-Werte stammen aus den **bestehenden** Presets (`get_governor_for_property`,
-`get_epp_for_property`). Das globale `boost`-Flag wird nicht angefasst — `scaling_max` unter
-dem Boost-Bereich deckelt ohnehin, `boost=0` wäre ein systemweiter Nebeneffekt.
+`get_epp_for_property`). Der **Halten-Cap** = Wert des aktiven Presets für die aktuelle
+Property, hart auf 400 MHz gefloort; folgt Preset-Änderungen pro 2-s-Tick. Der **Heben-Cap**
+= effektives Ziel der matchenden Boost-Regel(n). Das globale `boost`-Flag wird nicht
+angefasst — `scaling_max` unter dem Boost-Bereich deckelt ohnehin, `boost=0` wäre ein
+systemweiter Nebeneffekt.
 
 ---
 
@@ -316,6 +332,12 @@ Keine neue Schreib-Berechtigung über das schon Vorhandene hinaus nötig.
 ## 13. Offene Punkte für die Implementierung
 
 - Exakter Migrations-Stil (Modell in `models/power.py` + Alembic autogenerate).
-- Ob der Watcher im `_monitor_loop` mitläuft oder als eigener Task (Default: im Loop, ein
-  Tick = 5 s; bei Bedarf separater 2-s-Tick für schnellere Boost-Reaktion).
 - Genauer UI-Ort/Komponentenname (während Implementierung lokalisieren).
+- Mechanik des `max_freq_override` am Demand: entweder neues optionales Feld am
+  `PowerDemandInfo`/`power_demands`-Row, oder der Watcher hält das effektive Ziel im
+  Service-State und der Manager liest es beim SURGE-Apply. Während Implementierung festlegen.
+
+**Entschieden (vormals offen):**
+- Tick = **2 s** (eigener Task, getrennt vom 5-s-`_monitor_loop`).
+- Halten-Cap = **aktives Preset**, Floor **400 MHz**, kein eigener Config-Wert.
+- Boost-Ziel **pro Regel** (`target_max_mhz`, null = voller Boost).
