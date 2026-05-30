@@ -257,6 +257,27 @@ class PowerDemand(Base):
         return f"<PowerDemand(source='{self.source}', level='{self.level}')>"
 
 
+class PowerAuthorityConfig(Base):
+    """Singleton (id=1) config for CPU power authority + boost watcher."""
+
+    __tablename__ = "power_authority_config"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    external_authority_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    boost_rules_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    ppd_prev_active: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+    ppd_prev_enabled: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    def __repr__(self) -> str:
+        return f"<PowerAuthorityConfig(external_authority_enabled={self.external_authority_enabled}, boost_rules_enabled={self.boost_rules_enabled})>"
+
+
 class PowerCommand(Base):
     """
     Cross-worker command queue for hardware operations.

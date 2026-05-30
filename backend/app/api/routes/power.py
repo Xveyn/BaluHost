@@ -65,6 +65,13 @@ async def _get_admin_or_service_token(
 from app.schemas.power import (
     AutoScalingConfig,
     AutoScalingConfigResponse,
+    AuthorityStatusResponse,
+    AuthorityUpdateRequest,
+    BoostNowRequest,
+    BoostRule,
+    BoostRuleCreateRequest,
+    BoostRulesResponse,
+    BoostRuleUpdateRequest,
     DynamicModeConfig,
     DynamicModeConfigResponse,
     DynamicModeUpdateRequest,
@@ -85,6 +92,8 @@ from app.schemas.power import (
     UnregisterDemandResponse,
 )
 from app.schemas.user import UserPublic
+from app.services.audit.logger_db import get_audit_logger_db
+from app.services.power import config_store, ppd_authority
 from app.services.power.manager import get_power_manager
 
 router = APIRouter(prefix="/power", tags=["power-management"])
@@ -494,3 +503,142 @@ async def switch_power_backend(
         previous_backend=previous,
         new_backend=new
     )
+
+
+@router.get("/authority", response_model=AuthorityStatusResponse)
+@user_limiter.limit(get_limit("admin_operations"))
+async def get_authority_status(
+    request: Request,
+    response: Response,
+    _: UserPublic = Depends(deps.get_current_admin),
+) -> AuthorityStatusResponse:
+    """
+    Get current CPU authority configuration and PPD daemon state.
+
+    Returns whether BaluHost has exclusive CPU authority, whether boost
+    rules are active, and the current state of power-profiles-daemon.
+    """
+    cfg = config_store.load_authority_config()
+    ppd = ppd_authority.status()
+    mgr = get_power_manager()
+    return AuthorityStatusResponse(
+        external_authority_enabled=cfg["external_authority_enabled"],
+        boost_rules_enabled=cfg["boost_rules_enabled"],
+        ppd_active=ppd["ppd_active"],
+        ppd_masked=ppd["ppd_masked"],
+        cap_unenforceable=getattr(mgr, "_cap_unenforceable", False),
+        last_drift=getattr(mgr, "_last_drift", None),
+    )
+
+
+@router.put("/authority", response_model=AuthorityStatusResponse)
+@user_limiter.limit(get_limit("admin_operations"))
+async def update_authority(
+    request: Request,
+    response: Response,
+    body: AuthorityUpdateRequest,
+    user: UserPublic = Depends(deps.require_local_admin),
+) -> AuthorityStatusResponse:
+    """
+    Toggle CPU authority mode and/or boost rules (local channel + admin only).
+
+    When enabling external authority, stops and masks power-profiles-daemon
+    so BaluHost becomes the sole CPU frequency authority. When disabling,
+    unmasks and optionally restarts the daemon.
+    """
+    cfg = config_store.load_authority_config()
+    if (
+        body.external_authority_enabled is not None
+        and body.external_authority_enabled != cfg["external_authority_enabled"]
+    ):
+        if body.external_authority_enabled:
+            # Only flip the flag if PPD was actually stood down. Otherwise the
+            # enforcement loop and power-profiles-daemon would race for the CPU
+            # registers — the exact split-authority state this guards against.
+            acquired = await ppd_authority.acquire()
+            if not acquired:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=(
+                        "Failed to acquire CPU authority: could not stop/mask "
+                        "power-profiles-daemon (check sudoers provisioning)."
+                    ),
+                )
+            try:
+                await get_power_manager()._enforce_current_profile()
+            except Exception:
+                pass
+        else:
+            await ppd_authority.release()
+        config_store.save_authority_config({"external_authority_enabled": body.external_authority_enabled})
+    if body.boost_rules_enabled is not None:
+        config_store.save_authority_config({"boost_rules_enabled": body.boost_rules_enabled})
+    get_audit_logger_db().log_security_event(
+        action="power_authority_update",
+        user=user.username,
+        details={
+            "external_authority_enabled": body.external_authority_enabled,
+            "boost_rules_enabled": body.boost_rules_enabled,
+        },
+        success=True,
+    )
+    return await get_authority_status(request, response, user)
+
+
+@router.get("/boost-rules", response_model=BoostRulesResponse)
+@user_limiter.limit(get_limit("admin_operations"))
+async def list_boost_rules_route(request: Request, response: Response,
+        _: UserPublic = Depends(deps.get_current_admin)) -> BoostRulesResponse:
+    """List all boost rules (admin only)."""
+    return BoostRulesResponse(rules=config_store.list_boost_rules())
+
+
+@router.post("/boost-rules", response_model=BoostRule)
+@user_limiter.limit(get_limit("admin_operations"))
+async def create_boost_rule_route(request: Request, response: Response, body: BoostRuleCreateRequest,
+        _: UserPublic = Depends(deps.require_local_admin)) -> BoostRule:
+    """Create a new boost rule (local channel + admin only)."""
+    rule = config_store.create_boost_rule(body.kind, body.label, body.pattern, body.target_max_mhz)
+    if rule is None:
+        raise HTTPException(status_code=500, detail="Failed to create boost rule")
+    return BoostRule(**rule)
+
+
+@router.put("/boost-rules/{rule_id}", response_model=BoostRule)
+@user_limiter.limit(get_limit("admin_operations"))
+async def update_boost_rule_route(request: Request, response: Response, rule_id: int,
+        body: BoostRuleUpdateRequest, _: UserPublic = Depends(deps.require_local_admin)) -> BoostRule:
+    """Update a boost rule by ID (local channel + admin only)."""
+    fields = {k: v for k, v in body.model_dump().items() if v is not None}
+    if not config_store.update_boost_rule(rule_id, fields):
+        raise HTTPException(status_code=404, detail="Boost rule not found")
+    rule = next((r for r in config_store.list_boost_rules() if r["id"] == rule_id), None)
+    if rule is None:  # raced with a delete
+        raise HTTPException(status_code=404, detail="Boost rule not found")
+    return BoostRule(**rule)
+
+
+@router.delete("/boost-rules/{rule_id}")
+@user_limiter.limit(get_limit("admin_operations"))
+async def delete_boost_rule_route(request: Request, response: Response, rule_id: int,
+        _: UserPublic = Depends(deps.require_local_admin)):
+    """Delete a boost rule by ID (local channel + admin only)."""
+    if not config_store.delete_boost_rule(rule_id):
+        raise HTTPException(status_code=404, detail="Boost rule not found")
+    return {"success": True}
+
+
+@router.post("/boost-now")
+@user_limiter.limit(get_limit("admin_operations"))
+async def boost_now_route(request: Request, response: Response, body: BoostNowRequest,
+        _: UserPublic = Depends(deps.require_local_admin)):
+    """Trigger a manual SURGE boost for the given duration (local channel + admin only)."""
+    mgr = get_power_manager()
+    await mgr.register_demand(
+        "manual-boost",
+        PowerProfile.SURGE,
+        max_freq_override=body.target_max_mhz,
+        timeout_seconds=body.duration_seconds,
+        description="Manueller Boost",
+    )
+    return {"success": True, "duration_seconds": body.duration_seconds}

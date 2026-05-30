@@ -356,6 +356,14 @@ class LinuxCpuPowerBackend(CpuPowerBackend):
         cpu0_path = self.CPUFREQ_PATH / "cpu0" / "cpufreq" / "scaling_governor"
         return await self._read_sysfs(cpu0_path)
 
+    async def read_enforcement_state(self) -> Tuple[Optional[str], Optional[int]]:
+        """Read cpu0 scaling_governor + scaling_max_freq for drift comparison."""
+        cpu0 = self.CPUFREQ_PATH / "cpu0" / "cpufreq"
+        governor = await self._read_sysfs(cpu0 / "scaling_governor")
+        max_str = await self._read_sysfs(cpu0 / "scaling_max_freq")
+        max_mhz = int(max_str) // 1000 if max_str and max_str.isdigit() else None
+        return governor, max_mhz
+
     def is_available(self) -> bool:
         """Check if cpufreq interface is available."""
         return self._is_available_static()

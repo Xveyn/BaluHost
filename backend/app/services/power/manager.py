@@ -81,6 +81,7 @@ class PowerManagerService:
 
     _instance: Optional["PowerManagerService"] = None
     _lock = Lock()
+    HOLD_FLOOR_MHZ = 400
 
     def __new__(cls) -> "PowerManagerService":
         with cls._lock:
@@ -115,6 +116,13 @@ class PowerManagerService:
         self._state_lock = asyncio.Lock()
         self._dynamic_mode_enabled: bool = False
         self._dynamic_mode_config: Optional[DynamicModeConfig] = None
+        self._boost_max_override: Optional[int] = None  # per-rule SURGE cap (MHz); None = full boost
+        self._last_drift: Optional[dict] = None          # {"at", "field", "expected", "found"}
+        self._cap_unenforceable: bool = False
+        self._in_drift: bool = False                      # within a drift episode (log-once guard)
+        self._enforcement_task: Optional[asyncio.Task] = None
+        self._watcher_absent_ticks: int = 0
+        self._game_demand_active: bool = False
 
         logger.info("PowerManagerService initialized")
 
@@ -418,6 +426,7 @@ class PowerManagerService:
 
         # Start background monitor for demand expiration
         self._monitor_task = asyncio.create_task(self._monitor_loop())
+        self._enforcement_task = asyncio.create_task(self._enforcement_loop())
         # Start command queue poll loop for cross-worker mutations
         self._command_poll_task = asyncio.create_task(command_queue.run_poll_loop(self))
         logger.info("PowerManagerService started (primary mode)")
@@ -453,6 +462,14 @@ class PowerManagerService:
             except asyncio.CancelledError:
                 pass
             self._monitor_task = None
+
+        if self._enforcement_task:
+            self._enforcement_task.cancel()
+            try:
+                await self._enforcement_task
+            except asyncio.CancelledError:
+                pass
+            self._enforcement_task = None
 
         if self._command_poll_task:
             self._command_poll_task.cancel()
@@ -705,6 +722,124 @@ class PowerManagerService:
 
         return False, error_msg
 
+    async def _enforce_current_profile(self) -> None:
+        """Re-assert the desired hardware state; correct + log external drift.
+
+        Runs every enforcement tick (primary only). Does NOT change the logical
+        profile or write profile-change history — it only keeps the hardware
+        aligned with what the current profile demands.
+        """
+        if self._backend is None or self._dynamic_mode_enabled:
+            return
+
+        desired = await self._desired_config_for(self._current_profile)
+        if desired is None:
+            return
+
+        found_gov, found_max = await self._backend.read_enforcement_state()
+        gov_drift = found_gov is not None and found_gov != desired.governor
+        max_drift = (
+            desired.max_freq_mhz is not None
+            and found_max is not None
+            and found_max != desired.max_freq_mhz
+        )
+
+        if not gov_drift and not max_drift:
+            self._cap_unenforceable = False
+            self._in_drift = False
+            return
+
+        self._last_drift = {
+            "at": datetime.now(timezone.utc).isoformat(),
+            "field": "governor" if gov_drift else "max_freq",
+            "expected": f"{desired.governor}/{desired.max_freq_mhz}",
+            "found": f"{found_gov}/{found_max}",
+        }
+        # Keep re-asserting every tick (authority must win), but log only once
+        # per drift episode so a persistent external override / kernel clamp
+        # does not spam the log every 2 seconds.
+        if not self._in_drift:
+            logger.warning(
+                "CPU cap drift detected (external override?): expected %s/%s, found %s/%s — re-asserting",
+                desired.governor, desired.max_freq_mhz, found_gov, found_max,
+            )
+        self._in_drift = True
+
+        success, error_msg = await self._backend.apply_profile(desired)
+
+        if not success:
+            # Write rejected outright (permission/I-O error) — cap is not enforceable.
+            logger.warning("CPU cap re-assert failed (backend error): %s", error_msg)
+            self._cap_unenforceable = True
+            return
+
+        # Write accepted — verify it actually stuck (kernel may silently clamp).
+        vg, vm = await self._backend.read_enforcement_state()
+        still_off = (vg is not None and vg != desired.governor) or (
+            desired.max_freq_mhz is not None and vm is not None and vm != desired.max_freq_mhz
+        )
+        self._cap_unenforceable = bool(still_off)
+        if still_off:
+            logger.warning("CPU cap still not enforced after re-write (kernel clamp?)")
+
+    def _authority_active(self) -> bool:
+        """True when BaluHost should enforce the cap (external authority enabled)."""
+        try:
+            from app.services.power.config_store import load_authority_config
+            return bool(load_authority_config().get("external_authority_enabled"))
+        except Exception:
+            return False
+
+    def _active_boost_rules(self) -> list[dict]:
+        """Return enabled boost rules from config_store, or [] if boost rules are disabled."""
+        from app.services.power.config_store import load_authority_config, list_boost_rules
+        if not load_authority_config().get("boost_rules_enabled", True):
+            return []
+        return list_boost_rules(enabled_only=True)
+
+    async def _watch_tick(self) -> None:
+        """One enforcement tick: check running processes against boost rules and update game-session demand."""
+        from app.services.power import process_watcher
+        rules = self._active_boost_rules()
+        if not rules:
+            if self._game_demand_active:
+                await self.unregister_demand("game-session")
+                self._game_demand_active = False
+                self._boost_max_override = None
+            self._watcher_absent_ticks = 0
+            return
+
+        procs = process_watcher.snapshot_processes()
+        hit, target = process_watcher.match_boost_rules(procs, rules)
+
+        if hit:
+            self._watcher_absent_ticks = 0
+            if not self._game_demand_active or self._boost_max_override != target:
+                self._boost_max_override = target
+                await self.register_demand(
+                    "game-session", PowerProfile.SURGE,
+                    max_freq_override=target, description="Boost-Allowlist",
+                )
+                self._game_demand_active = True
+        elif self._game_demand_active:
+            self._watcher_absent_ticks += 1
+            if self._watcher_absent_ticks >= 2:
+                await self.unregister_demand("game-session")
+                self._game_demand_active = False
+                self._boost_max_override = None
+                self._watcher_absent_ticks = 0
+
+    async def _enforcement_loop(self) -> None:
+        """2-second primary-only loop: enforce cap + watch for boost processes."""
+        while self._is_running:
+            try:
+                if self._primary and self._authority_active():
+                    await self._watch_tick()
+                    await self._enforce_current_profile()
+            except Exception as e:
+                logger.error(f"Error in enforcement loop: {e}")
+            await asyncio.sleep(2)
+
     async def _get_profile_config_from_preset(
         self,
         power_property: ServicePowerProperty
@@ -759,6 +894,38 @@ class PowerManagerService:
             logger.warning(f"Error getting preset config: {e}, falling back to defaults")
             return None
 
+    async def _desired_config_for(self, profile: PowerProfile) -> Optional[PowerProfileConfig]:
+        """Build the config that *should* be enforced for ``profile``.
+
+        - Hold profiles (idle/low/medium): cap floored to HOLD_FLOOR_MHZ.
+        - SURGE: if a per-rule boost override is set, use it as scaling_max;
+          otherwise keep full boost (max_freq_mhz=None).
+        Falls back to the static default profile when no preset is active.
+        """
+        power_property = ServicePowerProperty(profile.value)
+        config = await self._get_profile_config_from_preset(power_property)
+        if config is None:
+            config = self._profiles.get(profile)
+            if config is None:
+                return None
+
+        if profile == PowerProfile.SURGE:
+            max_freq = self._boost_max_override  # None = full boost
+            min_freq = config.min_freq_mhz
+        else:
+            floored = max(config.max_freq_mhz or self.HOLD_FLOOR_MHZ, self.HOLD_FLOOR_MHZ)
+            max_freq = floored
+            min_freq = int(floored * 0.85)
+
+        return PowerProfileConfig(
+            profile=config.profile,
+            governor=config.governor,
+            energy_performance_preference=config.energy_performance_preference,
+            min_freq_mhz=min_freq,
+            max_freq_mhz=max_freq,
+            description=config.description,
+        )
+
     async def apply_profile(
         self,
         profile: PowerProfile,
@@ -810,7 +977,8 @@ class PowerManagerService:
         level: PowerProfile,
         power_property: Optional[ServicePowerProperty] = None,
         timeout_seconds: Optional[int] = None,
-        description: Optional[str] = None
+        description: Optional[str] = None,
+        max_freq_override: Optional[int] = None,
     ) -> str:
         """
         Register a power demand from a source.
@@ -836,6 +1004,12 @@ class PowerManagerService:
             expires_at=expires_at,
             description=description,
         )
+
+        # The override only feeds _desired_config_for / enforcement, which run
+        # on the primary worker only. Setting it on a follower would leave
+        # stale in-memory state on a singleton that never enforces.
+        if self._primary and (max_freq_override is not None or level == PowerProfile.SURGE):
+            self._boost_max_override = max_freq_override
 
         upsert_demand(
             source=source,
@@ -910,12 +1084,12 @@ class PowerManagerService:
         if self._backend:
             freq = await self._backend.get_current_frequency_mhz()
 
-        config = self._profiles.get(self._current_profile)
+        desired = await self._desired_config_for(self._current_profile)
         freq_range = None
-        if config and config.min_freq_mhz and config.max_freq_mhz:
-            freq_range = f"{config.min_freq_mhz}-{config.max_freq_mhz} MHz"
+        if desired and desired.min_freq_mhz and desired.max_freq_mhz:
+            freq_range = f"{desired.min_freq_mhz}-{desired.max_freq_mhz} MHz"
         elif self._current_profile == PowerProfile.SURGE:
-            freq_range = "Full boost (4.6 GHz)"
+            freq_range = "Full boost"
 
         cooldown_remaining = None
         if self._cooldown_until:
