@@ -81,6 +81,7 @@ class PowerManagerService:
 
     _instance: Optional["PowerManagerService"] = None
     _lock = Lock()
+    HOLD_FLOOR_MHZ = 400
 
     def __new__(cls) -> "PowerManagerService":
         with cls._lock:
@@ -115,6 +116,11 @@ class PowerManagerService:
         self._state_lock = asyncio.Lock()
         self._dynamic_mode_enabled: bool = False
         self._dynamic_mode_config: Optional[DynamicModeConfig] = None
+        self._boost_max_override: Optional[int] = None  # per-rule SURGE cap (MHz); None = full boost
+        self._last_drift: Optional[dict] = None          # {"at", "field", "expected", "found"}
+        self._cap_unenforceable: bool = False
+        self._enforcement_task: Optional[asyncio.Task] = None
+        self._watcher_absent_ticks: int = 0
 
         logger.info("PowerManagerService initialized")
 
@@ -758,6 +764,38 @@ class PowerManagerService:
         except Exception as e:
             logger.warning(f"Error getting preset config: {e}, falling back to defaults")
             return None
+
+    async def _desired_config_for(self, profile: PowerProfile) -> Optional[PowerProfileConfig]:
+        """Build the config that *should* be enforced for ``profile``.
+
+        - Hold profiles (idle/low/medium): cap floored to HOLD_FLOOR_MHZ.
+        - SURGE: if a per-rule boost override is set, use it as scaling_max;
+          otherwise keep full boost (max_freq_mhz=None).
+        Falls back to the static default profile when no preset is active.
+        """
+        power_property = ServicePowerProperty(profile.value)
+        config = await self._get_profile_config_from_preset(power_property)
+        if config is None:
+            config = self._profiles.get(profile)
+            if config is None:
+                return None
+
+        if profile == PowerProfile.SURGE:
+            max_freq = self._boost_max_override  # None = full boost
+            min_freq = config.min_freq_mhz
+        else:
+            floored = max(config.max_freq_mhz or self.HOLD_FLOOR_MHZ, self.HOLD_FLOOR_MHZ)
+            max_freq = floored
+            min_freq = int(floored * 0.85)
+
+        return PowerProfileConfig(
+            profile=config.profile,
+            governor=config.governor,
+            energy_performance_preference=config.energy_performance_preference,
+            min_freq_mhz=min_freq,
+            max_freq_mhz=max_freq,
+            description=config.description,
+        )
 
     async def apply_profile(
         self,
