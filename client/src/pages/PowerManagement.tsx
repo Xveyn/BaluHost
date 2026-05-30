@@ -27,6 +27,7 @@ import { HistoryTable } from '../components/power/HistoryTable';
 import { DynamicModeSection } from '../components/power/DynamicModeSection';
 import { GpuPowerCard } from '../components/power/GpuPowerCard';
 import { AuthorityPanel } from '../components/power/AuthorityPanel';
+import { BoostRulesEditor } from '../components/power/BoostRulesEditor';
 import { getPresetIcon } from '../components/power/utils';
 import {
   getPowerStatus,
@@ -490,6 +491,9 @@ export default function PowerManagement({ isAdmin }: PowerManagementProps) {
 
       {/* CPU Authority */}
       <AuthorityPanel isAdmin={isAdmin} />
+
+      {/* Boost Rules & Boost Now */}
+      <BoostRulesEditor isAdmin={isAdmin} />
 
       {/* Auto-Scaling Config (Admin only) */}
       {isAdmin && autoScaling && (

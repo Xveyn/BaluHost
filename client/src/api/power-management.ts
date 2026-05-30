@@ -547,3 +547,87 @@ export async function updateAuthority(
   return response.data;
 }
 
+// ============================================================================
+// Boost Rules (new: /api/power/boost-rules)
+// ============================================================================
+
+export type BoostRuleKind = 'process_glob' | 'game_session';
+
+export interface BoostRule {
+  id: number;
+  kind: BoostRuleKind;
+  pattern?: string;
+  label: string;
+  target_max_mhz?: number;
+  enabled: boolean;
+}
+
+export interface BoostRulesResponse {
+  rules: BoostRule[];
+}
+
+export interface CreateBoostRuleRequest {
+  kind: BoostRuleKind;
+  label: string;
+  pattern?: string;
+  target_max_mhz?: number;
+}
+
+export interface UpdateBoostRuleRequest {
+  label?: string;
+  pattern?: string;
+  target_max_mhz?: number;
+  enabled?: boolean;
+}
+
+export interface BoostNowRequest {
+  duration_seconds: number;
+  target_max_mhz?: number;
+}
+
+export interface BoostNowResponse {
+  success: boolean;
+  duration_seconds: number;
+}
+
+/**
+ * List all boost rules (admin).
+ */
+export async function listBoostRules(): Promise<BoostRulesResponse> {
+  const response = await apiClient.get<BoostRulesResponse>('/api/power/boost-rules');
+  return response.data;
+}
+
+/**
+ * Create a new boost rule (admin, local channel only).
+ */
+export async function createBoostRule(data: CreateBoostRuleRequest): Promise<BoostRule> {
+  const response = await apiClient.post<BoostRule>('/api/power/boost-rules', data);
+  return response.data;
+}
+
+/**
+ * Update an existing boost rule (admin, local channel only).
+ */
+export async function updateBoostRule(id: number, data: UpdateBoostRuleRequest): Promise<BoostRule> {
+  const response = await apiClient.put<BoostRule>(`/api/power/boost-rules/${id}`, data);
+  return response.data;
+}
+
+/**
+ * Delete a boost rule (admin, local channel only).
+ */
+export async function deleteBoostRule(id: number): Promise<{ success: boolean }> {
+  const response = await apiClient.delete<{ success: boolean }>(
+    `/api/power/boost-rules/${id}`
+  );
+  return response.data;
+}
+
+/**
+ * Trigger an immediate boost (admin, local channel only).
+ */
+export async function boostNow(data: BoostNowRequest): Promise<BoostNowResponse> {
+  const response = await apiClient.post<BoostNowResponse>('/api/power/boost-now', data);
+  return response.data;
+}
