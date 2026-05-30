@@ -69,6 +69,20 @@ def test_boost_now_remote_blocked(remote_client, admin_headers):
     assert r.status_code == 403
 
 
+def test_put_boost_rule_can_disable(client, admin_headers):
+    """PUT with enabled=false must actually disable the rule (False is not dropped)."""
+    r = client.post("/api/power/boost-rules",
+                    json={"kind": "process_glob", "pattern": "foo*", "label": "Foo"},
+                    headers=admin_headers)
+    rule_id = r.json()["id"]
+
+    r = client.put(f"/api/power/boost-rules/{rule_id}", json={"enabled": False}, headers=admin_headers)
+    assert r.status_code == 200
+    assert r.json()["enabled"] is False
+
+    client.delete(f"/api/power/boost-rules/{rule_id}", headers=admin_headers)
+
+
 def test_boost_now_passes_target_override(client, admin_headers, monkeypatch):
     """boost-now must forward the chosen target_max_mhz to register_demand."""
     from app.services.power.manager import get_power_manager

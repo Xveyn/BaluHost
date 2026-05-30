@@ -613,6 +613,8 @@ async def update_boost_rule_route(request: Request, response: Response, rule_id:
     if not config_store.update_boost_rule(rule_id, fields):
         raise HTTPException(status_code=404, detail="Boost rule not found")
     rule = next((r for r in config_store.list_boost_rules() if r["id"] == rule_id), None)
+    if rule is None:  # raced with a delete
+        raise HTTPException(status_code=404, detail="Boost rule not found")
     return BoostRule(**rule)
 
 
