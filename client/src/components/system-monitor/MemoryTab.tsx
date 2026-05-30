@@ -99,8 +99,15 @@ export function MemoryTab({ timeRange }: { timeRange: TimeRange }) {
         {/* BaluHost breakdown card. overflow-visible (overrides .card) + relative
             let the expanded breakdown render as an overlay anchored below the
             card, so toggling it open never changes the height of the sibling
-            stat cards in the same grid row. */}
-        <div className="card relative overflow-visible border-slate-800/60 bg-slate-900/55 p-3 sm:p-4 flex flex-col">
+            stat cards in the same grid row. While open, z-30 lifts the card's
+            whole stacking context above the chart card below (the .card
+            backdrop-blur creates a stacking context, so the overlay's own
+            z-index can't escape it otherwise). */}
+        <div
+          className={`card relative overflow-visible border-slate-800/60 bg-slate-900/55 p-3 sm:p-4 flex flex-col ${
+            breakdownOpen ? 'z-30' : ''
+          }`}
+        >
           <button
             type="button"
             onClick={() => setBreakdownOpen((v) => !v)}
