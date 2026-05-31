@@ -4,7 +4,11 @@ from app.models.status_bar import StatusBarPillConfig, StatusBarSettings
 
 def test_pill_config_model_has_expected_columns():
     cols = set(StatusBarPillConfig.__table__.columns.keys())
-    assert cols == {"id", "pill_id", "enabled", "visibility", "sort_order", "updated_at"}
+    assert cols == {"id", "pill_id", "enabled", "visibility", "sort_order", "display_mode", "updated_at"}
+
+
+def test_pill_config_display_mode_defaults_to_always():
+    assert StatusBarPillConfig.__table__.columns["display_mode"].default.arg == "always"
 
 
 def test_settings_model_has_expected_columns():
@@ -34,11 +38,26 @@ def test_pill_state_minimal_construction():
     assert s.value is None and s.extra is None
 
 
-def test_catalog_has_eleven_pills_with_unique_ids():
+def test_catalog_has_twelve_pills_with_unique_ids():
     from app.services.status_bar.catalog import CATALOG
     ids = [p.id for p in CATALOG]
-    assert len(ids) == 11
-    assert len(set(ids)) == 11
+    assert len(ids) == 12
+    assert len(set(ids)) == 12
+
+
+def test_desktop_pill_in_catalog_unlocked_admin_default():
+    from app.services.status_bar.catalog import CATALOG_BY_ID
+    d = CATALOG_BY_ID["desktop"]
+    assert d.default_visibility == "admin"
+    assert d.visibility_locked is False
+    assert d.display_mode_configurable is True
+    assert d.href == "/admin/system-control?tab=sleep"
+
+
+def test_only_desktop_is_display_mode_configurable():
+    from app.services.status_bar.catalog import CATALOG
+    configurable = {p.id for p in CATALOG if p.display_mode_configurable}
+    assert configurable == {"desktop"}
 
 
 def test_locked_pills_default_to_admin_visibility():
@@ -69,7 +88,7 @@ from app.services.status_bar.service import StatusBarService
 def test_get_config_seeds_all_catalog_pills(db_session):
     svc = StatusBarService(db_session)
     config = svc.get_config()
-    assert len(config.pills) == 11
+    assert len(config.pills) == 12
     raid = next(p for p in config.pills if p.pill_id == "raid")
     assert raid.enabled is False
     assert raid.visibility_locked is True
@@ -81,7 +100,7 @@ def test_get_config_is_idempotent(db_session):
     svc.get_config()
     svc.get_config()
     from app.models.status_bar import StatusBarPillConfig
-    assert db_session.query(StatusBarPillConfig).count() == 11
+    assert db_session.query(StatusBarPillConfig).count() == 12
 
 
 # ── Task 10: config update (locked guard + diff) ────────────────────────
@@ -212,3 +231,116 @@ async def test_collect_state_skips_collector_with_malformed_output(db_session, m
     state = await svc.collect_state(role="admin")
     # The malformed "power" pill is skipped; the good "pihole" pill still renders.
     assert [p.id for p in state.pills] == ["pihole"]
+
+
+def test_pill_config_item_accepts_display_mode():
+    from app.schemas.status_bar import PillConfigItem
+    item = PillConfigItem(pill_id="desktop", enabled=True, visibility="admin",
+                          sort_order=0, display_mode="when_off")
+    assert item.display_mode == "when_off"
+
+
+def test_pill_config_item_display_mode_defaults_always():
+    from app.schemas.status_bar import PillConfigItem
+    item = PillConfigItem(pill_id="power", enabled=True, visibility="admin", sort_order=0)
+    assert item.display_mode == "always"
+
+
+def test_pill_config_item_rejects_bad_display_mode():
+    import pytest
+    from pydantic import ValidationError
+    from app.schemas.status_bar import PillConfigItem
+    with pytest.raises(ValidationError):
+        PillConfigItem(pill_id="desktop", enabled=True, visibility="admin",
+                       sort_order=0, display_mode="sometimes")
+
+
+from app.schemas.status_bar import StatusBarConfigUpdate, PillConfigItem
+
+
+def _enable_desktop(svc, mode="always"):
+    cfg = svc.get_config()
+    items = [
+        PillConfigItem(pill_id=p.pill_id, enabled=(p.pill_id == "desktop"),
+                       visibility=p.visibility, sort_order=p.sort_order,
+                       display_mode=(mode if p.pill_id == "desktop" else "always"))
+        for p in cfg.pills
+    ]
+    svc.update_config(StatusBarConfigUpdate(pills=items, show_bottom_upload=True))
+
+
+def test_get_config_exposes_display_mode_fields(db_session):
+    svc = StatusBarService(db_session)
+    cfg = svc.get_config()
+    desktop = next(p for p in cfg.pills if p.pill_id == "desktop")
+    power = next(p for p in cfg.pills if p.pill_id == "power")
+    assert desktop.display_mode == "always"
+    assert desktop.display_mode_configurable is True
+    assert power.display_mode_configurable is False
+
+
+def test_update_config_rejects_display_mode_on_non_configurable(db_session):
+    import pytest
+    svc = StatusBarService(db_session)
+    cfg = svc.get_config()
+    items = [
+        PillConfigItem(pill_id=p.pill_id, enabled=p.enabled, visibility=p.visibility,
+                       sort_order=p.sort_order,
+                       display_mode=("when_off" if p.pill_id == "power" else "always"))
+        for p in cfg.pills
+    ]
+    with pytest.raises(ValueError):
+        svc.update_config(StatusBarConfigUpdate(pills=items, show_bottom_upload=True))
+
+
+def test_update_config_persists_desktop_display_mode(db_session):
+    svc = StatusBarService(db_session)
+    _enable_desktop(svc, mode="when_off")
+    cfg = svc.get_config()
+    desktop = next(p for p in cfg.pills if p.pill_id == "desktop")
+    assert desktop.display_mode == "when_off"
+
+
+def _patch_desktop_state(state):
+    from unittest.mock import AsyncMock, MagicMock, patch
+    fake = MagicMock()
+    fake.get_status = AsyncMock(return_value=MagicMock(state=MagicMock(value=state)))
+    return patch("app.services.power.desktop.get_desktop_service", return_value=fake)
+
+
+@pytest.mark.asyncio
+async def test_collect_state_always_shows_running(db_session):
+    svc = StatusBarService(db_session)
+    _enable_desktop(svc, mode="always")
+    with _patch_desktop_state("running"):
+        resp = await svc.collect_state(role="admin")
+    pill = next(p for p in resp.pills if p.id == "desktop")
+    assert pill.value == "An"
+    assert pill.extra is None or "_state" not in (pill.extra or {})
+
+
+@pytest.mark.asyncio
+async def test_collect_state_when_off_hides_running(db_session):
+    svc = StatusBarService(db_session)
+    _enable_desktop(svc, mode="when_off")
+    with _patch_desktop_state("running"):
+        resp = await svc.collect_state(role="admin")
+    assert "desktop" not in [p.id for p in resp.pills]
+
+
+@pytest.mark.asyncio
+async def test_collect_state_when_off_shows_stopped(db_session):
+    svc = StatusBarService(db_session)
+    _enable_desktop(svc, mode="when_off")
+    with _patch_desktop_state("stopped"):
+        resp = await svc.collect_state(role="admin")
+    assert "desktop" in [p.id for p in resp.pills]
+
+
+@pytest.mark.asyncio
+async def test_collect_state_when_on_hides_stopped(db_session):
+    svc = StatusBarService(db_session)
+    _enable_desktop(svc, mode="when_on")
+    with _patch_desktop_state("stopped"):
+        resp = await svc.collect_state(role="admin")
+    assert "desktop" not in [p.id for p in resp.pills]

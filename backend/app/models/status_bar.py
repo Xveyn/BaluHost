@@ -17,6 +17,9 @@ class StatusBarPillConfig(Base):
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     visibility: Mapped[str] = mapped_column(String(8), nullable=False, default="admin")  # "admin" | "all"
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    display_mode: Mapped[str] = mapped_column(
+        String(8), nullable=False, default="always", server_default="always"
+    )  # "always" | "when_off" | "when_on" — only meaningful for display_mode_configurable pills
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )

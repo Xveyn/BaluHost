@@ -14,6 +14,7 @@ class PillDefinition:
     visibility_locked: bool
     silent_when_ok: bool
     href: str
+    display_mode_configurable: bool = False  # only True for pills with an admin-chosen display mode
 
 
 CATALOG: list[PillDefinition] = [
@@ -39,6 +40,8 @@ CATALOG: list[PillDefinition] = [
                    "/schedulers"),
     PillDefinition("backup", "statusBar.pills.backup.name", "admin", True, True,
                    "/admin/system-control?tab=backup"),
+    PillDefinition("desktop", "statusBar.pills.desktop.name", "admin", False, False,
+                   "/admin/system-control?tab=sleep", display_mode_configurable=True),
 ]
 
 CATALOG_BY_ID: dict[str, PillDefinition] = {p.id: p for p in CATALOG}

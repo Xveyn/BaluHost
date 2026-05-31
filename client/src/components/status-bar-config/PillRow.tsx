@@ -3,15 +3,16 @@ import { CSS } from '@dnd-kit/utilities';
 import { GripVertical, Lock } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { CSSProperties } from 'react';
-import type { PillCatalogEntry, PillVisibility } from '../../api/statusBar';
+import type { PillCatalogEntry, PillVisibility, DisplayMode } from '../../api/statusBar';
 
 interface Props {
   entry: PillCatalogEntry;
   onToggleEnabled: (id: string, enabled: boolean) => void;
   onSetVisibility: (id: string, visibility: PillVisibility) => void;
+  onSetDisplayMode: (id: string, displayMode: DisplayMode) => void;
 }
 
-export function PillRow({ entry, onToggleEnabled, onSetVisibility }: Props) {
+export function PillRow({ entry, onToggleEnabled, onSetVisibility, onSetDisplayMode }: Props) {
   const { t } = useTranslation('statusBar');
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: entry.pill_id });
@@ -48,6 +49,19 @@ export function PillRow({ entry, onToggleEnabled, onSetVisibility }: Props) {
           <Lock className="h-3 w-3" />
           {t('visibility.locked')}
         </span>
+      ) : null}
+
+      {entry.display_mode_configurable ? (
+        <select
+          aria-label="display mode"
+          className="rounded-md border border-slate-700 bg-slate-800 px-2 py-1 text-xs text-slate-200"
+          value={entry.display_mode}
+          onChange={(e) => onSetDisplayMode(entry.pill_id, e.target.value as DisplayMode)}
+        >
+          <option value="always">{t('displayMode.always')}</option>
+          <option value="when_off">{t('displayMode.whenOff')}</option>
+          <option value="when_on">{t('displayMode.whenOn')}</option>
+        </select>
       ) : null}
 
       <select
