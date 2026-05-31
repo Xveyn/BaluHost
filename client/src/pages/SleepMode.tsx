@@ -10,6 +10,7 @@ import { OsSleepSettingsBanner } from '../components/power/OsSleepSettingsBanner
 import { OsAutoSuspendCard } from '../components/power/OsAutoSuspendCard';
 import { SleepModePanel } from '../components/power/SleepModePanel';
 import { AlwaysAwakePanel } from '../components/power/AlwaysAwakePanel';
+import { DesktopTogglePanel } from '../components/power/DesktopTogglePanel';
 import { CoreUptimePanel } from '../components/power/CoreUptimePanel';
 import { SleepConfigPanel } from '../components/power/SleepConfigPanel';
 import { SleepHistoryTable } from '../components/power/SleepHistoryTable';
@@ -21,6 +22,7 @@ export default function SleepMode() {
       <OsAutoSuspendCard />
       <SleepModePanel />
       <AlwaysAwakePanel />
+      <DesktopTogglePanel />
       <CoreUptimePanel />
       <SleepConfigPanel />
       <SleepHistoryTable />
