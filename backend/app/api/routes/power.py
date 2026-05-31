@@ -505,6 +505,23 @@ async def switch_power_backend(
     )
 
 
+def _authority_status_payload() -> AuthorityStatusResponse:
+    """Build the authority status response. Plain helper so both the GET and PUT
+    endpoints can reuse it without one route function calling another decorated
+    (rate-limited) route function directly."""
+    cfg = config_store.load_authority_config()
+    ppd = ppd_authority.status()
+    mgr = get_power_manager()
+    return AuthorityStatusResponse(
+        external_authority_enabled=cfg["external_authority_enabled"],
+        boost_rules_enabled=cfg["boost_rules_enabled"],
+        ppd_active=ppd["ppd_active"],
+        ppd_masked=ppd["ppd_masked"],
+        cap_unenforceable=getattr(mgr, "_cap_unenforceable", False),
+        last_drift=getattr(mgr, "_last_drift", None),
+    )
+
+
 @router.get("/authority", response_model=AuthorityStatusResponse)
 @user_limiter.limit(get_limit("admin_operations"))
 async def get_authority_status(
@@ -518,17 +535,7 @@ async def get_authority_status(
     Returns whether BaluHost has exclusive CPU authority, whether boost
     rules are active, and the current state of power-profiles-daemon.
     """
-    cfg = config_store.load_authority_config()
-    ppd = ppd_authority.status()
-    mgr = get_power_manager()
-    return AuthorityStatusResponse(
-        external_authority_enabled=cfg["external_authority_enabled"],
-        boost_rules_enabled=cfg["boost_rules_enabled"],
-        ppd_active=ppd["ppd_active"],
-        ppd_masked=ppd["ppd_masked"],
-        cap_unenforceable=getattr(mgr, "_cap_unenforceable", False),
-        last_drift=getattr(mgr, "_last_drift", None),
-    )
+    return _authority_status_payload()
 
 
 @router.put("/authority", response_model=AuthorityStatusResponse)
@@ -582,7 +589,7 @@ async def update_authority(
         },
         success=True,
     )
-    return await get_authority_status(request, response, user)
+    return _authority_status_payload()
 
 
 @router.get("/boost-rules", response_model=BoostRulesResponse)

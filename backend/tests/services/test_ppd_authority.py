@@ -34,3 +34,26 @@ async def test_release_unmasks_ppd(monkeypatch):
                         lambda args, **kw: calls.append(args) or type("R", (), {"returncode": 0, "stdout": b""})())
     await ppd_authority.release()
     assert ["sudo", "-n", "systemctl", "unmask", "power-profiles-daemon"] in calls
+
+
+@pytest.mark.asyncio
+async def test_acquire_is_idempotent_when_already_masked(monkeypatch):
+    """Re-acquiring must succeed even though `stop` on a masked unit exits non-zero.
+
+    Regression: per-command rc check made the second activation return False → 500.
+    Success is now judged by the end state (unit masked).
+    """
+    def fake_run(args, **kwargs):
+        rc = 0
+        stderr = b""
+        # `systemctl stop` on an already-masked unit fails like the real systemd
+        if args[:4] == ["sudo", "-n", "systemctl", "stop"]:
+            rc, stderr = 1, b"Unit power-profiles-daemon.service is masked."
+        stdout = b"masked\n" if args[:2] == ["systemctl", "is-enabled"] else b""
+        return type("R", (), {"returncode": rc, "stdout": stdout, "stderr": stderr})()
+
+    monkeypatch.setattr(ppd_authority.subprocess, "run", fake_run)
+
+    result = await ppd_authority.acquire()
+
+    assert result is True  # masked end state → success despite stop rc=1
