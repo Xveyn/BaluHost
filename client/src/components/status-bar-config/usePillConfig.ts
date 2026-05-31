@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { getStatusBarConfig, updateStatusBarConfig } from '../../api/statusBar';
-import type { PillCatalogEntry, PillVisibility } from '../../api/statusBar';
+import type { PillCatalogEntry, PillVisibility, DisplayMode } from '../../api/statusBar';
 
 export interface UsePillConfig {
   pills: PillCatalogEntry[];
@@ -10,6 +10,7 @@ export interface UsePillConfig {
   error: boolean;
   setEnabled: (id: string, enabled: boolean) => void;
   setVisibility: (id: string, visibility: PillVisibility) => void;
+  setDisplayMode: (id: string, displayMode: DisplayMode) => void;
   setShowBottomUpload: (v: boolean) => void;
   reorder: (from: number, to: number) => void;
   save: () => Promise<void>;
@@ -51,6 +52,10 @@ export function usePillConfig(): UsePillConfig {
     setPills(prev => prev.map(p => (p.pill_id === id ? { ...p, visibility } : p)));
   }, []);
 
+  const setDisplayMode = useCallback((id: string, displayMode: DisplayMode) => {
+    setPills(prev => prev.map(p => (p.pill_id === id ? { ...p, display_mode: displayMode } : p)));
+  }, []);
+
   const reorder = useCallback((from: number, to: number) => {
     setPills(prev => {
       const next = [...prev];
@@ -67,6 +72,7 @@ export function usePillConfig(): UsePillConfig {
         pills: pills.map(p => ({
           pill_id: p.pill_id, enabled: p.enabled,
           visibility: p.visibility, sort_order: p.sort_order,
+          display_mode: p.display_mode,
         })),
         show_bottom_upload: showBottomUpload,
       });
@@ -77,6 +83,6 @@ export function usePillConfig(): UsePillConfig {
 
   return {
     pills, showBottomUpload, loading, saving, error,
-    setEnabled, setVisibility, setShowBottomUpload: setShow, reorder, save, reload,
+    setEnabled, setVisibility, setDisplayMode, setShowBottomUpload: setShow, reorder, save, reload,
   };
 }
