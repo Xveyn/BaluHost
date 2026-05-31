@@ -81,6 +81,11 @@ class StatusBarService:
                 raise ValueError(
                     f"pill '{item.pill_id}' is visibility_locked and cannot be set to 'all'"
                 )
+            if (definition and not definition.display_mode_configurable
+                    and item.display_mode != "always"):
+                raise ValueError(
+                    f"pill '{item.pill_id}' does not support a custom display_mode"
+                )
 
         rows = self._ensure_rows()
         diff: dict = {"changed": []}
@@ -136,6 +141,12 @@ class StatusBarService:
             partial = await collector(self.db, role)
             if partial is None:
                 continue
+            if definition.display_mode_configurable:
+                state = partial.pop("_state", None)
+                mode = getattr(_row, "display_mode", "always")
+                if (mode == "when_off" and state != "stopped") or \
+                   (mode == "when_on" and state != "running"):
+                    continue
             try:
                 pills.append(PillState(id=definition.id, href=definition.href, **partial))
             except Exception as exc:  # noqa: BLE001 - one bad pill must not 5xx the strip
