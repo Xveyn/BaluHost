@@ -57,7 +57,7 @@ jobs:
       # monotonic per version, independent of any workflow run_number.
       - name: Checkout repo for tagging
         if: success()
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
           fetch-tags: true
