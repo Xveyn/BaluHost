@@ -74,6 +74,7 @@ export function StatusBarConfigTab() {
                 entry={entry}
                 onToggleEnabled={cfg.setEnabled}
                 onSetVisibility={cfg.setVisibility}
+                onSetDisplayMode={cfg.setDisplayMode}
               />
             ))}
           </div>
