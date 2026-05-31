@@ -448,7 +448,7 @@ git commit -m "feat(desktop): add DesktopService singleton"
 - Modify: `backend/app/api/routes/__init__.py`
 - Test: `backend/tests/test_desktop_routes.py`
 
-**Design notes:** Status is a read (any authenticated user). enable/disable are state-changing -> `Depends(get_current_admin)`, rate-limited, audit-logged. The route module declares a **bare `router = APIRouter()`** (no prefix in the file — matching `sleep.py`); the `/system/sleep/desktop` prefix is applied at include time in `__init__.py`. `@user_limiter.limit(...)` requires `request: Request` in the signature (slowapi reads it).
+**Design notes:** Status is a read (any authenticated user). enable/disable are state-changing -> `Depends(get_current_admin)`, rate-limited, audit-logged. The route module declares a **bare `router = APIRouter()`** (no prefix in the file — matching `sleep.py`); the `/system/sleep/desktop` prefix is applied at include time in `__init__.py`. `@user_limiter.limit(...)` requires BOTH `request: Request` and `response: Response` in the signature — slowapi reads `request` and injects rate-limit headers into `response`, raising if `response` is absent (matches all 15 endpoints in `sleep.py`).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -519,7 +519,7 @@ Registered under the /system/sleep/desktop prefix in routes/__init__.py.
 """
 import logging
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, Response
 
 from app.api.deps import get_current_user, get_current_admin
 from app.core.rate_limiter import user_limiter, get_limit
@@ -532,10 +532,14 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+# NOTE: every `@user_limiter.limit(...)` handler MUST take `response: Response`
+# (in addition to `request: Request`) — slowapi injects rate-limit headers into
+# it and raises if it's absent. This mirrors all 15 endpoints in sleep.py.
 @router.get("/status", response_model=DesktopStatus)
 @user_limiter.limit(get_limit("admin_operations"))
 async def desktop_status(
     request: Request,
+    response: Response,
     current_user=Depends(get_current_user),
 ) -> DesktopStatus:
     """Return whether the KDE desktop (display manager) is running."""
@@ -546,6 +550,7 @@ async def desktop_status(
 @user_limiter.limit(get_limit("admin_operations"))
 async def desktop_disable(
     request: Request,
+    response: Response,
     current_user=Depends(get_current_admin),
 ) -> dict:
     """Stop the KDE desktop so the GPU can drop to idle. Admin only."""
@@ -565,6 +570,7 @@ async def desktop_disable(
 @user_limiter.limit(get_limit("admin_operations"))
 async def desktop_enable(
     request: Request,
+    response: Response,
     current_user=Depends(get_current_admin),
 ) -> dict:
     """Start the KDE desktop. Admin only."""
