@@ -1305,17 +1305,27 @@ class SleepManagerService:
 
         can_suspend = systemctl
         if not settings.is_dev_mode:
-            # The service user has no active logind session, so polkit returns
-            # "challenge" without sudo even though `sudo systemctl suspend`
-            # itself is allowed via NOPASSWD. Run the check via sudo too so the
-            # capability badge reflects reality.
+            # Query logind's CanSuspend over D-Bus. NOTE: `systemctl can-suspend`
+            # is NOT a valid verb (systemd has no such command) — we must ask
+            # logind directly. The service user has no active login session, so
+            # polkit returns "challenge" rather than "yes"; but "challenge" still
+            # means the system *supports* suspend (it only needs authorization,
+            # which we have via `sudo systemctl suspend` NOPASSWD). Treat both
+            # "yes" and "challenge" as capable; "no"/"na" mean not capable.
             try:
                 import subprocess
                 result = subprocess.run(
-                    ["sudo", "systemctl", "can-suspend"],
+                    [
+                        "busctl", "call", "org.freedesktop.login1",
+                        "/org/freedesktop/login1",
+                        "org.freedesktop.login1.Manager", "CanSuspend",
+                    ],
                     capture_output=True, text=True, timeout=5,
                 )
-                can_suspend = result.returncode == 0 and "yes" in result.stdout.lower()
+                out = result.stdout.lower()
+                can_suspend = result.returncode == 0 and (
+                    '"yes"' in out or '"challenge"' in out
+                )
             except Exception:
                 can_suspend = False
 
