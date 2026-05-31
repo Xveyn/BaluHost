@@ -12,7 +12,7 @@ def test_get_config_as_admin_returns_catalog(client: TestClient, admin_headers):
     r = client.get("/api/system/statusbar/config", headers=admin_headers)
     assert r.status_code == 200
     body = r.json()
-    assert len(body["pills"]) == 11
+    assert len(body["pills"]) == 12
     assert "show_bottom_upload" in body
 
 
@@ -58,3 +58,32 @@ def test_put_config_writes_audit_log(client: TestClient, admin_headers, db_sessi
         .count()
     )
     assert logged >= 1
+
+
+def test_put_config_rejects_display_mode_on_non_configurable_pill(client: TestClient, admin_headers):
+    cfg = client.get("/api/system/statusbar/config", headers=admin_headers).json()
+    pills = [{
+        "pill_id": p["pill_id"], "enabled": p["enabled"], "visibility": p["visibility"],
+        "sort_order": p["sort_order"],
+        "display_mode": "when_off" if p["pill_id"] == "power" else "always",
+    } for p in cfg["pills"]]
+    r = client.put("/api/system/statusbar/config",
+                   json={"pills": pills, "show_bottom_upload": True},
+                   headers=admin_headers)
+    assert r.status_code == 400
+
+
+def test_put_config_accepts_display_mode_on_desktop(client: TestClient, admin_headers):
+    cfg = client.get("/api/system/statusbar/config", headers=admin_headers).json()
+    pills = [{
+        "pill_id": p["pill_id"], "enabled": p["enabled"], "visibility": p["visibility"],
+        "sort_order": p["sort_order"],
+        "display_mode": "when_off" if p["pill_id"] == "desktop" else "always",
+    } for p in cfg["pills"]]
+    r = client.put("/api/system/statusbar/config",
+                   json={"pills": pills, "show_bottom_upload": True},
+                   headers=admin_headers)
+    assert r.status_code == 200
+    desktop = next(p for p in r.json()["pills"] if p["pill_id"] == "desktop")
+    assert desktop["display_mode"] == "when_off"
+    assert desktop["display_mode_configurable"] is True
