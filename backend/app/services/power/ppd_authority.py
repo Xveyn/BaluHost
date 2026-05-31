@@ -31,23 +31,36 @@ def _systemctl_state(verb: str) -> bool:
 
 
 async def acquire() -> bool:
-    """Stop and mask power-profiles-daemon, recording its previous state."""
+    """Stop and mask power-profiles-daemon so BaluHost is the sole CPU authority.
+
+    Idempotent: success is judged by the END STATE (is the unit masked?), not by
+    each command's return code. ``systemctl stop`` on an already-masked unit
+    exits non-zero ("Unit is masked"), so checking per-command rc made a second
+    activation fail spuriously. Returns True iff PPD is masked afterwards.
+    """
     def _do() -> bool:
-        prev_active = _systemctl_state("is-active")
-        prev_enabled = _systemctl_state("is-enabled")
-        config_store.save_authority_config({"ppd_prev_active": prev_active, "ppd_prev_enabled": prev_enabled})
-        ok = True
+        # Only record the prior state the FIRST time (before we change anything).
+        # On a re-acquire the unit is already masked — don't clobber the real
+        # pre-feature state with the masked one.
+        if not _is_masked():
+            config_store.save_authority_config({
+                "ppd_prev_active": _systemctl_state("is-active"),
+                "ppd_prev_enabled": _systemctl_state("is-enabled"),
+            })
         for verb in ("stop", "mask"):
             res = _run(["sudo", "-n", "systemctl", verb, UNIT])
             if res.returncode != 0:
-                ok = False
+                # Non-fatal: stop on a masked/inactive unit is expected to be non-zero.
                 logger.warning(
-                    "PPD %s failed (rc=%s): %s",
+                    "PPD %s returned rc=%s: %s",
                     verb,
                     res.returncode,
                     (res.stderr or b"").decode(errors="ignore").strip(),
                 )
-        return ok
+        masked = _is_masked()
+        if not masked:
+            logger.error("PPD did not end up masked after acquire (sudoers missing?)")
+        return masked
     return await asyncio.get_running_loop().run_in_executor(None, _do)
 
 

@@ -16,6 +16,33 @@ def test_get_authority_status_ok(client, admin_headers):
     assert "ppd_active" in body
 
 
+def test_enable_authority_success_returns_200(client, admin_headers, monkeypatch):
+    """The success path (acquire OK) must return 200 with the new status, not 500.
+
+    Regression: update_authority used to `return await get_authority_status(...)`,
+    calling a rate-limited route function directly. Now it uses a plain helper.
+    """
+    from app.services.power import config_store
+
+    config_store.save_authority_config({"external_authority_enabled": False})
+
+    async def fake_acquire():
+        return True
+
+    monkeypatch.setattr("app.services.power.ppd_authority.acquire", fake_acquire)
+    monkeypatch.setattr("app.services.power.ppd_authority.status",
+                        lambda: {"ppd_active": False, "ppd_masked": True})
+
+    r = client.put("/api/power/authority", json={"external_authority_enabled": True}, headers=admin_headers)
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["external_authority_enabled"] is True
+    assert body["ppd_masked"] is True
+
+    config_store.save_authority_config({"external_authority_enabled": False})
+
+
 def test_enable_authority_fails_when_acquire_fails(client, admin_headers, monkeypatch):
     """If PPD can't be stood down, the flag must NOT be persisted (no split authority)."""
     from app.services.power import config_store
