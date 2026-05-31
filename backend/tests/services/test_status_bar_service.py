@@ -4,7 +4,11 @@ from app.models.status_bar import StatusBarPillConfig, StatusBarSettings
 
 def test_pill_config_model_has_expected_columns():
     cols = set(StatusBarPillConfig.__table__.columns.keys())
-    assert cols == {"id", "pill_id", "enabled", "visibility", "sort_order", "updated_at"}
+    assert cols == {"id", "pill_id", "enabled", "visibility", "sort_order", "display_mode", "updated_at"}
+
+
+def test_pill_config_display_mode_defaults_to_always():
+    assert StatusBarPillConfig.__table__.columns["display_mode"].default.arg == "always"
 
 
 def test_settings_model_has_expected_columns():
