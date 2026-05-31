@@ -367,6 +367,25 @@ if [[ "${SYNC_PERMISSIONS:-0}" == "1" || "${SYNC_PERMISSIONS,,}" == "true" ]]; t
         log_warn "AMD GPU permission script not found at $AMD_GPU_SCRIPT (skipping)."
     fi
 
+    # Hardware sudoers: RAID/SMART/fan/CPU-freq/suspend/rtcwake/ethtool grants.
+    # The installer renders @@BALUHOST_USER@@ from the running service user and
+    # validates with visudo before replacing the live file. This is the path by
+    # which baluhost-hardware-sudoers template changes reach an installed box.
+    # Invoked with no env vars (like the AMD-GPU script): the deploy sudoers rule
+    # whitelists this exact `bash <abs-path>` invocation, and the script's
+    # internal TEMPLATE default (/opt/baluhost/...) matches the prod INSTALL_DIR.
+    HARDWARE_SUDOERS_SCRIPT="$INSTALL_DIR/deploy/scripts/install-hardware-sudoers.sh"
+    if [[ -f "$HARDWARE_SUDOERS_SCRIPT" ]]; then
+        log_info "Re-applying hardware sudoers..."
+        if sudo bash "$HARDWARE_SUDOERS_SCRIPT"; then
+            log_info "Hardware sudoers sync OK."
+        else
+            log_warn "Hardware sudoers sync failed (non-fatal — deploy continues)."
+        fi
+    else
+        log_warn "Hardware sudoers script not found at $HARDWARE_SUDOERS_SCRIPT (skipping)."
+    fi
+
     # Future permission scripts go here following the same pattern:
     # if [[ -f "$INSTALL_DIR/deploy/scripts/install-<thing>-permissions.sh" ]]; then ...
 else

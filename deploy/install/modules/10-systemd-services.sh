@@ -91,6 +91,29 @@ else
     log_warn "Deploy sudoers template not found: $DEPLOY_SUDOERS_TEMPLATE (skipping)"
 fi
 
+# --- Install hardware sudoers rule ---
+log_step "Hardware Sudoers"
+
+HARDWARE_SUDOERS_TEMPLATE="$TEMPLATE_DIR/baluhost-hardware-sudoers"
+HARDWARE_SUDOERS_OUTPUT="/etc/sudoers.d/baluhost-hardware"
+
+if [[ -f "$HARDWARE_SUDOERS_TEMPLATE" ]]; then
+    process_template "$HARDWARE_SUDOERS_TEMPLATE" "$HARDWARE_SUDOERS_OUTPUT" \
+        "BALUHOST_USER=$BALUHOST_USER"
+    chmod 440 "$HARDWARE_SUDOERS_OUTPUT"
+    log_info "Installed hardware sudoers rule: $HARDWARE_SUDOERS_OUTPUT"
+
+    if visudo -cf "$HARDWARE_SUDOERS_OUTPUT" &>/dev/null; then
+        log_info "Hardware sudoers syntax OK."
+    else
+        log_error "Hardware sudoers syntax check failed! Removing $HARDWARE_SUDOERS_OUTPUT"
+        rm -f "$HARDWARE_SUDOERS_OUTPUT"
+        exit 1
+    fi
+else
+    log_warn "Hardware sudoers template not found: $HARDWARE_SUDOERS_TEMPLATE (skipping)"
+fi
+
 # --- Install polkit rule for core-uptime sleep inhibitor ---
 log_step "Polkit Rule (Core Uptime Inhibitor)"
 
