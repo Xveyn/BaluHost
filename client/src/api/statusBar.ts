@@ -5,7 +5,9 @@ import { apiClient } from '../lib/api';
 
 export type PillId =
   | 'power' | 'pihole' | 'uploads' | 'sync' | 'raid' | 'sleep' | 'vpn' | 'temp'
-  | 'always_awake' | 'scheduler' | 'backup';
+  | 'always_awake' | 'scheduler' | 'backup' | 'desktop';
+
+export type DisplayMode = 'always' | 'when_off' | 'when_on';
 
 export type PillTone = 'success' | 'info' | 'warning' | 'danger' | 'neutral';
 export type PillKind = 'state' | 'activity' | 'alert';
@@ -35,6 +37,8 @@ export interface PillCatalogEntry {
   visibility_locked: boolean;
   sort_order: number;
   href: string;
+  display_mode: DisplayMode;
+  display_mode_configurable: boolean;
 }
 
 export interface StatusBarConfigResponse {
@@ -47,6 +51,7 @@ export interface PillConfigItem {
   enabled: boolean;
   visibility: PillVisibility;
   sort_order: number;
+  display_mode: DisplayMode;
 }
 
 export interface StatusBarConfigUpdate {
