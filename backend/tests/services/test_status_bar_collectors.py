@@ -321,3 +321,53 @@ async def test_always_awake_and_core_uptime_both_off_silent():
     mgr = MagicMock(); mgr.get_status = MagicMock(return_value=fake_status)
     with patch.object(collectors, "get_sleep_manager", return_value=mgr):
         assert await collectors.collect_always_awake(MagicMock(), "admin") is None
+
+
+@pytest.mark.asyncio
+async def test_collect_desktop_running_neutral():
+    from app.services.status_bar import collectors
+    fake = MagicMock()
+    fake.get_status = AsyncMock(return_value=MagicMock(state=MagicMock(value="running")))
+    with patch("app.services.power.desktop.get_desktop_service", return_value=fake):
+        result = await collectors.collect_desktop(MagicMock(), "admin")
+    assert result is not None
+    assert result["tone"] == "neutral"
+    assert result["value"] == "An"
+    assert result["icon"] == "Monitor"
+    assert result["_state"] == "running"
+
+
+@pytest.mark.asyncio
+async def test_collect_desktop_stopped_success():
+    from app.services.status_bar import collectors
+    fake = MagicMock()
+    fake.get_status = AsyncMock(return_value=MagicMock(state=MagicMock(value="stopped")))
+    with patch("app.services.power.desktop.get_desktop_service", return_value=fake):
+        result = await collectors.collect_desktop(MagicMock(), "admin")
+    assert result["tone"] == "success"
+    assert result["_state"] == "stopped"
+
+
+@pytest.mark.asyncio
+async def test_collect_desktop_unknown_silent():
+    from app.services.status_bar import collectors
+    fake = MagicMock()
+    fake.get_status = AsyncMock(return_value=MagicMock(state=MagicMock(value="unknown")))
+    with patch("app.services.power.desktop.get_desktop_service", return_value=fake):
+        result = await collectors.collect_desktop(MagicMock(), "admin")
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_collect_desktop_swallows_error():
+    from app.services.status_bar import collectors
+    fake = MagicMock()
+    fake.get_status = AsyncMock(side_effect=RuntimeError("no sddm"))
+    with patch("app.services.power.desktop.get_desktop_service", return_value=fake):
+        result = await collectors.collect_desktop(MagicMock(), "admin")
+    assert result is None
+
+
+def test_desktop_registered_in_collectors():
+    from app.services.status_bar.collectors import COLLECTORS
+    assert "desktop" in COLLECTORS

@@ -362,6 +362,25 @@ async def collect_temp(db: Session, role: str) -> Optional[dict]:
             "value": f"{int(temp)}°C", "icon": "Thermometer"}
 
 
+# ── desktop (KDE/SDDM) ───────────────────────────────────────────────
+@_safe()
+async def collect_desktop(db: Session, role: str) -> Optional[dict]:
+    from app.services.power.desktop import get_desktop_service
+    status = await get_desktop_service().get_status()
+    state = status.state.value  # "running" | "stopped" | "unknown"
+    if state == "unknown":
+        return None  # no display manager (Pi/headless) → stay silent
+    running = state == "running"
+    return {
+        "kind": "state",
+        "tone": "neutral" if running else "success",
+        "label": "Desktop",
+        "value": "An" if running else "Aus · GPU idle",
+        "icon": "Monitor",
+        "_state": state,  # private hint for the service's display-mode filter; popped before PillState
+    }
+
+
 # ── registry ─────────────────────────────────────────────────────────
 COLLECTORS = {
     "power": collect_power,
@@ -375,4 +394,5 @@ COLLECTORS = {
     "always_awake": collect_always_awake,
     "scheduler": collect_scheduler,
     "backup": collect_backup,
+    "desktop": collect_desktop,
 }
