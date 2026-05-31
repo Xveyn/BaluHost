@@ -20,6 +20,9 @@ SINK_PATTERN_FALLBACK="iec958"
 
 AUDIO_SINK_TIMEOUT_S=3
 
+DM_UNIT="sddm.service"
+DESKTOP_WAIT_S=20
+
 # ---------- Globals ----------
 DRY_RUN=0
 
@@ -87,6 +90,15 @@ sys.exit(1)
 '
 }
 
+# desktop_state_from_isactive <isactive-stdout>
+# Maps `systemctl is-active sddm.service` stdout to up|down (pure, testable).
+desktop_state_from_isactive() {
+    case "${1:-}" in
+        active) printf 'up\n' ;;
+        *)      printf 'down\n' ;;
+    esac
+}
+
 # ---------- Audio ----------
 
 # find_sink <pattern> — gibt aktuelle pactl-Sink-Namen (live) zurück, der dem Pattern entspricht
@@ -116,9 +128,42 @@ set_default_sink() {
     run pactl set-default-sink "$name"
 }
 
+# ---------- Desktop ----------
+
+# ensure_desktop_up — make sure the KDE session is running before driving kscreen.
+# Starts sddm if stopped and waits for the Wayland socket. Honours DRY_RUN.
+ensure_desktop_up() {
+    local state
+    state=$(desktop_state_from_isactive "$(systemctl is-active "$DM_UNIT" 2>/dev/null || true)")
+    if [ "$state" = "up" ]; then
+        log "Desktop läuft bereits ($DM_UNIT)"
+        return 0
+    fi
+
+    log "Desktop ist aus — starte $DM_UNIT"
+    run sudo systemctl start "$DM_UNIT"
+
+    if [ "$DRY_RUN" = 1 ]; then
+        log "(dry-run) würde auf Wayland-Socket warten (max ${DESKTOP_WAIT_S}s)"
+        return 0
+    fi
+
+    local sock="$XDG_RUNTIME_DIR/wayland-0"
+    local end=$(( SECONDS + DESKTOP_WAIT_S ))
+    while [ "$SECONDS" -lt "$end" ]; do
+        if [ -S "$sock" ]; then
+            log "Desktop ist bereit (Wayland-Socket vorhanden)"
+            return 0
+        fi
+        sleep 0.5
+    done
+    die "Desktop kam nicht innerhalb ${DESKTOP_WAIT_S}s hoch (kein $sock)"
+}
+
 # ---------- Subcommands (vorerst Stubs) ----------
 cmd_tv() {
     log "Wechsle auf TV ($TV_OUTPUT, Mode $TV_MODE_ID)"
+    ensure_desktop_up
 
     # Display: enable + disable in einem kscreen-doctor-Aufruf (atomar)
     run kscreen-doctor \
@@ -145,6 +190,7 @@ cmd_tv() {
 }
 cmd_monitor() {
     log "Wechsle auf Monitor ($MON_OUTPUT, Mode $MON_MODE_ID, VRR $MON_VRR)"
+    ensure_desktop_up
 
     run kscreen-doctor \
         "output.${TV_OUTPUT}.disable" \
@@ -273,6 +319,16 @@ KSCREEN
     expected="DP-3"
     got=$(echo "$kscreen_tv" | parse_active_output)
     if [ "$got" != "$expected" ]; then log "FAIL parse_active_output tv: got='$got' want='$expected'"; fail=1; fi
+
+    # Test 7: desktop_state_from_isactive maps systemd output
+    got=$(desktop_state_from_isactive "active")
+    if [ "$got" != "up" ]; then log "FAIL desktop_state up: got='$got' want='up'"; fail=1; fi
+    got=$(desktop_state_from_isactive "inactive")
+    if [ "$got" != "down" ]; then log "FAIL desktop_state down(inactive): got='$got' want='down'"; fail=1; fi
+    got=$(desktop_state_from_isactive "failed")
+    if [ "$got" != "down" ]; then log "FAIL desktop_state down(failed): got='$got' want='down'"; fail=1; fi
+    got=$(desktop_state_from_isactive "")
+    if [ "$got" != "down" ]; then log "FAIL desktop_state down(empty): got='$got' want='down'"; fail=1; fi
 
     if [ "$fail" = 0 ]; then
         log "OK: alle Parser-Tests bestanden"
