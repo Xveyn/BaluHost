@@ -1,7 +1,12 @@
 # BaluHost Hardware - sudoers rules
 # Allows the baluhost backend to manage RAID arrays, disk health,
 # fan control (PWM), CPU frequency, and power management.
-# Installed by module 10 (systemd-services).
+#
+# Fresh install: rendered by module 10 (10-systemd-services.sh).
+# Existing box:  changes to this template reach prod ONLY via a
+#   SYNC_PERMISSIONS=1 deploy (ci-deploy.sh section 4b) or by running
+#   deploy/scripts/install-hardware-sudoers.sh manually. A routine deploy
+#   does NOT re-render it.
 
 # RAID management (mdadm)
 @@BALUHOST_USER@@ ALL=(root) NOPASSWD: /sbin/mdadm
