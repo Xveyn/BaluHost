@@ -9,6 +9,7 @@ from app.api.routes import (
     plugins_marketplace, benchmark,
     notifications, updates, chunked_upload, webdav, samba, cloud, cloud_export,
     sleep,
+    desktop,
     api_keys, desktop_pairing, ssd_file_cache, migration, pihole, env_config,
     backend_logs,
     activity,
@@ -66,6 +67,7 @@ api_router.include_router(samba.router, tags=["samba"])
 api_router.include_router(cloud.router, prefix="/cloud", tags=["cloud-import"])
 api_router.include_router(cloud_export.router, prefix="/cloud-export", tags=["cloud-export"])
 api_router.include_router(sleep.router, prefix="/system/sleep", tags=["sleep-mode"])
+api_router.include_router(desktop.router, prefix="/system/sleep/desktop", tags=["sleep-mode"])
 api_router.include_router(fritzbox.router, tags=["fritzbox"])
 api_router.include_router(api_keys.router, tags=["api-keys"])
 api_router.include_router(desktop_pairing.router, tags=["desktop-pairing"])
