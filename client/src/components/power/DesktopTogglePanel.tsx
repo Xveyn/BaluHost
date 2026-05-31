@@ -1,9 +1,11 @@
 /**
  * Desktop Toggle Panel
  *
- * Stops/starts the KDE display manager (SDDM) so the GPU can enter a
- * low-power state while the NAS remains fully accessible over the network.
- * The desktop session is re-started automatically when re-enabled.
+ * Turns the desktop display outputs off/on (via DPMS) so the GPU can enter a
+ * low-power state while the NAS remains fully accessible over the network. The
+ * KDE session keeps running — only the screens are powered down. (Stopping the
+ * display manager would instead light all outputs via the framebuffer console
+ * and pin the dGPU at high power, so DPMS is used here.)
  */
 
 import { useEffect, useState } from 'react';
@@ -79,8 +81,8 @@ export function DesktopTogglePanel() {
           <div>
             <h4 className="text-sm font-medium text-white">Desktop (KDE)</h4>
             <p className="mt-0.5 text-xs text-slate-400">
-              Beendet die KDE-Sitzung, damit die GPU in den Ruhezustand wechseln kann.
-              Beim Aktivieren startet der Desktop neu.
+              Schaltet die Bildschirme aus, damit die GPU in den Ruhezustand wechseln kann.
+              Die KDE-Sitzung läuft weiter; beim Aktivieren werden die Bildschirme wieder eingeschaltet.
             </p>
           </div>
         </div>
@@ -94,7 +96,7 @@ export function DesktopTogglePanel() {
               ? 'bg-amber-500/20 text-amber-300 hover:bg-amber-500/30'
               : 'bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30'
           }`}
-          title={running ? 'Desktop deaktivieren' : 'Desktop aktivieren'}
+          title={running ? 'Bildschirme ausschalten' : 'Bildschirme einschalten'}
         >
           {busy ? (
             <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
