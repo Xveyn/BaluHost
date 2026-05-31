@@ -56,7 +56,7 @@ This repo is **BaluHost**, a NAS management platform. You are adding a feature, 
 
 **Modified files:**
 - `backend/app/api/routes/__init__.py` — register the desktop router with `prefix="/system/sleep/desktop"`.
-- `deploy/install/templates/sudoers.d/baluhost-power.j2` — add three `systemctl ... sddm.service` rules.
+- `deploy/install/templates/sudoers-baluhost-power` — add three `systemctl ... sddm.service` rules (uses `%BALUHOST_USER%` placeholder, not Jinja2).
 - `client/src/pages/SleepMode.tsx` — render `<DesktopTogglePanel />`.
 
 ---
@@ -613,43 +613,50 @@ git commit -m "feat(desktop): add /system/sleep/desktop status/enable/disable en
 ## Task 5: Sudoers rule for sddm control
 
 **Files:**
-- Modify: `deploy/install/templates/sudoers.d/baluhost-power.j2`
+- Modify: `deploy/install/templates/sudoers-baluhost-power`
 
-**Design notes:** The linux backend runs `sudo systemctl start/stop sddm.service`. Without a NOPASSWD rule the backend cannot control SDDM (the prod box currently has no such rule — verified). Keep rules narrow: exact unit, exact verbs. `is-active` does not need sudo. CODEOWNERS protects `deploy/` — this goes through PR review. **This file is a Jinja2 template; do not render it as part of the source change.** The installer renders `{{ BALUHOST_USER }}`.
+**Design notes:** The linux backend runs `sudo systemctl start/stop sddm.service`. Without a NOPASSWD rule the backend cannot control SDDM (the prod box currently has no such rule). Keep rules narrow: exact unit, exact verbs, NO wildcards. `is-active` does not need sudo. CODEOWNERS protects `deploy/` — this goes through PR review.
+
+**Corrected (the 2026-05-30 draft guessed the wrong file/syntax):** the real template is `deploy/install/templates/sudoers-baluhost-power` (no `.j2`, no `sudoers.d/` subdir). It is NOT Jinja2 — it is substituted by `process_template()` in `deploy/install/modules/13-power-helpers.sh`, which replaces the literal placeholder **`%BALUHOST_USER%`** (not `{{ BALUHOST_USER }}`) and installs the result to `/etc/sudoers.d/baluhost-power` (mode 0440), then validates it with `visudo -cf`. Match the existing file's `%BALUHOST_USER%` style.
 
 - [ ] **Step 1: Add the rules**
 
-Append to `deploy/install/templates/sudoers.d/baluhost-power.j2` (after the existing rules):
+Append to `deploy/install/templates/sudoers-baluhost-power` (after the existing `baluhost-write-logind-idle` rule), mirroring its `%BALUHOST_USER%` style:
 
-```jinja
-{{ BALUHOST_USER }} ALL=(root) NOPASSWD: /usr/bin/systemctl start sddm.service
-{{ BALUHOST_USER }} ALL=(root) NOPASSWD: /usr/bin/systemctl stop sddm.service
-{{ BALUHOST_USER }} ALL=(root) NOPASSWD: /usr/bin/systemctl restart sddm.service
+```
+# BaluHost: allow the service user to start/stop the KDE display manager
+# (sddm) at runtime, so the desktop can be toggled off to let the dGPU drop
+# to idle (display_count == 0) and back on. Scoped to the single sddm.service
+# unit with explicit verbs — no wildcards, no general service control.
+%BALUHOST_USER% ALL=(root) NOPASSWD: /usr/bin/systemctl start sddm.service
+%BALUHOST_USER% ALL=(root) NOPASSWD: /usr/bin/systemctl stop sddm.service
+%BALUHOST_USER% ALL=(root) NOPASSWD: /usr/bin/systemctl restart sddm.service
 ```
 
 - [ ] **Step 2: Validate the rendered output parses as valid sudoers**
 
-Run from repo root:
+Run from repo root (use `python` on Windows; on the prod box use `.venv/bin/python`):
 
-```bash
-.venv/bin/python - <<'PY'
-text = open("deploy/install/templates/sudoers.d/baluhost-power.j2").read()
-rendered = text.replace("{{ BALUHOST_USER }}", "sven")
-open("/tmp/baluhost-power.rendered", "w").write(rendered)
-assert "{{" not in rendered, "unrendered Jinja remains"
-assert rendered.count("sddm.service") == 3, "expected 3 sddm rules"
-print(rendered)
-PY
-visudo -cf /tmp/baluhost-power.rendered
+```python
+t = open("deploy/install/templates/sudoers-baluhost-power", encoding="utf-8").read()
+r = t.replace("%BALUHOST_USER%", "sven")
+assert "%" not in r, "unsubstituted placeholder remains"
+rule_lines = [l.strip() for l in r.splitlines() if l.strip() and not l.strip().startswith("#")]
+sddm_rules = [l for l in rule_lines if "sddm.service" in l]
+assert len(sddm_rules) == 3, "expected 3 sddm rule lines"
+for verb in ("start", "stop", "restart"):
+    assert f"/usr/bin/systemctl {verb} sddm.service" in r, f"missing {verb} rule"
+for l in rule_lines:
+    assert l.startswith("sven ALL=(root) NOPASSWD: /"), f"malformed: {l}"
+print("OK")
 ```
 
-Expected: `visudo` prints `/tmp/baluhost-power.rendered: parsed OK`. (If `visudo` is unavailable on the dev machine, the two Python asserts above are the minimum gate.)
+On a Linux box also run `visudo -cf` against the rendered output. (On the Windows dev machine `visudo` is unavailable — the Python asserts above are the gate; the installer's own `visudo -cf` step in `13-power-helpers.sh` is the final guard at install time.)
 
-- [ ] **Step 3: Clean up + commit**
+- [ ] **Step 3: Commit**
 
 ```bash
-rm -f /tmp/baluhost-power.rendered
-git add deploy/install/templates/sudoers.d/baluhost-power.j2
+git add deploy/install/templates/sudoers-baluhost-power
 git commit -m "feat(desktop): allow service user to start/stop/restart sddm via sudoers"
 ```
 
