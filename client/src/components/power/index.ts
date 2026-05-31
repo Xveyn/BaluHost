@@ -11,3 +11,4 @@ export { SleepConfigPanel } from './SleepConfigPanel';
 export { SleepHistoryTable } from './SleepHistoryTable';
 export { CoreUptimePanel } from './CoreUptimePanel';
 export { CoreUptimeWindowCard } from './CoreUptimeWindowCard';
+export { DesktopTogglePanel } from './DesktopTogglePanel';

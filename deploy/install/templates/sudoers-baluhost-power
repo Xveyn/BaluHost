@@ -17,3 +17,11 @@
 %BALUHOST_USER% ALL=(root) NOPASSWD: /usr/bin/systemctl start power-profiles-daemon
 %BALUHOST_USER% ALL=(root) NOPASSWD: /usr/bin/systemctl mask power-profiles-daemon
 %BALUHOST_USER% ALL=(root) NOPASSWD: /usr/bin/systemctl unmask power-profiles-daemon
+
+# BaluHost: allow the service user to start/stop the KDE display manager
+# (sddm) at runtime, so the desktop can be toggled off to let the dGPU drop
+# to idle (display_count == 0) and back on. Scoped to the single sddm.service
+# unit with explicit verbs — no wildcards, no general service control.
+%BALUHOST_USER% ALL=(root) NOPASSWD: /usr/bin/systemctl start sddm.service
+%BALUHOST_USER% ALL=(root) NOPASSWD: /usr/bin/systemctl stop sddm.service
+%BALUHOST_USER% ALL=(root) NOPASSWD: /usr/bin/systemctl restart sddm.service
