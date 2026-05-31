@@ -34,11 +34,26 @@ def test_pill_state_minimal_construction():
     assert s.value is None and s.extra is None
 
 
-def test_catalog_has_eleven_pills_with_unique_ids():
+def test_catalog_has_twelve_pills_with_unique_ids():
     from app.services.status_bar.catalog import CATALOG
     ids = [p.id for p in CATALOG]
-    assert len(ids) == 11
-    assert len(set(ids)) == 11
+    assert len(ids) == 12
+    assert len(set(ids)) == 12
+
+
+def test_desktop_pill_in_catalog_unlocked_admin_default():
+    from app.services.status_bar.catalog import CATALOG_BY_ID
+    d = CATALOG_BY_ID["desktop"]
+    assert d.default_visibility == "admin"
+    assert d.visibility_locked is False
+    assert d.display_mode_configurable is True
+    assert d.href == "/admin/system-control?tab=sleep"
+
+
+def test_only_desktop_is_display_mode_configurable():
+    from app.services.status_bar.catalog import CATALOG
+    configurable = {p.id for p in CATALOG if p.display_mode_configurable}
+    assert configurable == {"desktop"}
 
 
 def test_locked_pills_default_to_admin_visibility():
@@ -69,7 +84,7 @@ from app.services.status_bar.service import StatusBarService
 def test_get_config_seeds_all_catalog_pills(db_session):
     svc = StatusBarService(db_session)
     config = svc.get_config()
-    assert len(config.pills) == 11
+    assert len(config.pills) == 12
     raid = next(p for p in config.pills if p.pill_id == "raid")
     assert raid.enabled is False
     assert raid.visibility_locked is True
@@ -81,7 +96,7 @@ def test_get_config_is_idempotent(db_session):
     svc.get_config()
     svc.get_config()
     from app.models.status_bar import StatusBarPillConfig
-    assert db_session.query(StatusBarPillConfig).count() == 11
+    assert db_session.query(StatusBarPillConfig).count() == 12
 
 
 # ── Task 10: config update (locked guard + diff) ────────────────────────

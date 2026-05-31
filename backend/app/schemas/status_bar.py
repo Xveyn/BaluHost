@@ -7,7 +7,7 @@ from pydantic import BaseModel
 # test_pill_id_literal_matches_catalog (see catalog tests).
 PILL_IDS = Literal[
     "power", "pihole", "uploads", "sync", "raid", "sleep", "vpn", "temp",
-    "always_awake", "scheduler", "backup",
+    "always_awake", "scheduler", "backup", "desktop",
 ]
 
 PillVisibility = Literal["admin", "all"]
