@@ -64,6 +64,8 @@ class StatusBarService:
                 visibility_locked=definition.visibility_locked,
                 sort_order=row.sort_order,
                 href=definition.href,
+                display_mode=getattr(row, "display_mode", "always"),
+                display_mode_configurable=definition.display_mode_configurable,
             ))
         return StatusBarConfigResponse(pills=entries, show_bottom_upload=settings.show_bottom_upload)
 
@@ -86,16 +88,17 @@ class StatusBarService:
             row = rows.get(item.pill_id)
             if row is None:
                 continue
-            before = (row.enabled, row.visibility, row.sort_order)
+            before = (row.enabled, row.visibility, row.sort_order, getattr(row, "display_mode", "always"))
             row.enabled = item.enabled
             row.visibility = item.visibility
             row.sort_order = item.sort_order
-            after = (row.enabled, row.visibility, row.sort_order)
+            row.display_mode = item.display_mode
+            after = (row.enabled, row.visibility, row.sort_order, row.display_mode)
             if before != after:
                 diff["changed"].append({
                     "pill_id": item.pill_id,
-                    "before": {"enabled": before[0], "visibility": before[1], "sort_order": before[2]},
-                    "after": {"enabled": after[0], "visibility": after[1], "sort_order": after[2]},
+                    "before": {"enabled": before[0], "visibility": before[1], "sort_order": before[2], "display_mode": before[3]},
+                    "after": {"enabled": after[0], "visibility": after[1], "sort_order": after[2], "display_mode": after[3]},
                 })
 
         settings = self._get_settings()

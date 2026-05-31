@@ -231,3 +231,25 @@ async def test_collect_state_skips_collector_with_malformed_output(db_session, m
     state = await svc.collect_state(role="admin")
     # The malformed "power" pill is skipped; the good "pihole" pill still renders.
     assert [p.id for p in state.pills] == ["pihole"]
+
+
+def test_pill_config_item_accepts_display_mode():
+    from app.schemas.status_bar import PillConfigItem
+    item = PillConfigItem(pill_id="desktop", enabled=True, visibility="admin",
+                          sort_order=0, display_mode="when_off")
+    assert item.display_mode == "when_off"
+
+
+def test_pill_config_item_display_mode_defaults_always():
+    from app.schemas.status_bar import PillConfigItem
+    item = PillConfigItem(pill_id="power", enabled=True, visibility="admin", sort_order=0)
+    assert item.display_mode == "always"
+
+
+def test_pill_config_item_rejects_bad_display_mode():
+    import pytest
+    from pydantic import ValidationError
+    from app.schemas.status_bar import PillConfigItem
+    with pytest.raises(ValidationError):
+        PillConfigItem(pill_id="desktop", enabled=True, visibility="admin",
+                       sort_order=0, display_mode="sometimes")

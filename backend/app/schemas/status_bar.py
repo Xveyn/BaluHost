@@ -13,6 +13,7 @@ PILL_IDS = Literal[
 PillVisibility = Literal["admin", "all"]
 PillKind = Literal["state", "activity", "alert"]
 PillTone = Literal["success", "info", "warning", "danger", "neutral"]
+DisplayMode = Literal["always", "when_off", "when_on"]
 
 
 class PillConfigItem(BaseModel):
@@ -20,6 +21,7 @@ class PillConfigItem(BaseModel):
     enabled: bool
     visibility: PillVisibility
     sort_order: int
+    display_mode: DisplayMode = "always"
 
 
 class StatusBarConfigUpdate(BaseModel):
@@ -36,6 +38,8 @@ class PillCatalogEntry(BaseModel):
     visibility_locked: bool
     sort_order: int
     href: str
+    display_mode: DisplayMode
+    display_mode_configurable: bool
 
 
 class StatusBarConfigResponse(BaseModel):
