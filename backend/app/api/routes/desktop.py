@@ -24,7 +24,7 @@ async def desktop_status(
     response: Response,
     current_user=Depends(get_current_user),
 ) -> DesktopStatus:
-    """Return whether the KDE desktop (display manager) is running."""
+    """Return whether the desktop displays are on (running) or off (stopped)."""
     return await get_desktop_service().get_status()
 
 
@@ -35,7 +35,11 @@ async def desktop_disable(
     response: Response,
     current_user=Depends(get_current_admin),
 ) -> dict:
-    """Stop the KDE desktop so the GPU can drop to idle. Admin only."""
+    """Turn the desktop displays off (DPMS) so the GPU can drop to idle.
+
+    Keeps the KWin session running; stopping sddm would instead light all
+    outputs via the framebuffer console and pin the dGPU at ~78W. Admin only.
+    """
     ok, message = await get_desktop_service().disable()
     get_audit_logger_db().log_event(
         event_type="POWER",
@@ -55,7 +59,7 @@ async def desktop_enable(
     response: Response,
     current_user=Depends(get_current_admin),
 ) -> dict:
-    """Start the KDE desktop. Admin only."""
+    """Turn the desktop displays back on (DPMS). Admin only."""
     ok, message = await get_desktop_service().enable()
     get_audit_logger_db().log_event(
         event_type="POWER",
