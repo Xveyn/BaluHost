@@ -2,10 +2,10 @@
 # via the locked-down helper script. Scoped to one binary; args wildcard
 # allowed but the helper validates strictly.
 #
-# Installed by deploy/install/modules/13-power-helpers.sh; uses %BALUHOST_USER%
-# template variable replaced by process_template().
+# Installed by deploy/install/modules/13-power-helpers.sh; the service-user
+# placeholder is substituted by process_template() (see lib/common.sh).
 
-%BALUHOST_USER% ALL=(root) NOPASSWD: /usr/local/lib/baluhost/baluhost-write-logind-idle *
+@@BALUHOST_USER@@ ALL=(root) NOPASSWD: /usr/local/lib/baluhost/baluhost-write-logind-idle *
 
 # BaluHost CPU power authority: stop/mask power-profiles-daemon so BaluHost is
 # the sole CPU frequency authority (and restore it when authority is disabled).
@@ -13,15 +13,15 @@
 # wildcards, no ALL. See backend/app/services/power/ppd_authority.py and
 # .claude/rules/ci-cd-security.md. Adjust the systemctl path if it differs from
 # /usr/bin/systemctl on the target distro.
-%BALUHOST_USER% ALL=(root) NOPASSWD: /usr/bin/systemctl stop power-profiles-daemon
-%BALUHOST_USER% ALL=(root) NOPASSWD: /usr/bin/systemctl start power-profiles-daemon
-%BALUHOST_USER% ALL=(root) NOPASSWD: /usr/bin/systemctl mask power-profiles-daemon
-%BALUHOST_USER% ALL=(root) NOPASSWD: /usr/bin/systemctl unmask power-profiles-daemon
+@@BALUHOST_USER@@ ALL=(root) NOPASSWD: /usr/bin/systemctl stop power-profiles-daemon
+@@BALUHOST_USER@@ ALL=(root) NOPASSWD: /usr/bin/systemctl start power-profiles-daemon
+@@BALUHOST_USER@@ ALL=(root) NOPASSWD: /usr/bin/systemctl mask power-profiles-daemon
+@@BALUHOST_USER@@ ALL=(root) NOPASSWD: /usr/bin/systemctl unmask power-profiles-daemon
 
 # BaluHost: allow the service user to start/stop the KDE display manager
 # (sddm) at runtime, so the desktop can be toggled off to let the dGPU drop
 # to idle (display_count == 0) and back on. Scoped to the single sddm.service
 # unit with explicit verbs — no wildcards, no general service control.
-%BALUHOST_USER% ALL=(root) NOPASSWD: /usr/bin/systemctl start sddm.service
-%BALUHOST_USER% ALL=(root) NOPASSWD: /usr/bin/systemctl stop sddm.service
-%BALUHOST_USER% ALL=(root) NOPASSWD: /usr/bin/systemctl restart sddm.service
+@@BALUHOST_USER@@ ALL=(root) NOPASSWD: /usr/bin/systemctl start sddm.service
+@@BALUHOST_USER@@ ALL=(root) NOPASSWD: /usr/bin/systemctl stop sddm.service
+@@BALUHOST_USER@@ ALL=(root) NOPASSWD: /usr/bin/systemctl restart sddm.service
