@@ -1,0 +1,320 @@
+#!/usr/bin/env bash
+# display-switch — wechselt zwischen TV (DP-3) und Monitor (HDMI-A-1)
+# Spec: ~/docs/superpowers/specs/2026-05-09-display-switch-design.md
+
+set -Eeuo pipefail   # -E: ERR-Trap auch in Funktionen aktiv
+trap 'die "Schritt fehlgeschlagen in Zeile $LINENO (letzter Befehl: $BASH_COMMAND)"' ERR
+
+# ---------- Konstanten ----------
+TV_OUTPUT="DP-3"
+TV_MODE_ID="2"
+TV_VRR="automatic"
+
+MON_OUTPUT="HDMI-A-1"
+MON_MODE_ID="59"
+MON_VRR="never"
+
+SINK_PATTERN_HDMI="hdmi-stereo"
+SINK_PATTERN_BT="bluez_output"
+SINK_PATTERN_FALLBACK="iec958"
+
+AUDIO_SINK_TIMEOUT_S=3
+
+# ---------- Globals ----------
+DRY_RUN=0
+
+# ---------- Helpers ----------
+log()  { printf '[display-switch] %s\n' "$*" >&2; }
+die()  { log "ERROR: $*"; exit 1; }
+
+run() {
+    if [ "$DRY_RUN" = 1 ]; then
+        printf '+ %s\n' "$*" >&2
+    else
+        "$@"
+    fi
+}
+
+usage() {
+    cat <<'EOF'
+Usage: display-switch <command> [--dry-run]
+
+Commands:
+  tv          Aktiviert DP-3 (TV, 4K@120), deaktiviert HDMI-A-1, Audio -> HDMI
+  monitor     Aktiviert HDMI-A-1 (1440p@144), deaktiviert DP-3, Audio -> Fallback
+  status      Zeigt aktiven Output und Default-Audio-Sink
+  __test      Interner Self-Test (Parser-Funktionen mit Fixtures)
+
+Options:
+  --dry-run   Statt auszuführen die Befehle auf stderr ausgeben
+EOF
+}
+
+# ---------- Parser ----------
+
+# parse_sink_match <pattern>
+# Liest `pactl list sinks short` von stdin, gibt ersten Sink-Namen aus,
+# dessen Name (Spalte 2) den Pattern als case-insensitive Substring enthält.
+# Exit-Code: 0 bei Match, 1 wenn kein Match.
+parse_sink_match() {
+    # Hinweis: mawk (Debian-Default) kennt kein IGNORECASE — pactl-Sink-Namen
+    # sind ohnehin lowercase, also reicht direktes Matching wenn das Pattern
+    # ebenfalls lowercase übergeben wird (siehe SINK_PATTERN_*-Konstanten).
+    local pattern=${1:?pattern required}
+    awk -v p="$pattern" '
+        BEGIN { found=0 }
+        $2 ~ p { print $2; found=1; exit }
+        END { exit !found }
+    '
+}
+
+# parse_active_output
+# Liest `kscreen-doctor -j` von stdin, gibt name des ersten Outputs aus,
+# der enabled UND connected ist. Leer + exit 1 wenn keiner.
+parse_active_output() {
+    python3 -c '
+import json, sys
+try:
+    d = json.load(sys.stdin)
+except Exception as e:
+    print(f"parse_active_output: invalid json: {e}", file=sys.stderr)
+    sys.exit(2)
+for o in d.get("outputs", []):
+    if o.get("enabled") and o.get("connected"):
+        print(o["name"])
+        sys.exit(0)
+sys.exit(1)
+'
+}
+
+# ---------- Audio ----------
+
+# find_sink <pattern> — gibt aktuelle pactl-Sink-Namen (live) zurück, der dem Pattern entspricht
+find_sink() {
+    local pattern=$1
+    pactl list sinks short | parse_sink_match "$pattern"
+}
+
+# wait_for_sink <pattern> <timeout_s> — pollt bis der Sink existiert oder Timeout
+wait_for_sink() {
+    local pattern=$1 timeout=$2
+    local end=$(( SECONDS + timeout ))
+    while [ "$SECONDS" -lt "$end" ]; do
+        local s
+        s=$(find_sink "$pattern" || true)
+        if [ -n "$s" ]; then
+            printf '%s\n' "$s"
+            return 0
+        fi
+        sleep 0.2
+    done
+    return 1
+}
+
+set_default_sink() {
+    local name=$1
+    run pactl set-default-sink "$name"
+}
+
+# ---------- Subcommands (vorerst Stubs) ----------
+cmd_tv() {
+    log "Wechsle auf TV ($TV_OUTPUT, Mode $TV_MODE_ID)"
+
+    # Display: enable + disable in einem kscreen-doctor-Aufruf (atomar)
+    run kscreen-doctor \
+        "output.${MON_OUTPUT}.disable" \
+        "output.${TV_OUTPUT}.enable" \
+        "output.${TV_OUTPUT}.mode.${TV_MODE_ID}" \
+        "output.${TV_OUTPUT}.position.0,0" \
+        "output.${TV_OUTPUT}.vrrpolicy.${TV_VRR}"
+
+    if [ "$DRY_RUN" = 1 ]; then
+        log "(dry-run) würde jetzt auf HDMI-Audio-Sink warten und set-default ausführen"
+        return 0
+    fi
+
+    # Audio: warten bis HDMI-Sink in PipeWire auftaucht, dann Default setzen
+    log "Warte auf HDMI-Audio-Sink (Timeout ${AUDIO_SINK_TIMEOUT_S}s) ..."
+    local sink
+    if sink=$(wait_for_sink "$SINK_PATTERN_HDMI" "$AUDIO_SINK_TIMEOUT_S"); then
+        log "Setze Default-Sink: $sink"
+        set_default_sink "$sink"
+    else
+        log "WARN: kein HDMI-Sink innerhalb ${AUDIO_SINK_TIMEOUT_S}s gefunden — Audio bleibt auf $(pactl get-default-sink)"
+    fi
+}
+cmd_monitor() {
+    log "Wechsle auf Monitor ($MON_OUTPUT, Mode $MON_MODE_ID, VRR $MON_VRR)"
+
+    run kscreen-doctor \
+        "output.${TV_OUTPUT}.disable" \
+        "output.${MON_OUTPUT}.enable" \
+        "output.${MON_OUTPUT}.mode.${MON_MODE_ID}" \
+        "output.${MON_OUTPUT}.position.0,0" \
+        "output.${MON_OUTPUT}.vrrpolicy.${MON_VRR}"
+
+    if [ "$DRY_RUN" = 1 ]; then
+        log "(dry-run) würde jetzt Audio-Smart-Strategie ausführen"
+        return 0
+    fi
+
+    # Smart-Strategie: Audio nur anfassen, wenn aktueller Default ein HDMI-Sink ist
+    local current
+    current=$(pactl get-default-sink 2>/dev/null || echo "")
+    log "Aktueller Default-Sink: ${current:-<none>}"
+
+    if [[ "$current" != *"$SINK_PATTERN_HDMI"* ]]; then
+        log "Default ist kein HDMI-Sink — Audio bleibt unangetastet"
+        return 0
+    fi
+
+    # Wechselziel: BT bevorzugt, sonst Onboard-S/PDIF
+    local target
+    target=$(find_sink "$SINK_PATTERN_BT" || true)
+    if [ -n "$target" ]; then
+        log "BT-Headset verbunden — wähle: $target"
+    else
+        target=$(find_sink "$SINK_PATTERN_FALLBACK" || true)
+        if [ -n "$target" ]; then
+            log "Fallback Onboard-S/PDIF: $target"
+        else
+            log "WARN: weder BT noch S/PDIF-Sink gefunden — Audio bleibt auf $current (TV-HDMI, vermutlich tot)"
+            return 0
+        fi
+    fi
+
+    set_default_sink "$target"
+}
+cmd_status() {
+    local active sink
+    active=$(kscreen-doctor -j 2>/dev/null | parse_active_output || true)
+    sink=$(pactl get-default-sink 2>/dev/null || echo "<unknown>")
+
+    case "$active" in
+        "$TV_OUTPUT")
+            printf 'mode=tv display=%s audio=%s\n' "$active" "$sink"
+            return 0
+            ;;
+        "$MON_OUTPUT")
+            printf 'mode=monitor display=%s audio=%s\n' "$active" "$sink"
+            return 1
+            ;;
+        "")
+            printf 'mode=ambiguous display=<none> audio=%s\n' "$sink"
+            return 2
+            ;;
+        *)
+            printf 'mode=unknown display=%s audio=%s\n' "$active" "$sink"
+            return 2
+            ;;
+    esac
+}
+
+cmd_test() {
+    local fail=0
+    local got expected
+
+    # Fixture: pactl list sinks short Output (Tab-getrennt)
+    local pactl_fixture
+    pactl_fixture=$(cat <<'PACTL'
+55	alsa_output.pci-0000_03_00.1.hdmi-stereo	PipeWire	s32le 2ch 48000Hz	SUSPENDED
+61	alsa_output.pci-0000_0e_00.6.iec958-stereo	PipeWire	s32le 2ch 48000Hz	SUSPENDED
+72	bluez_output.C8_2B_6B_35_0D_B3.1	PipeWire	s16le 2ch 48000Hz	RUNNING
+PACTL
+)
+
+    # Test 1: HDMI-Sink finden
+    expected="alsa_output.pci-0000_03_00.1.hdmi-stereo"
+    got=$(echo "$pactl_fixture" | parse_sink_match "hdmi-stereo")
+    if [ "$got" != "$expected" ]; then log "FAIL parse_sink_match hdmi: got='$got' want='$expected'"; fail=1; fi
+
+    # Test 2: BT-Sink finden
+    expected="bluez_output.C8_2B_6B_35_0D_B3.1"
+    got=$(echo "$pactl_fixture" | parse_sink_match "bluez_output")
+    if [ "$got" != "$expected" ]; then log "FAIL parse_sink_match bt: got='$got' want='$expected'"; fail=1; fi
+
+    # Test 3: Fallback (iec958)
+    expected="alsa_output.pci-0000_0e_00.6.iec958-stereo"
+    got=$(echo "$pactl_fixture" | parse_sink_match "iec958")
+    if [ "$got" != "$expected" ]; then log "FAIL parse_sink_match iec958: got='$got' want='$expected'"; fail=1; fi
+
+    # Test 4: Kein Match → leer
+    got=$(echo "$pactl_fixture" | parse_sink_match "doesnotexist" || true)
+    if [ -n "$got" ]; then log "FAIL parse_sink_match nomatch: got='$got' want=empty"; fail=1; fi
+
+    # Fixture: kscreen-doctor -j (gekürzt, nur was wir brauchen)
+    local kscreen_fixture
+    kscreen_fixture=$(cat <<'KSCREEN'
+{
+  "outputs": [
+    {"id":1,"name":"DP-3","connected":true,"enabled":false,"currentModeId":"2"},
+    {"id":2,"name":"HDMI-A-1","connected":true,"enabled":true,"currentModeId":"59"}
+  ]
+}
+KSCREEN
+)
+
+    # Test 5: Aktiven Output finden (Monitor-Modus)
+    expected="HDMI-A-1"
+    got=$(echo "$kscreen_fixture" | parse_active_output)
+    if [ "$got" != "$expected" ]; then log "FAIL parse_active_output mon: got='$got' want='$expected'"; fail=1; fi
+
+    # Test 6: Aktiven Output finden (TV-Modus)
+    local kscreen_tv
+    kscreen_tv=$(cat <<'KSCREEN'
+{
+  "outputs": [
+    {"id":1,"name":"DP-3","connected":true,"enabled":true,"currentModeId":"2"},
+    {"id":2,"name":"HDMI-A-1","connected":true,"enabled":false,"currentModeId":"59"}
+  ]
+}
+KSCREEN
+)
+    expected="DP-3"
+    got=$(echo "$kscreen_tv" | parse_active_output)
+    if [ "$got" != "$expected" ]; then log "FAIL parse_active_output tv: got='$got' want='$expected'"; fail=1; fi
+
+    if [ "$fail" = 0 ]; then
+        log "OK: alle Parser-Tests bestanden"
+        return 0
+    else
+        die "Parser-Tests fehlgeschlagen"
+    fi
+}
+
+# ---------- Dispatch ----------
+main() {
+    # SSH-Sessions haben kein WAYLAND_DISPLAY/XDG_RUNTIME_DIR — versuche zu raten
+    if [ -z "${XDG_RUNTIME_DIR:-}" ]; then
+        export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+    fi
+    if [ -z "${WAYLAND_DISPLAY:-}" ] && [ -S "$XDG_RUNTIME_DIR/wayland-0" ]; then
+        export WAYLAND_DISPLAY="wayland-0"
+    fi
+
+    local cmd=""
+    for a in "$@"; do
+        case "$a" in
+            --dry-run) DRY_RUN=1 ;;
+            -h|--help) usage; exit 0 ;;
+            -*)        die "Unknown option: $a" ;;
+            *)         if [ -z "$cmd" ]; then cmd="$a"; else die "Unexpected extra argument: $a"; fi ;;
+        esac
+    done
+
+    case "$cmd" in
+        tv)        cmd_tv ;;
+        monitor)   cmd_monitor ;;
+        # status nutzt non-zero Exit-Codes als Modus-Signal (1=monitor, 2=ambiguous).
+        # Ohne `|| exit $?` würde set -e den Rückgabewert als Fehler werten und die ERR-Trap auslösen.
+        status)    cmd_status || exit $? ;;
+        __test)    cmd_test ;;
+        ""|help)   usage; exit 0 ;;
+        *)         usage; die "Unknown command: $cmd" ;;
+    esac
+}
+
+# Nur ausführen wenn direkt aufgerufen, nicht beim sourcen
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
+fi
