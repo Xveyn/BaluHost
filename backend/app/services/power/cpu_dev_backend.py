@@ -29,11 +29,13 @@ class DevCpuPowerBackend(CpuPowerBackend):
         self._current_profile: PowerProfile = PowerProfile.IDLE
         self._simulated_freq_mhz: float = 800.0
         self._current_governor: str = "powersave"
+        self._current_max_mhz: Optional[int] = None
         logger.info("DevCpuPowerBackend initialized (simulation mode)")
 
     async def apply_profile(self, config: PowerProfileConfig) -> Tuple[bool, Optional[str]]:
         """Simulate applying a power profile."""
         self._current_governor = config.governor
+        self._current_max_mhz = config.max_freq_mhz
         self._current_profile = config.profile
 
         # Simulate realistic frequency based on profile
@@ -64,6 +66,10 @@ class DevCpuPowerBackend(CpuPowerBackend):
     async def get_current_governor(self) -> Optional[str]:
         """Return the simulated current governor."""
         return self._current_governor
+
+    async def read_enforcement_state(self) -> Tuple[Optional[str], Optional[int]]:
+        """Return the last-applied governor and max frequency (simulated)."""
+        return self._current_governor, self._current_max_mhz
 
     def is_available(self) -> bool:
         """Dev backend is always available."""

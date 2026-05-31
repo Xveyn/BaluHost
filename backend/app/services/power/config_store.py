@@ -421,6 +421,136 @@ def list_active_demands() -> List[PowerDemandInfo]:
         return []
 
 
+def load_authority_config() -> dict[str, Any]:
+    """Load the singleton power_authority_config row (id=1).
+
+    Returns a dict with keys: external_authority_enabled, boost_rules_enabled,
+    ppd_prev_active, ppd_prev_enabled. Falls back to safe defaults if the row
+    is missing or the DB is unavailable.
+    """
+    from app.models.power import PowerAuthorityConfig
+    defaults: dict[str, Any] = {
+        "external_authority_enabled": False,
+        "boost_rules_enabled": True,
+        "ppd_prev_active": None,
+        "ppd_prev_enabled": None,
+    }
+    try:
+        db = SessionLocal()
+        try:
+            row = db.query(PowerAuthorityConfig).filter(PowerAuthorityConfig.id == 1).first()
+            if row is None:
+                return defaults
+            return {
+                "external_authority_enabled": bool(row.external_authority_enabled),
+                "boost_rules_enabled": bool(row.boost_rules_enabled),
+                "ppd_prev_active": row.ppd_prev_active,
+                "ppd_prev_enabled": row.ppd_prev_enabled,
+            }
+        finally:
+            db.close()
+    except Exception as exc:
+        logger.warning(f"Failed to load authority config: {exc}")
+        return defaults
+
+
+def list_boost_rules(enabled_only: bool = False) -> list[dict]:
+    """Return all boost rules as dicts, optionally filtered to enabled-only rows."""
+    from app.models.power_boost_rule import PowerBoostRule
+    try:
+        db = SessionLocal()
+        try:
+            q = db.query(PowerBoostRule)
+            if enabled_only:
+                q = q.filter(PowerBoostRule.enabled == True)  # noqa: E712
+            return [
+                {"id": r.id, "kind": r.kind, "pattern": r.pattern, "label": r.label,
+                 "target_max_mhz": r.target_max_mhz, "enabled": bool(r.enabled)}
+                for r in q.order_by(PowerBoostRule.id).all()
+            ]
+        finally:
+            db.close()
+    except Exception as exc:
+        logger.warning(f"Failed to list boost rules: {exc}")
+        return []
+
+
+def create_boost_rule(kind: str, label: str, pattern: Optional[str],
+                      target_max_mhz: Optional[int]) -> Optional[dict]:
+    from app.models.power_boost_rule import PowerBoostRule
+    db = SessionLocal()
+    try:
+        row = PowerBoostRule(kind=kind, label=label, pattern=pattern,
+                             target_max_mhz=target_max_mhz, enabled=True)
+        db.add(row); db.commit(); db.refresh(row)
+        return {"id": row.id, "kind": row.kind, "pattern": row.pattern,
+                "label": row.label, "target_max_mhz": row.target_max_mhz, "enabled": True}
+    except Exception as exc:
+        db.rollback(); logger.warning(f"create boost rule failed: {exc}"); return None
+    finally:
+        db.close()
+
+
+def update_boost_rule(rule_id: int, fields: dict) -> bool:
+    from app.models.power_boost_rule import PowerBoostRule
+    db = SessionLocal()
+    try:
+        row = db.query(PowerBoostRule).filter(PowerBoostRule.id == rule_id).first()
+        if row is None:
+            return False
+        for k, v in fields.items():
+            if hasattr(row, k) and k in {"kind", "pattern", "label", "target_max_mhz", "enabled"}:
+                setattr(row, k, v)
+        db.commit(); return True
+    except Exception as exc:
+        db.rollback(); logger.warning(f"update boost rule failed: {exc}"); return False
+    finally:
+        db.close()
+
+
+def delete_boost_rule(rule_id: int) -> bool:
+    from app.models.power_boost_rule import PowerBoostRule
+    db = SessionLocal()
+    try:
+        row = db.query(PowerBoostRule).filter(PowerBoostRule.id == rule_id).first()
+        if row is None:
+            return False
+        db.delete(row); db.commit(); return True
+    except Exception as exc:
+        db.rollback(); logger.warning(f"delete boost rule failed: {exc}"); return False
+    finally:
+        db.close()
+
+
+def save_authority_config(fields: dict[str, Any]) -> bool:
+    """Update fields on the singleton power_authority_config row (id=1).
+
+    Creates the row if it does not exist. Returns True on success, False on error.
+    """
+    from app.models.power import PowerAuthorityConfig
+    try:
+        db = SessionLocal()
+        try:
+            row = db.query(PowerAuthorityConfig).filter(PowerAuthorityConfig.id == 1).first()
+            if row is None:
+                row = PowerAuthorityConfig(id=1)
+                db.add(row)
+            for key, value in fields.items():
+                if hasattr(row, key):
+                    setattr(row, key, value)
+            db.commit()
+            return True
+        except Exception as exc:
+            db.rollback()
+            logger.warning(f"Failed to save authority config: {exc}")
+            return False
+        finally:
+            db.close()
+    except Exception as exc:
+        logger.warning(f"Failed to open session for authority config: {exc}")
+        return False
+
+
 def delete_expired_demands(now: Optional[datetime] = None) -> List[PowerDemandInfo]:
     """
     Remove power_demands rows whose ``expires_at`` is in the past.
