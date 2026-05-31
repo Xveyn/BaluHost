@@ -4,7 +4,7 @@
 
 **Goal:** Add a BaluHost "Desktop" control under the Sleep feature that can stop/start the KDE desktop (SDDM) at runtime so the AMD GPU can drop to idle, and make the existing `display-switch` script auto-restart the desktop whenever the user switches displays.
 
-**Architecture:** A new `DesktopBackend` (dev + linux) mirrors the existing sleep backend pattern (`sleep_backend_dev.py` / `sleep_backend_linux.py`). The linux backend wraps `systemctl start/stop/is-active sddm.service` via a narrow sudoers rule. A thin `DesktopService` exposes status/enable/disable, surfaced through three endpoints included under the `/sleep/desktop` prefix and a small panel on the existing Sleep page. Separately, `display-switch` gains a guard: before switching outputs it ensures the desktop is running (start SDDM + wait for the Wayland socket), because switching a display only makes sense with KDE up.
+**Architecture:** A new `DesktopBackend` (dev + linux) mirrors the existing sleep backend pattern (`sleep_backend_dev.py` / `sleep_backend_linux.py`). The linux backend wraps `systemctl start/stop/is-active sddm.service` via a narrow sudoers rule. A thin `DesktopService` exposes status/enable/disable, surfaced through three endpoints included under the `/system/sleep/desktop` prefix (co-located with the sleep feature, which lives under `/system/sleep`) and a small panel on the existing Sleep page. Separately, `display-switch` gains a guard: before switching outputs it ensures the desktop is running (start SDDM + wait for the Wayland socket), because switching a display only makes sense with KDE up.
 
 **Tech Stack:** Python 3.13 / FastAPI / Pydantic v2 / SQLAlchemy (backend), React 18 + TypeScript + axios (frontend), bash + systemd + sddm + kscreen-doctor (host), pytest (tests).
 
@@ -20,11 +20,11 @@ This repo is **BaluHost**, a NAS management platform. You are adding a feature, 
 - The existing sleep feature is the closest analog and the pattern to copy:
   - Service: `backend/app/services/power/sleep.py`, accessed via `get_sleep_manager()` (returns None if not running). Backends: `sleep_backend_dev.py` + `sleep_backend_linux.py`.
   - `LinuxSleepBackend` shells out with `subprocess.run(cmd, capture_output=True, text=True, timeout=...)` using **list args** and returns a `(ok, message)`-style result. Sleep's suspend uses `["sudo", "systemctl", "suspend"]`.
-  - Route: `backend/app/api/routes/sleep.py` declares a bare `router = APIRouter()` (NO prefix in the file). It is registered in `backend/app/api/routes/__init__.py` (~line 120) as:
-    `api_router.include_router(sleep.router, prefix="/sleep", tags=["sleep"])`
-    The prefix is applied at include time. Endpoints use `@user_limiter.limit(get_limit("admin_operations"))` and `Depends(get_current_user)` / `Depends(get_current_admin)`.
+  - Route: `backend/app/api/routes/sleep.py` declares a bare `router = APIRouter()` (NO prefix in the file). It is registered in `backend/app/api/routes/__init__.py` (~line 68, verified on `origin/main`) as:
+    `api_router.include_router(sleep.router, prefix="/system/sleep", tags=["sleep-mode"])`
+    The prefix is applied at include time — so sleep endpoints live under `/api/system/sleep/...`, NOT `/api/sleep/...`. Endpoints use `@user_limiter.limit(get_limit("admin_operations"))` and `Depends(get_current_user)` / `Depends(get_current_admin)`.
   - Schemas: `backend/app/schemas/sleep.py`.
-  - Frontend page: `client/src/pages/SleepMode.tsx`; API client `client/src/api/sleep.ts` (`import { api } from '../lib/api';`); panels under `client/src/components/power/`.
+  - Frontend page: `client/src/pages/SleepMode.tsx`; API client `client/src/api/sleep.ts` imports `import { apiClient } from '../lib/api';` (there is NO `api` export — `lib/api.ts` exports `apiClient`) and uses **full** paths including the `/api` prefix, e.g. `apiClient.get('/api/system/sleep/status')`; panels under `client/src/components/power/`.
 - The audit logger signature (verified): `log_event(event_type, user, action, resource=None, details=None, success=True, error_message=None, ip_address=None, user_agent=None, db=None)`. **`db` defaults to None** and `user` accepts `None`, so the keyword-argument calls in this plan are valid and need no DB session.
 - Sudoers are templated, **not** hand-edited: `deploy/install/templates/sudoers.d/baluhost-power.j2` is rendered by the installer (Jinja2) with `BALUHOST_USER`. It already grants `systemctl suspend` etc. CODEOWNERS protects `deploy/`. The prod box currently has **no** rule for `sddm.service` — Task 5 adds it.
 - `display-switch` lives at `~/.local/bin/display-switch` and is **not** versioned in this repo. It already has a `__test` self-test (fixtures) and a `--dry-run` mode. Constants: `TV_OUTPUT="DP-3"`, `MON_OUTPUT="HDMI-A-1"`. It always activates exactly one output, so it can never produce `display_count == 0` on its own — that is why the desktop toggle (not display-switch) is what enables GPU idle. Task 7 vendors the script into the repo and adds the desktop guard.
@@ -46,7 +46,7 @@ This repo is **BaluHost**, a NAS management platform. You are adding a feature, 
 - `backend/app/schemas/desktop.py` — Pydantic models: `DesktopState` enum, `DesktopStatus`.
 - `backend/app/services/power/desktop_backend.py` — backend protocol + `DevDesktopBackend` + `LinuxDesktopBackend` (one small file, like the sleep backends).
 - `backend/app/services/power/desktop.py` — `DesktopService` + `get_desktop_service()` singleton.
-- `backend/app/api/routes/desktop.py` — bare `APIRouter()` with three endpoints (included under `/sleep/desktop`).
+- `backend/app/api/routes/desktop.py` — bare `APIRouter()` with three endpoints (included under `/system/sleep/desktop`).
 - `backend/tests/test_desktop_backend.py` — schema + backend unit tests (mock subprocess).
 - `backend/tests/test_desktop_service.py` — service unit tests.
 - `backend/tests/test_desktop_routes.py` — API tests (dev backend, no real systemctl).
@@ -55,7 +55,7 @@ This repo is **BaluHost**, a NAS management platform. You are adding a feature, 
 - `deploy/scripts/display-switch` — versioned copy of the host script + desktop guard.
 
 **Modified files:**
-- `backend/app/api/routes/__init__.py` — register the desktop router with `prefix="/sleep/desktop"`.
+- `backend/app/api/routes/__init__.py` — register the desktop router with `prefix="/system/sleep/desktop"`.
 - `deploy/install/templates/sudoers.d/baluhost-power.j2` — add three `systemctl ... sddm.service` rules.
 - `client/src/pages/SleepMode.tsx` — render `<DesktopTogglePanel />`.
 
@@ -448,7 +448,7 @@ git commit -m "feat(desktop): add DesktopService singleton"
 - Modify: `backend/app/api/routes/__init__.py`
 - Test: `backend/tests/test_desktop_routes.py`
 
-**Design notes:** Status is a read (any authenticated user). enable/disable are state-changing -> `Depends(get_current_admin)`, rate-limited, audit-logged. The route module declares a **bare `router = APIRouter()`** (no prefix in the file — matching `sleep.py`); the `/sleep/desktop` prefix is applied at include time in `__init__.py`. `@user_limiter.limit(...)` requires `request: Request` in the signature (slowapi reads it).
+**Design notes:** Status is a read (any authenticated user). enable/disable are state-changing -> `Depends(get_current_admin)`, rate-limited, audit-logged. The route module declares a **bare `router = APIRouter()`** (no prefix in the file — matching `sleep.py`); the `/system/sleep/desktop` prefix is applied at include time in `__init__.py`. `@user_limiter.limit(...)` requires `request: Request` in the signature (slowapi reads it).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -481,25 +481,25 @@ def client():
 
 
 def test_status_endpoint(client):
-    r = client.get("/api/sleep/desktop/status")
+    r = client.get("/api/system/sleep/desktop/status")
     assert r.status_code == 200
     assert r.json()["state"] == "running"
 
 
 def test_disable_then_status(client):
-    r = client.post("/api/sleep/desktop/disable")
+    r = client.post("/api/system/sleep/desktop/disable")
     assert r.status_code == 200
     assert r.json()["success"] is True
-    r = client.get("/api/sleep/desktop/status")
+    r = client.get("/api/system/sleep/desktop/status")
     assert r.json()["state"] == "stopped"
 
 
 def test_enable_endpoint(client):
-    client.post("/api/sleep/desktop/disable")
-    r = client.post("/api/sleep/desktop/enable")
+    client.post("/api/system/sleep/desktop/disable")
+    r = client.post("/api/system/sleep/desktop/enable")
     assert r.status_code == 200
     assert r.json()["success"] is True
-    r = client.get("/api/sleep/desktop/status")
+    r = client.get("/api/system/sleep/desktop/status")
     assert r.json()["state"] == "running"
 ```
 
@@ -515,7 +515,7 @@ Create `backend/app/api/routes/desktop.py`:
 ```python
 """Desktop (display-manager) control endpoints.
 
-Registered under the /sleep/desktop prefix in routes/__init__.py.
+Registered under the /system/sleep/desktop prefix in routes/__init__.py.
 """
 import logging
 
@@ -582,12 +582,12 @@ async def desktop_enable(
 
 - [ ] **Step 3b: Register the router**
 
-In `backend/app/api/routes/__init__.py`, find the sleep registration line (~120):
-`api_router.include_router(sleep.router, prefix="/sleep", tags=["sleep"])`
+In `backend/app/api/routes/__init__.py`, find the sleep registration line (~68):
+`api_router.include_router(sleep.router, prefix="/system/sleep", tags=["sleep-mode"])`
 Add `desktop` to the imports at the top of the file (next to where `sleep` is imported), and add directly below the sleep line:
 
 ```python
-    api_router.include_router(desktop.router, prefix="/sleep/desktop", tags=["sleep"])
+    api_router.include_router(desktop.router, prefix="/system/sleep/desktop", tags=["sleep-mode"])
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -599,7 +599,7 @@ Expected: PASS (3 tests)
 
 ```bash
 git add backend/app/api/routes/desktop.py backend/app/api/routes/__init__.py backend/tests/test_desktop_routes.py
-git commit -m "feat(desktop): add /sleep/desktop status/enable/disable endpoints"
+git commit -m "feat(desktop): add /system/sleep/desktop status/enable/disable endpoints"
 ```
 
 ---
@@ -658,14 +658,14 @@ git commit -m "feat(desktop): allow service user to start/stop/restart sddm via 
 - Create: `client/src/components/power/DesktopTogglePanel.tsx`
 - Modify: `client/src/pages/SleepMode.tsx`
 
-**Design notes:** `client/src/api/sleep.ts` uses `import { api } from '../lib/api';` (verified) — match it. Follow an existing panel under `client/src/components/power/` (e.g. `SleepModePanel.tsx`) for styling and loading/error conventions. There is no frontend unit-test harness (`npm run test` is a placeholder per dev docs), so verification is `npm run build` (type-check) plus the manual smoke in Task 8.
+**Design notes:** `client/src/api/sleep.ts` uses `import { apiClient } from '../lib/api';` (verified on `origin/main` — there is no `api` export) and full `/api/...` URLs — match it. Follow an existing panel under `client/src/components/power/` (e.g. `SleepModePanel.tsx`) for styling and loading/error conventions. There is no frontend unit-test harness (`npm run test` is a placeholder per dev docs), so verification is `npm run build` (type-check) plus the manual smoke in Task 8.
 
 - [ ] **Step 1: Create the API client**
 
 Create `client/src/api/desktop.ts`:
 
 ```typescript
-import { api } from '../lib/api';
+import { apiClient } from '../lib/api';
 
 export type DesktopState = 'running' | 'stopped' | 'unknown';
 
@@ -681,22 +681,22 @@ export interface DesktopActionResult {
 }
 
 export async function getDesktopStatus(): Promise<DesktopStatus> {
-  const { data } = await api.get<DesktopStatus>('/sleep/desktop/status');
+  const { data } = await apiClient.get<DesktopStatus>('/api/system/sleep/desktop/status');
   return data;
 }
 
 export async function disableDesktop(): Promise<DesktopActionResult> {
-  const { data } = await api.post<DesktopActionResult>('/sleep/desktop/disable');
+  const { data } = await apiClient.post<DesktopActionResult>('/api/system/sleep/desktop/disable');
   return data;
 }
 
 export async function enableDesktop(): Promise<DesktopActionResult> {
-  const { data } = await api.post<DesktopActionResult>('/sleep/desktop/enable');
+  const { data } = await apiClient.post<DesktopActionResult>('/api/system/sleep/desktop/enable');
   return data;
 }
 ```
 
-> Before writing, open `client/src/api/sleep.ts` and confirm base-path handling: if the axios instance already prefixes `/api`, the paths above are correct (`/sleep/...`). If sleep.ts includes `/api` explicitly in its URLs, add `/api` here to match. Mirror whatever sleep.ts does.
+> Verified against `client/src/api/sleep.ts` (and `client/src/lib/api.ts`) on `origin/main`: the module imports the named export **`apiClient`** (there is no `api` export) and passes **full** URLs that include the `/api` prefix — the `apiClient` axios instance has NO `baseURL` in dev (relative URLs flow through the Vite proxy, which only matches `/api`). So the paths above MUST start with `/api/system/sleep/desktop/...` and the import MUST be `apiClient`. Mirror whatever `sleep.ts` does.
 
 - [ ] **Step 2: Create the panel component**
 
@@ -964,7 +964,7 @@ Expected: success, no TS errors.
 **Spec coverage:**
 - "KDE deaktivieren können" -> Tasks 2-6 (backend + endpoint + UI `disable`). OK
 - "weiterhin Desktop UI nutzen können" -> `enable` endpoint + panel button, and Task 7 auto-restart on display switch. OK
-- "soll als Feature nach BaluHost unter Sleep" -> router included under `/sleep/desktop`, panel mounted on `SleepMode.tsx`. OK
+- "soll als Feature nach BaluHost unter Sleep" -> router included under `/system/sleep/desktop` (co-located with the sleep router at `/system/sleep`), panel mounted on `SleepMode.tsx`. OK
 - "display-switch aktiviert KDE wenn es aus ist" -> Task 7 `ensure_desktop_up`. OK
 - GPU can sleep once desktop is off -> relies on existing `display_count == 0` path; documented + smoke-tested in Task 8. OK
 
@@ -972,10 +972,10 @@ Expected: success, no TS errors.
 
 **Type consistency:** `DesktopState`/`DesktopStatus` defined in Task 1, reused unchanged in Tasks 2-4 and mirrored in TS in Task 6 (`running|stopped|unknown`). Backend methods `get_status`/`enable`/`disable` consistent across backend (Task 2), service (Task 3), route (Task 4). `desktop_state_from_isactive` returns `up`/`down` consistently in Task 7. Endpoint response shape `{success, message}` matches the TS `DesktopActionResult`.
 
-## Resolved facts (verified 2026-05-30, no longer open)
-1. `get_audit_logger_db().log_event(...)` has `db: Optional[Session] = None` and `user: Optional[str]` — the keyword calls in Task 4 are valid with no DB session.
-2. `client/src/api/sleep.ts` uses `import { api } from '../lib/api';` — matched in Task 6.
-3. Route registration style in `__init__.py`: prefix applied at include time (`include_router(sleep.router, prefix="/sleep", ...)`) — desktop router is a bare `APIRouter()` included with `prefix="/sleep/desktop"`.
+## Resolved facts (re-verified 2026-05-31 against `origin/main`)
+1. `get_audit_logger_db().log_event(...)` has `db: Optional[Session] = None` and `user: Optional[str]` (signature confirmed at `app/services/audit/logger_db.py:40`) — the keyword calls in Task 4 are valid with no DB session.
+2. **Corrected (was wrong in the 2026-05-30 draft):** `client/src/api/sleep.ts` uses `import { apiClient } from '../lib/api';` — there is NO `api` export. It passes full `/api/...` URLs (the dev axios instance has no `baseURL`; the Vite proxy only matches `/api`). Task 6 now uses `apiClient` + `/api/system/sleep/desktop/...`.
+3. **Corrected (was wrong in the 2026-05-30 draft):** the sleep router is registered as `include_router(sleep.router, prefix="/system/sleep", tags=["sleep-mode"])` (`__init__.py:68`), so sleep lives under `/api/system/sleep`, NOT `/api/sleep`. The desktop router is a bare `APIRouter()` included with `prefix="/system/sleep/desktop"` — and Task 4 tests + Task 6 client all use `/api/system/sleep/desktop/...` to match.
 4. Endpoints in `sleep.py` use `user_limiter` (not `limiter`) — matched in Task 4.
 
 ## One thing to confirm during execution
