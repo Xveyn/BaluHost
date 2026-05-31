@@ -18,7 +18,14 @@
       "coreUptimeUntil": "bis {{time}}"
     },
     "scheduler": { "name": "Scheduler" },
-    "backup": { "name": "Backup" }
+    "backup": { "name": "Backup" },
+    "desktop": { "name": "Desktop (KDE)" }
+  },
+  "displayMode": {
+    "label": "Anzeige",
+    "always": "Immer anzeigen",
+    "whenOff": "Nur wenn AUS",
+    "whenOn": "Nur wenn AN"
   },
   "visibility": { "admin": "Nur Admin", "all": "Alle Nutzer", "locked": "Nur Admin (gesperrt)" },
   "enabled": "Aktiv",
