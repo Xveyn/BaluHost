@@ -58,18 +58,20 @@ describe('PowerMenu — disable desktop quick action', () => {
     });
     render(<PowerMenu {...baseProps} />);
     openMenu();
-    await waitFor(() => expect(getDesktopStatus).toHaveBeenCalled());
-    await act(async () => {});
-    expect(screen.queryByText('Disable desktop')).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(getDesktopStatus).toHaveBeenCalled();
+      expect(screen.queryByText('Disable desktop')).not.toBeInTheDocument();
+    });
   });
 
   it('hides "Disable desktop" when the status lookup fails', async () => {
     (getDesktopStatus as unknown as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('no desktop'));
     render(<PowerMenu {...baseProps} />);
     openMenu();
-    await waitFor(() => expect(getDesktopStatus).toHaveBeenCalled());
-    await act(async () => {});
-    expect(screen.queryByText('Disable desktop')).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(getDesktopStatus).toHaveBeenCalled();
+      expect(screen.queryByText('Disable desktop')).not.toBeInTheDocument();
+    });
   });
 
   it('clicking it calls disableDesktop and shows a success toast', async () => {
@@ -79,16 +81,28 @@ describe('PowerMenu — disable desktop quick action', () => {
     (disableDesktop as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({ success: true, message: 'ok' });
     render(<PowerMenu {...baseProps} />);
     openMenu();
-    const item = await screen.findByText('Disable desktop');
+    const item = await screen.findByRole('button', { name: /Disable desktop/i });
     fireEvent.click(item);
     await waitFor(() => expect(disableDesktop).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(toast.success).toHaveBeenCalled());
   });
 
-  it('does not show "Disable desktop" for non-admins', async () => {
+  it('shows an error toast when disableDesktop returns success=false', async () => {
     (getDesktopStatus as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
       state: 'running', display_manager: 'sddm', detail: null,
     });
+    (disableDesktop as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: false, message: 'DPMS unavailable',
+    });
+    render(<PowerMenu {...baseProps} />);
+    openMenu();
+    fireEvent.click(await screen.findByRole('button', { name: /Disable desktop/i }));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('DPMS unavailable'));
+  });
+
+  it('does not show "Disable desktop" for non-admins', async () => {
+    // No getDesktopStatus mock needed: the effect is gated on isAdmin,
+    // so a non-admin never triggers the lookup.
     render(<PowerMenu {...baseProps} isAdmin={false} />);
     openMenu();
     await act(async () => {});

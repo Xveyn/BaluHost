@@ -21,7 +21,9 @@ export default function PowerMenu({ isAdmin, onShutdown, onRestart, onLogout }: 
   const [desktopState, setDesktopState] = useState<DesktopState | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Check sleep + desktop availability when dropdown opens
+  // Check sleep + desktop availability when dropdown opens. Both states are
+  // intentionally kept from the previous open and re-fetched on every open, so
+  // there is no flash of a missing item during the re-fetch.
   useEffect(() => {
     if (isOpen && isAdmin) {
       getSleepStatus()
