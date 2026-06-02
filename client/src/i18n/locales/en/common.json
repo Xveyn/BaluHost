@@ -253,7 +253,11 @@
     "suspendDesc": "Suspend system",
     "suspendConfirm": "Suspend the system? The server will be unreachable until woken up.",
     "suspendActivated": "System suspended",
-    "suspendFailed": "Failed to suspend system"
+    "suspendFailed": "Failed to suspend system",
+    "desktopDisable": "Disable desktop",
+    "desktopDisableDesc": "Turn off displays (saves GPU power)",
+    "desktopDisabled": "Desktop disabled",
+    "desktopDisableFailed": "Failed to disable desktop"
   },
   "adminOnly": "Admin only",
   "local_only_action_hint": "Only available via the BaluHost Companion app running on the server itself.",

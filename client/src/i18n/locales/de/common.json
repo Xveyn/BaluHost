@@ -253,7 +253,11 @@
     "suspendDesc": "System in Standby versetzen",
     "suspendConfirm": "System in Standby versetzen? Der Server ist nicht erreichbar, bis er aufgeweckt wird.",
     "suspendActivated": "System wird in Standby versetzt",
-    "suspendFailed": "Standby konnte nicht aktiviert werden"
+    "suspendFailed": "Standby konnte nicht aktiviert werden",
+    "desktopDisable": "Desktop deaktivieren",
+    "desktopDisableDesc": "Bildschirme ausschalten (GPU spart Strom)",
+    "desktopDisabled": "Desktop deaktiviert",
+    "desktopDisableFailed": "Desktop konnte nicht deaktiviert werden"
   },
   "adminOnly": "Nur für Admins",
   "local_only_action_hint": "Nur über die BaluHost-Companion-App am Server selbst möglich.",
