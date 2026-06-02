@@ -120,7 +120,7 @@ export function TwoFactorSetupFlow({
           {backupCodes.map((code) => (
             <div
               key={code}
-              className="px-3 py-2 rounded-lg bg-slate-800/60 border border-slate-700/40 font-mono text-sm text-center"
+              className="px-3 py-2 rounded-lg bg-slate-800/60 border border-slate-700/40 font-mono text-sm text-slate-200 text-center"
             >
               {code}
             </div>
@@ -170,7 +170,7 @@ export function TwoFactorSetupFlow({
         <label className="block text-xs font-medium text-slate-400 mb-1">
           {t('security.manualEntry')}
         </label>
-        <div className="px-3 py-2 rounded-lg bg-slate-800/60 border border-slate-700/40 font-mono text-sm break-all select-all">
+        <div className="px-3 py-2 rounded-lg bg-slate-800/60 border border-slate-700/40 font-mono text-sm text-slate-200 break-all select-all">
           {setupData.secret}
         </div>
       </div>
