@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.35.0] - 2026-06-02
+
+### Added
+
+- **(power)** i18n strings for PowerMenu disable-desktop action (de+en)
+- **(power)** add 'disable desktop' quick action to PowerMenu
+- **(power)** show dynamic-mode governor in power status pill
+- **(power)** show active preset + level in power status pill
+
+### Fixed
+
+- **(2fa)** readable contrast for 'Verification Code' label in setup modal
+- **(2fa)** readable contrast for secret + backup codes in setup modal
+- **(deploy)** hard-sync git on deploy + rollback to survive dirty tracked files
+
+### Documentation
+
+- **(power)** implementation plan for PowerMenu disable-desktop action
+- **(power)** spec for PowerMenu quick 'disable desktop' option
+- **(power)** implementation plan for preset in power status pill
+- **(power)** spec for showing active preset in power status pill
+
+---
+
 ## [1.34.0] - 2026-05-31
 
 ### Added
