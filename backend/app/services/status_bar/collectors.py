@@ -31,18 +31,18 @@ def _safe(default=None):
 async def collect_power(db: Session, role: str) -> Optional[dict]:
     from app.services.power.manager import get_power_manager
     status = await get_power_manager().get_power_status()
-    # PowerStatusResponse exposes the active profile as `current_profile`
-    # (a PowerProfile enum). Keep defensive fallbacks for older shapes.
-    profile = (
-        getattr(status, "current_profile", None)
-        or getattr(status, "active_profile", None)
-        or getattr(status, "profile", None)
-    )
+
+    profile = getattr(status, "current_profile", None)
     if not profile:
         return None
-    # PowerProfile is a str-enum; its `.value` (e.g. "idle") is the display text.
-    raw = getattr(profile, "value", profile)
-    label = str(raw).replace("_", " ").title()
+    # PowerProfile is a str-enum; its `.value` (e.g. "surge") is the level text.
+    level = str(getattr(profile, "value", profile)).replace("_", " ").title()
+
+    # Active preset (e.g. "Balanced"/"Performance") maps each level to MHz —
+    # it's what actually configures the CPU, so show it as the prominent part.
+    preset = getattr(status, "active_preset", None)
+    preset_name = getattr(preset, "name", None) if preset else None
+    label = f"{preset_name} · {level}" if preset_name else level
     return {"kind": "state", "tone": "info", "label": label, "icon": "Zap"}
 
 

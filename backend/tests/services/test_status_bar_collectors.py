@@ -371,3 +371,55 @@ async def test_collect_desktop_swallows_error():
 def test_desktop_registered_in_collectors():
     from app.services.status_bar.collectors import COLLECTORS
     assert "desktop" in COLLECTORS
+
+
+# ── power ────────────────────────────────────────────────────────────
+@pytest.mark.asyncio
+async def test_power_pill_preset_and_level():
+    from app.services.status_bar import collectors
+    preset = MagicMock()
+    preset.name = "Balanced"
+    status = MagicMock(
+        dynamic_mode_enabled=False,
+        current_profile=MagicMock(value="surge"),
+        active_preset=preset,
+    )
+    mgr = MagicMock()
+    mgr.get_power_status = AsyncMock(return_value=status)
+    with patch("app.services.power.manager.get_power_manager", return_value=mgr):
+        result = await collectors.collect_power(MagicMock(), "admin")
+    assert result["label"] == "Balanced · Surge"
+    assert result["tone"] == "info"
+    assert result["icon"] == "Zap"
+    assert "value" not in result
+
+
+@pytest.mark.asyncio
+async def test_power_pill_no_preset_fallback():
+    from app.services.status_bar import collectors
+    status = MagicMock(
+        dynamic_mode_enabled=False,
+        current_profile=MagicMock(value="surge"),
+        active_preset=None,
+    )
+    mgr = MagicMock()
+    mgr.get_power_status = AsyncMock(return_value=status)
+    with patch("app.services.power.manager.get_power_manager", return_value=mgr):
+        result = await collectors.collect_power(MagicMock(), "admin")
+    assert result["label"] == "Surge"
+    assert "value" not in result
+
+
+@pytest.mark.asyncio
+async def test_power_pill_silent_without_profile():
+    from app.services.status_bar import collectors
+    status = MagicMock(
+        dynamic_mode_enabled=False,
+        current_profile=None,
+        active_profile=None,
+        profile=None,
+    )
+    mgr = MagicMock()
+    mgr.get_power_status = AsyncMock(return_value=status)
+    with patch("app.services.power.manager.get_power_manager", return_value=mgr):
+        assert await collectors.collect_power(MagicMock(), "admin") is None
