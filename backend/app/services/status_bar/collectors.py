@@ -32,6 +32,14 @@ async def collect_power(db: Session, role: str) -> Optional[dict]:
     from app.services.power.manager import get_power_manager
     status = await get_power_manager().get_power_status()
 
+    # Dynamic mode: the kernel governor controls the CPU directly — the demand
+    # profile and preset are frozen and no longer reflect what's running, so we
+    # surface the mode + governor instead of a stale "preset · level".
+    if getattr(status, "dynamic_mode_enabled", False):
+        gov = getattr(getattr(status, "dynamic_mode_config", None), "governor", None)
+        label = f"Dynamisch · {gov}" if gov else "Dynamisch"
+        return {"kind": "state", "tone": "info", "label": label, "icon": "Zap"}
+
     profile = getattr(status, "current_profile", None)
     if not profile:
         return None

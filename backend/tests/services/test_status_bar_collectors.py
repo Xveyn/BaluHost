@@ -418,3 +418,33 @@ async def test_power_pill_silent_without_profile():
     mgr.get_power_status = AsyncMock(return_value=status)
     with patch("app.services.power.manager.get_power_manager", return_value=mgr):
         assert await collectors.collect_power(MagicMock(), "admin") is None
+
+
+@pytest.mark.asyncio
+async def test_power_pill_dynamic_mode_with_governor():
+    from app.services.status_bar import collectors
+    status = MagicMock(
+        dynamic_mode_enabled=True,
+        dynamic_mode_config=MagicMock(governor="schedutil"),
+    )
+    mgr = MagicMock()
+    mgr.get_power_status = AsyncMock(return_value=status)
+    with patch("app.services.power.manager.get_power_manager", return_value=mgr):
+        result = await collectors.collect_power(MagicMock(), "admin")
+    assert result["label"] == "Dynamisch · schedutil"
+    assert result["tone"] == "info"
+    assert result["icon"] == "Zap"
+
+
+@pytest.mark.asyncio
+async def test_power_pill_dynamic_mode_no_config():
+    from app.services.status_bar import collectors
+    status = MagicMock(
+        dynamic_mode_enabled=True,
+        dynamic_mode_config=None,
+    )
+    mgr = MagicMock()
+    mgr.get_power_status = AsyncMock(return_value=status)
+    with patch("app.services.power.manager.get_power_manager", return_value=mgr):
+        result = await collectors.collect_power(MagicMock(), "admin")
+    assert result["label"] == "Dynamisch"
