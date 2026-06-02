@@ -190,8 +190,12 @@ rollback() {
     log_info "Rolling back to commit: $PREV_COMMIT"
 
     cd "$INSTALL_DIR"
-    git checkout "$PREV_COMMIT" 2>/dev/null || {
-        log_error "git checkout $PREV_COMMIT failed"
+    # Force-reset rather than `git checkout`: the failed build may have left a
+    # tracked file dirty (same hazard as the forward update, #138), and a plain
+    # checkout would refuse it — exactly when the rollback is needed most.
+    # `--hard` discards those build artifacts; untracked files are left intact.
+    git reset --hard "$PREV_COMMIT" 2>/dev/null || {
+        log_error "git reset --hard $PREV_COMMIT failed"
         deploy_log_write "rollback_failed"
         exit 1
     }
@@ -319,9 +323,16 @@ fi
 log_step "Git Update"
 
 cd "$INSTALL_DIR"
+# Hard-sync to the remote instead of `git pull`. The prod box is a pure deploy
+# target (0 commits ahead of origin/main), so any local change to a tracked file
+# is a build artifact — e.g. client/package-lock.json normalized by `npm ci` —
+# that a plain `git pull` refuses to overwrite, aborting the deploy (#138).
+# `checkout -f` also re-attaches to main from a detached HEAD left by a prior
+# rollback. Untracked files (.env.production, backups/) are NOT touched — no
+# `git clean` is run, so deploy-local state is preserved.
 git fetch --all --prune
-git checkout main
-git pull origin main
+git checkout -f main
+git reset --hard origin/main
 
 NEW_COMMIT=$(git rev-parse HEAD)
 log_info "Updated: $OLD_COMMIT -> $NEW_COMMIT"
