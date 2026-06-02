@@ -179,7 +179,7 @@ export function TwoFactorSetupFlow({
 
       <form onSubmit={handleVerify} className="space-y-3">
         <div>
-          <label className="block text-sm font-medium mb-1">
+          <label className="block text-sm font-medium text-slate-300 mb-1">
             {t('security.verificationCode')}
           </label>
           <input
