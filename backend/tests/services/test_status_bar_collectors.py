@@ -413,12 +413,7 @@ async def test_power_pill_no_preset_fallback():
 @pytest.mark.asyncio
 async def test_power_pill_silent_without_profile():
     from app.services.status_bar import collectors
-    status = MagicMock(
-        dynamic_mode_enabled=False,
-        current_profile=None,
-        active_profile=None,
-        profile=None,
-    )
+    status = MagicMock(dynamic_mode_enabled=False, current_profile=None)
     mgr = MagicMock()
     mgr.get_power_status = AsyncMock(return_value=status)
     with patch("app.services.power.manager.get_power_manager", return_value=mgr):
