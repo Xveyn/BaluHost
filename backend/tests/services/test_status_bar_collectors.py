@@ -448,3 +448,5 @@ async def test_power_pill_dynamic_mode_no_config():
     with patch("app.services.power.manager.get_power_manager", return_value=mgr):
         result = await collectors.collect_power(MagicMock(), "admin")
     assert result["label"] == "Dynamisch"
+    assert result["tone"] == "info"
+    assert result["icon"] == "Zap"
