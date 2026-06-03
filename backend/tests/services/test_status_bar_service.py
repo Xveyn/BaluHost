@@ -38,6 +38,28 @@ def test_pill_state_minimal_construction():
     assert s.value is None and s.extra is None
 
 
+def test_pill_state_accepts_i18n_fields():
+    from app.schemas.status_bar import PillState
+    s = PillState(
+        id="vpn", kind="state", tone="success", href="/x",
+        label_key="pills.vpn.live",
+        value_key="pills.vpn.connected", value_params={"n": 2},
+    )
+    assert s.label_key == "pills.vpn.live"
+    assert s.value_key == "pills.vpn.connected"
+    assert s.value_params == {"n": 2}
+    assert s.label_params is None
+
+
+def test_pill_state_label_params_for_power():
+    from app.schemas.status_bar import PillState
+    s = PillState(
+        id="power", kind="state", tone="info", href="/x",
+        label_key="pills.power.profile", label_params={"preset": "Balanced", "level": "Surge"},
+    )
+    assert s.label_params == {"preset": "Balanced", "level": "Surge"}
+
+
 def test_catalog_has_twelve_pills_with_unique_ids():
     from app.services.status_bar.catalog import CATALOG
     ids = [p.id for p in CATALOG]

@@ -52,8 +52,12 @@ class PillState(BaseModel):
     id: PILL_IDS
     kind: PillKind
     tone: PillTone
-    label: str
-    value: Optional[str] = None
+    label: Optional[str] = None           # legacy literal label — removed in the i18n contract task
+    label_key: Optional[str] = None       # i18n key for the short live label, e.g. "pills.vpn.live"
+    label_params: Optional[dict] = None   # interpolation params for label_key (only `power` uses it)
+    value: Optional[str] = None           # pure-data value ("72°C", "14:30", "3") AND defaultValue fallback
+    value_key: Optional[str] = None       # i18n key for a translatable value, e.g. "pills.vpn.connected"
+    value_params: Optional[dict] = None   # interpolation params for value_key, e.g. {"n": 1}
     icon: Optional[str] = None
     href: str
     extra: Optional[dict] = None
