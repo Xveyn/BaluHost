@@ -584,9 +584,13 @@ git commit -m "feat(statusbar): emit i18n keys from sleep/vpn/temp/scheduler col
 
 - [ ] **Step 1: Write the failing tests**
 
-In `backend/tests/services/test_status_bar_collectors.py`:
+In `backend/tests/services/test_status_bar_collectors.py`, make exactly these edits to the backup tests:
+- **Rename** `test_backup_in_progress_shows_laeuft` → `test_backup_in_progress_shows_running_key` and replace its body (below).
+- **Replace the body** of `test_backup_failed_within_24h_is_danger` (keep the name) with the version below.
+- **Replace the body** of `test_backup_running_beats_recent_failure` (keep the name) with the version below.
+- **Leave unchanged**: `test_backup_failed_older_than_24h_is_silent`, `test_backup_completed_is_silent`.
 
-Replace `test_backup_in_progress_shows_laeuft` and `test_backup_running_beats_recent_failure` value assertions, and add a failed-key check:
+The three resulting test functions:
 
 ```python
 @pytest.mark.asyncio
@@ -627,8 +631,6 @@ async def test_backup_running_beats_recent_failure():
         result = await collectors.collect_backup(MagicMock(), "admin")
     assert result["value_key"] == "pills.backup.running"
 ```
-
-(Delete the now-duplicated old `test_backup_in_progress_shows_laeuft` and `test_backup_failed_within_24h_is_danger`; keep `test_backup_failed_older_than_24h_is_silent` and `test_backup_completed_is_silent` unchanged.)
 
 Replace `test_collect_desktop_running_neutral` and `test_collect_desktop_stopped_success` with:
 
@@ -1062,4 +1064,5 @@ git commit -m "test(statusbar): verify live-strip i18n end to end" --allow-empty
 - **`{{n}}` not `{{count}}`**: value params use `n` deliberately to avoid i18next's plural-suffix resolution (which would look for `connected_one`/`connected_other`).
 - **`value` doubles as fallback**: for `raid` the collector sends both `value_key` and raw `value`; the renderer's `defaultValue: pill.value` shows the raw status if a status key is missing.
 - **`AlwaysAwakePill` is unchanged**: it already derives its label/value from its own i18n keys and ignores `label_key`. Its collector still emits a valid `label_key` for schema validity.
+- **Route test is unaffected**: `backend/tests/api/test_status_bar_routes.py` only asserts `"pills" in r.json()` for `/state` (never a pill's `label`), and the default seed leaves all pills disabled (empty `pills`), so it stays green throughout the migration. No edits needed there.
 - **Windows/CRLF**: the repo uses `core.autocrlf=true`; the JSON/TS edits will show "LF will be replaced by CRLF" warnings on commit — that is expected, not an error.
