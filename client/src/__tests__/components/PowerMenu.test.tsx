@@ -19,11 +19,12 @@ vi.mock('../../api/sleep', () => ({
 vi.mock('../../api/desktop', () => ({
   getDesktopStatus: vi.fn(),
   disableDesktop: vi.fn(),
+  enableDesktop: vi.fn(),
 }));
 
 import PowerMenu from '../../components/PowerMenu';
 import { getSleepStatus } from '../../api/sleep';
-import { getDesktopStatus, disableDesktop } from '../../api/desktop';
+import { getDesktopStatus, disableDesktop, enableDesktop } from '../../api/desktop';
 import toast from 'react-hot-toast';
 
 const baseProps = {
@@ -107,6 +108,78 @@ describe('PowerMenu — disable desktop quick action', () => {
     openMenu();
     await act(async () => {});
     expect(screen.queryByText('Disable desktop')).not.toBeInTheDocument();
+    expect(getDesktopStatus).not.toHaveBeenCalled();
+  });
+});
+
+describe('PowerMenu — enable desktop quick action', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (getSleepStatus as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({});
+  });
+
+  it('shows "Enable desktop" when displays are stopped', async () => {
+    (getDesktopStatus as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      state: 'stopped', display_manager: 'sddm', detail: null,
+    });
+    render(<PowerMenu {...baseProps} />);
+    openMenu();
+    expect(await screen.findByText('Enable desktop')).toBeInTheDocument();
+  });
+
+  it('hides "Enable desktop" when displays are running', async () => {
+    (getDesktopStatus as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      state: 'running', display_manager: 'sddm', detail: null,
+    });
+    render(<PowerMenu {...baseProps} />);
+    openMenu();
+    await waitFor(() => {
+      expect(getDesktopStatus).toHaveBeenCalled();
+      expect(screen.queryByText('Enable desktop')).not.toBeInTheDocument();
+    });
+  });
+
+  it('hides "Enable desktop" when the status lookup fails', async () => {
+    (getDesktopStatus as unknown as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('no desktop'));
+    render(<PowerMenu {...baseProps} />);
+    openMenu();
+    await waitFor(() => {
+      expect(getDesktopStatus).toHaveBeenCalled();
+      expect(screen.queryByText('Enable desktop')).not.toBeInTheDocument();
+    });
+  });
+
+  it('clicking it calls enableDesktop and shows a success toast', async () => {
+    (getDesktopStatus as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      state: 'stopped', display_manager: 'sddm', detail: null,
+    });
+    (enableDesktop as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({ success: true, message: 'ok' });
+    render(<PowerMenu {...baseProps} />);
+    openMenu();
+    const item = await screen.findByRole('button', { name: /Enable desktop/i });
+    fireEvent.click(item);
+    await waitFor(() => expect(enableDesktop).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(toast.success).toHaveBeenCalled());
+  });
+
+  it('shows an error toast when enableDesktop returns success=false', async () => {
+    (getDesktopStatus as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      state: 'stopped', display_manager: 'sddm', detail: null,
+    });
+    (enableDesktop as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: false, message: 'display manager offline',
+    });
+    render(<PowerMenu {...baseProps} />);
+    openMenu();
+    fireEvent.click(await screen.findByRole('button', { name: /Enable desktop/i }));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('display manager offline'));
+  });
+
+  it('does not show "Enable desktop" for non-admins', async () => {
+    render(<PowerMenu {...baseProps} isAdmin={false} />);
+    openMenu();
+    await act(async () => {});
+    expect(screen.queryByText('Enable desktop')).not.toBeInTheDocument();
     expect(getDesktopStatus).not.toHaveBeenCalled();
   });
 });

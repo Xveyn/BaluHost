@@ -257,7 +257,11 @@
     "desktopDisable": "Disable desktop",
     "desktopDisableDesc": "Turn off displays (saves GPU power)",
     "desktopDisabled": "Desktop disabled",
-    "desktopDisableFailed": "Failed to disable desktop"
+    "desktopDisableFailed": "Failed to disable desktop",
+    "desktopEnable": "Enable desktop",
+    "desktopEnableDesc": "Turn displays back on",
+    "desktopEnabled": "Desktop enabled",
+    "desktopEnableFailed": "Failed to enable desktop"
   },
   "adminOnly": "Admin only",
   "local_only_action_hint": "Only available via the BaluHost Companion app running on the server itself.",
