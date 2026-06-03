@@ -252,3 +252,79 @@ class TestSwitchBackend:
         data = response.json()
         assert data["success"] is True
         assert "new_backend" in data
+
+
+class TestUpdateDynamicMode:
+    """Tests for PUT /api/power/dynamic-mode."""
+
+    def test_unknown_capabilities_does_not_false_400(
+        self, client: TestClient, admin_headers: dict, monkeypatch
+    ):
+        """A worker that can't enumerate governors must not pre-reject the body.
+
+        Regression (multi-worker): a follower with a cold/stale SHM snapshot
+        returns ``available_governors=[]``. The route used to raise 400
+        ("Governor not available") for any governor in that state, which under
+        4 Uvicorn workers caused intermittent 400s on ~3/4 of switch requests.
+        When the governor list is empty the route must defer to the primary
+        (the hardware authority) instead of guessing.
+        """
+        from unittest.mock import AsyncMock
+        import app.api.routes.power as power_routes
+        from app.schemas.power import DynamicModeConfig, DynamicModeConfigResponse
+
+        empty_caps = DynamicModeConfigResponse(
+            config=DynamicModeConfig(),
+            available_governors=[],  # capabilities unknown on this worker
+            system_min_freq_mhz=400,
+            system_max_freq_mhz=4600,
+        )
+
+        manager = AsyncMock()
+        manager.get_dynamic_mode_config = AsyncMock(return_value=empty_caps)
+        manager.enable_dynamic_mode = AsyncMock(return_value=(True, None))
+        manager.disable_dynamic_mode = AsyncMock(return_value=(True, None))
+        monkeypatch.setattr(power_routes, "get_power_manager", lambda: manager)
+
+        response = client.put(
+            "/api/power/dynamic-mode",
+            json={
+                "enabled": True,
+                "governor": "schedutil",
+                "min_freq_mhz": 400,
+                "max_freq_mhz": 4600,
+            },
+            headers=admin_headers,
+        )
+
+        assert response.status_code != 400
+        manager.enable_dynamic_mode.assert_awaited()
+
+    def test_known_capabilities_still_rejects_bad_governor(
+        self, client: TestClient, admin_headers: dict, monkeypatch
+    ):
+        """When the worker DOES know the governors, an unknown one still 400s."""
+        from unittest.mock import AsyncMock
+        import app.api.routes.power as power_routes
+        from app.schemas.power import DynamicModeConfig, DynamicModeConfigResponse
+
+        caps = DynamicModeConfigResponse(
+            config=DynamicModeConfig(),
+            available_governors=["powersave", "performance", "schedutil"],
+            system_min_freq_mhz=400,
+            system_max_freq_mhz=4600,
+        )
+
+        manager = AsyncMock()
+        manager.get_dynamic_mode_config = AsyncMock(return_value=caps)
+        manager.enable_dynamic_mode = AsyncMock(return_value=(True, None))
+        monkeypatch.setattr(power_routes, "get_power_manager", lambda: manager)
+
+        response = client.put(
+            "/api/power/dynamic-mode",
+            json={"enabled": True, "governor": "bogus-governor"},
+            headers=admin_headers,
+        )
+
+        assert response.status_code == 400
+        manager.enable_dynamic_mode.assert_not_awaited()

@@ -602,6 +602,58 @@ class TestPowerManagerServiceStatus:
         assert "surge" in payload_json
 
     @pytest.mark.asyncio
+    async def test_follower_dynamic_mode_config_reads_capabilities_from_shm(self):
+        """A follower (no backend) must source governors + freq range from SHM.
+
+        Regression (multi-worker): with 4 Uvicorn workers only the primary owns
+        a backend; followers have ``self._backend is None``. GET/PUT
+        /dynamic-mode landing on a follower returned ``available_governors=[]``,
+        which left the UI governor list empty and made the PUT governor
+        validation raise 400 (``governor not in []``).
+        """
+        from app.services.monitoring import shm
+
+        follower = PowerManagerService()
+        follower._is_running = True
+        follower._primary = False
+        follower._backend = None  # follower owns no hardware backend
+        follower._dynamic_mode_config = None
+
+        shm.write_shm(
+            "power_status.json",
+            {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "backend_kind": "linux",
+                "available_governors": ["powersave", "performance", "schedutil"],
+                "system_min_freq_mhz": 400,
+                "system_max_freq_mhz": 4600,
+            },
+        )
+
+        resp = await follower.get_dynamic_mode_config()
+
+        assert resp.available_governors == ["powersave", "performance", "schedutil"]
+        assert resp.system_min_freq_mhz == 400
+        assert resp.system_max_freq_mhz == 4600
+
+    @pytest.mark.asyncio
+    async def test_primary_writes_capabilities_into_shm(self, service):
+        """The primary's status SHM snapshot must carry governors + freq range
+        so followers can answer GET /dynamic-mode and validate PUT bodies."""
+        from app.services.monitoring import shm
+
+        service._primary = True
+        await service._write_status_shm()
+
+        snapshot = shm.read_shm("power_status.json", max_age_seconds=30.0)
+        assert snapshot is not None
+        # Dev backend governors
+        assert "powersave" in snapshot["available_governors"]
+        assert "performance" in snapshot["available_governors"]
+        assert snapshot["system_min_freq_mhz"] is not None
+        assert snapshot["system_max_freq_mhz"] is not None
+
+    @pytest.mark.asyncio
     async def test_active_demands_are_db_backed(self, service):
         """register_demand should write to power_demands; get_active_demands reads from it."""
         await service.register_demand(
