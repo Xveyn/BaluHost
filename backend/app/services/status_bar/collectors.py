@@ -154,7 +154,7 @@ async def collect_sleep(db: Session, role: str) -> Optional[dict]:
         sleep_time = getattr(config, "schedule_sleep_time", None)
     except Exception:  # noqa: BLE001 - value is optional, never block the pill
         sleep_time = None
-    return {"kind": "state", "tone": "neutral", "label": "Sleep",
+    return {"kind": "state", "tone": "neutral", "label_key": "pills.sleep.live",
             "value": sleep_time, "icon": "Moon"}
 
 
@@ -250,8 +250,9 @@ async def collect_vpn(db: Session, role: str) -> Optional[dict]:
     return {
         "kind": "state",
         "tone": "success" if connected > 0 else "neutral",
-        "label": "VPN",
-        "value": f"{connected} verbunden",
+        "label_key": "pills.vpn.live",
+        "value_key": "pills.vpn.connected",
+        "value_params": {"n": connected},
         "icon": "Lock",
     }
 
@@ -288,7 +289,7 @@ async def collect_scheduler(db: Session, role: str) -> Optional[dict]:
     return {
         "kind": "activity",
         "tone": "info",
-        "label": "Scheduler",
+        "label_key": "pills.scheduler.live",
         "value": str(len(rows)),
         "icon": "Clock",
         "extra": {"jobs": jobs},
@@ -366,7 +367,7 @@ async def collect_temp(db: Session, role: str) -> Optional[dict]:
     if not hot:
         return None
     name, temp = hot[0]
-    return {"kind": "alert", "tone": "danger", "label": "Temp",
+    return {"kind": "alert", "tone": "danger", "label_key": "pills.temp.live",
             "value": f"{int(temp)}°C", "icon": "Thermometer"}
 
 

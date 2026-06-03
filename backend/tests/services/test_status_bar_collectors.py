@@ -242,7 +242,9 @@ async def test_vpn_neutral_when_configured_but_none_connected():
         result = await collectors.collect_vpn(MagicMock(), "admin")
     assert result is not None
     assert result["tone"] == "neutral"
-    assert result["value"] == "0 verbunden"
+    assert result["label_key"] == "pills.vpn.live"
+    assert result["value_key"] == "pills.vpn.connected"
+    assert result["value_params"] == {"n": 0}
 
 
 @pytest.mark.asyncio
@@ -251,8 +253,47 @@ async def test_vpn_success_when_peers_connected():
     with patch.object(collectors, "_vpn_peer_counts", return_value=(2, 4)):
         result = await collectors.collect_vpn(MagicMock(), "admin")
     assert result["tone"] == "success"
-    assert result["value"] == "2 verbunden"
-    assert result["label"] == "VPN"
+    assert result["value_params"] == {"n": 2}
+    assert result["label_key"] == "pills.vpn.live"
+    assert "label" not in result
+
+
+@pytest.mark.asyncio
+async def test_collect_sleep_uses_label_key_and_raw_time():
+    from app.services.status_bar import collectors
+    status = MagicMock(schedule_enabled=True)
+    config = MagicMock(schedule_sleep_time="23:30")
+    mgr = MagicMock()
+    mgr.get_status = MagicMock(return_value=status)
+    mgr.get_config = MagicMock(return_value=config)
+    with patch.object(collectors, "get_sleep_manager", return_value=mgr):
+        result = await collectors.collect_sleep(MagicMock(), "admin")
+    assert result["label_key"] == "pills.sleep.live"
+    assert result["value"] == "23:30"
+
+
+@pytest.mark.asyncio
+async def test_collect_temp_uses_label_key_and_raw_celsius():
+    from app.services.status_bar import collectors
+    service = MagicMock()
+    service.get_status = AsyncMock(return_value={"fans": [
+        {"name": "cpu", "temperature_celsius": 95, "emergency_temp_celsius": 90},
+    ]})
+    with patch("app.services.power.fan_control.get_fan_control_service", return_value=service):
+        result = await collectors.collect_temp(MagicMock(), "admin")
+    assert result["label_key"] == "pills.temp.live"
+    assert result["value"] == "95°C"
+
+
+@pytest.mark.asyncio
+async def test_collect_scheduler_uses_label_key():
+    from datetime import datetime, timezone
+    from app.services.status_bar import collectors
+    rows = [_exec("backup", "running", datetime(2026, 5, 28, 10, tzinfo=timezone.utc))]
+    with patch.object(collectors, "_active_executions", return_value=rows):
+        result = await collectors.collect_scheduler(MagicMock(), "admin")
+    assert result["label_key"] == "pills.scheduler.live"
+    assert result["value"] == "1"
 
 
 def test_vpn_peer_counts_only_counts_recent_handshakes():
