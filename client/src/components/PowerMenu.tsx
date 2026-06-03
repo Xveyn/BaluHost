@@ -1,9 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Power, PowerOff, RotateCcw, LogOut, Moon, Pause, MonitorOff } from 'lucide-react';
+import { Power, PowerOff, RotateCcw, LogOut, Moon, Pause, MonitorOff, Monitor } from 'lucide-react';
 import { ConfirmDialog } from './ui/ConfirmDialog';
 import { getSleepStatus, enterSoftSleep, enterSuspend } from '../api/sleep';
-import { getDesktopStatus, disableDesktop, type DesktopState } from '../api/desktop';
+import { getDesktopStatus, disableDesktop, enableDesktop, type DesktopState } from '../api/desktop';
 import toast from 'react-hot-toast';
 
 interface PowerMenuProps {
@@ -88,6 +88,20 @@ export default function PowerMenu({ isAdmin, onShutdown, onRestart, onLogout }: 
       }
     } catch {
       toast.error(t('powerMenu.desktopDisableFailed', 'Failed to disable desktop'));
+    }
+  };
+
+  const handleEnableDesktop = async () => {
+    setIsOpen(false);
+    try {
+      const result = await enableDesktop();
+      if (result.success) {
+        toast.success(t('powerMenu.desktopEnabled', 'Desktop enabled'));
+      } else {
+        toast.error(result.message || t('powerMenu.desktopEnableFailed', 'Failed to enable desktop'));
+      }
+    } catch {
+      toast.error(t('powerMenu.desktopEnableFailed', 'Failed to enable desktop'));
     }
   };
 
@@ -177,6 +191,21 @@ export default function PowerMenu({ isAdmin, onShutdown, onRestart, onLogout }: 
                       <div>
                         <p className="text-sm font-medium text-slate-100">{t('powerMenu.desktopDisable', 'Disable desktop')}</p>
                         <p className="text-xs text-slate-400">{t('powerMenu.desktopDisableDesc', 'Turn off displays (saves GPU power)')}</p>
+                      </div>
+                    </button>
+                  )}
+
+                  {desktopState === 'stopped' && (
+                    <button
+                      onClick={handleEnableDesktop}
+                      className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition hover:bg-emerald-500/10"
+                    >
+                      <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-emerald-500/30 bg-emerald-500/10">
+                        <Monitor className="h-4 w-4 text-emerald-400" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-slate-100">{t('powerMenu.desktopEnable', 'Enable desktop')}</p>
+                        <p className="text-xs text-slate-400">{t('powerMenu.desktopEnableDesc', 'Turn displays back on')}</p>
                       </div>
                     </button>
                   )}
