@@ -44,12 +44,13 @@ export function StatusBarConfigTab() {
       .filter(p => p.enabled)
       .map(p => ({
         id: p.pill_id, kind: 'state' as const, tone: 'neutral' as const,
-        // Strip the backend-sent "statusBar." ns prefix; useTranslation('statusBar')
-        // already binds the namespace, so t() needs the ns-relative key.
-        label: t(p.name_key.replace(/^statusBar\./, '')), href: p.href, value: null, icon: null, extra: null,
+        // Preview shows the config name; strip the "statusBar." ns prefix so the
+        // renderer's useTranslation('statusBar') resolves it.
+        label_key: p.name_key.replace(/^statusBar\./, ''),
+        href: p.href, value: null, value_key: null, value_params: null, icon: null, extra: null,
       })),
     show_bottom_upload: cfg.showBottomUpload,
-  }), [cfg.pills, cfg.showBottomUpload, t]);
+  }), [cfg.pills, cfg.showBottomUpload]);
 
   if (cfg.loading) {
     return <div className="py-8 text-center text-slate-400">…</div>;

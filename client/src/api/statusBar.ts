@@ -17,8 +17,11 @@ export interface PillState {
   id: PillId;
   kind: PillKind;
   tone: PillTone;
-  label: string;
+  label_key: string;
+  label_params?: Record<string, unknown> | null;
   value?: string | null;
+  value_key?: string | null;
+  value_params?: Record<string, unknown> | null;
   icon?: string | null;
   href: string;
   extra?: Record<string, unknown> | null;
