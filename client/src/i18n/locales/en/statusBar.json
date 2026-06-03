@@ -2,14 +2,17 @@
   "tabTitle": "Topbar Status Strip",
   "description": "Choose which status pills appear in the topbar, who can see them, and their order.",
   "pills": {
-    "power": { "name": "Power Profile" },
-    "pihole": { "name": "Pi-hole DNS" },
-    "uploads": { "name": "Uploads / Downloads" },
-    "sync": { "name": "Sync" },
-    "raid": { "name": "RAID Health" },
-    "sleep": { "name": "Sleep Mode" },
-    "vpn": { "name": "VPN Clients" },
-    "temp": { "name": "Temperature / Fans" },
+    "power": { "name": "Power Profile", "profile": "{{preset}} · {{level}}", "level": "{{level}}", "dynamic": "Dynamic · {{governor}}", "dynamicBare": "Dynamic" },
+    "pihole": { "name": "Pi-hole DNS", "live": "Pi-hole", "on": "On", "off": "Off" },
+    "uploads": { "name": "Uploads / Downloads", "live": "Uploads" },
+    "sync": { "name": "Sync", "live": "Sync", "conflicts": "{{n}} conflicts" },
+    "raid": {
+      "name": "RAID Health", "live": "RAID",
+      "status": { "degraded": "Degraded", "rebuilding": "Rebuilding", "resyncing": "Re-syncing", "inactive": "Inactive", "failed": "Failed" }
+    },
+    "sleep": { "name": "Sleep Mode", "live": "Sleep" },
+    "vpn": { "name": "VPN Clients", "live": "VPN", "connected": "{{n}} connected" },
+    "temp": { "name": "Temperature / Fans", "live": "Temp" },
     "alwaysAwake": {
       "name": "Always Awake / Core Hours",
       "live": "Always Awake",
@@ -17,9 +20,9 @@
       "coreUptimeLive": "Core Hours",
       "coreUptimeUntil": "until {{time}}"
     },
-    "scheduler": { "name": "Scheduler" },
-    "backup": { "name": "Backup" },
-    "desktop": { "name": "Desktop (KDE)" }
+    "scheduler": { "name": "Scheduler", "live": "Scheduler" },
+    "backup": { "name": "Backup", "live": "Backup", "running": "running", "failed": "failed" },
+    "desktop": { "name": "Desktop (KDE)", "live": "Desktop", "on": "On", "off": "Off · GPU idle" }
   },
   "displayMode": {
     "always": "Always show",

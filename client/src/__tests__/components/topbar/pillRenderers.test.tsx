@@ -1,27 +1,48 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { PillRenderer } from '../../../components/topbar/pillRenderers';
 import type { PillState } from '../../../api/statusBar';
 
+const dict: Record<string, string> = {
+  'pills.vpn.live': 'VPN',
+  'pills.vpn.connected': '{{n}} connected',
+  'pills.raid.live': 'RAID',
+};
+
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({
+    t: (key: string, opts?: Record<string, unknown>) => {
+      const tmpl = dict[key];
+      if (tmpl === undefined) return (opts?.defaultValue as string) ?? key;
+      return tmpl.replace(/\{\{(\w+)\}\}/g, (_m, k) => String(opts?.[k] ?? ''));
+    },
+  }),
+}));
+
 function renderPill(pill: PillState) {
-  return render(<MemoryRouter><PillRenderer pill={pill} /></MemoryRouter>);
+  return render(<MemoryRouter><PillRenderer pill={pill} flat /></MemoryRouter>);
 }
 
+const base = { kind: 'state' as const, tone: 'info' as const, href: '/x' };
+
 describe('PillRenderer', () => {
-  it('renders a generic pill for a normal pill', () => {
-    renderPill({ id: 'raid', kind: 'alert', tone: 'warning', label: 'RAID',
-                 value: 'degraded', href: '/x', icon: 'HardDrive', extra: null });
-    expect(screen.getByText('RAID')).toBeInTheDocument();
-    expect(screen.getByText('degraded')).toBeInTheDocument();
+  it('translates label_key and value_key with params', () => {
+    renderPill({ ...base, id: 'vpn', label_key: 'pills.vpn.live',
+      value_key: 'pills.vpn.connected', value_params: { n: 2 } });
+    expect(screen.getByText('VPN')).toBeInTheDocument();
+    expect(screen.getByText('2 connected')).toBeInTheDocument();
   });
 
-  it('routes always_awake to the countdown pill', () => {
-    renderPill({ id: 'always_awake', kind: 'state', tone: 'warning', label: 'Always Awake',
-                 value: '02:00', href: '/x', icon: 'Coffee',
-                 extra: { variant: 'always_awake', expires_in_seconds: 120 } });
-    // i18n is not initialized in component tests, so t() returns the raw key.
-    expect(screen.getByText('pills.alwaysAwake.live')).toBeInTheDocument();
-    expect(screen.getByText('02:00')).toBeInTheDocument();
+  it('falls back to raw value when value_key is unknown', () => {
+    renderPill({ ...base, id: 'raid', label_key: 'pills.raid.live',
+      value_key: 'pills.raid.status.weirdstate', value: 'weirdstate' });
+    expect(screen.getByText('RAID')).toBeInTheDocument();
+    expect(screen.getByText('weirdstate')).toBeInTheDocument();
+  });
+
+  it('renders a pure-data value verbatim when there is no value_key', () => {
+    renderPill({ ...base, id: 'temp', label_key: 'pills.temp.live', value: '95°C' });
+    expect(screen.getByText('95°C')).toBeInTheDocument();
   });
 });

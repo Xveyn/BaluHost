@@ -32,26 +32,25 @@ async def collect_power(db: Session, role: str) -> Optional[dict]:
     from app.services.power.manager import get_power_manager
     status = await get_power_manager().get_power_status()
 
-    # Dynamic mode: the kernel governor controls the CPU directly — the demand
-    # profile and preset are frozen and no longer reflect what's running, so we
-    # surface the mode + governor instead of a stale "preset · level".
     if getattr(status, "dynamic_mode_enabled", False):
         gov = getattr(getattr(status, "dynamic_mode_config", None), "governor", None)
-        label = f"Dynamisch · {gov}" if gov else "Dynamisch"
-        return {"kind": "state", "tone": "info", "label": label, "icon": "Zap"}
+        if gov:
+            return {"kind": "state", "tone": "info", "label_key": "pills.power.dynamic",
+                    "label_params": {"governor": gov}, "icon": "Zap"}
+        return {"kind": "state", "tone": "info", "label_key": "pills.power.dynamicBare", "icon": "Zap"}
 
     profile = getattr(status, "current_profile", None)
     if not profile:
         return None
-    # PowerProfile is a str-enum; its `.value` (e.g. "surge") is the level text.
     level = str(getattr(profile, "value", profile)).replace("_", " ").title()
 
-    # Active preset (e.g. "Balanced"/"Performance") maps each level to MHz —
-    # it's what actually configures the CPU, so show it as the prominent part.
     preset = getattr(status, "active_preset", None)
     preset_name = getattr(preset, "name", None) if preset else None
-    label = f"{preset_name} · {level}" if preset_name else level
-    return {"kind": "state", "tone": "info", "label": label, "icon": "Zap"}
+    if preset_name:
+        return {"kind": "state", "tone": "info", "label_key": "pills.power.profile",
+                "label_params": {"preset": preset_name, "level": level}, "icon": "Zap"}
+    return {"kind": "state", "tone": "info", "label_key": "pills.power.level",
+            "label_params": {"level": level}, "icon": "Zap"}
 
 
 # ── pihole ───────────────────────────────────────────────────────────
@@ -65,8 +64,8 @@ async def collect_pihole(db: Session, role: str) -> Optional[dict]:
     return {
         "kind": "state",
         "tone": "success" if blocking else "neutral",
-        "label": "Pi-hole",
-        "value": "on" if blocking else "off",
+        "label_key": "pills.pihole.live",
+        "value_key": "pills.pihole.on" if blocking else "pills.pihole.off",
         "icon": "Shield",
     }
 
@@ -82,7 +81,7 @@ async def collect_uploads(db: Session, role: str) -> Optional[dict]:
     return {
         "kind": "activity",
         "tone": "info",
-        "label": "Uploads",
+        "label_key": "pills.uploads.live",
         "value": str(len(active)),
         "icon": "Upload",
     }
@@ -99,8 +98,8 @@ async def collect_sync(db: Session, role: str) -> Optional[dict]:
     )
     if conflicts == 0:
         return None
-    return {"kind": "activity", "tone": "warning", "label": "Sync",
-            "value": f"{conflicts} conflicts", "icon": "RefreshCw"}
+    return {"kind": "activity", "tone": "warning", "label_key": "pills.sync.live",
+            "value_key": "pills.sync.conflicts", "value_params": {"n": conflicts}, "icon": "RefreshCw"}
 
 
 # ── raid ─────────────────────────────────────────────────────────────
@@ -131,7 +130,8 @@ async def collect_raid(db: Session, role: str) -> Optional[dict]:
     return {
         "kind": "alert",
         "tone": "danger" if failed else "warning",
-        "label": "RAID",
+        "label_key": "pills.raid.live",
+        "value_key": f"pills.raid.status.{bad[0]}",
         "value": bad[0],
         "icon": "HardDrive",
     }
@@ -154,7 +154,7 @@ async def collect_sleep(db: Session, role: str) -> Optional[dict]:
         sleep_time = getattr(config, "schedule_sleep_time", None)
     except Exception:  # noqa: BLE001 - value is optional, never block the pill
         sleep_time = None
-    return {"kind": "state", "tone": "neutral", "label": "Sleep",
+    return {"kind": "state", "tone": "neutral", "label_key": "pills.sleep.live",
             "value": sleep_time, "icon": "Moon"}
 
 
@@ -188,7 +188,7 @@ async def collect_always_awake(db: Session, role: str) -> Optional[dict]:
 
     aa = getattr(status, "always_awake", None)
     if aa is not None and aa.enabled:
-        out = {"kind": "state", "tone": "warning", "label": "Always Awake",
+        out = {"kind": "state", "tone": "warning", "label_key": "pills.alwaysAwake.live",
                "icon": "Coffee", "extra": {"variant": "always_awake"}}
         if aa.until is None:
             out["value"] = "permanent"
@@ -201,11 +201,10 @@ async def collect_always_awake(db: Session, role: str) -> Optional[dict]:
     # Fallback: Kernbetriebszeit window currently active (always-awake overrides it)
     cu = getattr(status, "core_uptime", None)
     if cu is not None and getattr(cu, "active", False):
-        out = {"kind": "state", "tone": "success", "label": "Kernbetriebszeit",
+        out = {"kind": "state", "tone": "success", "label_key": "pills.alwaysAwake.coreUptimeLive",
                "icon": "Shield", "extra": {"variant": "core_uptime"}}
         until = _format_until(getattr(cu, "current_window_ends_at", None))
         if until:
-            out["value"] = f"bis {until}"
             out["extra"]["until"] = until
         return out
 
@@ -250,8 +249,9 @@ async def collect_vpn(db: Session, role: str) -> Optional[dict]:
     return {
         "kind": "state",
         "tone": "success" if connected > 0 else "neutral",
-        "label": "VPN",
-        "value": f"{connected} verbunden",
+        "label_key": "pills.vpn.live",
+        "value_key": "pills.vpn.connected",
+        "value_params": {"n": connected},
         "icon": "Lock",
     }
 
@@ -288,7 +288,7 @@ async def collect_scheduler(db: Session, role: str) -> Optional[dict]:
     return {
         "kind": "activity",
         "tone": "info",
-        "label": "Scheduler",
+        "label_key": "pills.scheduler.live",
         "value": str(len(rows)),
         "icon": "Clock",
         "extra": {"jobs": jobs},
@@ -322,8 +322,8 @@ async def collect_backup(db: Session, role: str) -> Optional[dict]:
 
     running = _running_backup(db)
     if running is not None:
-        return {"kind": "activity", "tone": "info", "label": "Backup",
-                "value": "läuft", "icon": "Save"}
+        return {"kind": "activity", "tone": "info", "label_key": "pills.backup.live",
+                "value_key": "pills.backup.running", "icon": "Save"}
 
     last = _last_finished_backup(db)
     if last is None or last.status != "failed":
@@ -335,8 +335,8 @@ async def collect_backup(db: Session, role: str) -> Optional[dict]:
             finished = finished.replace(tzinfo=timezone.utc)
         if datetime.now(timezone.utc) - finished > timedelta(hours=24):
             return None
-    return {"kind": "alert", "tone": "danger", "label": "Backup",
-            "value": "fehlgeschlagen", "icon": "Save"}
+    return {"kind": "alert", "tone": "danger", "label_key": "pills.backup.live",
+            "value_key": "pills.backup.failed", "icon": "Save"}
 
 
 # ── temp / fans ──────────────────────────────────────────────────────
@@ -366,7 +366,7 @@ async def collect_temp(db: Session, role: str) -> Optional[dict]:
     if not hot:
         return None
     name, temp = hot[0]
-    return {"kind": "alert", "tone": "danger", "label": "Temp",
+    return {"kind": "alert", "tone": "danger", "label_key": "pills.temp.live",
             "value": f"{int(temp)}°C", "icon": "Thermometer"}
 
 
@@ -382,8 +382,8 @@ async def collect_desktop(db: Session, role: str) -> Optional[dict]:
     return {
         "kind": "state",
         "tone": "neutral" if running else "success",
-        "label": "Desktop",
-        "value": "An" if running else "Aus · GPU idle",
+        "label_key": "pills.desktop.live",
+        "value_key": "pills.desktop.on" if running else "pills.desktop.off",
         "icon": "Monitor",
         "_state": state,  # private hint for the service's display-mode filter; popped before PillState
     }

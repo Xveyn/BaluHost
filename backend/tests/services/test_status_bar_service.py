@@ -34,8 +34,30 @@ def test_pill_config_item_rejects_bad_visibility():
 
 def test_pill_state_minimal_construction():
     from app.schemas.status_bar import PillState
-    s = PillState(id="raid", kind="alert", tone="warning", label="RAID", href="/x")
+    s = PillState(id="raid", kind="alert", tone="warning", label_key="pills.raid.live", href="/x")
     assert s.value is None and s.extra is None
+
+
+def test_pill_state_accepts_i18n_fields():
+    from app.schemas.status_bar import PillState
+    s = PillState(
+        id="vpn", kind="state", tone="success", href="/x",
+        label_key="pills.vpn.live",
+        value_key="pills.vpn.connected", value_params={"n": 2},
+    )
+    assert s.label_key == "pills.vpn.live"
+    assert s.value_key == "pills.vpn.connected"
+    assert s.value_params == {"n": 2}
+    assert s.label_params is None
+
+
+def test_pill_state_label_params_for_power():
+    from app.schemas.status_bar import PillState
+    s = PillState(
+        id="power", kind="state", tone="info", href="/x",
+        label_key="pills.power.profile", label_params={"preset": "Balanced", "level": "Surge"},
+    )
+    assert s.label_params == {"preset": "Balanced", "level": "Surge"}
 
 
 def test_catalog_has_twelve_pills_with_unique_ids():
@@ -140,7 +162,7 @@ async def test_collect_state_only_includes_enabled_pills(db_session, monkeypatch
     import app.services.status_bar.service as service_mod
 
     async def fake_power(db, role):
-        return {"kind": "state", "tone": "info", "label": "Performance"}
+        return {"kind": "state", "tone": "info", "label_key": "pills.power.live"}
 
     monkeypatch.setitem(service_mod.COLLECTORS, "power", fake_power)
 
@@ -162,7 +184,7 @@ async def test_collect_state_filters_admin_pills_for_user(db_session, monkeypatc
     import app.services.status_bar.service as service_mod
 
     async def fake(db, role):
-        return {"kind": "state", "tone": "info", "label": "X"}
+        return {"kind": "state", "tone": "info", "label_key": "pills.power.live"}
 
     monkeypatch.setitem(service_mod.COLLECTORS, "power", fake)
     monkeypatch.setitem(service_mod.COLLECTORS, "uploads", fake)
@@ -186,7 +208,7 @@ async def test_collect_state_respects_sort_order(db_session, monkeypatch):
     import app.services.status_bar.service as service_mod
 
     async def fake(db, role):
-        return {"kind": "state", "tone": "info", "label": "X"}
+        return {"kind": "state", "tone": "info", "label_key": "pills.power.live"}
 
     for pid in ("power", "pihole"):
         monkeypatch.setitem(service_mod.COLLECTORS, pid, fake)
@@ -214,7 +236,7 @@ async def test_collect_state_skips_collector_with_malformed_output(db_session, m
         return {"tone": "info"}  # missing required kind/label -> PillState ValidationError
 
     async def good(db, role):
-        return {"kind": "state", "tone": "info", "label": "OK"}
+        return {"kind": "state", "tone": "info", "label_key": "pills.power.live"}
 
     monkeypatch.setitem(service_mod.COLLECTORS, "power", bad)
     monkeypatch.setitem(service_mod.COLLECTORS, "pihole", good)
@@ -315,7 +337,7 @@ async def test_collect_state_always_shows_running(db_session):
     with _patch_desktop_state("running"):
         resp = await svc.collect_state(role="admin")
     pill = next(p for p in resp.pills if p.id == "desktop")
-    assert pill.value == "An"
+    assert pill.value_key == "pills.desktop.on"
     assert pill.extra is None or "_state" not in (pill.extra or {})
 
 

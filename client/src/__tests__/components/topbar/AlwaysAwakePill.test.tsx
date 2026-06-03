@@ -8,7 +8,7 @@ beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
 
 function base(extra: Record<string, unknown> | null, value: string): PillState {
-  return { id: 'always_awake', kind: 'state', tone: 'warning', label: 'Always Awake',
+  return { id: 'always_awake', kind: 'state', tone: 'warning', label_key: 'pills.alwaysAwake.live',
            value, href: '/admin/system-control?tab=sleep', icon: 'Coffee', extra };
 }
 
@@ -33,7 +33,7 @@ describe('AlwaysAwakePill', () => {
 
   it('renders the core-uptime variant with the Kernbetriebszeit label + until value', () => {
     const pill: PillState = {
-      id: 'always_awake', kind: 'state', tone: 'success', label: 'Kernbetriebszeit',
+      id: 'always_awake', kind: 'state', tone: 'success', label_key: 'pills.alwaysAwake.coreUptimeLive',
       value: 'bis 22:00', href: '/admin/system-control?tab=sleep', icon: 'Shield',
       extra: { variant: 'core_uptime', until: '22:00' },
     };
