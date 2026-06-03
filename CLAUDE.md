@@ -19,7 +19,7 @@ Grep/Glob nur als Fallback verwenden, wenn vectordb-search keine passenden Ergeb
 
 ## Project Overview
 
-BaluHost is a full-stack NAS management platform with multiple components:
+BaluHost is a full-stack self-hosted home server platform (NAS at its core) with multiple components:
 - **Backend**: Python FastAPI (primary), located in `backend/`
 - **Frontend**: React + TypeScript + Vite (Web UI), located in `client/`
 - **TUI**: Terminal UI (Textual), located in `backend/baluhost_tui/`

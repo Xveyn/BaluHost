@@ -2,7 +2,7 @@
 
 # BaluHost
 
-**Self-Hosted NAS Management Platform**
+**Self-Hosted Home Server Platform**
 
 [![Version](https://img.shields.io/github/v/release/Xveyn/BaluHost?color=blue&label=version)](https://github.com/Xveyn/BaluHost/releases/latest)
 [![Python](https://img.shields.io/badge/python-3.11+-3776AB.svg)](https://www.python.org/downloads/)
@@ -11,7 +11,7 @@
 [![React](https://img.shields.io/badge/React-18+-61dafb.svg)](https://react.dev/)
 [![License](https://img.shields.io/badge/license-MIT-purple.svg)](LICENSE)
 
-A full-stack web interface for managing your Network Attached Storage — file management, RAID monitoring, system telemetry, power control, VPN, and more.
+Manage your home server end to end — file & RAID storage at the core, plus system & power monitoring, VPN and networking, and a plugin marketplace to extend it — all from one web UI, with production-grade deployment built in.
 
 [Features](#features) · [Quick Start](#quick-start) · [Architecture](#architecture) · [Documentation](#documentation)
 
@@ -19,9 +19,21 @@ A full-stack web interface for managing your Network Attached Storage — file m
 
 ---
 
-## Production Status
+## Reference System
 
-Deployed since January 25, 2026 on Debian 13 (Ryzen 5 5600GT, 16GB RAM).
+BaluHost is developed and tested against a single reference configuration — the maintainer's production box, in service since January 25, 2026:
+
+| Spec | Detail |
+|------|--------|
+| **OS** | Debian 13 |
+| **Kernel** | `6.12.74+deb13+1-amd64` (x86_64) |
+| **CPU** | AMD Ryzen 5 5600GT |
+| **Memory** | 16 GB RAM |
+| **GPU** | AMD Radeon RX 7900 XT (20 GB VRAM) |
+
+The same machine doubles as a KDE Plasma desktop and — thanks to the Radeon GPU — an optional Linux gaming rig / "Steam Machine" (Proton). That gaming use case is not part of this repository; it simply shares the reference hardware.
+
+### Production Stack
 
 | Component | Status | Details |
 |-----------|--------|---------|
@@ -84,9 +96,16 @@ Deployed since January 25, 2026 on Debian 13 (Ryzen 5 5600GT, 16GB RAM).
 - Service health monitoring
 - Secure read-only database inspection (sensitive fields redacted)
 - Cloud import (rclone integration)
-- Plugin system
 - Self-hosted update mechanism
 - System benchmarking
+
+### Plugins & Extensibility
+- Plugin marketplace — browse, install, update & remove plugins from a UI tab
+- Plugins distributed from a separate Git repo, installed in one click
+- Isolated per-plugin Python dependencies (no pollution of the core environment)
+- Frontend SDK (`window.BaluHost`) for plugin dashboard panels & UI bundles
+- Inter-plugin event bus and lifecycle hooks
+- SmartDevice framework for hardware-device plugins (e.g. Tapo smart plugs)
 
 ### Multi-Platform
 - **BaluHost** — Web UI (this repo)
@@ -230,7 +249,7 @@ All routes prefixed with `/api`:
 | **Admin** | `/admin-db/*`, `/admin/*` | Database inspection, services |
 | **Logging** | `/logging/audit`, `/logging/disk-io` | Audit trail |
 | **Pi-hole** | `/pihole/*` | DNS management |
-| **Plugins** | `/plugins/*` | Plugin system |
+| **Plugins** | `/plugins/*`, `/plugins/marketplace/*` | Plugin runtime & marketplace |
 
 ---
 
