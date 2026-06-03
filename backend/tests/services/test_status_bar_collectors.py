@@ -493,3 +493,32 @@ async def test_collect_uploads_counts_active():
         result = await collectors.collect_uploads(MagicMock(), "admin")
     assert result["label_key"] == "pills.uploads.live"
     assert result["value"] == "1"
+
+
+@pytest.mark.asyncio
+async def test_no_collector_emits_legacy_label_key():
+    """Every collector must emit `label_key`, never the legacy literal `label`."""
+    from app.services.status_bar import collectors
+    from app.services.status_bar.collectors import COLLECTORS
+    from unittest.mock import AsyncMock, MagicMock, patch
+    # Patch the underlying helpers so several collectors return a populated dict.
+    patches = [
+        patch.object(collectors, "_vpn_peer_counts", return_value=(1, 2)),
+        patch.object(collectors, "_raid_array_statuses", return_value=["degraded"]),
+        patch.object(collectors, "_active_executions",
+                     return_value=[_exec("backup", "running", None)]),
+        patch.object(collectors, "_running_backup", return_value=_backup("in_progress", None)),
+        patch.object(collectors, "_last_finished_backup", return_value=None),
+    ]
+    for p in patches:
+        p.start()
+    try:
+        for name, fn in COLLECTORS.items():
+            result = await fn(MagicMock(), "admin")
+            if result is None:
+                continue
+            assert "label" not in result, f"collector {name} still emits legacy 'label'"
+            assert "label_key" in result, f"collector {name} missing 'label_key'"
+    finally:
+        for p in patches:
+            p.stop()
