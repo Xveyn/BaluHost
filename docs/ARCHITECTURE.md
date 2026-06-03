@@ -6,7 +6,7 @@
 
 ## 📐 System Overview
 
-BaluHost is a modern, full-stack NAS management application designed for self-hosted file storage and system monitoring. The architecture follows a clear separation of concerns with a React frontend, FastAPI backend, and simulated/real hardware integration.
+BaluHost is a modern, full-stack self-hosted home server platform, built around a NAS core (file storage, RAID) and extended with system monitoring, power & hardware control, networking, and a plugin marketplace. The architecture follows a clear separation of concerns with a React frontend, FastAPI backend, and simulated/real hardware integration.
 
 ```
 ┌───────────────────────────────────────────────────────────┐

@@ -1,6 +1,6 @@
 # BaluHost Frontend
 
-Modern React TypeScript frontend for BaluHost NAS Management Platform.
+Modern React TypeScript frontend for the BaluHost home server platform.
 
 ## 🚀 Technology Stack
 
