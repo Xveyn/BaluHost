@@ -10,6 +10,11 @@ on:
         type: boolean
         required: false
         default: false
+      install_companion:
+        description: "Build the Tauri Companion app from source on BaluNode and install it system-wide (.deb). Leave off for routine deploys."
+        type: boolean
+        required: false
+        default: false
 
 concurrency:
   group: production-deploy
@@ -35,7 +40,10 @@ jobs:
       && github.actor == 'Xveyn'
     runs-on: [self-hosted, prod]
     environment: production
-    timeout-minutes: 15
+    # 30 (not 15): an opt-in companion build does a cold Rust compile the first
+    # time, which can take several minutes on top of the normal deploy. Routine
+    # deploys finish well under this regardless.
+    timeout-minutes: 30
 
     steps:
       - name: Run deploy script
@@ -44,6 +52,7 @@ jobs:
           DEPLOY_ACTOR: ${{ github.actor }}
           # Push-triggered deploys default to off; workflow_dispatch can opt-in.
           SYNC_PERMISSIONS: ${{ inputs.sync_permissions == true && '1' || '0' }}
+          INSTALL_COMPANION: ${{ inputs.install_companion == true && '1' || '0' }}
         run: |
           export GITHUB_ACTOR="$DEPLOY_ACTOR"
           /opt/baluhost/deploy/scripts/ci-deploy.sh
