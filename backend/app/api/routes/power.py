@@ -397,7 +397,12 @@ async def update_dynamic_mode(
 
     # Apply partial updates
     if body.governor is not None:
-        if body.governor not in current.available_governors:
+        # Only pre-validate when this worker actually knows the available
+        # governors. A follower with a cold/stale SHM snapshot reports an empty
+        # list; in that case defer to the primary worker, which validates the
+        # governor against real hardware. (Without this, ~3/4 of switch requests
+        # under multi-worker deployments would 400 on a valid governor.)
+        if current.available_governors and body.governor not in current.available_governors:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Governor '{body.governor}' not available. Available: {', '.join(current.available_governors)}"

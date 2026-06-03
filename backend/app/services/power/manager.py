@@ -239,14 +239,33 @@ class PowerManagerService:
         return True, None
 
     async def get_dynamic_mode_config(self) -> DynamicModeConfigResponse:
-        """Get dynamic mode configuration and system capabilities."""
+        """Get dynamic mode configuration and system capabilities.
+
+        Capabilities (available governors + system frequency range) live on the
+        backend, which only the primary worker owns. Followers have no backend,
+        so they read the primary's SHM snapshot instead. Without this, a follower
+        reports ``available_governors=[]``, which leaves the UI governor list
+        empty and makes the PUT governor validation 400 on most requests under
+        multi-worker deployments.
+        """
         config = self._dynamic_mode_config or load_dynamic_mode_config() or DynamicModeConfig()  # type: ignore[call-arg]
 
-        available_governors = []
+        available_governors: List[str] = []
         sys_min, sys_max = 400, 4600
         if self._backend:
             available_governors = await self._backend.get_available_governors()
             sys_min, sys_max = await self._backend.get_system_freq_range()
+        else:
+            # Follower worker: source capabilities from the primary's snapshot.
+            shm_status = None
+            try:
+                shm_status = shm.read_shm("power_status.json", max_age_seconds=15.0)
+            except Exception:
+                shm_status = None
+            if shm_status:
+                available_governors = shm_status.get("available_governors") or []
+                sys_min = shm_status.get("system_min_freq_mhz") or sys_min
+                sys_max = shm_status.get("system_max_freq_mhz") or sys_max
 
         return DynamicModeConfigResponse(
             config=config,
@@ -495,7 +514,7 @@ class PowerManagerService:
 
                 await self._check_expired_demands()
                 await self._check_auto_scaling()
-                self._write_status_shm()
+                await self._write_status_shm()
             except Exception as e:
                 logger.error(f"Error in power monitor loop: {e}")
 
@@ -508,10 +527,14 @@ class PowerManagerService:
         except Exception as exc:
             logger.debug(f"Demand cache refresh failed: {exc}")
 
-    def _write_status_shm(self) -> None:
+    async def _write_status_shm(self) -> None:
         """
         Write a snapshot of live status to shared memory so secondary workers
-        can answer ``GET /api/power/status`` without holding their own state.
+        can answer ``GET /api/power/status`` and ``GET /api/power/dynamic-mode``
+        without holding their own backend.
+
+        Followers have no backend, so the hardware capabilities (available
+        governors + system frequency range) must be published here for them.
         """
         try:
             backend_kind = (
@@ -530,6 +553,12 @@ class PowerManagerService:
                     "errors": perm_info.get("errors", []),
                     "has_write_access": self._backend.has_write_permission(),
                 }
+            available_governors: List[str] = []
+            sys_min: Optional[int] = None
+            sys_max: Optional[int] = None
+            if self._backend is not None:
+                available_governors = await self._backend.get_available_governors()
+                sys_min, sys_max = await self._backend.get_system_freq_range()
             shm.write_shm(
                 "power_status.json",
                 {
@@ -537,6 +566,9 @@ class PowerManagerService:
                     "backend_kind": backend_kind,
                     "linux_backend_available": LinuxCpuPowerBackend._is_available_static(),
                     "permission_status": permission_status,
+                    "available_governors": available_governors,
+                    "system_min_freq_mhz": sys_min,
+                    "system_max_freq_mhz": sys_max,
                 },
             )
         except Exception as exc:
