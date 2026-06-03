@@ -8,6 +8,18 @@ vi.mock('../../../hooks/useStatusBarState', () => ({
   useStatusBarState: () => ({ state: null, stale: false }),
 }));
 
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({
+    t: (key: string, opts?: Record<string, unknown>) => {
+      const dict: Record<string, string> = {
+        'pills.pihole.live': 'Pi-hole',
+        'pills.power.dynamicBare': 'Power',
+      };
+      return dict[key] ?? (opts?.defaultValue as string) ?? key;
+    },
+  }),
+}));
+
 function preview(pills: any[]): StatusBarStateResponse {
   return { pills, show_bottom_upload: true };
 }
@@ -22,8 +34,8 @@ describe('TopbarStatusStrip', () => {
 
   it('renders pills in payload order', () => {
     const pills = [
-      { id: 'pihole', kind: 'state', tone: 'success', label: 'Pi-hole', value: 'on', href: '/pihole', icon: 'Shield', extra: null },
-      { id: 'power', kind: 'state', tone: 'info', label: 'Power', value: null, href: '/x', icon: 'Zap', extra: null },
+      { id: 'pihole', kind: 'state', tone: 'success', label_key: 'pills.pihole.live', value: 'on', href: '/pihole', icon: 'Shield', extra: null },
+      { id: 'power', kind: 'state', tone: 'info', label_key: 'pills.power.dynamicBare', value: null, href: '/x', icon: 'Zap', extra: null },
     ];
     render(<MemoryRouter><TopbarStatusStrip previewState={preview(pills)} /></MemoryRouter>);
     const links = screen.getAllByRole('link');
@@ -34,8 +46,8 @@ describe('TopbarStatusStrip', () => {
 
   it('renders a divider between pills but not before the first', () => {
     const twoPills = [
-      { id: 'pihole', kind: 'state', tone: 'success', label: 'Pi-hole', value: 'on', href: '/pihole', icon: 'Shield', extra: null },
-      { id: 'power', kind: 'state', tone: 'info', label: 'Power', value: null, href: '/x', icon: 'Zap', extra: null },
+      { id: 'pihole', kind: 'state', tone: 'success', label_key: 'pills.pihole.live', value: 'on', href: '/pihole', icon: 'Shield', extra: null },
+      { id: 'power', kind: 'state', tone: 'info', label_key: 'pills.power.dynamicBare', value: null, href: '/x', icon: 'Zap', extra: null },
     ];
     const { container } = render(
       <MemoryRouter><TopbarStatusStrip previewState={preview(twoPills)} /></MemoryRouter>,
@@ -46,7 +58,7 @@ describe('TopbarStatusStrip', () => {
 
   it('renders no divider for a single pill', () => {
     const onePill = [
-      { id: 'power', kind: 'state', tone: 'info', label: 'Power', value: null, href: '/x', icon: 'Zap', extra: null },
+      { id: 'power', kind: 'state', tone: 'info', label_key: 'pills.power.dynamicBare', value: null, href: '/x', icon: 'Zap', extra: null },
     ];
     const { container } = render(
       <MemoryRouter><TopbarStatusStrip previewState={preview(onePill)} /></MemoryRouter>,
