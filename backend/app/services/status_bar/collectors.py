@@ -188,7 +188,7 @@ async def collect_always_awake(db: Session, role: str) -> Optional[dict]:
 
     aa = getattr(status, "always_awake", None)
     if aa is not None and aa.enabled:
-        out = {"kind": "state", "tone": "warning", "label": "Always Awake",
+        out = {"kind": "state", "tone": "warning", "label_key": "pills.alwaysAwake.live",
                "icon": "Coffee", "extra": {"variant": "always_awake"}}
         if aa.until is None:
             out["value"] = "permanent"
@@ -201,11 +201,10 @@ async def collect_always_awake(db: Session, role: str) -> Optional[dict]:
     # Fallback: Kernbetriebszeit window currently active (always-awake overrides it)
     cu = getattr(status, "core_uptime", None)
     if cu is not None and getattr(cu, "active", False):
-        out = {"kind": "state", "tone": "success", "label": "Kernbetriebszeit",
+        out = {"kind": "state", "tone": "success", "label_key": "pills.alwaysAwake.coreUptimeLive",
                "icon": "Shield", "extra": {"variant": "core_uptime"}}
         until = _format_until(getattr(cu, "current_window_ends_at", None))
         if until:
-            out["value"] = f"bis {until}"
             out["extra"]["until"] = until
         return out
 
@@ -323,8 +322,8 @@ async def collect_backup(db: Session, role: str) -> Optional[dict]:
 
     running = _running_backup(db)
     if running is not None:
-        return {"kind": "activity", "tone": "info", "label": "Backup",
-                "value": "läuft", "icon": "Save"}
+        return {"kind": "activity", "tone": "info", "label_key": "pills.backup.live",
+                "value_key": "pills.backup.running", "icon": "Save"}
 
     last = _last_finished_backup(db)
     if last is None or last.status != "failed":
@@ -336,8 +335,8 @@ async def collect_backup(db: Session, role: str) -> Optional[dict]:
             finished = finished.replace(tzinfo=timezone.utc)
         if datetime.now(timezone.utc) - finished > timedelta(hours=24):
             return None
-    return {"kind": "alert", "tone": "danger", "label": "Backup",
-            "value": "fehlgeschlagen", "icon": "Save"}
+    return {"kind": "alert", "tone": "danger", "label_key": "pills.backup.live",
+            "value_key": "pills.backup.failed", "icon": "Save"}
 
 
 # ── temp / fans ──────────────────────────────────────────────────────
@@ -383,8 +382,8 @@ async def collect_desktop(db: Session, role: str) -> Optional[dict]:
     return {
         "kind": "state",
         "tone": "neutral" if running else "success",
-        "label": "Desktop",
-        "value": "An" if running else "Aus · GPU idle",
+        "label_key": "pills.desktop.live",
+        "value_key": "pills.desktop.on" if running else "pills.desktop.off",
         "icon": "Monitor",
         "_state": state,  # private hint for the service's display-mode filter; popped before PillState
     }

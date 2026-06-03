@@ -337,7 +337,7 @@ async def test_collect_state_always_shows_running(db_session):
     with _patch_desktop_state("running"):
         resp = await svc.collect_state(role="admin")
     pill = next(p for p in resp.pills if p.id == "desktop")
-    assert pill.value == "An"
+    assert pill.value_key == "pills.desktop.on"
     assert pill.extra is None or "_state" not in (pill.extra or {})
 
 

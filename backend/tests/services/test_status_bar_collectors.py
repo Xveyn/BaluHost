@@ -104,6 +104,7 @@ async def test_always_awake_permanent_has_permanent_value():
         result = await collectors.collect_always_awake(MagicMock(), "admin")
     assert result["value"] == "permanent"
     assert result["tone"] == "warning"
+    assert result["label_key"] == "pills.alwaysAwake.live"
 
 
 @pytest.mark.asyncio
@@ -170,7 +171,7 @@ def _backup(status, created_at, completed_at=None):
 
 
 @pytest.mark.asyncio
-async def test_backup_in_progress_shows_laeuft():
+async def test_backup_in_progress_shows_running_key():
     from datetime import datetime, timezone
     from app.services.status_bar import collectors
     running = _backup("in_progress", datetime(2026, 5, 28, 10, tzinfo=timezone.utc))
@@ -178,7 +179,8 @@ async def test_backup_in_progress_shows_laeuft():
          patch.object(collectors, "_last_finished_backup", return_value=None):
         result = await collectors.collect_backup(MagicMock(), "admin")
     assert result["tone"] == "info"
-    assert result["value"] == "läuft"
+    assert result["label_key"] == "pills.backup.live"
+    assert result["value_key"] == "pills.backup.running"
 
 
 @pytest.mark.asyncio
@@ -191,6 +193,7 @@ async def test_backup_failed_within_24h_is_danger():
          patch.object(collectors, "_last_finished_backup", return_value=failed):
         result = await collectors.collect_backup(MagicMock(), "admin")
     assert result["tone"] == "danger"
+    assert result["value_key"] == "pills.backup.failed"
 
 
 @pytest.mark.asyncio
@@ -225,7 +228,7 @@ async def test_backup_running_beats_recent_failure():
     with patch.object(collectors, "_running_backup", return_value=running), \
          patch.object(collectors, "_last_finished_backup", return_value=failed):
         result = await collectors.collect_backup(MagicMock(), "admin")
-    assert result["value"] == "läuft"
+    assert result["value_key"] == "pills.backup.running"
 
 
 @pytest.mark.asyncio
@@ -330,17 +333,17 @@ async def test_always_awake_falls_back_to_core_uptime():
     from app.services.status_bar import collectors
     fake_status = MagicMock()
     fake_status.always_awake = MagicMock(enabled=False, until=None, expires_in_seconds=None)
-    fake_status.core_uptime = MagicMock(
-        active=True, current_window_ends_at=datetime(2026, 5, 29, 22, 0))
+    fake_status.core_uptime = MagicMock(active=True, current_window_ends_at=datetime(2026, 5, 29, 22, 0))
     mgr = MagicMock(); mgr.get_status = MagicMock(return_value=fake_status)
     with patch.object(collectors, "get_sleep_manager", return_value=mgr):
         result = await collectors.collect_always_awake(MagicMock(), "admin")
     assert result is not None
     assert result["icon"] == "Shield"
     assert result["tone"] == "success"
-    assert result["value"] == "bis 22:00"
+    assert result["label_key"] == "pills.alwaysAwake.coreUptimeLive"
     assert result["extra"]["variant"] == "core_uptime"
     assert result["extra"]["until"] == "22:00"
+    assert "value" not in result
 
 
 @pytest.mark.asyncio
@@ -357,6 +360,7 @@ async def test_always_awake_takes_precedence_over_core_uptime():
     assert result["tone"] == "warning"
     assert result["extra"]["variant"] == "always_awake"
     assert result["value"] == "permanent"
+    assert result["label_key"] == "pills.alwaysAwake.live"
 
 
 @pytest.mark.asyncio
@@ -379,7 +383,8 @@ async def test_collect_desktop_running_neutral():
         result = await collectors.collect_desktop(MagicMock(), "admin")
     assert result is not None
     assert result["tone"] == "neutral"
-    assert result["value"] == "An"
+    assert result["label_key"] == "pills.desktop.live"
+    assert result["value_key"] == "pills.desktop.on"
     assert result["icon"] == "Monitor"
     assert result["_state"] == "running"
 
@@ -392,6 +397,7 @@ async def test_collect_desktop_stopped_success():
     with patch("app.services.power.desktop.get_desktop_service", return_value=fake):
         result = await collectors.collect_desktop(MagicMock(), "admin")
     assert result["tone"] == "success"
+    assert result["value_key"] == "pills.desktop.off"
     assert result["_state"] == "stopped"
 
 
