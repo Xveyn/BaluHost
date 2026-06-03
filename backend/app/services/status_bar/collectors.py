@@ -32,26 +32,25 @@ async def collect_power(db: Session, role: str) -> Optional[dict]:
     from app.services.power.manager import get_power_manager
     status = await get_power_manager().get_power_status()
 
-    # Dynamic mode: the kernel governor controls the CPU directly — the demand
-    # profile and preset are frozen and no longer reflect what's running, so we
-    # surface the mode + governor instead of a stale "preset · level".
     if getattr(status, "dynamic_mode_enabled", False):
         gov = getattr(getattr(status, "dynamic_mode_config", None), "governor", None)
-        label = f"Dynamisch · {gov}" if gov else "Dynamisch"
-        return {"kind": "state", "tone": "info", "label": label, "icon": "Zap"}
+        if gov:
+            return {"kind": "state", "tone": "info", "label_key": "pills.power.dynamic",
+                    "label_params": {"governor": gov}, "icon": "Zap"}
+        return {"kind": "state", "tone": "info", "label_key": "pills.power.dynamicBare", "icon": "Zap"}
 
     profile = getattr(status, "current_profile", None)
     if not profile:
         return None
-    # PowerProfile is a str-enum; its `.value` (e.g. "surge") is the level text.
     level = str(getattr(profile, "value", profile)).replace("_", " ").title()
 
-    # Active preset (e.g. "Balanced"/"Performance") maps each level to MHz —
-    # it's what actually configures the CPU, so show it as the prominent part.
     preset = getattr(status, "active_preset", None)
     preset_name = getattr(preset, "name", None) if preset else None
-    label = f"{preset_name} · {level}" if preset_name else level
-    return {"kind": "state", "tone": "info", "label": label, "icon": "Zap"}
+    if preset_name:
+        return {"kind": "state", "tone": "info", "label_key": "pills.power.profile",
+                "label_params": {"preset": preset_name, "level": level}, "icon": "Zap"}
+    return {"kind": "state", "tone": "info", "label_key": "pills.power.level",
+            "label_params": {"level": level}, "icon": "Zap"}
 
 
 # ── pihole ───────────────────────────────────────────────────────────
@@ -65,8 +64,8 @@ async def collect_pihole(db: Session, role: str) -> Optional[dict]:
     return {
         "kind": "state",
         "tone": "success" if blocking else "neutral",
-        "label": "Pi-hole",
-        "value": "on" if blocking else "off",
+        "label_key": "pills.pihole.live",
+        "value_key": "pills.pihole.on" if blocking else "pills.pihole.off",
         "icon": "Shield",
     }
 
@@ -82,7 +81,7 @@ async def collect_uploads(db: Session, role: str) -> Optional[dict]:
     return {
         "kind": "activity",
         "tone": "info",
-        "label": "Uploads",
+        "label_key": "pills.uploads.live",
         "value": str(len(active)),
         "icon": "Upload",
     }
@@ -99,8 +98,8 @@ async def collect_sync(db: Session, role: str) -> Optional[dict]:
     )
     if conflicts == 0:
         return None
-    return {"kind": "activity", "tone": "warning", "label": "Sync",
-            "value": f"{conflicts} conflicts", "icon": "RefreshCw"}
+    return {"kind": "activity", "tone": "warning", "label_key": "pills.sync.live",
+            "value_key": "pills.sync.conflicts", "value_params": {"n": conflicts}, "icon": "RefreshCw"}
 
 
 # ── raid ─────────────────────────────────────────────────────────────
@@ -131,7 +130,8 @@ async def collect_raid(db: Session, role: str) -> Optional[dict]:
     return {
         "kind": "alert",
         "tone": "danger" if failed else "warning",
-        "label": "RAID",
+        "label_key": "pills.raid.live",
+        "value_key": f"pills.raid.status.{bad[0]}",
         "value": bad[0],
         "icon": "HardDrive",
     }

@@ -13,8 +13,9 @@ async def test_collect_pihole_enabled_returns_success_tone():
     })
     with patch.object(collectors, "get_pihole_service", return_value=fake_service):
         result = await collectors.collect_pihole(MagicMock(), "admin")
-    assert result is not None
     assert result["tone"] == "success"
+    assert result["label_key"] == "pills.pihole.live"
+    assert result["value_key"] == "pills.pihole.on"
 
 
 @pytest.mark.asyncio
@@ -44,6 +45,9 @@ async def test_collect_raid_warns_when_degraded():
         result = await collectors.collect_raid(MagicMock(), "admin")
     assert result is not None
     assert result["tone"] in ("warning", "danger")
+    assert result["label_key"] == "pills.raid.live"
+    assert result["value_key"] == "pills.raid.status.degraded"
+    assert result["value"] == "degraded"  # raw fallback for unknown statuses
 
 
 @pytest.mark.asyncio
@@ -73,7 +77,9 @@ async def test_collect_sync_warns_on_conflicts():
     result = await collectors.collect_sync(fake_db, "admin")
     assert result is not None
     assert result["tone"] == "warning"
-    assert "3" in result["value"]
+    assert result["label_key"] == "pills.sync.live"
+    assert result["value_key"] == "pills.sync.conflicts"
+    assert result["value_params"] == {"n": 3}
 
 
 @pytest.mark.asyncio
@@ -377,45 +383,33 @@ def test_desktop_registered_in_collectors():
 @pytest.mark.asyncio
 async def test_power_pill_preset_and_level():
     from app.services.status_bar import collectors
-    preset = MagicMock()
-    preset.name = "Balanced"
-    status = MagicMock(
-        dynamic_mode_enabled=False,
-        current_profile=MagicMock(value="surge"),
-        active_preset=preset,
-    )
-    mgr = MagicMock()
-    mgr.get_power_status = AsyncMock(return_value=status)
+    preset = MagicMock(); preset.name = "Balanced"
+    status = MagicMock(dynamic_mode_enabled=False, current_profile=MagicMock(value="surge"), active_preset=preset)
+    mgr = MagicMock(); mgr.get_power_status = AsyncMock(return_value=status)
     with patch("app.services.power.manager.get_power_manager", return_value=mgr):
         result = await collectors.collect_power(MagicMock(), "admin")
-    assert result["label"] == "Balanced · Surge"
-    assert result["tone"] == "info"
+    assert result["label_key"] == "pills.power.profile"
+    assert result["label_params"] == {"preset": "Balanced", "level": "Surge"}
     assert result["icon"] == "Zap"
-    assert "value" not in result
+    assert "value" not in result and "label" not in result
 
 
 @pytest.mark.asyncio
 async def test_power_pill_no_preset_fallback():
     from app.services.status_bar import collectors
-    status = MagicMock(
-        dynamic_mode_enabled=False,
-        current_profile=MagicMock(value="surge"),
-        active_preset=None,
-    )
-    mgr = MagicMock()
-    mgr.get_power_status = AsyncMock(return_value=status)
+    status = MagicMock(dynamic_mode_enabled=False, current_profile=MagicMock(value="surge"), active_preset=None)
+    mgr = MagicMock(); mgr.get_power_status = AsyncMock(return_value=status)
     with patch("app.services.power.manager.get_power_manager", return_value=mgr):
         result = await collectors.collect_power(MagicMock(), "admin")
-    assert result["label"] == "Surge"
-    assert "value" not in result
+    assert result["label_key"] == "pills.power.level"
+    assert result["label_params"] == {"level": "Surge"}
 
 
 @pytest.mark.asyncio
 async def test_power_pill_silent_without_profile():
     from app.services.status_bar import collectors
     status = MagicMock(dynamic_mode_enabled=False, current_profile=None)
-    mgr = MagicMock()
-    mgr.get_power_status = AsyncMock(return_value=status)
+    mgr = MagicMock(); mgr.get_power_status = AsyncMock(return_value=status)
     with patch("app.services.power.manager.get_power_manager", return_value=mgr):
         assert await collectors.collect_power(MagicMock(), "admin") is None
 
@@ -423,30 +417,32 @@ async def test_power_pill_silent_without_profile():
 @pytest.mark.asyncio
 async def test_power_pill_dynamic_mode_with_governor():
     from app.services.status_bar import collectors
-    status = MagicMock(
-        dynamic_mode_enabled=True,
-        dynamic_mode_config=MagicMock(governor="schedutil"),
-    )
-    mgr = MagicMock()
-    mgr.get_power_status = AsyncMock(return_value=status)
+    status = MagicMock(dynamic_mode_enabled=True, dynamic_mode_config=MagicMock(governor="schedutil"))
+    mgr = MagicMock(); mgr.get_power_status = AsyncMock(return_value=status)
     with patch("app.services.power.manager.get_power_manager", return_value=mgr):
         result = await collectors.collect_power(MagicMock(), "admin")
-    assert result["label"] == "Dynamisch · schedutil"
-    assert result["tone"] == "info"
-    assert result["icon"] == "Zap"
+    assert result["label_key"] == "pills.power.dynamic"
+    assert result["label_params"] == {"governor": "schedutil"}
 
 
 @pytest.mark.asyncio
 async def test_power_pill_dynamic_mode_no_config():
     from app.services.status_bar import collectors
-    status = MagicMock(
-        dynamic_mode_enabled=True,
-        dynamic_mode_config=None,
-    )
-    mgr = MagicMock()
-    mgr.get_power_status = AsyncMock(return_value=status)
+    status = MagicMock(dynamic_mode_enabled=True, dynamic_mode_config=None)
+    mgr = MagicMock(); mgr.get_power_status = AsyncMock(return_value=status)
     with patch("app.services.power.manager.get_power_manager", return_value=mgr):
         result = await collectors.collect_power(MagicMock(), "admin")
-    assert result["label"] == "Dynamisch"
-    assert result["tone"] == "info"
-    assert result["icon"] == "Zap"
+    assert result["label_key"] == "pills.power.dynamicBare"
+    assert "label_params" not in result
+
+
+# ── uploads ──────────────────────────────────────────────────────────
+@pytest.mark.asyncio
+async def test_collect_uploads_counts_active():
+    from app.services.status_bar import collectors
+    p1 = MagicMock(status="uploading"); p2 = MagicMock(status="done")
+    mgr = MagicMock(); mgr._progress = {"a": p1, "b": p2}
+    with patch("app.services.upload_progress.get_upload_progress_manager", return_value=mgr):
+        result = await collectors.collect_uploads(MagicMock(), "admin")
+    assert result["label_key"] == "pills.uploads.live"
+    assert result["value"] == "1"
