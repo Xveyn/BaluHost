@@ -74,7 +74,7 @@ def init_database():
         print("\n✅ Database initialization completed successfully!")
         print(f"\nAdmin credentials:")
         print(f"  Username: {settings.admin_username}")
-        print(f"  Password: {settings.admin_password}")
+        print("  Password: (as configured in your environment / .env.production)")
         print(f"\n⚠️  IMPORTANT: Change the admin password after first login!")
 
     except Exception as e:

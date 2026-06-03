@@ -125,6 +125,11 @@ class Settings(BaseSettings):
 
     # VCL storage path (empty = use nas_storage_path/.system/versions)
     vcl_storage_path: str = ""
+
+    # Managed SSH known_hosts for remote-server connections (TOFU host-key pinning).
+    # Empty = use nas_storage_path/.system/ssh/known_hosts (persists across deploys;
+    # the prod deploy never git-cleans untracked files under the storage tree).
+    ssh_known_hosts_path: str = ""
     nas_backup_retention_days: int = 30
     nas_backup_max_count: int = 10
 

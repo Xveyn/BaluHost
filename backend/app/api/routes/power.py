@@ -602,7 +602,7 @@ async def update_authority(
 async def list_boost_rules_route(request: Request, response: Response,
         _: UserPublic = Depends(deps.get_current_admin)) -> BoostRulesResponse:
     """List all boost rules (admin only)."""
-    return BoostRulesResponse(rules=config_store.list_boost_rules())
+    return BoostRulesResponse(rules=[BoostRule(**r) for r in config_store.list_boost_rules()])
 
 
 @router.post("/boost-rules", response_model=BoostRule)
