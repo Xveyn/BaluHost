@@ -313,7 +313,8 @@ class VPNService:
         try:
             config_content = VPNService.generate_server_config(db)
         except RuntimeError as exc:
-            return False, str(exc)
+            logger.warning("VPN server config generation failed: %s", exc)
+            return False, "Failed to generate server config"
 
         if settings.is_dev_mode:
             logger.info("Dev mode: generated WireGuard server config (not applying)")
@@ -335,7 +336,8 @@ class VPNService:
                 capture_output=True, text=True, timeout=5,
             )
         except Exception as exc:
-            return False, f"Failed to write config: {exc}"
+            logger.warning("VPN write-config failed: %s", exc)
+            return False, "Failed to write server config"
 
         # Check if wg0 interface is already up
         try:
@@ -376,7 +378,8 @@ class VPNService:
                 logger.info("WireGuard server config synced (live reload)")
                 return True, "Server config synced (live reload)"
             except Exception as exc:
-                return False, f"Failed to sync config: {exc}"
+                logger.warning("VPN wg syncconf failed: %s", exc)
+                return False, "Failed to sync server config"
         else:
             # Interface not up — start it
             try:
@@ -389,7 +392,8 @@ class VPNService:
                 logger.info("WireGuard interface wg0 started")
                 return True, "Server config applied and wg0 started"
             except Exception as exc:
-                return False, f"Failed to start wg0: {exc}"
+                logger.warning("VPN wg-quick up failed: %s", exc)
+                return False, "Failed to start WireGuard interface"
 
     @staticmethod
     def _try_apply_server_config(db: Session) -> None:

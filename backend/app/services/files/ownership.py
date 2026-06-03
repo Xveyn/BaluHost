@@ -89,7 +89,9 @@ class ResidencyEnforcementResult:
 
 def _get_path_hash(path: str) -> int:
     """Generate a hash for PostgreSQL advisory lock."""
-    return int(hashlib.md5(path.encode()).hexdigest()[:15], 16)
+    # MD5 here derives a stable integer for a PostgreSQL advisory lock key — not
+    # security-sensitive hashing. usedforsecurity=False documents intent and clears CodeQL.
+    return int(hashlib.md5(path.encode(), usedforsecurity=False).hexdigest()[:15], 16)
 
 
 def _is_in_shared_dir(path: str) -> bool:
