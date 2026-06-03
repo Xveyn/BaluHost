@@ -15,6 +15,9 @@ concurrency:
   group: production-deploy
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
   ci-check:
     uses: ./.github/workflows/ci-check.yml

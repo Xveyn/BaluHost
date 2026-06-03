@@ -3,6 +3,9 @@ name: RAID Tests (self-hosted mdadm)
 on:
   workflow_dispatch: {}
 
+permissions:
+  contents: read
+
 jobs:
   raid-mdadm-selfhosted:
     runs-on: [self-hosted, linux, mdadm]

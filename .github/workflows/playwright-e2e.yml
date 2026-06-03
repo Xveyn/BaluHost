@@ -17,6 +17,9 @@ on:
     branches: [ '*' ]
   workflow_dispatch: {}
 
+permissions:
+  contents: read
+
 jobs:
   mock-e2e:
     name: Mocked E2E (fast)
