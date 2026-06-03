@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 
 export interface ConfirmDialogProps {
   open: boolean;
@@ -52,7 +53,11 @@ export function ConfirmDialog({
 
   const styles = variantStyles[variant];
 
-  return (
+  // Render through a portal on document.body. The overlay is position:fixed and
+  // centers on the viewport — but an ancestor with backdrop-filter/transform
+  // (e.g. the topbar with `backdrop-blur`) would otherwise become its containing
+  // block, dragging the centered dialog up into that ancestor's box.
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xl">
       <div className={`card w-full max-w-md ${styles.border} bg-slate-900/80 backdrop-blur-2xl ${styles.shadow}`}>
         <h3 className="text-xl font-semibold text-white">{title}</h3>
@@ -69,6 +74,7 @@ export function ConfirmDialog({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
