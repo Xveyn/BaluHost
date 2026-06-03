@@ -44,6 +44,9 @@ Thumbs.db
 # Claude Code local settings (user-specific permissions)
 .claude/settings.local.json
 
+# Claude Code isolated worktrees (embedded git repos, never committed)
+.claude/worktrees/
+
 # Testing
 coverage/
 htmlcov/

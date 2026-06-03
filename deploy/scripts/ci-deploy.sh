@@ -35,6 +35,15 @@ BACKUP_RETENTION=10
 # Database handling is unaffected — alembic still runs, no schema reset.
 SYNC_PERMISSIONS="${SYNC_PERMISSIONS:-0}"
 
+# Build the Tauri Companion app from source on this host and install it
+# system-wide (.deb). Off by default so a routine deploy never pays the Rust
+# compile cost. Enable via:
+#   - GitHub: workflow_dispatch input "install_companion" = true
+#   - Manual: INSTALL_COMPANION=1 ./ci-deploy.sh
+# Runs only after a successful deploy + health check, and is fully non-fatal:
+# a companion build/install failure never rolls back a healthy backend deploy.
+INSTALL_COMPANION="${INSTALL_COMPANION:-0}"
+
 # Load .env.production into environment (needed by Alembic/Pydantic)
 load_env_production() {
     local env_file="$INSTALL_DIR/.env.production"
@@ -170,6 +179,58 @@ restart_services() {
     log_info "Reloading nginx..."
     sudo systemctl reload nginx
     log_info "All services restarted."
+}
+
+# ─── Companion (Tauri) Build + Install ────────────────────────────────
+#
+# Opt-in (INSTALL_COMPANION=1). Builds the BaluHost Companion desktop app from
+# source on this host — Rust must be installed — and installs the resulting
+# .deb system-wide. Build runs as the unprivileged deploy user; only the final
+# dpkg/apt install needs root, and that goes through the pinned-path sudoers
+# entry for install-companion.sh. Every failure path is non-fatal: the backend
+# deploy has already succeeded and must not be rolled back by a companion issue.
+build_install_companion() {
+    log_step "BaluHost Companion (Tauri) Build + Install"
+
+    local client_dir="$INSTALL_DIR/client"
+    local deb_glob="$INSTALL_DIR/client/src-tauri/target/release/bundle/deb/*.deb"
+    local stage_dir="$INSTALL_DIR/.companion"
+    local staged_deb="$stage_dir/baluhost-companion.deb"
+
+    if ! command -v cargo >/dev/null 2>&1; then
+        log_warn "Rust/cargo not found on this host — cannot build companion. Skipping."
+        log_warn "Install Rust (see docs) then re-run with INSTALL_COMPANION=1."
+        return 0
+    fi
+
+    # node_modules are already populated by the Frontend Build step (npm ci),
+    # so the tauri CLI from devDependencies is available without a second install.
+    cd "$client_dir"
+    log_info "Building companion .deb from source (cold builds take several minutes)..."
+    if ! VITE_TAURI=1 npm run tauri:build -- --bundles deb; then
+        log_warn "Companion build failed — backend deploy is unaffected. Skipping install."
+        return 0
+    fi
+
+    # Stage the freshly built .deb at a FIXED path. The installer's sudoers
+    # entry pins this exact, non-user-controlled path, so the version-stamped
+    # build filename never reaches a sudo command line.
+    mkdir -p "$stage_dir"
+    local built
+    # shellcheck disable=SC2086
+    built=$(ls -t $deb_glob 2>/dev/null | head -1 || true)
+    if [[ -z "$built" ]]; then
+        log_warn "Build reported success but no .deb was found at $deb_glob — skipping install."
+        return 0
+    fi
+    cp -f "$built" "$staged_deb"
+    log_info "Staged: $(basename "$built") -> $staged_deb"
+
+    if sudo bash "$INSTALL_DIR/deploy/scripts/install-companion.sh"; then
+        log_info "Companion installed/updated system-wide."
+    else
+        log_warn "Companion install failed (non-fatal — deploy stays green)."
+    fi
 }
 
 # ─── Rollback ─────────────────────────────────────────────────────────
@@ -451,6 +512,14 @@ if health_check; then
     log_info "DB: $OLD_DB_REV -> $NEW_DB_REV"
     log_info "Duration: ${DURATION}s"
     log_info "Backup: $BACKUP_FILE"
+
+    # Opt-in companion build+install runs last, after the deploy is already
+    # marked successful, so it can never trigger a rollback of a healthy box.
+    if [[ "${INSTALL_COMPANION:-0}" == "1" || "${INSTALL_COMPANION,,}" == "true" ]]; then
+        build_install_companion
+    else
+        log_info "Companion build skipped (set INSTALL_COMPANION=1 to enable)."
+    fi
 else
     log_error "Health check failed after deploy!"
     rollback
