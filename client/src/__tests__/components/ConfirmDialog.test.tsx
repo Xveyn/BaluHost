@@ -17,6 +17,16 @@ describe('ConfirmDialog', () => {
     expect(container.innerHTML).toBe('');
   });
 
+  it('renders through a portal on document.body, not nested in its parent', () => {
+    // The overlay is position:fixed and meant to center on the viewport. If it
+    // stays nested in its parent, an ancestor with backdrop-filter/transform
+    // (e.g. the topbar) becomes the containing block and the dialog drifts to
+    // that ancestor's box ("too high"). Portaling to document.body prevents that.
+    const { container } = render(<ConfirmDialog {...defaultProps} />);
+    expect(container).toBeEmptyDOMElement();
+    expect(screen.getByText('Are you sure?')).toBeInTheDocument();
+  });
+
   it('renders title, message, and buttons when open=true', () => {
     render(<ConfirmDialog {...defaultProps} />);
 
@@ -60,18 +70,15 @@ describe('ConfirmDialog', () => {
   });
 
   it('renders danger variant with rose styling', () => {
-    const { container } = render(
-      <ConfirmDialog {...defaultProps} variant="danger" />
-    );
-    const card = container.querySelector('.border-rose-500\\/40');
+    // Dialog is portaled to document.body, so query the whole document.
+    render(<ConfirmDialog {...defaultProps} variant="danger" />);
+    const card = document.querySelector('.border-rose-500\\/40');
     expect(card).not.toBeNull();
   });
 
   it('renders warning variant with amber styling', () => {
-    const { container } = render(
-      <ConfirmDialog {...defaultProps} variant="warning" />
-    );
-    const card = container.querySelector('.border-amber-500\\/40');
+    render(<ConfirmDialog {...defaultProps} variant="warning" />);
+    const card = document.querySelector('.border-amber-500\\/40');
     expect(card).not.toBeNull();
   });
 
