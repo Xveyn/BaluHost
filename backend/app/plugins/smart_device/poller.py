@@ -506,9 +506,13 @@ class SmartDevicePoller:
         """Run the category-wide sample cleanup if the interval has elapsed."""
         if self._db_session_factory is None:
             return
-        if not self._should_cleanup_samples(time.time()):
+        now = time.time()
+        if not self._should_cleanup_samples(now):
             return
-        self._last_sample_cleanup = time.time()
+        # Set before the synchronous cleanup call. There is no await between the
+        # check above and this set, and cleanup_old_smart_device_samples is sync,
+        # so concurrent per-plugin loops cannot double-fire (single-threaded asyncio).
+        self._last_sample_cleanup = now
         try:
             from app.plugins.smart_device.retention import cleanup_old_smart_device_samples
             db = self._db_session_factory()
