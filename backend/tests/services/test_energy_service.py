@@ -23,7 +23,46 @@ from app.services.power.energy import (
     get_cumulative_energy_data,
     get_cumulative_energy_total,
     get_hourly_samples,
+    _parse_power_from_sample,
+    _interval_energy_wh,
+    GAP_THRESHOLD_MINUTES,
 )
+
+
+class TestIntervalEnergyPrimitive:
+    def test_parse_exposes_import_fields(self):
+        live = _parse_power_from_sample(json.dumps({"current_power": 50.0, "is_online": True}))
+        assert live["imported"] is False
+        assert live["bucket_energy_kwh"] is None
+
+        imp = _parse_power_from_sample(json.dumps({
+            "watts": 100.0, "is_online": True,
+            "imported_from": "tapo_history", "bucket_energy_kwh": 0.1,
+        }))
+        assert imp["imported"] is True
+        assert imp["bucket_energy_kwh"] == 0.1
+
+    def test_imported_bucket_uses_own_energy(self):
+        t0 = datetime(2026, 1, 1, 0, 0, tzinfo=timezone.utc)
+        prev = {"timestamp": t0, "watts": 0.0, "imported": False, "bucket_energy_kwh": None}
+        cur = {"timestamp": t0 + timedelta(days=5), "watts": 100.0,
+               "imported": True, "bucket_energy_kwh": 0.1}
+        assert _interval_energy_wh(prev, cur) == pytest.approx(100.0)
+
+    def test_live_within_cap_is_integrated(self):
+        t0 = datetime(2026, 1, 1, 0, 0, tzinfo=timezone.utc)
+        prev = {"timestamp": t0, "watts": 100.0, "imported": False, "bucket_energy_kwh": None}
+        cur = {"timestamp": t0 + timedelta(minutes=10), "watts": 100.0,
+               "imported": False, "bucket_energy_kwh": None}
+        assert _interval_energy_wh(prev, cur) == pytest.approx(100.0 * (10 / 60))
+
+    def test_live_gap_beyond_cap_is_zero(self):
+        t0 = datetime(2026, 1, 1, 0, 0, tzinfo=timezone.utc)
+        prev = {"timestamp": t0, "watts": 200.0, "imported": False, "bucket_energy_kwh": None}
+        cur = {"timestamp": t0 + timedelta(hours=2), "watts": 200.0,
+               "imported": False, "bucket_energy_kwh": None}
+        assert GAP_THRESHOLD_MINUTES == 15
+        assert _interval_energy_wh(prev, cur) == 0.0
 
 
 @pytest.fixture

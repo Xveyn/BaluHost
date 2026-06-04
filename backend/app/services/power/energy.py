@@ -24,6 +24,11 @@ logger = logging.getLogger(__name__)
 # The capability name used by power-monitoring plugins
 _POWER_CAPABILITY = "power_monitor"
 
+# A live-sample gap longer than this is treated as downtime: the trapezoidal
+# integration does NOT bridge it (the poller was down / device asleep, ~0 draw).
+# Imported buckets carry their own energy and are exempt from this cap.
+GAP_THRESHOLD_MINUTES = 15
+
 
 class EnergyPeriod:
     """Energy consumption statistics for a time period."""
@@ -99,13 +104,34 @@ def _parse_power_from_sample(data_json: str) -> Optional[Dict]:
 
     is_online = data.get("is_online", True)
 
+    bucket_energy_kwh = data.get("bucket_energy_kwh")
+
     return {
         "watts": float(watts),
         "voltage": float(voltage) if voltage is not None else None,
         "current": current_a,
         "energy_today": energy_today_kwh,
         "is_online": bool(is_online),
+        "imported": bool(data.get("imported_from")),
+        "bucket_energy_kwh": float(bucket_energy_kwh) if bucket_energy_kwh is not None else None,
     }
+
+
+def _interval_energy_wh(prev: Dict, cur: Dict) -> float:
+    """Energy in Wh attributed to the interval ending at ``cur``.
+
+    - Imported buckets contribute their own measured ``bucket_energy_kwh``
+      (no integration, independent of the gap to ``prev``).
+    - Live samples are trapezoid-integrated only when the gap to ``prev`` is
+      within ``GAP_THRESHOLD_MINUTES``; larger gaps are treated as downtime
+      (0 Wh — the poller was down / device asleep, drawing ~0).
+    """
+    if cur.get("imported") and cur.get("bucket_energy_kwh") is not None:
+        return cur["bucket_energy_kwh"] * 1000.0
+    gap_h = (cur["timestamp"] - prev["timestamp"]).total_seconds() / 3600.0
+    if gap_h * 60.0 > GAP_THRESHOLD_MINUTES:
+        return 0.0
+    return (prev["watts"] + cur["watts"]) / 2.0 * gap_h
 
 
 def save_power_sample(
