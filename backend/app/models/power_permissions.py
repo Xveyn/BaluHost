@@ -24,6 +24,7 @@ class UserPowerPermission(Base):
     can_wake: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
     can_suspend: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
     can_wol: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
+    can_toggle_desktop: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
 
     granted_by: Mapped[Optional[int]] = mapped_column(
         Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
