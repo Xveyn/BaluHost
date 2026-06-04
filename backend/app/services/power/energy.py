@@ -120,13 +120,17 @@ def _parse_power_from_sample(data_json: str) -> Optional[Dict]:
 def _interval_energy_wh(prev: Dict, cur: Dict) -> float:
     """Energy in Wh attributed to the interval ending at ``cur``.
 
+    ``prev`` and ``cur`` are parsed sample dicts (from ``_parse_power_from_sample``,
+    so they always carry ``timestamp``, ``watts``, ``imported`` and
+    ``bucket_energy_kwh``).
+
     - Imported buckets contribute their own measured ``bucket_energy_kwh``
       (no integration, independent of the gap to ``prev``).
     - Live samples are trapezoid-integrated only when the gap to ``prev`` is
       within ``GAP_THRESHOLD_MINUTES``; larger gaps are treated as downtime
       (0 Wh — the poller was down / device asleep, drawing ~0).
     """
-    if cur.get("imported") and cur.get("bucket_energy_kwh") is not None:
+    if cur["imported"] and cur["bucket_energy_kwh"] is not None:
         return cur["bucket_energy_kwh"] * 1000.0
     gap_h = (cur["timestamp"] - prev["timestamp"]).total_seconds() / 3600.0
     if gap_h * 60.0 > GAP_THRESHOLD_MINUTES:
@@ -436,6 +440,7 @@ def _device_cumulative_series(parsed: List[Dict]) -> tuple[List[Dict], float]:
 
     Returns (points, total_wh); points are
     {"timestamp": datetime, "cumulative_kwh": float, "instant_watts": float}.
+    Energy is accumulated internally in Wh and converted to kWh per point.
     """
     points: List[Dict] = []
     cumulative_wh = 0.0
@@ -451,7 +456,7 @@ def _device_cumulative_series(parsed: List[Dict]) -> tuple[List[Dict], float]:
 
 
 def _downsample(data_points: List[Dict], max_points: int = 200) -> List[Dict]:
-    """Evenly thin a list of chart points down to at most max_points."""
+    """Evenly thin a list of chart points to ~max_points (first and last kept)."""
     if len(data_points) <= max_points:
         return data_points
     step = len(data_points) // max_points
