@@ -143,7 +143,11 @@ export function PluginSettingsSection({ pluginName, configSchema, config, transl
                   step={1}
                   disabled={isUnlimited}
                   value={isUnlimited ? '' : current}
-                  onChange={(e) => setFormData({ ...formData, [key]: Number(e.target.value) })}
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    if (raw === '') return; // ignore empty mid-edit: Number('') === 0 would collide with the unlimited sentinel
+                    setFormData({ ...formData, [key]: Number(raw) });
+                  }}
                   className="w-28 rounded bg-gray-700 border border-gray-600 px-3 py-1.5 text-sm text-gray-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 disabled:opacity-50"
                 />
                 <span className="text-xs text-gray-400">{t('settings.daysUnit')}</span>

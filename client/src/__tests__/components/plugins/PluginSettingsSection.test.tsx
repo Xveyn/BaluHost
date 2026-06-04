@@ -42,4 +42,12 @@ describe('PluginSettingsSection number/retention field', () => {
     fireEvent.click(screen.getByText('settings.save'));
     await waitFor(() => expect(pluginsApi.updatePluginConfig).toHaveBeenCalledWith('tapo_smart_plug', { retention_days: 0 }));
   });
+
+  it('clearing the field does not silently set unlimited (Number("") === 0 guard)', async () => {
+    render(<PluginSettingsSection pluginName="tapo_smart_plug" configSchema={SCHEMA} config={{ retention_days: 30 }} />);
+    fireEvent.change(screen.getByRole('spinbutton'), { target: { value: '' } });
+    fireEvent.click(screen.getByText('settings.save'));
+    // Empty input is ignored, so the value stays 30 (not coerced to the 0 sentinel).
+    await waitFor(() => expect(pluginsApi.updatePluginConfig).toHaveBeenCalledWith('tapo_smart_plug', { retention_days: 30 }));
+  });
 });
