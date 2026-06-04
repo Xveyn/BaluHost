@@ -10,6 +10,7 @@ export interface UserPowerPermissions {
   can_wake: boolean;
   can_suspend: boolean;
   can_wol: boolean;
+  can_toggle_desktop: boolean;
   granted_by: number | null;
   granted_by_username: string | null;
   granted_at: string | null;
@@ -20,6 +21,7 @@ export interface UserPowerPermissionsUpdate {
   can_wake?: boolean;
   can_suspend?: boolean;
   can_wol?: boolean;
+  can_toggle_desktop?: boolean;
 }
 
 export interface MyPowerPermissions {
@@ -27,6 +29,7 @@ export interface MyPowerPermissions {
   can_wake: boolean;
   can_suspend: boolean;
   can_wol: boolean;
+  can_toggle_desktop: boolean;
 }
 
 /**

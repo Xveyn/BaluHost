@@ -24,7 +24,7 @@ Pydantic v2 models for API request/response validation. One file per feature dom
 
 **Power** (`power.py`): `PowerProfile` enum (IDLE/LOW/MEDIUM/SURGE), `ServicePowerProperty`, profile configs
 
-**Power Permissions** (`power_permissions.py`): `UserPowerPermissionsResponse`, `UserPowerPermissionsUpdate`, `MyPowerPermissionsResponse` — per-user power action delegation
+**Power Permissions** (`power_permissions.py`): `UserPowerPermissionsResponse`, `UserPowerPermissionsUpdate`, `MyPowerPermissionsResponse` — per-user power action delegation (incl. `can_toggle_desktop`). UI name: "System Permissions / Systemberechtigungen"; backend stays `power_permissions`.
 
 ## Adding a Schema
 

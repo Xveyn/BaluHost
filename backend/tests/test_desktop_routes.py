@@ -14,7 +14,6 @@ def client():
         username = "admin"
         role = "admin"
     app.dependency_overrides[deps.get_current_user] = lambda: _User()
-    app.dependency_overrides[deps.get_current_admin] = lambda: _User()
     import app.services.power.desktop as desktop_mod
     desktop_mod._service = DesktopService(backend=DevDesktopBackend())
     with TestClient(app) as c:

@@ -379,6 +379,7 @@ require_power_soft_sleep = _make_power_dependency("soft_sleep")
 require_power_wake = _make_power_dependency("wake")
 require_power_suspend = _make_power_dependency("suspend")
 require_power_wol = _make_power_dependency("wol")
+require_power_toggle_desktop = _make_power_dependency("toggle_desktop")
 
 
 async def require_local_or_setup_secret(
