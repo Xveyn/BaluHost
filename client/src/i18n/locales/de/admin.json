@@ -76,6 +76,22 @@
       "toggleFailed": "Benutzerstatus konnte nicht geändert werden",
       "bulkDeleteFailed": "Benutzer konnten nicht gelöscht werden",
       "invalidEmail": "Bitte eine gültige E-Mail-Adresse eingeben"
+    },
+    "systemPermissions": {
+      "title": "Systemberechtigungen",
+      "description": "Erlaubt diesem User, System-Aktionen über die Mobile App auszuführen.",
+      "loading": "Systemberechtigungen werden geladen…",
+      "saved": "Systemberechtigungen aktualisiert",
+      "saveError": "Fehler beim Speichern",
+      "lastChangedBy": "Zuletzt geändert von {{name}} am {{date}}",
+      "impliedBy": "Impliziert durch {{name}}",
+      "items": {
+        "softSleep": { "label": "Soft Sleep", "desc": "Server in Soft Sleep versetzen" },
+        "wake": { "label": "Wake", "desc": "Server aus Soft Sleep aufwecken" },
+        "suspend": { "label": "Suspend", "desc": "System Suspend (S3 Sleep)" },
+        "wol": { "label": "Wake-on-LAN", "desc": "WoL Magic Packet senden" },
+        "toggleDesktop": { "label": "Desktop", "desc": "Desktop aktivieren/deaktivieren (spart GPU-Strom)" }
+      }
     }
   },
   "system": {

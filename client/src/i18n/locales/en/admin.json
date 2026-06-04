@@ -76,6 +76,22 @@
       "toggleFailed": "Failed to toggle user status",
       "bulkDeleteFailed": "Failed to delete users",
       "invalidEmail": "Please enter a valid email address"
+    },
+    "systemPermissions": {
+      "title": "System Permissions",
+      "description": "Allows this user to perform system actions via the mobile app.",
+      "loading": "Loading system permissions…",
+      "saved": "System permissions updated",
+      "saveError": "Failed to save",
+      "lastChangedBy": "Last changed by {{name}} on {{date}}",
+      "impliedBy": "Implied by {{name}}",
+      "items": {
+        "softSleep": { "label": "Soft Sleep", "desc": "Put the server into soft sleep" },
+        "wake": { "label": "Wake", "desc": "Wake the server from soft sleep" },
+        "suspend": { "label": "Suspend", "desc": "System suspend (S3 sleep)" },
+        "wol": { "label": "Wake-on-LAN", "desc": "Send a WoL magic packet" },
+        "toggleDesktop": { "label": "Desktop", "desc": "Enable/disable the desktop (saves GPU power)" }
+      }
     }
   },
   "system": {
