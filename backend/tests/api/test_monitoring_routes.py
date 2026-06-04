@@ -242,6 +242,23 @@ class TestRetentionConfigEndpoints:
         )
         assert response.status_code == 400
 
+    def test_retention_config_excludes_power(self, client: TestClient, admin_headers: dict):
+        """POWER is no longer a monitoring-managed metric and must not be listed."""
+        response = client.get("/api/monitoring/config/retention", headers=admin_headers)
+        assert response.status_code == 200
+        metric_types = {c["metric_type"] for c in response.json()["configs"]}
+        assert "power" not in metric_types
+        assert "cpu" in metric_types
+
+    def test_update_retention_power_rejected(self, client: TestClient, admin_headers: dict):
+        """Updating retention for the unmanaged POWER metric returns 400."""
+        response = client.put(
+            "/api/monitoring/config/retention/power",
+            json={"retention_hours": 48},
+            headers=admin_headers,
+        )
+        assert response.status_code == 400
+
 
 class TestDatabaseStatsEndpoint:
     """Tests for database statistics endpoint (admin only)."""
