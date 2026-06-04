@@ -18,7 +18,7 @@ import {
 } from 'recharts';
 import toast from 'react-hot-toast';
 import { getApiErrorMessage } from '../../lib/errorHandling';
-import { formatTimeForRange, parseUtcTimestamp } from '../../lib/dateUtils';
+import { formatTimeForRange, parseUtcTimestamp, localRangeToUtcIso } from '../../lib/dateUtils';
 import type { ChartTimeRange } from '../../lib/dateUtils';
 import { smartDevicesApi } from '../../api/smart-devices';
 import type { SmartDevice, PowerSummary } from '../../api/smart-devices';
@@ -35,7 +35,7 @@ import { PluginBadge } from '../ui/PluginBadge';
 import { formatNumber } from '../../lib/formatters';
 import { usePlugins } from '../../contexts/PluginContext';
 
-type CumulativePeriod = 'today' | 'week' | 'month';
+type CumulativePeriod = 'today' | 'week' | 'month' | 'custom';
 type ChartMode = 'cumulative' | 'instant';
 
 export function PowerTab() {
@@ -58,6 +58,13 @@ export function PowerTab() {
   const [cumulativeLoading, setCumulativeLoading] = useState(false);
   const [selectedDeviceId, setSelectedDeviceId] = useState<number | null>(null);
   const [chartMode, setChartMode] = useState<ChartMode>('cumulative');
+
+  // Custom range (applied values drive fetching; drafts live in the popover)
+  const [customStart, setCustomStart] = useState<string | null>(null);
+  const [customEnd, setCustomEnd] = useState<string | null>(null);
+  const [showRangePicker, setShowRangePicker] = useState(false);
+  const [draftStart, setDraftStart] = useState('');
+  const [draftEnd, setDraftEnd] = useState('');
 
   const fetchPower = useCallback(async () => {
     try {
@@ -97,12 +104,19 @@ export function PowerTab() {
 
   // Fetch cumulative data with separate interval (60s - matches DB write interval)
   useEffect(() => {
+    const isCustom = cumulativePeriod === 'custom';
+    if (isCustom && (!customStart || !customEnd)) {
+      return; // nothing applied yet
+    }
     const fetchCumulative = async () => {
       setCumulativeLoading(true);
       try {
+        const start = isCustom ? customStart! : undefined;
+        const end = isCustom ? customEnd! : undefined;
+        const period = (isCustom ? 'today' : cumulativePeriod) as 'today' | 'week' | 'month';
         const data = selectedDeviceId === null
-          ? await getCumulativeEnergyTotal(cumulativePeriod)
-          : await getCumulativeEnergy(selectedDeviceId, cumulativePeriod);
+          ? await getCumulativeEnergyTotal(period, start, end)
+          : await getCumulativeEnergy(selectedDeviceId, period, start, end);
         setCumulativeData(data);
       } catch {
         // Non-critical: cumulative data will remain null
@@ -117,7 +131,7 @@ export function PowerTab() {
     // Separate interval: 60 seconds (matches DB write interval)
     const interval = setInterval(fetchCumulative, 60000);
     return () => clearInterval(interval);
-  }, [selectedDeviceId, cumulativePeriod]);
+  }, [selectedDeviceId, cumulativePeriod, customStart, customEnd]);
 
   const handleSavePrice = async () => {
     const newPrice = parseFloat(priceInput);
@@ -390,6 +404,58 @@ export function PowerTab() {
                 {period === 'today' ? t('monitor.power.periodToday') : period === 'week' ? t('monitor.power.periodWeek') : t('monitor.power.periodMonth')}
               </button>
             ))}
+            <div className="relative">
+              <button
+                onClick={() => {
+                  setDraftStart(customStart ?? '');
+                  setDraftEnd(customEnd ?? '');
+                  setShowRangePicker((v) => !v);
+                }}
+                className={`px-3 py-1.5 text-xs sm:text-sm rounded-md transition-colors ${
+                  cumulativePeriod === 'custom'
+                    ? 'bg-blue-500/20 text-blue-400 border border-blue-500/40'
+                    : 'bg-slate-800 text-slate-400 hover:bg-slate-700 border border-transparent'
+                }`}
+              >
+                {t('monitor.power.periodCustom')}
+              </button>
+              {showRangePicker && (
+                <div className="absolute right-0 z-20 mt-2 w-64 rounded-lg border border-slate-700 bg-slate-900 p-3 shadow-xl">
+                  <label className="block text-xs text-slate-400 mb-1">{t('monitor.power.customFrom')}</label>
+                  <input
+                    type="date"
+                    value={draftStart}
+                    max={draftEnd || undefined}
+                    onChange={(e) => setDraftStart(e.target.value)}
+                    className="w-full mb-2 px-2 py-1 text-sm bg-slate-800 border border-slate-700 rounded text-white focus:border-blue-500 focus:outline-none"
+                  />
+                  <label className="block text-xs text-slate-400 mb-1">{t('monitor.power.customTo')}</label>
+                  <input
+                    type="date"
+                    value={draftEnd}
+                    min={draftStart || undefined}
+                    onChange={(e) => setDraftEnd(e.target.value)}
+                    className="w-full mb-3 px-2 py-1 text-sm bg-slate-800 border border-slate-700 rounded text-white focus:border-blue-500 focus:outline-none"
+                  />
+                  <button
+                    onClick={() => {
+                      if (!draftStart || !draftEnd || draftStart > draftEnd) {
+                        toast.error(t('monitor.power.customInvalidRange'));
+                        return;
+                      }
+                      const { startIso, endIso } = localRangeToUtcIso(draftStart, draftEnd, Date.now());
+                      setCustomStart(startIso);
+                      setCustomEnd(endIso);
+                      setCumulativePeriod('custom');
+                      setShowRangePicker(false);
+                    }}
+                    className="w-full px-2 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded"
+                  >
+                    {t('monitor.power.customApply')}
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
