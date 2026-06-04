@@ -42,7 +42,8 @@ async def desktop_disable(
     delegated user with the can_toggle_desktop permission.
     """
     ok, message = await get_desktop_service().disable()
-    get_audit_logger_db().log_event(
+    audit_logger = get_audit_logger_db()
+    audit_logger.log_event(
         event_type="POWER",
         action="desktop_disable",
         user=current_user.username,
@@ -50,6 +51,16 @@ async def desktop_disable(
         success=ok,
         details={"message": message},
     )
+    if current_user.role != "admin":
+        # Mirror the sleep routes: record that a delegated (non-admin) user
+        # invoked a privileged power action, for the security-audit trail.
+        audit_logger.log_security_event(
+            action="delegated_power_action",
+            user=current_user.username,
+            resource="toggle_desktop",
+            details={"action": "desktop_disable"},
+            success=True,
+        )
     return {"success": ok, "message": message}
 
 
@@ -65,7 +76,8 @@ async def desktop_enable(
     Admin or a delegated user with the can_toggle_desktop permission.
     """
     ok, message = await get_desktop_service().enable()
-    get_audit_logger_db().log_event(
+    audit_logger = get_audit_logger_db()
+    audit_logger.log_event(
         event_type="POWER",
         action="desktop_enable",
         user=current_user.username,
@@ -73,4 +85,14 @@ async def desktop_enable(
         success=ok,
         details={"message": message},
     )
+    if current_user.role != "admin":
+        # Mirror the sleep routes: record that a delegated (non-admin) user
+        # invoked a privileged power action, for the security-audit trail.
+        audit_logger.log_security_event(
+            action="delegated_power_action",
+            user=current_user.username,
+            resource="toggle_desktop",
+            details={"action": "desktop_enable"},
+            success=True,
+        )
     return {"success": ok, "message": message}
