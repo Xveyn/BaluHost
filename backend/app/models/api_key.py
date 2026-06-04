@@ -88,12 +88,6 @@ class ApiKey(Base):
             f"prefix='{self.key_prefix}', active={self.is_active})>"
         )
 
-    def revoke(self, reason: Optional[str] = None) -> None:
-        """Revoke this API key."""
-        self.is_active = False
-        self.revoked_at = datetime.now(timezone.utc)
-        self.revocation_reason = reason
-
     @staticmethod
     def hash_key(raw_key: str) -> str:
         """Create SHA-256 hash of the raw API key."""

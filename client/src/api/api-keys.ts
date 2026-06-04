@@ -57,10 +57,8 @@ export async function getApiKey(keyId: number): Promise<ApiKeyPublic> {
   return res.data;
 }
 
-export async function revokeApiKey(keyId: number, reason?: string): Promise<void> {
-  await apiClient.delete(`/api/api-keys/${keyId}`, {
-    params: reason ? { reason } : undefined,
-  });
+export async function deleteApiKey(keyId: number): Promise<void> {
+  await apiClient.delete(`/api/api-keys/${keyId}`);
 }
 
 export async function getEligibleUsers(): Promise<EligibleUser[]> {

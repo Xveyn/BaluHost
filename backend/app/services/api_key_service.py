@@ -148,78 +148,74 @@ class ApiKeyService:
         )
 
     @staticmethod
-    def revoke_api_key(
+    def delete_api_key(
         db: Session,
         key_id: int,
         admin_user_id: int,
-        reason: Optional[str] = None,
     ) -> bool:
         """
-        Revoke an API key.
+        Permanently delete an API key.
 
-        Returns True if key was found and revoked, False otherwise.
+        Revoking a key removes it outright — an invalid key has no reason to
+        linger in the database. The audit log keeps the record of the action.
+
+        Returns True if the key was found and deleted, False otherwise.
         """
         api_key = (
             db.query(ApiKey)
             .filter(
                 ApiKey.id == key_id,
                 ApiKey.created_by_user_id == admin_user_id,
-                ApiKey.is_active == True,  # noqa: E712
             )
             .first()
         )
         if not api_key:
             return False
 
-        api_key.revoke(reason)
+        db.delete(api_key)
         db.commit()
 
-        logger.info("API key revoked: id=%d reason='%s'", key_id, reason or "none")
+        logger.info("API key deleted: id=%d", key_id)
         return True
 
     @staticmethod
-    def revoke_all_for_user(db: Session, user_id: int, reason: str) -> int:
+    def delete_all_for_user(db: Session, user_id: int) -> int:
         """
-        Revoke all active API keys targeting a specific user.
+        Permanently delete all API keys targeting a specific user.
 
         Useful when a user is deleted or deactivated.
 
-        Returns the number of keys revoked.
+        Returns the number of keys deleted.
         """
-        keys = (
+        deleted = (
             db.query(ApiKey)
-            .filter(ApiKey.target_user_id == user_id, ApiKey.is_active == True)  # noqa: E712
-            .all()
+            .filter(ApiKey.target_user_id == user_id)
+            .delete(synchronize_session=False)
         )
-        for key in keys:
-            key.revoke(reason)
         db.commit()
 
-        if keys:
-            logger.info("Revoked %d API keys for user %d: %s", len(keys), user_id, reason)
-        return len(keys)
+        if deleted:
+            logger.info("Deleted %d API keys for user %d", deleted, user_id)
+        return deleted
 
     @staticmethod
     def cleanup_expired(db: Session) -> int:
         """
-        Deactivate expired API keys.
+        Permanently delete expired API keys.
 
         Returns the number of keys cleaned up.
         """
         now = datetime.now(timezone.utc)
-        expired_keys = (
+        deleted = (
             db.query(ApiKey)
             .filter(
-                ApiKey.is_active == True,  # noqa: E712
                 ApiKey.expires_at != None,  # noqa: E711
                 ApiKey.expires_at <= now,
             )
-            .all()
+            .delete(synchronize_session=False)
         )
-        for key in expired_keys:
-            key.revoke("expired")
         db.commit()
 
-        if expired_keys:
-            logger.info("Cleaned up %d expired API keys", len(expired_keys))
-        return len(expired_keys)
+        if deleted:
+            logger.info("Cleaned up %d expired API keys", deleted)
+        return deleted
