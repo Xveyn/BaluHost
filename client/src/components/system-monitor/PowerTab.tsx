@@ -66,6 +66,21 @@ export function PowerTab() {
   const [draftStart, setDraftStart] = useState('');
   const [draftEnd, setDraftEnd] = useState('');
 
+  // Derive the API args (period vs. custom start/end) for the active selection.
+  // Shared by the polling effect and the price-edit refresh so they never drift.
+  const resolveRangeArgs = useCallback((): {
+    period: 'today' | 'week' | 'month';
+    start?: string;
+    end?: string;
+  } => {
+    const isCustom = cumulativePeriod === 'custom';
+    return {
+      period: (isCustom ? 'today' : cumulativePeriod) as 'today' | 'week' | 'month',
+      start: isCustom ? customStart ?? undefined : undefined,
+      end: isCustom ? customEnd ?? undefined : undefined,
+    };
+  }, [cumulativePeriod, customStart, customEnd]);
+
   const fetchPower = useCallback(async () => {
     try {
       const [listRes, summaryRes] = await Promise.all([
@@ -104,16 +119,13 @@ export function PowerTab() {
 
   // Fetch cumulative data with separate interval (60s - matches DB write interval)
   useEffect(() => {
-    const isCustom = cumulativePeriod === 'custom';
-    if (isCustom && (!customStart || !customEnd)) {
+    const { period, start, end } = resolveRangeArgs();
+    if (cumulativePeriod === 'custom' && (!start || !end)) {
       return; // nothing applied yet
     }
     const fetchCumulative = async () => {
       setCumulativeLoading(true);
       try {
-        const start = isCustom ? customStart! : undefined;
-        const end = isCustom ? customEnd! : undefined;
-        const period = (isCustom ? 'today' : cumulativePeriod) as 'today' | 'week' | 'month';
         const data = selectedDeviceId === null
           ? await getCumulativeEnergyTotal(period, start, end)
           : await getCumulativeEnergy(selectedDeviceId, period, start, end);
@@ -131,7 +143,7 @@ export function PowerTab() {
     // Separate interval: 60 seconds (matches DB write interval)
     const interval = setInterval(fetchCumulative, 60000);
     return () => clearInterval(interval);
-  }, [selectedDeviceId, cumulativePeriod, customStart, customEnd]);
+  }, [selectedDeviceId, cumulativePeriod, resolveRangeArgs]);
 
   const handleSavePrice = async () => {
     const newPrice = parseFloat(priceInput);
@@ -150,10 +162,7 @@ export function PowerTab() {
       setEditingPrice(false);
       toast.success(t('monitor.power.priceUpdated'));
       // Refresh cumulative data with new price (respect an active custom range)
-      const isCustom = cumulativePeriod === 'custom';
-      const start = isCustom ? customStart ?? undefined : undefined;
-      const end = isCustom ? customEnd ?? undefined : undefined;
-      const period = (isCustom ? 'today' : cumulativePeriod) as 'today' | 'week' | 'month';
+      const { period, start, end } = resolveRangeArgs();
       const refreshData = selectedDeviceId === null
         ? getCumulativeEnergyTotal(period, start, end)
         : getCumulativeEnergy(selectedDeviceId, period, start, end);
@@ -410,11 +419,7 @@ export function PowerTab() {
             ))}
             <div className="relative">
               <button
-                onClick={() => {
-                  setDraftStart(customStart ?? '');
-                  setDraftEnd(customEnd ?? '');
-                  setShowRangePicker((v) => !v);
-                }}
+                onClick={() => setShowRangePicker((v) => !v)}
                 className={`px-3 py-1.5 text-xs sm:text-sm rounded-md transition-colors ${
                   cumulativePeriod === 'custom'
                     ? 'bg-blue-500/20 text-blue-400 border border-blue-500/40'
@@ -424,7 +429,10 @@ export function PowerTab() {
                 {t('monitor.power.periodCustom')}
               </button>
               {showRangePicker && (
-                <div className="absolute right-0 z-20 mt-2 w-64 rounded-lg border border-slate-700 bg-slate-900 p-3 shadow-xl">
+                <div
+                  className="absolute right-0 z-20 mt-2 w-64 rounded-lg border border-slate-700 bg-slate-900 p-3 shadow-xl"
+                  onKeyDown={(e) => { if (e.key === 'Escape') setShowRangePicker(false); }}
+                >
                   <label className="block text-xs text-slate-400 mb-1">{t('monitor.power.customFrom')}</label>
                   <input
                     type="date"
