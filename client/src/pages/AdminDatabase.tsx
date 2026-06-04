@@ -9,15 +9,16 @@ import RowDetailPanel from '../components/admin/RowDetailPanel'
 import DataTypeIndicator from '../components/admin/DataTypeIndicator'
 import { rowsToCsv } from '../lib/csv'
 import type { ColumnFilters, AdminTableSchemaField } from '../api/admin-db'
-import { Database, Table, Download, ChevronLeft, ChevronRight, RefreshCw, BarChart3, History, Wrench, Search, Filter, X } from 'lucide-react'
+import { Database, Table, Download, ChevronLeft, ChevronRight, RefreshCw, BarChart3, History, Wrench, Search, Filter, X, Timer } from 'lucide-react'
 import { AdminBadge } from '../components/ui/AdminBadge'
 import DatabaseStatsCards from '../components/admin/DatabaseStatsCards'
 import MaintenanceTools from '../components/admin/MaintenanceTools'
 import StorageAnalysisChart from '../components/admin/StorageAnalysisChart'
 import MonitoringHistoryViewer from '../components/admin/MonitoringHistoryViewer'
+import RetentionSettings from '../components/admin/RetentionSettings'
 
 type CategoryType = 'browse' | 'analytics'
-type AnalyticsTabType = 'stats' | 'storage' | 'history' | 'maintenance'
+type AnalyticsTabType = 'stats' | 'storage' | 'history' | 'maintenance' | 'retention'
 
 export default function AdminDatabase() {
   const { t } = useTranslation('admin');
@@ -68,6 +69,7 @@ export default function AdminDatabase() {
     { id: 'storage' as AnalyticsTabType, label: t('database.tabs.storage'), icon: Database },
     { id: 'history' as AnalyticsTabType, label: t('database.tabs.history'), icon: History },
     { id: 'maintenance' as AnalyticsTabType, label: t('database.tabs.maintenance'), icon: Wrench },
+    { id: 'retention' as AnalyticsTabType, label: t('database.tabs.retention'), icon: Timer },
   ];
 
   // Debounce global search
@@ -493,6 +495,12 @@ export default function AdminDatabase() {
         return (
           <div className="card">
             <MaintenanceTools />
+          </div>
+        )
+      case 'retention':
+        return (
+          <div className="card">
+            <RetentionSettings />
           </div>
         )
       default:
