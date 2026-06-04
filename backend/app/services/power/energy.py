@@ -503,6 +503,9 @@ def get_cumulative_energy_total(
     db: Session,
     period: str,
     cost_per_kwh: float,
+    *,
+    start: Optional[datetime] = None,
+    end: Optional[datetime] = None,
 ) -> Dict:
     """
     Aggregate cumulative energy across all active power-monitoring devices.
@@ -511,6 +514,8 @@ def get_cumulative_energy_total(
         db: Database session
         period: 'today', 'week', or 'month'
         cost_per_kwh: Cost per kWh for cost calculation
+        start: Optional explicit window start (keyword-only); overrides period
+        end: Optional explicit window end (keyword-only); overrides period
 
     Returns:
         Dict with aggregated totals and data_points array
@@ -524,10 +529,12 @@ def get_cumulative_energy_total(
         if isinstance(d.capabilities, list) and _POWER_CAPABILITY in d.capabilities
     ]
 
+    period_label = "custom" if (start is not None and end is not None) else period
+
     empty_result = {
         "device_id": 0,
         "device_name": "Total",
-        "period": period,
+        "period": period_label,
         "cost_per_kwh": cost_per_kwh,
         "currency": "EUR",
         "total_kwh": 0.0,
@@ -541,12 +548,27 @@ def get_cumulative_energy_total(
     # Collect instant_watts per timestamp from all devices
     watts_by_ts: Dict[str, float] = {}
     for device in power_devices:
-        device_data = get_cumulative_energy_data(db, device.id, period, cost_per_kwh)
+        device_data = get_cumulative_energy_data(
+            db, device.id, period, cost_per_kwh, start=start, end=end,
+        )
         if device_data is None:
             continue
         for point in device_data.get("data_points", []):
             ts = point["timestamp"]
             watts_by_ts[ts] = watts_by_ts.get(ts, 0.0) + point["instant_watts"]
+
+    if not watts_by_ts and start is not None and end is not None:
+        return {
+            "device_id": 0, "device_name": "Total", "period": period_label,
+            "cost_per_kwh": cost_per_kwh, "currency": "EUR",
+            "total_kwh": 0.0, "total_cost": 0.0,
+            "data_points": [
+                {"timestamp": start.isoformat(), "cumulative_kwh": 0.0,
+                 "cumulative_cost": 0.0, "instant_watts": 0.0},
+                {"timestamp": end.isoformat(), "cumulative_kwh": 0.0,
+                 "cumulative_cost": 0.0, "instant_watts": 0.0},
+            ],
+        }
 
     if not watts_by_ts:
         return empty_result
@@ -577,7 +599,7 @@ def get_cumulative_energy_total(
     return {
         "device_id": 0,
         "device_name": "Total",
-        "period": period,
+        "period": period_label,
         "cost_per_kwh": cost_per_kwh,
         "currency": "EUR",
         "total_kwh": round(total_kwh, 3),
