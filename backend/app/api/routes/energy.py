@@ -32,7 +32,11 @@ router = APIRouter()
 def _validate_range(
     start: Optional[datetime], end: Optional[datetime]
 ) -> tuple[Optional[datetime], Optional[datetime]]:
-    """Validate/normalize a custom range. Returns (None, None) when absent."""
+    """Validate/normalize a custom range. Returns (None, None) when absent.
+
+    A future ``end`` is silently clamped to now; the caller receives no
+    indication that clamping occurred.
+    """
     if start is None and end is None:
         return None, None
     if start is None or end is None:
@@ -383,9 +387,9 @@ async def update_energy_price(
 @user_limiter.limit(get_limit("system_monitor"))
 async def get_cumulative_energy_total(
     request: Request, response: Response,
-    period: str = Query("today"),
+    period: str = Query("today", pattern="^(today|week|month)$"),
     start: Optional[datetime] = Query(None, description="UTC ISO start (inclusive)"),
-    end: Optional[datetime] = Query(None, description="UTC ISO end (inclusive)"),
+    end: Optional[datetime] = Query(None, description="UTC ISO end (inclusive); clamped to now if in the future"),
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_user),
 ) -> CumulativeEnergyResponse:
@@ -429,9 +433,9 @@ async def get_cumulative_energy_total(
 async def get_cumulative_energy(
     request: Request, response: Response,
     device_id: int,
-    period: str = Query("today"),
+    period: str = Query("today", pattern="^(today|week|month)$"),
     start: Optional[datetime] = Query(None, description="UTC ISO start (inclusive)"),
-    end: Optional[datetime] = Query(None, description="UTC ISO end (inclusive)"),
+    end: Optional[datetime] = Query(None, description="UTC ISO end (inclusive); clamped to now if in the future"),
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_user),
 ) -> CumulativeEnergyResponse:

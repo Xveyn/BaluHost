@@ -64,6 +64,7 @@ class TestCumulativeRangeParams:
         body = r.json()
         assert body["period"] == "custom"
         assert body["total_kwh"] == 0.0
+        # empty custom window returns two synthetic 0 boundary points (start, end)
         assert len(body["data_points"]) == 2
 
     def test_total_valid_empty_range(self, client: TestClient, user_headers, power_device):
