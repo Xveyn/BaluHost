@@ -532,8 +532,16 @@ class SmartDevicePoller:
             db = self._db_session_factory()
             try:
                 for plugin_name in list(self._plugins.keys()):
-                    days = self._retention_days_for_plugin(db, plugin_name)
-                    cleanup_smart_device_samples(db, plugin_name, days)
+                    # Isolate failures per plugin so one bad plugin does not
+                    # abort cleanup for the rest (each cleanup commits on its own).
+                    try:
+                        days = self._retention_days_for_plugin(db, plugin_name)
+                        cleanup_smart_device_samples(db, plugin_name, days)
+                    except Exception as exc:
+                        logger.debug(
+                            "SmartDevicePoller: sample cleanup failed for %s: %s",
+                            plugin_name, exc,
+                        )
             finally:
                 db.close()
         except Exception as exc:
