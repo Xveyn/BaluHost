@@ -4,6 +4,7 @@ import toast from 'react-hot-toast'
 import { RefreshCw, Save } from 'lucide-react'
 import { getRetentionConfig, updateRetentionConfig } from '../../api/monitoring'
 import type { RetentionConfig } from '../../api/monitoring'
+import { handleApiError, getApiErrorMessage } from '../../lib/errorHandling'
 import { METRIC_CONFIG, DEFAULT_METRIC_CONFIG } from './metricConfig'
 
 const MIN_HOURS = 1
@@ -35,11 +36,11 @@ export default function RetentionSettings() {
       setConfigs(data.configs)
       setEdited({})
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to load retention config')
+      setError(getApiErrorMessage(err, t('retentionSettings.loadFailed')))
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [t])
 
   useEffect(() => { load() }, [load])
 
@@ -59,11 +60,13 @@ export default function RetentionSettings() {
     if (dirty.length === 0 || hasInvalid) return
     setSaving(true)
     try {
+      // Promise.all fails fast: if one update throws, we surface the error and
+      // reload — any already-succeeded updates are reflected by the reload.
       await Promise.all(dirty.map(c => updateRetentionConfig(c.metric_type, edited[c.metric_type])))
       toast.success(t('retentionSettings.saved'))
       await load()
-    } catch {
-      toast.error(t('retentionSettings.saveFailed'))
+    } catch (err: unknown) {
+      handleApiError(err, t('retentionSettings.saveFailed'))
     } finally {
       setSaving(false)
     }
@@ -118,9 +121,11 @@ export default function RetentionSettings() {
                 <div className="flex items-center gap-2">
                   <input
                     data-testid={`retention-input-${c.metric_type}`}
+                    aria-label={cfg.labelKey ? t(cfg.labelKey) : c.metric_type}
                     type="number"
                     min={MIN_HOURS}
                     max={MAX_HOURS}
+                    step={1}
                     value={value}
                     onChange={e => setValue(c.metric_type, Number(e.target.value))}
                     className={`w-28 bg-slate-800/60 border rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none ${invalid ? 'border-red-500/60' : 'border-slate-700/50 focus:border-blue-500/50'}`}
