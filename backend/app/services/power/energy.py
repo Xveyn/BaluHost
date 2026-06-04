@@ -125,7 +125,10 @@ def _interval_energy_wh(prev: Dict, cur: Dict) -> float:
     ``bucket_energy_kwh``).
 
     - Imported buckets contribute their own measured ``bucket_energy_kwh``
-      (no integration, independent of the gap to ``prev``).
+      (no integration, independent of the gap to ``prev``). A malformed import
+      lacking ``bucket_energy_kwh`` falls through to the live path below and,
+      at hourly+ spacing, is gap-zeroed — a deliberate conservative under-count
+      (never invents energy).
     - Live samples are trapezoid-integrated only when the gap to ``prev`` is
       within ``GAP_THRESHOLD_MINUTES``; larger gaps are treated as downtime
       (0 Wh — the poller was down / device asleep, drawing ~0).
