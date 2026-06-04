@@ -51,10 +51,9 @@ class ApiKey(Base):
         nullable=False,
     )
 
-    # Active / revoked state
+    # Active state. Revoking a key hard-deletes the row (see
+    # ApiKeyService.delete_api_key), so there is no persisted "revoked" state.
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    revocation_reason: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
     # Optional expiration
     expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -87,12 +86,6 @@ class ApiKey(Base):
             f"<ApiKey(id={self.id}, name='{self.name}', "
             f"prefix='{self.key_prefix}', active={self.is_active})>"
         )
-
-    def revoke(self, reason: Optional[str] = None) -> None:
-        """Revoke this API key."""
-        self.is_active = False
-        self.revoked_at = datetime.now(timezone.utc)
-        self.revocation_reason = reason
 
     @staticmethod
     def hash_key(raw_key: str) -> str:

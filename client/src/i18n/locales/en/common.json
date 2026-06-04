@@ -185,7 +185,8 @@
       "envConfig": "System Variables",
       "firebase": "Firebase",
       "balupi": "BaluPi",
-      "statusBar": "Status Bar"
+      "statusBar": "Status Bar",
+      "apiKeys": "API Keys"
     }
   },
   "devices": {

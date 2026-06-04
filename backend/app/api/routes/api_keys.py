@@ -1,6 +1,5 @@
 """API routes for API Key management (admin only)."""
 import logging
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
@@ -41,8 +40,6 @@ def _serialize_api_key(api_key) -> ApiKeyPublic:
         last_used_ip=api_key.last_used_ip,
         use_count=api_key.use_count,
         created_at=api_key.created_at.isoformat() if api_key.created_at else "",
-        revoked_at=api_key.revoked_at.isoformat() if api_key.revoked_at else None,
-        revocation_reason=api_key.revocation_reason,
     )
 
 
@@ -148,30 +145,29 @@ async def get_api_key(
 
 @router.delete("/{key_id}", status_code=status.HTTP_200_OK)
 @limiter.limit(get_limit("admin_operations"))
-async def revoke_api_key(
+async def delete_api_key(
     request: Request,
     response: Response,
     key_id: int,
-    reason: Optional[str] = None,
     current_user: UserPublic = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ):
-    """Revoke an API key."""
+    """Permanently delete an API key (revoking removes it outright)."""
     audit_logger = get_audit_logger_db()
 
-    success = ApiKeyService.revoke_api_key(db, key_id, current_user.id, reason)
+    success = ApiKeyService.delete_api_key(db, key_id, current_user.id)
     if not success:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="API key not found or already revoked",
+            detail="API key not found",
         )
 
     audit_logger.log_security_event(
-        action="api_key_revoked",
+        action="api_key_deleted",
         user=current_user.username,
         success=True,
-        details={"key_id": key_id, "reason": reason or "none"},
+        details={"key_id": key_id},
         db=db,
     )
 
-    return {"detail": "API key revoked successfully"}
+    return {"detail": "API key deleted successfully"}

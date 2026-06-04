@@ -4,7 +4,7 @@ import { KeyRound, Plus, Trash2, Copy, Check, AlertTriangle, Clock, User } from 
 import {
   listApiKeys,
   createApiKey,
-  revokeApiKey,
+  deleteApiKey,
   getEligibleUsers,
   getKeyStatus,
   type ApiKeyPublic,
@@ -117,18 +117,18 @@ export default function ApiKeysTab() {
     }
   };
 
-  const handleRevoke = async (key: ApiKeyPublic) => {
+  const handleDelete = async (key: ApiKeyPublic) => {
     const confirmed = await confirm(
-      `${t('apiKeys.revokeConfirm')} "${key.name}" (${key.key_prefix}...)?`,
-      { title: t('apiKeys.revoke'), variant: 'danger', confirmLabel: t('apiKeys.revoke') },
+      `${t('apiKeys.deleteConfirm')} "${key.name}" (${key.key_prefix}...)?`,
+      { title: t('apiKeys.delete'), variant: 'danger', confirmLabel: t('apiKeys.delete') },
     );
     if (!confirmed) return;
 
     try {
-      await revokeApiKey(key.id);
+      await deleteApiKey(key.id);
       loadKeys();
     } catch {
-      setError(t('apiKeys.revokeFailed'));
+      setError(t('apiKeys.deleteFailed'));
     }
   };
 
@@ -343,9 +343,9 @@ export default function ApiKeysTab() {
 
                   {key.is_active && (
                     <button
-                      onClick={() => handleRevoke(key)}
+                      onClick={() => handleDelete(key)}
                       className="flex-shrink-0 p-2 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors touch-manipulation active:scale-95"
-                      title={t('apiKeys.revoke')}
+                      title={t('apiKeys.delete')}
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
