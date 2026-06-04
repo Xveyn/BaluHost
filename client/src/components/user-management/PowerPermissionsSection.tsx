@@ -24,7 +24,7 @@ interface PermissionToggle {
 
 // Maps an API field name to its i18n item key under
 // admin:users.systemPermissions.items.*
-const FIELD_TO_I18N: Record<string, string> = {
+const FIELD_TO_I18N: Record<keyof UserPowerPermissionsUpdate, string> = {
   can_soft_sleep: 'softSleep',
   can_wake: 'wake',
   can_suspend: 'suspend',
@@ -41,7 +41,7 @@ const PERMISSION_TOGGLES: PermissionToggle[] = [
 ];
 
 export function PowerPermissionsSection({ userId, userRole }: PowerPermissionsSectionProps) {
-  const { t } = useTranslation('admin');
+  const { t, i18n } = useTranslation('admin');
   const [permissions, setPermissions] = useState<UserPowerPermissions | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -148,7 +148,7 @@ export function PowerPermissionsSection({ userId, userRole }: PowerPermissionsSe
           {t('users.systemPermissions.lastChangedBy', {
             name: permissions.granted_by_username,
             date: permissions.granted_at
-              ? new Date(permissions.granted_at).toLocaleDateString()
+              ? new Date(permissions.granted_at).toLocaleDateString(i18n.language)
               : '',
           })}
         </p>
