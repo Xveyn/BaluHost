@@ -53,7 +53,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, MutableMapping, Optional, Tuple
 from typing import Iterable
 
 ROOT_DIR = Path(__file__).resolve().parent
@@ -214,7 +214,7 @@ def terminate_processes(processes: List[ProcessInfo]) -> None:
 
 def _print_dev_banner() -> None:
     """Print a structured overview of the dev-mode configuration."""
-    setup_mode = os.environ.get("BALUHOST_SKIP_SETUP", "").lower() == "false"
+    setup_mode = os.environ.get("SKIP_SETUP", "").lower() == "false"
     quota_gb = int(os.environ.get("NAS_QUOTA_BYTES", 0)) / (1024 ** 3)
     print("""
 ============================================
@@ -246,15 +246,35 @@ def _print_dev_banner() -> None:
 """.format(
         setup_label=" (Setup Wizard)" if setup_mode else "",
         quota=quota_gb,
-        seed_info="NONE — setup wizard will create users" if setup_mode else "admin/DevMode2024, user/User123",
+        seed_info="NONE — setup wizard will create users" if setup_mode else "admin/DevMode2024 (+ demo users alex, maria / Demo1234)",
     ))
+
+
+def _configure_setup_env(
+    setup_mode: bool,
+    environ: Optional[MutableMapping[str, str]] = None,
+) -> None:
+    """Configure the ``SKIP_SETUP`` env var for the chosen dev startup mode.
+
+    ``Settings.skip_setup`` binds to ``SKIP_SETUP`` (there is no ``BALUHOST_``
+    prefix on the settings model). Normal dev mode defaults it to ``"true"`` so
+    the backend auto-creates the admin (admin/DevMode2024) and skips the
+    first-run wizard — unless the caller already exported a value. ``--setup``
+    mode forces ``"false"`` so the wizard appears.
+    """
+    env = os.environ if environ is None else environ
+    if setup_mode:
+        env["SKIP_SETUP"] = "false"
+    else:
+        env.setdefault("SKIP_SETUP", "true")
 
 
 def _prepare_setup_mode() -> None:
     """Prepare the environment for setup wizard testing.
 
     Deletes the SQLite dev database so the server starts with zero users,
-    triggering the setup wizard in the frontend.
+    triggering the setup wizard in the frontend. The ``SKIP_SETUP=false``
+    toggle is applied separately by :func:`_configure_setup_env`.
     """
     db_path = BACKEND_DIR / "baluhost.db"
     if db_path.exists():
@@ -262,10 +282,7 @@ def _prepare_setup_mode() -> None:
         print("[setup] Deleted dev database for fresh setup wizard experience")
     else:
         print("[setup] No existing dev database — clean start")
-
-    # Ensure skip_setup is off (the default, but be explicit)
-    os.environ["BALUHOST_SKIP_SETUP"] = "false"
-    print("[setup] BALUHOST_SKIP_SETUP=false — setup wizard will appear")
+    print("[setup] SKIP_SETUP=false — setup wizard will appear")
 
 
 def main() -> int:
@@ -357,6 +374,10 @@ def main() -> int:
         # Companion can talk to the dev backend via plain HTTP without UDS.
         # This is dev-only — settings validator blocks it in production.
         os.environ.setdefault("BALUHOST_LOCAL_LOOPBACK_FALLBACK", "true")
+
+        # Bind SKIP_SETUP correctly (the settings model has no BALUHOST_ prefix):
+        # default ON in normal dev mode (auto-seed admin, skip wizard), OFF for --setup.
+        _configure_setup_env(setup_mode)
 
         if setup_mode:
             _prepare_setup_mode()
