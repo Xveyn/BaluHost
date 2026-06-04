@@ -223,13 +223,13 @@ def get_cumulative_energy_total(
 ) -> Dict:
 ```
 
-Set `period_label` once near the top of the body (after building `power_devices`):
+Set `period_label` once **immediately after the `power_devices = [...]` list comprehension and before the `empty_result = {` dict** (so `empty_result` can use it):
 
 ```python
     period_label = "custom" if (start is not None and end is not None) else period
 ```
 
-In `empty_result`, change `"period": period,` to `"period": period_label,`.
+In the `empty_result` dict (currently `"period": period,`), change it to `"period": period_label,`.
 
 Pass the range through to the per-device call (the line `device_data = get_cumulative_energy_data(db, device.id, period, cost_per_kwh)`):
 
