@@ -12,9 +12,10 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timedelta, timezone
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models.smart_device import SmartDeviceSample
+from app.models.smart_device import SmartDevice, SmartDeviceSample
 
 logger = logging.getLogger(__name__)
 
@@ -22,19 +23,27 @@ logger = logging.getLogger(__name__)
 SMART_DEVICE_SAMPLE_RETENTION_DAYS = 30
 
 
-def cleanup_old_smart_device_samples(
+def cleanup_smart_device_samples(
     db: Session,
-    days_to_keep: int = SMART_DEVICE_SAMPLE_RETENTION_DAYS,
+    plugin_name: str,
+    days_to_keep: int,
 ) -> int:
-    """Delete smart_device_samples older than the cutoff across ALL capabilities.
+    """Delete samples for devices owned by ``plugin_name`` older than the cutoff.
 
-    Imported rows (``data_json`` contains ``"imported_from"``) are preserved.
+    Covers all capabilities of that plugin's devices. Rows whose ``data_json``
+    contains ``"imported_from"`` (manually imported history) are always kept.
+    ``days_to_keep <= 0`` means unlimited — nothing is deleted.
 
     Returns the number of deleted rows.
     """
+    if days_to_keep <= 0:
+        return 0
+
     cutoff = datetime.now(timezone.utc) - timedelta(days=days_to_keep)
+    device_ids = select(SmartDevice.id).where(SmartDevice.plugin_name == plugin_name)
 
     deleted = db.query(SmartDeviceSample).filter(
+        SmartDeviceSample.device_id.in_(device_ids),
         SmartDeviceSample.timestamp < cutoff,
         ~SmartDeviceSample.data_json.contains('"imported_from"'),
     ).delete(synchronize_session=False)
@@ -42,7 +51,8 @@ def cleanup_old_smart_device_samples(
     db.commit()
     if deleted:
         logger.info(
-            "Cleaned up %d smart_device_samples older than %d days (imported rows preserved)",
-            deleted, days_to_keep,
+            "Cleaned up %d smart_device_samples for plugin '%s' older than %d days "
+            "(imported rows preserved)",
+            deleted, plugin_name, days_to_keep,
         )
     return deleted

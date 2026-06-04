@@ -6,7 +6,7 @@ import pytest
 
 from app.models.smart_device import SmartDevice, SmartDeviceSample
 from app.plugins.smart_device.retention import (
-    cleanup_old_smart_device_samples,
+    cleanup_smart_device_samples,
     SMART_DEVICE_SAMPLE_RETENTION_DAYS,
 )
 
@@ -46,7 +46,7 @@ def test_deletes_all_capabilities_older_than_cutoff(db_session, device):
     _add(db_session, device.id, "switch", days_ago=60)
     _add(db_session, device.id, "power_monitor", days_ago=1)
 
-    deleted = cleanup_old_smart_device_samples(db_session, days_to_keep=30)
+    deleted = cleanup_smart_device_samples(db_session, "tapo_smart_plug", 30)
 
     assert deleted == 2
     assert db_session.query(SmartDeviceSample).count() == 1
@@ -57,7 +57,7 @@ def test_preserves_imported_rows(db_session, device):
     _add(db_session, device.id, "power_monitor", days_ago=60,
          extra={"imported_from": "tapo_history"})              # imported -> kept
 
-    deleted = cleanup_old_smart_device_samples(db_session, days_to_keep=30)
+    deleted = cleanup_smart_device_samples(db_session, "tapo_smart_plug", 30)
 
     assert deleted == 1
     remaining = db_session.query(SmartDeviceSample).all()
@@ -67,7 +67,7 @@ def test_preserves_imported_rows(db_session, device):
 
 def test_nothing_to_delete(db_session, device):
     _add(db_session, device.id, "switch", days_ago=1)
-    assert cleanup_old_smart_device_samples(db_session, days_to_keep=30) == 0
+    assert cleanup_smart_device_samples(db_session, "tapo_smart_plug", 30) == 0
 
 
 def test_poller_cleanup_gate():
@@ -82,3 +82,36 @@ def test_poller_cleanup_gate():
     assert poller._should_cleanup_samples(now=1000.0 + _SAMPLE_CLEANUP_INTERVAL - 1) is False
     # Interval elapsed.
     assert poller._should_cleanup_samples(now=1000.0 + _SAMPLE_CLEANUP_INTERVAL) is True
+
+
+def test_scopes_to_plugin(db_session, device):
+    """Cleanup only deletes samples of devices owned by the given plugin."""
+    from app.models.smart_device import SmartDevice, SmartDeviceSample
+
+    other = SmartDevice(
+        name="Other", plugin_name="other_plugin",
+        device_type_id="x", address="10.0.0.9",
+        capabilities=["sensor"], is_active=True, is_online=True,
+        created_by_user_id=1,
+    )
+    db_session.add(other)
+    db_session.commit()
+    db_session.refresh(other)
+
+    _add(db_session, device.id, "power_monitor", days_ago=60)   # tapo, old -> deleted
+    _add(db_session, other.id, "sensor", days_ago=60)           # other plugin, old -> kept
+
+    deleted = cleanup_smart_device_samples(db_session, "tapo_smart_plug", 30)
+
+    assert deleted == 1
+    remaining = {s.device_id for s in db_session.query(SmartDeviceSample).all()}
+    assert remaining == {other.id}
+
+
+def test_unlimited_keeps_everything(db_session, device):
+    from app.models.smart_device import SmartDeviceSample
+
+    _add(db_session, device.id, "power_monitor", days_ago=400)
+    deleted = cleanup_smart_device_samples(db_session, "tapo_smart_plug", 0)
+    assert deleted == 0
+    assert db_session.query(SmartDeviceSample).count() == 1
