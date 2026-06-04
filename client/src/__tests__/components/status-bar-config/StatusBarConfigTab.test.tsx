@@ -15,8 +15,8 @@ import { StatusBarConfigTab } from '../../../components/status-bar-config/Status
 
 const cfg = {
   pills: [
-    { pill_id: 'power', name_key: 'statusBar.pills.power.name', enabled: false, visibility: 'admin', visibility_locked: false, sort_order: 0, href: '/x' },
-    { pill_id: 'raid', name_key: 'statusBar.pills.raid.name', enabled: false, visibility: 'admin', visibility_locked: true, sort_order: 1, href: '/y' },
+    { pill_id: 'power', name_key: 'statusBar.pills.power.name', enabled: false, visibility: 'admin', visibility_locked: false, sort_order: 0, href: '/x', icon: 'Zap', display_mode: 'always', display_mode_configurable: false },
+    { pill_id: 'raid', name_key: 'statusBar.pills.raid.name', enabled: false, visibility: 'admin', visibility_locked: true, sort_order: 1, href: '/y', icon: 'HardDrive', display_mode: 'always', display_mode_configurable: false },
   ],
   show_bottom_upload: true,
 };
@@ -36,6 +36,19 @@ describe('StatusBarConfigTab', () => {
     renderTab();
     await waitFor(() => expect(screen.getByText('pills.power.name')).toBeInTheDocument());
     expect(screen.getByText('pills.raid.name')).toBeInTheDocument();
+  });
+
+  it('renders the pill icon in the live preview', async () => {
+    (getStatusBarConfig as any).mockResolvedValue({
+      pills: [
+        { pill_id: 'power', name_key: 'statusBar.pills.power.name', enabled: true, visibility: 'admin', visibility_locked: false, sort_order: 0, href: '/x', icon: 'Zap', display_mode: 'always', display_mode_configurable: false },
+      ],
+      show_bottom_upload: true,
+    });
+    const { container } = renderTab();
+    await waitFor(() => expect(screen.getByText('save')).toBeInTheDocument());
+    // The enabled pill's lucide icon (Zap) must appear in the Live Preview.
+    expect(container.querySelector('.lucide-zap')).toBeInTheDocument();
   });
 
   it('save button calls updateStatusBarConfig', async () => {

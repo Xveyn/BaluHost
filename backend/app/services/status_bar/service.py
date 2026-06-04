@@ -1,12 +1,15 @@
 """Aggregator + config service for the topbar status strip."""
 import logging
+from typing import cast
 
 from sqlalchemy.orm import Session
 
 from app.models.status_bar import StatusBarPillConfig, StatusBarSettings
 from app.schemas.status_bar import (
+    DisplayMode,
     PillCatalogEntry,
     PillState,
+    PillVisibility,
     StatusBarConfigResponse,
     StatusBarConfigUpdate,
     StatusBarStateResponse,
@@ -60,11 +63,12 @@ class StatusBarService:
                 pill_id=definition.id,
                 name_key=definition.name_key,
                 enabled=row.enabled,
-                visibility=row.visibility,
+                visibility=cast(PillVisibility, row.visibility),
                 visibility_locked=definition.visibility_locked,
                 sort_order=row.sort_order,
                 href=definition.href,
-                display_mode=getattr(row, "display_mode", "always"),
+                icon=definition.icon,
+                display_mode=cast(DisplayMode, getattr(row, "display_mode", "always")),
                 display_mode_configurable=definition.display_mode_configurable,
             ))
         return StatusBarConfigResponse(pills=entries, show_bottom_upload=settings.show_bottom_upload)

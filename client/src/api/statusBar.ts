@@ -40,6 +40,7 @@ export interface PillCatalogEntry {
   visibility_locked: boolean;
   sort_order: number;
   href: string;
+  icon: string;
   display_mode: DisplayMode;
   display_mode_configurable: boolean;
 }
