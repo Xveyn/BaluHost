@@ -103,6 +103,47 @@ def test_locked_set_matches_spec():
     assert locked == {"raid", "sleep", "vpn", "temp", "always_awake", "scheduler", "backup"}
 
 
+# ── catalog icon (representative icon for the config Live Preview) ───────
+# Each catalog entry declares the icon the live collector emits, so the admin
+# config tab's Live Preview can show real icons without an API round-trip.
+# Pinned per id for drift detection against collectors.py.
+_EXPECTED_PILL_ICONS = {
+    "power": "Zap",
+    "pihole": "Shield",
+    "uploads": "Upload",
+    "sync": "RefreshCw",
+    "raid": "HardDrive",
+    "sleep": "Moon",
+    "vpn": "Lock",
+    "temp": "Thermometer",
+    "always_awake": "Coffee",
+    "scheduler": "Clock",
+    "backup": "Save",
+    "desktop": "Monitor",
+}
+
+
+def test_every_catalog_pill_has_a_nonempty_icon():
+    from app.services.status_bar.catalog import CATALOG
+    for p in CATALOG:
+        assert getattr(p, "icon", None), f"pill {p.id} is missing an icon"
+
+
+def test_catalog_icons_match_expected():
+    from app.services.status_bar.catalog import CATALOG_BY_ID
+    actual = {pid: CATALOG_BY_ID[pid].icon for pid in _EXPECTED_PILL_ICONS}
+    assert actual == _EXPECTED_PILL_ICONS
+
+
+def test_get_config_exposes_icon(db_session):
+    svc = StatusBarService(db_session)
+    cfg = svc.get_config()
+    by_id = {p.pill_id: p for p in cfg.pills}
+    assert by_id["power"].icon == "Zap"
+    assert by_id["desktop"].icon == "Monitor"
+    assert all(p.icon for p in cfg.pills)
+
+
 # ── Task 9: config read (seed-on-read) ──────────────────────────────────
 from app.services.status_bar.service import StatusBarService
 

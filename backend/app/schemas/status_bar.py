@@ -38,6 +38,7 @@ class PillCatalogEntry(BaseModel):
     visibility_locked: bool
     sort_order: int
     href: str
+    icon: str
     display_mode: DisplayMode
     display_mode_configurable: bool
 

@@ -32,7 +32,7 @@ function renderInDnd(element: React.ReactElement) {
 
 const base: PillCatalogEntry = {
   pill_id: 'power', name_key: 'statusBar.pills.power.name', enabled: false,
-  visibility: 'admin', visibility_locked: false, sort_order: 0, href: '/x',
+  visibility: 'admin', visibility_locked: false, sort_order: 0, href: '/x', icon: 'Zap',
   display_mode: 'always', display_mode_configurable: false,
 };
 
@@ -56,7 +56,7 @@ describe('PillRow', () => {
 
   it('renders a display-mode select only for display_mode_configurable pills', () => {
     const baseEntry = { name_key: 'statusBar.pills.x.name', enabled: true, visibility: 'admin' as const,
-                   visibility_locked: false, sort_order: 0, href: '/x', display_mode: 'always' as const };
+                   visibility_locked: false, sort_order: 0, href: '/x', icon: 'Monitor', display_mode: 'always' as const };
     const { rerender } = renderInDnd(
       <PillRow entry={{ ...baseEntry, pill_id: 'desktop', display_mode_configurable: true }}
                onToggleEnabled={() => {}} onSetVisibility={() => {}} onSetDisplayMode={() => {}} />
@@ -77,7 +77,7 @@ describe('PillRow', () => {
     const onSetDisplayMode = vi.fn();
     renderInDnd(
       <PillRow entry={{ pill_id: 'desktop', name_key: 'statusBar.pills.desktop.name', enabled: true,
-               visibility: 'admin', visibility_locked: false, sort_order: 0, href: '/x',
+               visibility: 'admin', visibility_locked: false, sort_order: 0, href: '/x', icon: 'Monitor',
                display_mode: 'always', display_mode_configurable: true }}
                onToggleEnabled={() => {}} onSetVisibility={() => {}} onSetDisplayMode={onSetDisplayMode} />
     );
