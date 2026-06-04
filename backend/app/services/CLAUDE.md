@@ -24,7 +24,7 @@ Business logic layer. Routes delegate to services — services contain the actua
 | `totp_service.py` | TOTP 2FA setup, verification, backup codes |
 | `token_service.py` | Refresh token management, rotation |
 | `plugin_service.py` | Plugin install/uninstall/toggle operations |
-| `power_permissions.py` | Per-user power action permissions (get, update, check) |
+| `power_permissions.py` | Per-user power action permissions (get, update, check), incl. `can_toggle_desktop`. UI name: "System Permissions / Systemberechtigungen"; backend identifiers stay `power_permissions` (deliberate — no rename/migration). |
 | `samba_service.py` | Samba/SMB share management |
 | `webdav_service.py` | WebDAV server lifecycle control |
 | `rate_limit_config.py` | DB-backed rate limit configuration |
