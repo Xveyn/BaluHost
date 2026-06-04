@@ -50,6 +50,20 @@ class TestCumulativeRangeParams:
         )
         assert r.status_code == 422
 
+    def test_future_only_range_rejected(self, client: TestClient, user_headers, power_device):
+        # A wholly-future range collapses end->now after clamping, so it must
+        # be rejected as start >= end (422), not silently return an inverted window.
+        now = datetime.now(timezone.utc)
+        qs = urlencode({
+            "start": _iso(now + timedelta(days=1)),
+            "end": _iso(now + timedelta(days=2)),
+        })
+        r = client.get(
+            f"/api/energy/cumulative/{power_device.id}?{qs}",
+            headers=user_headers,
+        )
+        assert r.status_code == 422
+
     def test_valid_empty_range_returns_custom(self, client: TestClient, user_headers, power_device):
         now = datetime.now(timezone.utc)
         qs = urlencode({

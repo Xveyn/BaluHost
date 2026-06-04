@@ -49,14 +49,16 @@ def _validate_range(
         start = start.replace(tzinfo=timezone.utc)
     if end.tzinfo is None:
         end = end.replace(tzinfo=timezone.utc)
+    # Clamp a future end to now BEFORE the order check, so a wholly-future
+    # range (which collapses end to now) is also rejected as start >= end.
+    now = datetime.now(timezone.utc)
+    if end > now:
+        end = now
     if start >= end:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="'start' must be before 'end'",
         )
-    now = datetime.now(timezone.utc)
-    if end > now:
-        end = now
     return start, end
 
 
