@@ -151,6 +151,13 @@ class TestToggleDesktopPermission:
         assert data["can_wake"] is False
         assert data["can_suspend"] is False
         assert data["can_wol"] is False
+        # Reset the shared regular_user row so this grant doesn't leak into
+        # order-independent runs of test_default_is_false.
+        client.put(
+            f"/api/users/{regular_user.id}/power-permissions",
+            json={"can_toggle_desktop": False},
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
 
     def test_my_permissions_includes_toggle_desktop(self, client: TestClient, user_token: str):
         resp = client.get(
