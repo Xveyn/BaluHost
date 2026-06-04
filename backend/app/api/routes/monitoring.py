@@ -44,6 +44,7 @@ from app.schemas.monitoring import (
 )
 from app.models.sleep import SleepStateLog
 from app.services.monitoring.orchestrator import get_monitoring_orchestrator
+from app.services.monitoring.retention_manager import METRIC_MODELS
 
 router = APIRouter(prefix="/monitoring", tags=["monitoring"])
 
@@ -644,7 +645,7 @@ async def get_retention_config(
     orchestrator = get_monitoring_orchestrator()
     configs = []
 
-    for metric_type in MetricType:
+    for metric_type in METRIC_MODELS:
         config = orchestrator.retention_manager.get_config(db, metric_type)
         configs.append(RetentionConfigResponse(
             metric_type=metric_type.value,
@@ -675,6 +676,9 @@ async def update_retention_config(
         mt = MetricType(metric_type)
     except ValueError:
         raise HTTPException(status_code=400, detail=f"Invalid metric type: {metric_type}")
+
+    if mt not in METRIC_MODELS:
+        raise HTTPException(status_code=400, detail=f"Metric type not configurable: {metric_type}")
 
     config = orchestrator.retention_manager.set_retention(db, mt, update.retention_hours)
 

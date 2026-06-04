@@ -186,7 +186,12 @@
     "title": "Plugin Settings",
     "save": "Save Settings",
     "saved": "Settings saved",
-    "saveError": "Failed to save settings"
+    "saveError": "Failed to save settings",
+    "daysUnit": "days",
+    "unlimited": "Unlimited",
+    "unlimitedHint": "never deleted",
+    "presetDays_one": "{{count}} day",
+    "presetDays_other": "{{count}} days"
   },
   "permissionDescriptions": {
     "file:read": "Read files from storage",

@@ -40,6 +40,14 @@ class TapoPluginConfig(BaseModel):
         description="Devices shown in the dashboard power panel",
         json_schema_extra={"x-options-source": "smart-devices"},
     )
+    retention_days: int = Field(
+        default=30,
+        ge=0,
+        le=365,
+        title="Sample retention (days)",
+        description="How long to keep this plugin's device samples (0 = unlimited).",
+        json_schema_extra={"x-presets": [7, 30, 90, 180], "x-unlimited-value": 0},
+    )
 
 
 @dataclass
@@ -140,6 +148,7 @@ class TapoSmartPlugPlugin(SmartDevicePlugin):
                 "description": "TP-Link Tapo P110/P115 smart plug integration with power monitoring",
                 "panel_title": "Power Monitoring",
                 "settings_panel_devices": "Dashboard Panel Devices",
+                "settings_retention_days": "Sample retention (days)",
                 "settings_third_party_hint": "Enable \"Third-Party Compatibility\" in the Tapo app for each device. Without this, the device may not respond.",
             },
             "de": {
@@ -147,6 +156,7 @@ class TapoSmartPlugPlugin(SmartDevicePlugin):
                 "description": "TP-Link Tapo P110/P115 Steckdosen-Integration mit Leistungsüberwachung",
                 "panel_title": "Stromverbrauch",
                 "settings_panel_devices": "Dashboard-Panel Geräte",
+                "settings_retention_days": "Aufbewahrung der Messdaten (Tage)",
                 "settings_third_party_hint": "Aktiviere \"Drittanbieter-Kompatibilität\" in der Tapo App für jedes Gerät. Ohne diese Einstellung antwortet das Gerät möglicherweise nicht.",
             },
         }

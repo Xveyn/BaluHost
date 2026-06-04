@@ -125,6 +125,61 @@ export function PluginSettingsSection({ pluginName, configSchema, config, transl
           );
         }
 
+        if (schema.type === 'integer' || schema.type === 'number') {
+          const presets: number[] = Array.isArray(schema['x-presets']) ? schema['x-presets'] : [];
+          const unlimitedValue = schema['x-unlimited-value'];
+          const hasUnlimited = unlimitedValue !== undefined;
+          const current = formData[key] ?? schema.default ?? '';
+          const isUnlimited = hasUnlimited && current === unlimitedValue;
+          const freeMin = hasUnlimited ? Math.max(1, schema.minimum ?? 1) : (schema.minimum ?? 0);
+          return (
+            <div key={key} className="space-y-1.5">
+              <label className="text-sm text-gray-300">{label}</label>
+              <div className="flex items-center gap-2 flex-wrap">
+                <input
+                  type="number"
+                  min={freeMin}
+                  max={schema.maximum}
+                  step={1}
+                  disabled={isUnlimited}
+                  value={isUnlimited ? '' : current}
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    if (raw === '') return; // ignore empty mid-edit: Number('') === 0 would collide with the unlimited sentinel
+                    setFormData({ ...formData, [key]: Number(raw) });
+                  }}
+                  className="w-28 rounded bg-gray-700 border border-gray-600 px-3 py-1.5 text-sm text-gray-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 disabled:opacity-50"
+                />
+                <span className="text-xs text-gray-400">{t('settings.daysUnit')}</span>
+                {isUnlimited && <span className="text-xs text-amber-400">{t('settings.unlimitedHint')}</span>}
+              </div>
+              {(presets.length > 0 || hasUnlimited) && (
+                <div className="flex flex-wrap gap-1.5">
+                  {presets.map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setFormData({ ...formData, [key]: p })}
+                      className={`px-2 py-1 rounded-md text-xs border transition-colors ${current === p && !isUnlimited ? 'bg-blue-600 border-blue-500 text-white' : 'bg-gray-700 border-gray-600 text-gray-300 hover:bg-gray-600'}`}
+                    >
+                      {t('settings.presetDays', { count: p })}
+                    </button>
+                  ))}
+                  {hasUnlimited && (
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, [key]: unlimitedValue })}
+                      className={`px-2 py-1 rounded-md text-xs border transition-colors ${isUnlimited ? 'bg-amber-600 border-amber-500 text-white' : 'bg-gray-700 border-gray-600 text-gray-300 hover:bg-gray-600'}`}
+                    >
+                      {t('settings.unlimited')}
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        }
+
         return null;
       })}
 

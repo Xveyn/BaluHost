@@ -186,7 +186,12 @@
     "title": "Plugin-Einstellungen",
     "save": "Einstellungen speichern",
     "saved": "Einstellungen gespeichert",
-    "saveError": "Einstellungen konnten nicht gespeichert werden"
+    "saveError": "Einstellungen konnten nicht gespeichert werden",
+    "daysUnit": "Tage",
+    "unlimited": "Unbegrenzt",
+    "unlimitedHint": "wird nie gelöscht",
+    "presetDays_one": "{{count}} Tag",
+    "presetDays_other": "{{count}} Tage"
   },
   "permissionDescriptions": {
     "file:read": "Dateien aus dem Speicher lesen",
