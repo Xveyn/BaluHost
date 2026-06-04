@@ -138,19 +138,37 @@ export interface CumulativeEnergyResponse {
 
 export async function getCumulativeEnergy(
   deviceId: number,
-  period: 'today' | 'week' | 'month' = 'today'
+  period: 'today' | 'week' | 'month' = 'today',
+  start?: string,
+  end?: string,
 ): Promise<CumulativeEnergyResponse> {
+  const params = new URLSearchParams();
+  if (start && end) {
+    params.set('start', start);
+    params.set('end', end);
+  } else {
+    params.set('period', period);
+  }
   const response = await apiClient.get<CumulativeEnergyResponse>(
-    `/api/energy/cumulative/${deviceId}?period=${period}`
+    `/api/energy/cumulative/${deviceId}?${params.toString()}`,
   );
   return response.data;
 }
 
 export async function getCumulativeEnergyTotal(
-  period: 'today' | 'week' | 'month' = 'today'
+  period: 'today' | 'week' | 'month' = 'today',
+  start?: string,
+  end?: string,
 ): Promise<CumulativeEnergyResponse> {
+  const params = new URLSearchParams();
+  if (start && end) {
+    params.set('start', start);
+    params.set('end', end);
+  } else {
+    params.set('period', period);
+  }
   const response = await apiClient.get<CumulativeEnergyResponse>(
-    `/api/energy/cumulative/total?period=${period}`
+    `/api/energy/cumulative/total?${params.toString()}`,
   );
   return response.data;
 }
