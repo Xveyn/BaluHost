@@ -136,7 +136,8 @@
       "stats": "Stats",
       "storage": "Storage",
       "history": "History",
-      "maintenance": "Maintenance"
+      "maintenance": "Maintenance",
+      "retention": "Retention"
     },
     "selectTable": "Select table",
     "noTableSelected": "No table selected",
@@ -264,7 +265,9 @@
       "network": "Network",
       "diskIo": "Disk I/O",
       "process": "Process",
-      "power": "Power"
+      "power": "Power",
+      "uptime": "Uptime",
+      "gpu": "GPU"
     },
     "fields": {
       "samples": "Samples",
@@ -278,6 +281,19 @@
       "totalSize": "Total Size",
       "metricTypes": "Metric Types"
     }
+  },
+  "retentionSettings": {
+    "title": "Data Retention",
+    "hint": "How long monitoring samples are kept in the database before automatic cleanup.",
+    "hours": "h",
+    "approxDays": "≈ {{count}} days",
+    "presetDays_one": "{{count}} day",
+    "presetDays_other": "{{count}} days",
+    "save": "Save",
+    "saved": "Retention updated",
+    "saveFailed": "Failed to update retention",
+    "loading": "Loading retention settings...",
+    "validation": "Enter a value between 1 and 8760 hours."
   },
   "storageAnalysis": {
     "title": "Storage Analysis",

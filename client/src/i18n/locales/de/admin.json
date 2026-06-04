@@ -136,7 +136,8 @@
       "stats": "Statistiken",
       "storage": "Speicher",
       "history": "Verlauf",
-      "maintenance": "Wartung"
+      "maintenance": "Wartung",
+      "retention": "Aufbewahrung"
     },
     "selectTable": "Tabelle auswählen",
     "noTableSelected": "Keine Tabelle ausgewählt",
@@ -264,7 +265,9 @@
       "network": "Netzwerk",
       "diskIo": "Disk I/O",
       "process": "Prozess",
-      "power": "Strom"
+      "power": "Strom",
+      "uptime": "Betriebszeit",
+      "gpu": "GPU"
     },
     "fields": {
       "samples": "Samples",
@@ -278,6 +281,19 @@
       "totalSize": "Gesamtgröße",
       "metricTypes": "Metrik-Typen"
     }
+  },
+  "retentionSettings": {
+    "title": "Datenaufbewahrung",
+    "hint": "Wie lange Monitoring-Samples in der Datenbank behalten werden, bevor sie automatisch bereinigt werden.",
+    "hours": "h",
+    "approxDays": "≈ {{count}} Tage",
+    "presetDays_one": "{{count}} Tag",
+    "presetDays_other": "{{count}} Tage",
+    "save": "Speichern",
+    "saved": "Aufbewahrung aktualisiert",
+    "saveFailed": "Aufbewahrung konnte nicht aktualisiert werden",
+    "loading": "Lade Aufbewahrungseinstellungen...",
+    "validation": "Bitte einen Wert zwischen 1 und 8760 Stunden eingeben."
   },
   "storageAnalysis": {
     "title": "Speicheranalyse",
