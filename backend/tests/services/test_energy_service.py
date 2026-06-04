@@ -21,6 +21,7 @@ from app.services.power.energy import (
     get_energy_price_config,
     update_energy_price_config,
     get_cumulative_energy_data,
+    get_cumulative_energy_total,
     get_hourly_samples,
 )
 
@@ -238,3 +239,66 @@ class TestCumulativeEnergyData:
         assert result is not None
         assert result["total_kwh"] == 0.0
         assert result["data_points"] == []
+
+
+# ============================================================================
+# Cumulative Custom Range
+# ============================================================================
+
+class TestCumulativeCustomRange:
+    def test_explicit_range_filters_window(self, db_session, smart_device, sample_data):
+        # sample_data has 10 samples at now, now-5m, ... now-45m
+        now = datetime.now(timezone.utc)
+        start = now - timedelta(minutes=12)  # captures samples at 0,5,10 min ago
+        result = get_cumulative_energy_data(
+            db_session, smart_device.id, "today", 0.40, start=start, end=now,
+        )
+        assert result is not None
+        assert result["period"] == "custom"
+        # Only samples within [start, now] are counted (3 of them: 0,5,10 min ago)
+        assert len(result["data_points"]) == 3
+
+    def test_empty_range_returns_two_zero_boundary_points(self, db_session, smart_device):
+        now = datetime.now(timezone.utc)
+        start = now - timedelta(days=400)
+        end = now - timedelta(days=399)  # no samples exist here
+        result = get_cumulative_energy_data(
+            db_session, smart_device.id, "today", 0.40, start=start, end=end,
+        )
+        assert result is not None
+        assert result["period"] == "custom"
+        assert result["total_kwh"] == 0.0
+        assert result["total_cost"] == 0.0
+        assert len(result["data_points"]) == 2
+        assert result["data_points"][0]["instant_watts"] == 0.0
+        assert result["data_points"][0]["cumulative_kwh"] == 0.0
+        assert result["data_points"][0]["timestamp"] == start.isoformat()
+        assert result["data_points"][1]["timestamp"] == end.isoformat()
+
+    def test_no_range_keeps_period_label(self, db_session, smart_device, sample_data):
+        result = get_cumulative_energy_data(db_session, smart_device.id, "today", 0.40)
+        assert result["period"] == "today"
+
+
+# ============================================================================
+# Cumulative Total Custom Range
+# ============================================================================
+
+class TestCumulativeTotalCustomRange:
+    def test_total_explicit_range(self, db_session, smart_device, sample_data):
+        now = datetime.now(timezone.utc)
+        start = now - timedelta(minutes=12)
+        result = get_cumulative_energy_total(db_session, "today", 0.40, start=start, end=now)
+        assert result["period"] == "custom"
+        assert result["device_name"] == "Total"
+        assert len(result["data_points"]) >= 1
+
+    def test_total_empty_range_zero_boundaries(self, db_session, smart_device):
+        now = datetime.now(timezone.utc)
+        start = now - timedelta(days=400)
+        end = now - timedelta(days=399)
+        result = get_cumulative_energy_total(db_session, "today", 0.40, start=start, end=end)
+        assert result["period"] == "custom"
+        assert result["total_kwh"] == 0.0
+        assert len(result["data_points"]) == 2
+        assert result["data_points"][0]["timestamp"] == start.isoformat()

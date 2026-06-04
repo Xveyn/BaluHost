@@ -364,11 +364,36 @@ def update_energy_price_config(
     return config
 
 
+def _resolve_period_range(period: str, now: datetime) -> tuple[datetime, datetime]:
+    """Map a named period to a (start, end=now) window.
+
+    Args:
+        period: One of "today", "week", or "month". Any other value falls
+            through to the month window (start of the current month).
+        now: The reference "now" timestamp (UTC).
+
+    Returns:
+        Tuple of (start, now).
+    """
+    if period == "today":
+        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    elif period == "week":
+        start = (now - timedelta(days=now.weekday())).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+    else:  # month
+        start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    return start, now
+
+
 def get_cumulative_energy_data(
     db: Session,
     device_id: int,
     period: str,
-    cost_per_kwh: float
+    cost_per_kwh: float,
+    *,
+    start: Optional[datetime] = None,
+    end: Optional[datetime] = None,
 ) -> Optional[Dict]:
     """
     Calculate cumulative energy consumption data for charting.
@@ -378,6 +403,8 @@ def get_cumulative_energy_data(
         device_id: Smart device ID
         period: 'today', 'week', or 'month'
         cost_per_kwh: Cost per kWh for cost calculation
+        start: Optional explicit window start (keyword-only); overrides period
+        end: Optional explicit window end (keyword-only); overrides period
 
     Returns:
         Dict with device info, totals, and data_points array, or None if device not found
@@ -387,20 +414,19 @@ def get_cumulative_energy_data(
         return None
 
     now = datetime.now(timezone.utc)
-    if period == "today":
-        start_time = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    elif period == "week":
-        start_time = now - timedelta(days=now.weekday())
-        start_time = start_time.replace(hour=0, minute=0, second=0, microsecond=0)
+    if start is not None and end is not None:
+        start_time, end_time = start, end
+        period_label = "custom"
     else:
-        start_time = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        start_time, end_time = _resolve_period_range(period, now)
+        period_label = period
 
     samples = db.query(SmartDeviceSample).filter(
         and_(
             SmartDeviceSample.device_id == device_id,
             SmartDeviceSample.capability == _POWER_CAPABILITY,
             SmartDeviceSample.timestamp >= start_time,
-            SmartDeviceSample.timestamp <= now,
+            SmartDeviceSample.timestamp <= end_time,
         )
     ).order_by(SmartDeviceSample.timestamp).all()
 
@@ -412,10 +438,27 @@ def get_cumulative_energy_data(
             parsed_samples.append({"timestamp": s.timestamp, **p})
 
     if not parsed_samples:
+        if start is not None and end is not None:
+            zero_points = [
+                {"timestamp": start_time.isoformat(), "cumulative_kwh": 0.0,
+                 "cumulative_cost": 0.0, "instant_watts": 0.0},
+                {"timestamp": end_time.isoformat(), "cumulative_kwh": 0.0,
+                 "cumulative_cost": 0.0, "instant_watts": 0.0},
+            ]
+            return {
+                "device_id": device_id,
+                "device_name": device.name,
+                "period": period_label,
+                "cost_per_kwh": cost_per_kwh,
+                "currency": "EUR",
+                "total_kwh": 0.0,
+                "total_cost": 0.0,
+                "data_points": zero_points,
+            }
         return {
             "device_id": device_id,
             "device_name": device.name,
-            "period": period,
+            "period": period_label,
             "cost_per_kwh": cost_per_kwh,
             "currency": "EUR",
             "total_kwh": 0.0,
@@ -460,7 +503,7 @@ def get_cumulative_energy_data(
     return {
         "device_id": device_id,
         "device_name": device.name,
-        "period": period,
+        "period": period_label,
         "cost_per_kwh": cost_per_kwh,
         "currency": "EUR",
         "total_kwh": round(total_kwh, 4),
@@ -473,6 +516,9 @@ def get_cumulative_energy_total(
     db: Session,
     period: str,
     cost_per_kwh: float,
+    *,
+    start: Optional[datetime] = None,
+    end: Optional[datetime] = None,
 ) -> Dict:
     """
     Aggregate cumulative energy across all active power-monitoring devices.
@@ -481,6 +527,8 @@ def get_cumulative_energy_total(
         db: Database session
         period: 'today', 'week', or 'month'
         cost_per_kwh: Cost per kWh for cost calculation
+        start: Optional explicit window start (keyword-only); overrides period
+        end: Optional explicit window end (keyword-only); overrides period
 
     Returns:
         Dict with aggregated totals and data_points array
@@ -494,10 +542,12 @@ def get_cumulative_energy_total(
         if isinstance(d.capabilities, list) and _POWER_CAPABILITY in d.capabilities
     ]
 
+    period_label = "custom" if (start is not None and end is not None) else period
+
     empty_result = {
         "device_id": 0,
         "device_name": "Total",
-        "period": period,
+        "period": period_label,
         "cost_per_kwh": cost_per_kwh,
         "currency": "EUR",
         "total_kwh": 0.0,
@@ -511,7 +561,9 @@ def get_cumulative_energy_total(
     # Collect instant_watts per timestamp from all devices
     watts_by_ts: Dict[str, float] = {}
     for device in power_devices:
-        device_data = get_cumulative_energy_data(db, device.id, period, cost_per_kwh)
+        device_data = get_cumulative_energy_data(
+            db, device.id, period, cost_per_kwh, start=start, end=end,
+        )
         if device_data is None:
             continue
         for point in device_data.get("data_points", []):
@@ -547,7 +599,7 @@ def get_cumulative_energy_total(
     return {
         "device_id": 0,
         "device_name": "Total",
-        "period": period,
+        "period": period_label,
         "cost_per_kwh": cost_per_kwh,
         "currency": "EUR",
         "total_kwh": round(total_kwh, 3),

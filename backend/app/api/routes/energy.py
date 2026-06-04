@@ -5,6 +5,7 @@ Provides detailed energy consumption statistics, downtime tracking,
 and historical analysis based on smart device power measurements.
 """
 
+from datetime import datetime, timezone
 from typing import Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Request, Response
 from sqlalchemy.orm import Session
@@ -26,6 +27,39 @@ from app.services.power import energy as energy_stats
 from app.core.rate_limiter import user_limiter, get_limit
 
 router = APIRouter()
+
+
+def _validate_range(
+    start: Optional[datetime], end: Optional[datetime]
+) -> tuple[Optional[datetime], Optional[datetime]]:
+    """Validate/normalize a custom range. Returns (None, None) when absent.
+
+    A future ``end`` is silently clamped to now; the caller receives no
+    indication that clamping occurred.
+    """
+    if start is None and end is None:
+        return None, None
+    if start is None or end is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Both 'start' and 'end' are required for a custom range",
+        )
+    # Treat naive datetimes as UTC (frontend sends '...Z', but be defensive)
+    if start.tzinfo is None:
+        start = start.replace(tzinfo=timezone.utc)
+    if end.tzinfo is None:
+        end = end.replace(tzinfo=timezone.utc)
+    # Clamp a future end to now BEFORE the order check, so a wholly-future
+    # range (which collapses end to now) is also rejected as start >= end.
+    now = datetime.now(timezone.utc)
+    if end > now:
+        end = now
+    if start >= end:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="'start' must be before 'end'",
+        )
+    return start, end
 
 
 @router.get("/dashboard/{device_id}", response_model=EnergyDashboard)
@@ -63,7 +97,6 @@ async def get_energy_dashboard(
     ]
 
     # Get current power from SmartDeviceManager (SHM state)
-    from datetime import datetime, timezone
     current_watts = 0.0
     is_online = False
     last_updated = datetime.now(timezone.utc)
@@ -357,6 +390,8 @@ async def update_energy_price(
 async def get_cumulative_energy_total(
     request: Request, response: Response,
     period: str = Query("today", pattern="^(today|week|month)$"),
+    start: Optional[datetime] = Query(None, description="UTC ISO start (inclusive)"),
+    end: Optional[datetime] = Query(None, description="UTC ISO end (inclusive); clamped to now if in the future"),
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_user),
 ) -> CumulativeEnergyResponse:
@@ -367,10 +402,15 @@ async def get_cumulative_energy_total(
 
     Args:
         period: 'today', 'week', or 'month'
+        start: UTC ISO start datetime for a custom range (requires end)
+        end: UTC ISO end datetime for a custom range (requires start)
     """
+    start_dt, end_dt = _validate_range(start, end)
     price_config = energy_stats.get_energy_price_config(db)
     cost_per_kwh = price_config.cost_per_kwh
-    result = energy_stats.get_cumulative_energy_total(db, period, cost_per_kwh)
+    result = energy_stats.get_cumulative_energy_total(
+        db, period, cost_per_kwh, start=start_dt, end=end_dt,
+    )
 
     # Update currency from config
     result["currency"] = price_config.currency
@@ -396,6 +436,8 @@ async def get_cumulative_energy(
     request: Request, response: Response,
     device_id: int,
     period: str = Query("today", pattern="^(today|week|month)$"),
+    start: Optional[datetime] = Query(None, description="UTC ISO start (inclusive)"),
+    end: Optional[datetime] = Query(None, description="UTC ISO end (inclusive); clamped to now if in the future"),
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_user),
 ) -> CumulativeEnergyResponse:
@@ -407,7 +449,11 @@ async def get_cumulative_energy(
     Args:
         device_id: Smart device ID
         period: 'today', 'week', or 'month'
+        start: UTC ISO start datetime for a custom range (requires end)
+        end: UTC ISO end datetime for a custom range (requires start)
     """
+    start_dt, end_dt = _validate_range(start, end)
+
     # Get current price config
     price_config = energy_stats.get_energy_price_config(db)
 
@@ -416,7 +462,9 @@ async def get_cumulative_energy(
         db=db,
         device_id=device_id,
         period=period,
-        cost_per_kwh=price_config.cost_per_kwh
+        cost_per_kwh=price_config.cost_per_kwh,
+        start=start_dt,
+        end=end_dt,
     )
 
     if not data:

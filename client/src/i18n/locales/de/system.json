@@ -189,7 +189,12 @@
       "instantPowerConsumption": "Momentanverbrauch",
       "avgPower": "Durchschn. Leistung",
       "maxPower": "Max. Leistung",
-      "minPower": "Min. Leistung"
+      "minPower": "Min. Leistung",
+      "periodCustom": "Benutzerdefiniert",
+      "customFrom": "Von",
+      "customTo": "Bis",
+      "customApply": "Anwenden",
+      "customInvalidRange": "Startdatum muss vor oder gleich dem Enddatum liegen"
     },
     "units": {
       "backend": "Backend (HTTP)",

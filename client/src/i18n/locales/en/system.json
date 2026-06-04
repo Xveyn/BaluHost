@@ -194,7 +194,12 @@
       "instantPowerConsumption": "Instant Power Consumption",
       "avgPower": "Avg. Power",
       "maxPower": "Max. Power",
-      "minPower": "Min. Power"
+      "minPower": "Min. Power",
+      "periodCustom": "Custom",
+      "customFrom": "From",
+      "customTo": "To",
+      "customApply": "Apply",
+      "customInvalidRange": "Start date must be on or before end date"
     },
     "units": {
       "backend": "Backend (HTTP)",
