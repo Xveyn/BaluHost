@@ -6,7 +6,7 @@ import logging
 
 from fastapi import APIRouter, Depends, Request, Response
 
-from app.api.deps import get_current_user, get_current_admin
+from app.api.deps import get_current_user, require_power_toggle_desktop
 from app.core.rate_limiter import user_limiter, get_limit
 from app.schemas.desktop import DesktopStatus
 from app.services.power.desktop import get_desktop_service
@@ -33,7 +33,7 @@ async def desktop_status(
 async def desktop_disable(
     request: Request,
     response: Response,
-    current_user=Depends(get_current_admin),
+    current_user=Depends(require_power_toggle_desktop),
 ) -> dict:
     """Turn the desktop displays off (DPMS) so the GPU can drop to idle.
 
@@ -57,7 +57,7 @@ async def desktop_disable(
 async def desktop_enable(
     request: Request,
     response: Response,
-    current_user=Depends(get_current_admin),
+    current_user=Depends(require_power_toggle_desktop),
 ) -> dict:
     """Turn the desktop displays back on (DPMS). Admin only."""
     ok, message = await get_desktop_service().enable()

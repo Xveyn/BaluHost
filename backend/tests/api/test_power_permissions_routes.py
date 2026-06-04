@@ -166,3 +166,46 @@ class TestToggleDesktopPermission:
         )
         assert resp.status_code == 200
         assert resp.json()["can_toggle_desktop"] is False
+
+
+class TestDelegatedDesktopAccess:
+    @pytest.fixture(autouse=True)
+    def _dev_desktop(self):
+        # Force the in-memory dev backend so the endpoint result is
+        # deterministic and cross-platform (no kscreen-doctor / os.getuid()).
+        import app.services.power.desktop as desktop_mod
+        from app.services.power.desktop import DesktopService
+        from app.services.power.desktop_backend import DevDesktopBackend
+        prev = desktop_mod._service
+        desktop_mod._service = DesktopService(backend=DevDesktopBackend())
+        yield
+        desktop_mod._service = prev
+
+    def test_user_without_permission_gets_403(self, client: TestClient, user_token: str):
+        resp = client.post(
+            "/api/system/sleep/desktop/disable",
+            headers={"Authorization": f"Bearer {user_token}"},
+        )
+        assert resp.status_code == 403
+
+    def test_user_with_permission_can_access(
+        self, client: TestClient, admin_token: str, user_token: str, regular_user: User,
+    ):
+        client.put(
+            f"/api/users/{regular_user.id}/power-permissions",
+            json={"can_toggle_desktop": True},
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+        resp = client.post(
+            "/api/system/sleep/desktop/disable",
+            headers={"Authorization": f"Bearer {user_token}"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["success"] is True
+
+    def test_admin_still_works(self, client: TestClient, admin_token: str):
+        resp = client.post(
+            "/api/system/sleep/desktop/enable",
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+        assert resp.status_code == 200
