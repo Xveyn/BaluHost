@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Moon, Sun, Power, Wifi, Loader2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { Moon, Sun, Power, Wifi, MonitorOff, Loader2 } from 'lucide-react';
 import {
   getUserPowerPermissions,
   updateUserPowerPermissions,
@@ -16,45 +17,31 @@ interface PowerPermissionsSectionProps {
 
 interface PermissionToggle {
   key: keyof UserPowerPermissionsUpdate;
-  label: string;
-  description: string;
   icon: React.ReactNode;
   impliedBy?: keyof UserPowerPermissionsUpdate;
   implies?: keyof UserPowerPermissionsUpdate;
 }
 
+// Maps an API field name to its i18n item key under
+// admin:users.systemPermissions.items.*
+const FIELD_TO_I18N: Record<string, string> = {
+  can_soft_sleep: 'softSleep',
+  can_wake: 'wake',
+  can_suspend: 'suspend',
+  can_wol: 'wol',
+  can_toggle_desktop: 'toggleDesktop',
+};
+
 const PERMISSION_TOGGLES: PermissionToggle[] = [
-  {
-    key: 'can_soft_sleep',
-    label: 'Soft Sleep',
-    description: 'Server in Soft Sleep versetzen',
-    icon: <Moon className="h-4 w-4" />,
-    implies: 'can_wake',
-  },
-  {
-    key: 'can_wake',
-    label: 'Wake',
-    description: 'Server aus Soft Sleep aufwecken',
-    icon: <Sun className="h-4 w-4" />,
-    impliedBy: 'can_soft_sleep',
-  },
-  {
-    key: 'can_suspend',
-    label: 'Suspend',
-    description: 'System Suspend (S3 Sleep)',
-    icon: <Power className="h-4 w-4" />,
-    implies: 'can_wol',
-  },
-  {
-    key: 'can_wol',
-    label: 'Wake-on-LAN',
-    description: 'WoL Magic Packet senden',
-    icon: <Wifi className="h-4 w-4" />,
-    impliedBy: 'can_suspend',
-  },
+  { key: 'can_soft_sleep', icon: <Moon className="h-4 w-4" />, implies: 'can_wake' },
+  { key: 'can_wake', icon: <Sun className="h-4 w-4" />, impliedBy: 'can_soft_sleep' },
+  { key: 'can_suspend', icon: <Power className="h-4 w-4" />, implies: 'can_wol' },
+  { key: 'can_wol', icon: <Wifi className="h-4 w-4" />, impliedBy: 'can_suspend' },
+  { key: 'can_toggle_desktop', icon: <MonitorOff className="h-4 w-4" /> },
 ];
 
 export function PowerPermissionsSection({ userId, userRole }: PowerPermissionsSectionProps) {
+  const { t } = useTranslation('admin');
   const [permissions, setPermissions] = useState<UserPowerPermissions | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -74,7 +61,7 @@ export function PowerPermissionsSection({ userId, userRole }: PowerPermissionsSe
     return (
       <div className="flex items-center gap-2 py-3 text-sm text-slate-400">
         <Loader2 className="h-4 w-4 animate-spin" />
-        Lade Power Permissions...
+        {t('users.systemPermissions.loading')}
       </div>
     );
   }
@@ -85,9 +72,9 @@ export function PowerPermissionsSection({ userId, userRole }: PowerPermissionsSe
       const update: UserPowerPermissionsUpdate = { [key]: newValue };
       const result = await updateUserPowerPermissions(userId, update);
       setPermissions(result);
-      toast.success('Power Permissions aktualisiert');
+      toast.success(t('users.systemPermissions.saved'));
     } catch (error) {
-      handleApiError(error, 'Fehler beim Speichern');
+      handleApiError(error, t('users.systemPermissions.saveError'));
     } finally {
       setSaving(false);
     }
@@ -100,23 +87,30 @@ export function PowerPermissionsSection({ userId, userRole }: PowerPermissionsSe
 
   return (
     <div className="border-t border-slate-800 pt-3 mt-3">
-      <h3 className="text-sm font-medium text-slate-300 mb-1">Power Permissions</h3>
+      <h3 className="text-sm font-medium text-slate-300 mb-1">
+        {t('users.systemPermissions.title')}
+      </h3>
       <p className="text-xs text-slate-500 mb-3">
-        Erlaubt diesem User, Power-Aktionen ueber die Mobile App auszufuehren.
+        {t('users.systemPermissions.description')}
       </p>
 
       <div className="space-y-2">
         {PERMISSION_TOGGLES.map((toggle) => {
           const value = permissions?.[toggle.key] ?? false;
           const implied = isImplied(toggle);
+          const i18nKey = FIELD_TO_I18N[toggle.key];
 
           return (
             <div key={toggle.key} className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2 min-w-0">
                 <span className="text-slate-400">{toggle.icon}</span>
                 <div>
-                  <span className="text-sm text-slate-200">{toggle.label}</span>
-                  <span className="text-xs text-slate-500 ml-2">{toggle.description}</span>
+                  <span className="text-sm text-slate-200">
+                    {t(`users.systemPermissions.items.${i18nKey}.label`)}
+                  </span>
+                  <span className="text-xs text-slate-500 ml-2">
+                    {t(`users.systemPermissions.items.${i18nKey}.desc`)}
+                  </span>
                 </div>
               </div>
               <button
@@ -125,7 +119,13 @@ export function PowerPermissionsSection({ userId, userRole }: PowerPermissionsSe
                 aria-checked={value}
                 disabled={saving || implied}
                 onClick={() => handleToggle(toggle.key, !value)}
-                title={implied ? `Impliziert durch ${toggle.impliedBy === 'can_soft_sleep' ? 'Soft Sleep' : 'Suspend'}` : undefined}
+                title={
+                  implied && toggle.impliedBy
+                    ? t('users.systemPermissions.impliedBy', {
+                        name: t(`users.systemPermissions.items.${FIELD_TO_I18N[toggle.impliedBy]}.label`),
+                      })
+                    : undefined
+                }
                 className={`relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors
                   ${value ? 'bg-sky-500' : 'bg-slate-700'}
                   ${implied ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}
@@ -145,8 +145,12 @@ export function PowerPermissionsSection({ userId, userRole }: PowerPermissionsSe
 
       {permissions?.granted_by_username && (
         <p className="text-xs text-slate-500 mt-2">
-          Zuletzt geaendert von {permissions.granted_by_username}
-          {permissions.granted_at && ` am ${new Date(permissions.granted_at).toLocaleDateString('de-DE')}`}
+          {t('users.systemPermissions.lastChangedBy', {
+            name: permissions.granted_by_username,
+            date: permissions.granted_at
+              ? new Date(permissions.granted_at).toLocaleDateString()
+              : '',
+          })}
         </p>
       )}
     </div>
