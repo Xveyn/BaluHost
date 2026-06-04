@@ -115,3 +115,26 @@ def test_unlimited_keeps_everything(db_session, device):
     deleted = cleanup_smart_device_samples(db_session, "tapo_smart_plug", 0)
     assert deleted == 0
     assert db_session.query(SmartDeviceSample).count() == 1
+
+
+def test_retention_days_for_plugin_reads_config(db_session):
+    """Poller resolves retention from InstalledPlugin.config, default 30."""
+    from app.plugins.smart_device.poller import SmartDevicePoller
+    from app.services import plugin_service
+
+    poller = SmartDevicePoller()
+
+    # No config row -> default 30
+    assert poller._retention_days_for_plugin(db_session, "tapo_smart_plug") == 30
+
+    # Configured value
+    plugin_service.update_config(
+        db_session, name="tapo_smart_plug", validated_config={"retention_days": 7}
+    )
+    assert poller._retention_days_for_plugin(db_session, "tapo_smart_plug") == 7
+
+    # Unlimited
+    plugin_service.update_config(
+        db_session, name="tapo_smart_plug", validated_config={"retention_days": 0}
+    )
+    assert poller._retention_days_for_plugin(db_session, "tapo_smart_plug") == 0

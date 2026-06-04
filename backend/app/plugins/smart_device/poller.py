@@ -498,26 +498,42 @@ class SmartDevicePoller:
         except Exception as exc:
             logger.debug("SmartDevicePoller: DB persist failed for plugin %s: %s", plugin_name, exc)
 
+    def _retention_days_for_plugin(self, db, plugin_name: str) -> int:
+        """Resolve a plugin's configured sample retention (days).
+
+        Falls back to SMART_DEVICE_SAMPLE_RETENTION_DAYS when the plugin has no
+        config row or an unreadable value.
+        """
+        from app.plugins.smart_device.retention import SMART_DEVICE_SAMPLE_RETENTION_DAYS
+        from app.services import plugin_service
+        try:
+            record = plugin_service.get_installed_plugin(db, plugin_name)
+            cfg = (record.config or {}) if record else {}
+            return int(cfg.get("retention_days", SMART_DEVICE_SAMPLE_RETENTION_DAYS))
+        except (TypeError, ValueError):
+            return SMART_DEVICE_SAMPLE_RETENTION_DAYS
+
     def _should_cleanup_samples(self, now: float) -> bool:
         """True when a sample cleanup is due (shared across all plugin loops)."""
         return now - self._last_sample_cleanup >= _SAMPLE_CLEANUP_INTERVAL
 
     async def _maybe_cleanup_samples(self) -> None:
-        """Run the category-wide sample cleanup if the interval has elapsed."""
+        """Run per-plugin sample cleanup if the daily interval has elapsed."""
         if self._db_session_factory is None:
             return
         now = time.time()
         if not self._should_cleanup_samples(now):
             return
-        # Set before the synchronous cleanup call. There is no await between the
-        # check above and this set, and cleanup_old_smart_device_samples is sync,
-        # so concurrent per-plugin loops cannot double-fire (single-threaded asyncio).
+        # Set before the synchronous cleanup. No await between the check and this
+        # set, and cleanup is sync, so concurrent plugin loops cannot double-fire.
         self._last_sample_cleanup = now
         try:
-            from app.plugins.smart_device.retention import cleanup_old_smart_device_samples
+            from app.plugins.smart_device.retention import cleanup_smart_device_samples
             db = self._db_session_factory()
             try:
-                cleanup_old_smart_device_samples(db)
+                for plugin_name in list(self._plugins.keys()):
+                    days = self._retention_days_for_plugin(db, plugin_name)
+                    cleanup_smart_device_samples(db, plugin_name, days)
             finally:
                 db.close()
         except Exception as exc:
