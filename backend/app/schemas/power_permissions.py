@@ -14,6 +14,7 @@ class UserPowerPermissionsResponse(BaseModel):
     can_wake: bool = False
     can_suspend: bool = False
     can_wol: bool = False
+    can_toggle_desktop: bool = False
     granted_by: Optional[int] = None
     granted_by_username: Optional[str] = None
     granted_at: Optional[datetime] = None
@@ -28,6 +29,7 @@ class UserPowerPermissionsUpdate(BaseModel):
     can_wake: Optional[bool] = Field(default=None, description="Allow waking from soft sleep")
     can_suspend: Optional[bool] = Field(default=None, description="Allow system suspend")
     can_wol: Optional[bool] = Field(default=None, description="Allow sending Wake-on-LAN")
+    can_toggle_desktop: Optional[bool] = Field(default=None, description="Allow toggling the desktop (DPMS on/off)")
 
 
 class MyPowerPermissionsResponse(BaseModel):
@@ -37,3 +39,4 @@ class MyPowerPermissionsResponse(BaseModel):
     can_wake: bool = False
     can_suspend: bool = False
     can_wol: bool = False
+    can_toggle_desktop: bool = False
