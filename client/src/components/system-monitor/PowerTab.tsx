@@ -149,10 +149,14 @@ export function PowerTab() {
       setPriceConfig(updated);
       setEditingPrice(false);
       toast.success(t('monitor.power.priceUpdated'));
-      // Refresh cumulative data with new price
+      // Refresh cumulative data with new price (respect an active custom range)
+      const isCustom = cumulativePeriod === 'custom';
+      const start = isCustom ? customStart ?? undefined : undefined;
+      const end = isCustom ? customEnd ?? undefined : undefined;
+      const period = (isCustom ? 'today' : cumulativePeriod) as 'today' | 'week' | 'month';
       const refreshData = selectedDeviceId === null
-        ? getCumulativeEnergyTotal(cumulativePeriod)
-        : getCumulativeEnergy(selectedDeviceId, cumulativePeriod);
+        ? getCumulativeEnergyTotal(period, start, end)
+        : getCumulativeEnergy(selectedDeviceId, period, start, end);
       setCumulativeData(await refreshData);
     } catch (err: unknown) {
       toast.error(getApiErrorMessage(err, t('monitor.power.saveError')));
