@@ -38,7 +38,8 @@ async def desktop_disable(
     """Turn the desktop displays off (DPMS) so the GPU can drop to idle.
 
     Keeps the KWin session running; stopping sddm would instead light all
-    outputs via the framebuffer console and pin the dGPU at ~78W. Admin only.
+    outputs via the framebuffer console and pin the dGPU at ~78W. Admin or a
+    delegated user with the can_toggle_desktop permission.
     """
     ok, message = await get_desktop_service().disable()
     get_audit_logger_db().log_event(
@@ -59,7 +60,10 @@ async def desktop_enable(
     response: Response,
     current_user=Depends(require_power_toggle_desktop),
 ) -> dict:
-    """Turn the desktop displays back on (DPMS). Admin only."""
+    """Turn the desktop displays back on (DPMS).
+
+    Admin or a delegated user with the can_toggle_desktop permission.
+    """
     ok, message = await get_desktop_service().enable()
     get_audit_logger_db().log_event(
         event_type="POWER",

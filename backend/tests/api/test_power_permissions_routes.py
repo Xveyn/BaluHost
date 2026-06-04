@@ -202,6 +202,12 @@ class TestDelegatedDesktopAccess:
         )
         assert resp.status_code == 200
         assert resp.json()["success"] is True
+        # Reset so later tests asserting can_toggle_desktop == False aren't polluted.
+        client.put(
+            f"/api/users/{regular_user.id}/power-permissions",
+            json={"can_toggle_desktop": False},
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
 
     def test_admin_still_works(self, client: TestClient, admin_token: str):
         resp = client.post(
