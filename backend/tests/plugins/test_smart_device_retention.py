@@ -68,3 +68,17 @@ def test_preserves_imported_rows(db_session, device):
 def test_nothing_to_delete(db_session, device):
     _add(db_session, device.id, "switch", days_ago=1)
     assert cleanup_old_smart_device_samples(db_session, days_to_keep=30) == 0
+
+
+def test_poller_cleanup_gate():
+    """The poller only runs cleanup once per interval."""
+    from app.plugins.smart_device.poller import SmartDevicePoller, _SAMPLE_CLEANUP_INTERVAL
+
+    poller = SmartDevicePoller()
+    # Never cleaned -> should run immediately.
+    assert poller._should_cleanup_samples(now=0.0) is True
+    poller._last_sample_cleanup = 1000.0
+    # Too soon.
+    assert poller._should_cleanup_samples(now=1000.0 + _SAMPLE_CLEANUP_INTERVAL - 1) is False
+    # Interval elapsed.
+    assert poller._should_cleanup_samples(now=1000.0 + _SAMPLE_CLEANUP_INTERVAL) is True
