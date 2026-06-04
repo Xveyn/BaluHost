@@ -19,6 +19,7 @@ _ACTION_FIELD_MAP = {
     "wake": "can_wake",
     "suspend": "can_suspend",
     "wol": "can_wol",
+    "toggle_desktop": "can_toggle_desktop",
 }
 
 
@@ -44,6 +45,7 @@ def get_permissions(db: Session, user_id: int) -> UserPowerPermissionsResponse:
         can_wake=perm.can_wake,
         can_suspend=perm.can_suspend,
         can_wol=perm.can_wol,
+        can_toggle_desktop=perm.can_toggle_desktop,
         granted_by=perm.granted_by,
         granted_by_username=granted_by_username,
         granted_at=perm.granted_at,
@@ -114,6 +116,7 @@ def update_permissions(
         "can_wake": perm.can_wake,
         "can_suspend": perm.can_suspend,
         "can_wol": perm.can_wol,
+        "can_toggle_desktop": perm.can_toggle_desktop,
     }
 
     # Track which fields were explicitly set so implications can be applied
@@ -142,6 +145,8 @@ def update_permissions(
         perm.can_wol = update.can_wol
         if not update.can_wol:
             explicit_false.add("can_wol")
+    if update.can_toggle_desktop is not None:
+        perm.can_toggle_desktop = update.can_toggle_desktop
 
     # Apply implication rules
     perm.can_soft_sleep, perm.can_wake, perm.can_suspend, perm.can_wol = (
@@ -162,6 +167,7 @@ def update_permissions(
         "can_wake": perm.can_wake,
         "can_suspend": perm.can_suspend,
         "can_wol": perm.can_wol,
+        "can_toggle_desktop": perm.can_toggle_desktop,
     }
 
     # Audit log

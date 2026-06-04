@@ -125,3 +125,37 @@ class TestDelegatedSleepAccess:
             headers={"Authorization": f"Bearer {admin_token}"},
         )
         assert resp.status_code != 403  # 503 expected (service not running), not 403
+
+
+class TestToggleDesktopPermission:
+    def test_default_is_false(self, client: TestClient, admin_token: str, regular_user: User):
+        resp = client.get(
+            f"/api/users/{regular_user.id}/power-permissions",
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["can_toggle_desktop"] is False
+
+    def test_grant_does_not_imply_other_permissions(
+        self, client: TestClient, admin_token: str, regular_user: User,
+    ):
+        resp = client.put(
+            f"/api/users/{regular_user.id}/power-permissions",
+            json={"can_toggle_desktop": True},
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["can_toggle_desktop"] is True
+        assert data["can_soft_sleep"] is False
+        assert data["can_wake"] is False
+        assert data["can_suspend"] is False
+        assert data["can_wol"] is False
+
+    def test_my_permissions_includes_toggle_desktop(self, client: TestClient, user_token: str):
+        resp = client.get(
+            "/api/system/sleep/my-permissions",
+            headers={"Authorization": f"Bearer {user_token}"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["can_toggle_desktop"] is False
