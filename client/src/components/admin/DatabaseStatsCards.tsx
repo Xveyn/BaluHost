@@ -2,19 +2,11 @@ import { useEffect, useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { getDatabaseStats } from '../../api/monitoring'
 import type { DatabaseStatsResponse, MetricDatabaseStats } from '../../api/monitoring'
-import { Database, Cpu, MemoryStick, Network, HardDrive, Activity, RefreshCw, Zap } from 'lucide-react'
+import { Database, HardDrive, Activity, RefreshCw } from 'lucide-react'
+import { METRIC_CONFIG, DEFAULT_METRIC_CONFIG } from './metricConfig'
 import { formatBytes } from '../../lib/formatters'
 import { StatCard } from '../ui/StatCard'
 import { ProgressBar } from '../ui/ProgressBar'
-
-export const METRIC_CONFIG: Record<string, { labelKey: string; icon: React.ElementType; color: string }> = {
-  cpu: { labelKey: 'admin:databaseStats.metrics.cpu', icon: Cpu, color: 'blue' },
-  memory: { labelKey: 'admin:databaseStats.metrics.memory', icon: MemoryStick, color: 'emerald' },
-  network: { labelKey: 'admin:databaseStats.metrics.network', icon: Network, color: 'purple' },
-  disk_io: { labelKey: 'admin:databaseStats.metrics.diskIo', icon: HardDrive, color: 'amber' },
-  process: { labelKey: 'admin:databaseStats.metrics.process', icon: Activity, color: 'rose' },
-  power: { labelKey: 'admin:databaseStats.metrics.power', icon: Zap, color: 'amber' },
-}
 
 interface MetricCardProps {
   metricType: string
@@ -37,7 +29,7 @@ function formatDate(dateStr: string | undefined, locale: string): string {
 }
 
 function MetricCard({ metricType, stats, totalSize, t, locale }: MetricCardProps) {
-  const config = METRIC_CONFIG[metricType] || { labelKey: metricType, icon: Database, color: 'slate' }
+  const config = METRIC_CONFIG[metricType] || DEFAULT_METRIC_CONFIG
   const Icon = config.icon
   const colorClasses: Record<string, { border: string; bg: string; text: string; glow: string }> = {
     blue: { border: 'hover:border-blue-500/50', bg: 'from-blue-500/20 to-blue-600/10', text: 'text-blue-400', glow: 'hover:shadow-blue-500/10' },
