@@ -6,7 +6,6 @@ Covers:
 - Period stats aggregation
 - Today/week/month convenience methods
 - Energy price config CRUD
-- Cleanup of old samples
 - Cumulative energy data calculation
 """
 
@@ -21,7 +20,6 @@ from app.services.power.energy import (
     get_period_stats,
     get_energy_price_config,
     update_energy_price_config,
-    cleanup_old_samples,
     get_cumulative_energy_data,
     get_hourly_samples,
 )
@@ -209,83 +207,6 @@ class TestEnergyPriceConfig:
         assert config.cost_per_kwh == 0.35
         assert config.currency == "USD"
         assert config.updated_by_user_id == regular_user.id
-
-
-# ============================================================================
-# Cleanup
-# ============================================================================
-
-class TestCleanup:
-    """Test old sample cleanup."""
-
-    def test_cleanup_old_samples(self, db_session, smart_device):
-        now = datetime.now(timezone.utc)
-        data = json.dumps({"current_power": 50.0, "is_online": True})
-        # Add old and new samples
-        db_session.add(SmartDeviceSample(
-            device_id=smart_device.id,
-            capability="power_monitor",
-            data_json=data,
-            timestamp=now - timedelta(days=60),
-        ))
-        db_session.add(SmartDeviceSample(
-            device_id=smart_device.id,
-            capability="power_monitor",
-            data_json=data,
-            timestamp=now - timedelta(hours=1),
-        ))
-        db_session.commit()
-
-        deleted = cleanup_old_samples(db_session, days_to_keep=30)
-        assert deleted == 1
-
-        remaining = db_session.query(SmartDeviceSample).filter(
-            SmartDeviceSample.capability == "power_monitor"
-        ).count()
-        assert remaining == 1
-
-    def test_cleanup_nothing_old(self, db_session, smart_device, sample_data):
-        deleted = cleanup_old_samples(db_session, days_to_keep=30)
-        assert deleted == 0
-
-    def test_cleanup_preserves_imported_samples(self, db_session, smart_device):
-        """Imported samples (imported_from set) must never be deleted by retention."""
-        now = datetime.now(timezone.utc)
-
-        # Old live sample (60 days) — should be deleted
-        live_old = json.dumps({"watts": 50.0, "is_online": True})
-        db_session.add(SmartDeviceSample(
-            device_id=smart_device.id,
-            capability="power_monitor",
-            data_json=live_old,
-            timestamp=now - timedelta(days=60),
-        ))
-
-        # Old imported sample (60 days) — must SURVIVE cleanup
-        imported_old = json.dumps({
-            "watts": 18.0,
-            "is_online": True,
-            "imported_from": "tapo_history",
-            "bucket_interval": "hourly",
-        })
-        db_session.add(SmartDeviceSample(
-            device_id=smart_device.id,
-            capability="power_monitor",
-            data_json=imported_old,
-            timestamp=now - timedelta(days=60),
-        ))
-
-        db_session.commit()
-
-        deleted = cleanup_old_samples(db_session, days_to_keep=30)
-        assert deleted == 1
-
-        remaining = db_session.query(SmartDeviceSample).filter(
-            SmartDeviceSample.capability == "power_monitor"
-        ).all()
-        assert len(remaining) == 1
-        data = json.loads(remaining[0].data_json)
-        assert data.get("imported_from") == "tapo_history"
 
 
 # ============================================================================
