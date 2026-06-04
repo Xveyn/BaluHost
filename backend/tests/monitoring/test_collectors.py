@@ -427,6 +427,43 @@ class TestRetentionManager:
             assert isinstance(count, int)
             assert count >= 0
 
+    def test_power_not_managed_by_retention_manager(self, db_session):
+        """POWER must not be a metric the monitoring RetentionManager owns."""
+        from app.services.monitoring.retention_manager import METRIC_MODELS
+        from app.models.monitoring import MetricType
+
+        assert MetricType.POWER not in METRIC_MODELS
+
+    def test_run_all_cleanup_leaves_smart_device_samples(self, db_session):
+        """run_all_cleanup must not delete smart_device_samples (owned elsewhere)."""
+        import json
+        from datetime import datetime, timezone, timedelta
+        from app.models.smart_device import SmartDevice, SmartDeviceSample
+        from app.services.monitoring.retention_manager import RetentionManager
+
+        device = SmartDevice(
+            name="Test Plug", plugin_name="tapo_smart_plug",
+            device_type_id="tapo_p110", address="192.168.1.50",
+            capabilities=["power_monitor"], is_active=True, is_online=True,
+            created_by_user_id=1,
+        )
+        db_session.add(device)
+        db_session.commit()
+        db_session.refresh(device)
+
+        old = SmartDeviceSample(
+            device_id=device.id, capability="power_monitor",
+            data_json=json.dumps({"watts": 5.0}),
+            timestamp=datetime.now(timezone.utc) - timedelta(days=400),
+        )
+        db_session.add(old)
+        db_session.commit()
+
+        results = RetentionManager().run_all_cleanup(db_session)
+
+        assert "power" not in results
+        assert db_session.query(SmartDeviceSample).count() == 1
+
 
 class TestSampleToDbConversion:
     """Test sample schema to DB model conversion for each collector."""

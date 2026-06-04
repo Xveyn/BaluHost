@@ -23,7 +23,6 @@ from app.models.monitoring import (
     UptimeSample,
     GpuSample,
 )
-from app.models.smart_device import SmartDeviceSample
 
 logger = logging.getLogger(__name__)
 
@@ -34,19 +33,19 @@ DEFAULT_RETENTION = {
     MetricType.NETWORK: 168,   # 7 days
     MetricType.DISK_IO: 168,   # 7 days
     MetricType.PROCESS: 72,    # 3 days
-    MetricType.POWER: 720,     # 30 days
     MetricType.UPTIME: 720,    # 30 days
     MetricType.GPU: 168,       # 7 days (matches CPU)
 }
 
 # Mapping of metric types to their database models
+# NOTE: MetricType.POWER (SmartDeviceSample) is intentionally excluded —
+# smart-device sample retention is owned by the smart-device/plugin layer.
 METRIC_MODELS = {
     MetricType.CPU: CpuSample,
     MetricType.MEMORY: MemorySample,
     MetricType.NETWORK: NetworkSample,
     MetricType.DISK_IO: DiskIoSample,
     MetricType.PROCESS: ProcessSample,
-    MetricType.POWER: SmartDeviceSample,
     MetricType.UPTIME: UptimeSample,
     MetricType.GPU: GpuSample,
 }
@@ -181,7 +180,7 @@ class RetentionManager:
         """
         results = {}
 
-        for metric_type in MetricType:
+        for metric_type in METRIC_MODELS:
             deleted = self.apply_retention_policy(db, metric_type)
             results[metric_type.value] = deleted
 
@@ -243,7 +242,6 @@ class RetentionManager:
             MetricType.NETWORK: 60,
             MetricType.DISK_IO: 100,
             MetricType.PROCESS: 120,
-            MetricType.POWER: 60,
             MetricType.UPTIME: 40,
             MetricType.GPU: 140,
         }
