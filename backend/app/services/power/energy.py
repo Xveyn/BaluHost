@@ -412,6 +412,56 @@ def _resolve_period_range(period: str, now: datetime) -> tuple[datetime, datetim
     return start, now
 
 
+def _load_parsed_online_sorted(db: Session, device_id: int,
+                               start_time: datetime, end_time: datetime) -> List[Dict]:
+    """Query power samples in [start, end], parse, keep online, sorted by time."""
+    samples = db.query(SmartDeviceSample).filter(
+        and_(
+            SmartDeviceSample.device_id == device_id,
+            SmartDeviceSample.capability == _POWER_CAPABILITY,
+            SmartDeviceSample.timestamp >= start_time,
+            SmartDeviceSample.timestamp <= end_time,
+        )
+    ).order_by(SmartDeviceSample.timestamp).all()
+    parsed: List[Dict] = []
+    for s in samples:
+        p = _parse_power_from_sample(s.data_json)
+        if p is not None and p["is_online"]:
+            parsed.append({"timestamp": s.timestamp, **p})
+    return parsed
+
+
+def _device_cumulative_series(parsed: List[Dict]) -> tuple[List[Dict], float]:
+    """Full-resolution cumulative series from online, time-sorted samples.
+
+    Returns (points, total_wh); points are
+    {"timestamp": datetime, "cumulative_kwh": float, "instant_watts": float}.
+    """
+    points: List[Dict] = []
+    cumulative_wh = 0.0
+    for i, s in enumerate(parsed):
+        if i > 0:
+            cumulative_wh += _interval_energy_wh(parsed[i - 1], s)
+        points.append({
+            "timestamp": s["timestamp"],
+            "cumulative_kwh": cumulative_wh / 1000.0,
+            "instant_watts": s["watts"],
+        })
+    return points, cumulative_wh
+
+
+def _downsample(data_points: List[Dict], max_points: int = 200) -> List[Dict]:
+    """Evenly thin a list of chart points down to at most max_points."""
+    if len(data_points) <= max_points:
+        return data_points
+    step = len(data_points) // max_points
+    out = [data_points[0]]
+    for i in range(step, len(data_points) - 1, step):
+        out.append(data_points[i])
+    out.append(data_points[-1])
+    return out
+
+
 def get_cumulative_energy_data(
     db: Session,
     device_id: int,
@@ -447,21 +497,7 @@ def get_cumulative_energy_data(
         start_time, end_time = _resolve_period_range(period, now)
         period_label = period
 
-    samples = db.query(SmartDeviceSample).filter(
-        and_(
-            SmartDeviceSample.device_id == device_id,
-            SmartDeviceSample.capability == _POWER_CAPABILITY,
-            SmartDeviceSample.timestamp >= start_time,
-            SmartDeviceSample.timestamp <= end_time,
-        )
-    ).order_by(SmartDeviceSample.timestamp).all()
-
-    # Parse and filter online samples
-    parsed_samples = []
-    for s in samples:
-        p = _parse_power_from_sample(s.data_json)
-        if p is not None and p["is_online"]:
-            parsed_samples.append({"timestamp": s.timestamp, **p})
+    parsed_samples = _load_parsed_online_sorted(db, device_id, start_time, end_time)
 
     if not parsed_samples:
         if start is not None and end is not None:
@@ -492,40 +528,20 @@ def get_cumulative_energy_data(
             "data_points": []
         }
 
-    # Calculate cumulative energy using trapezoidal integration
-    data_points = []
-    cumulative_wh = 0.0
+    series, total_wh = _device_cumulative_series(parsed_samples)
+    data_points = [
+        {
+            "timestamp": p["timestamp"].isoformat(),
+            "cumulative_kwh": round(p["cumulative_kwh"], 4),
+            "cumulative_cost": round(p["cumulative_kwh"] * cost_per_kwh, 4),
+            "instant_watts": round(p["instant_watts"], 1),
+        }
+        for p in series
+    ]
+    data_points = _downsample(data_points)
 
-    for i, sample in enumerate(parsed_samples):
-        if i > 0:
-            prev = parsed_samples[i - 1]
-            time_diff_hours = (sample["timestamp"] - prev["timestamp"]).total_seconds() / 3600
-            avg_power = (prev["watts"] + sample["watts"]) / 2
-            cumulative_wh += avg_power * time_diff_hours
-
-        cumulative_kwh = cumulative_wh / 1000
-        cumulative_cost = cumulative_kwh * cost_per_kwh
-
-        data_points.append({
-            "timestamp": sample["timestamp"].isoformat(),
-            "cumulative_kwh": round(cumulative_kwh, 4),
-            "cumulative_cost": round(cumulative_cost, 4),
-            "instant_watts": round(sample["watts"], 1)
-        })
-
-    # Downsample if too many points
-    max_points = 200
-    if len(data_points) > max_points:
-        step = len(data_points) // max_points
-        downsampled = [data_points[0]]
-        for i in range(step, len(data_points) - 1, step):
-            downsampled.append(data_points[i])
-        downsampled.append(data_points[-1])
-        data_points = downsampled
-
-    total_kwh = cumulative_wh / 1000
+    total_kwh = total_wh / 1000.0
     total_cost = total_kwh * cost_per_kwh
-
     return {
         "device_id": device_id,
         "device_name": device.name,
@@ -534,7 +550,7 @@ def get_cumulative_energy_data(
         "currency": "EUR",
         "total_kwh": round(total_kwh, 4),
         "total_cost": round(total_cost, 2),
-        "data_points": data_points
+        "data_points": data_points,
     }
 
 
