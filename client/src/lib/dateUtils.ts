@@ -65,7 +65,7 @@ export function formatDateTime(timestamp: string, locale = 'de-DE'): string {
 /**
  * Time range types used by charts for dynamic X-axis formatting.
  */
-export type ChartTimeRange = '10m' | '1h' | '24h' | '7d' | 'today' | 'week' | 'month';
+export type ChartTimeRange = '10m' | '1h' | '24h' | '7d' | 'today' | 'week' | 'month' | 'custom';
 
 /**
  * Format a timestamp for chart X-axis based on the selected time range.
@@ -103,5 +103,33 @@ export function formatTimeForRange(
         + ' ' + date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
     case 'month':
       return date.toLocaleDateString(locale, { day: '2-digit', month: '2-digit' });
+    case 'custom':
+      return date.toLocaleString(locale, {
+        day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+      });
   }
+}
+
+/**
+ * Convert a locally-picked date range (YYYY-MM-DD strings from <input type="date">)
+ * to absolute UTC ISO instants for the energy API.
+ *
+ * - `startIso` = local 00:00 of `startDate`.
+ * - `endIso`   = local 00:00 of the day AFTER `endDate` (inclusive end day),
+ *               clamped to `nowMs` so the window never reaches into the future.
+ *
+ * @param startDate - 'YYYY-MM-DD' (local)
+ * @param endDate   - 'YYYY-MM-DD' (local)
+ * @param nowMs     - current epoch ms (injected for testability)
+ */
+export function localRangeToUtcIso(
+  startDate: string,
+  endDate: string,
+  nowMs: number,
+): { startIso: string; endIso: string } {
+  const start = new Date(`${startDate}T00:00:00`); // parsed as local time
+  const endNext = new Date(`${endDate}T00:00:00`);
+  endNext.setDate(endNext.getDate() + 1); // inclusive end day -> exclusive next midnight
+  const endMs = Math.min(endNext.getTime(), nowMs);
+  return { startIso: start.toISOString(), endIso: new Date(endMs).toISOString() };
 }
