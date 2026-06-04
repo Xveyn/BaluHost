@@ -383,3 +383,30 @@ class TestCumulativeTotalCustomRange:
         assert result["total_kwh"] == 0.0
         assert len(result["data_points"]) == 2
         assert result["data_points"][0]["timestamp"] == start.isoformat()
+
+
+class TestTotalEqualsSumOfDevices:
+    def test_total_equals_sum_of_device_totals(self, db_session):
+        now = datetime.now(timezone.utc)
+        dev_a = SmartDevice(name="A", plugin_name="tapo_smart_plug",
+                            device_type_id="tapo_p110", address="10.0.0.1",
+                            capabilities=["power_monitor"], is_active=True,
+                            is_online=True, created_by_user_id=1)
+        dev_b = SmartDevice(name="B", plugin_name="tapo_smart_plug",
+                            device_type_id="tapo_p110", address="10.0.0.2",
+                            capabilities=["power_monitor"], is_active=True,
+                            is_online=True, created_by_user_id=1)
+        db_session.add_all([dev_a, dev_b]); db_session.commit()
+        for i in range(7):
+            _add_sample(db_session, dev_a.id, now - timedelta(minutes=60 - i * 10), 100.0)
+            _add_sample(db_session, dev_b.id, now - timedelta(minutes=55 - i * 10), 50.0)
+        db_session.commit()
+
+        a = get_cumulative_energy_data(db_session, dev_a.id, "today", 0.40,
+                                       start=now - timedelta(hours=2), end=now)
+        b = get_cumulative_energy_data(db_session, dev_b.id, "today", 0.40,
+                                       start=now - timedelta(hours=2), end=now)
+        total = get_cumulative_energy_total(db_session, "today", 0.40,
+                                            start=now - timedelta(hours=2), end=now)
+        assert total["period"] == "custom"
+        assert total["total_kwh"] == pytest.approx(a["total_kwh"] + b["total_kwh"], abs=1e-6)
