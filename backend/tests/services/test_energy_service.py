@@ -21,6 +21,7 @@ from app.services.power.energy import (
     get_energy_price_config,
     update_energy_price_config,
     get_cumulative_energy_data,
+    get_cumulative_energy_total,
     get_hourly_samples,
 )
 
@@ -285,7 +286,6 @@ class TestCumulativeCustomRange:
 
 class TestCumulativeTotalCustomRange:
     def test_total_explicit_range(self, db_session, smart_device, sample_data):
-        from app.services.power.energy import get_cumulative_energy_total
         now = datetime.now(timezone.utc)
         start = now - timedelta(minutes=12)
         result = get_cumulative_energy_total(db_session, "today", 0.40, start=start, end=now)
@@ -294,7 +294,6 @@ class TestCumulativeTotalCustomRange:
         assert len(result["data_points"]) >= 1
 
     def test_total_empty_range_zero_boundaries(self, db_session, smart_device):
-        from app.services.power.energy import get_cumulative_energy_total
         now = datetime.now(timezone.utc)
         start = now - timedelta(days=400)
         end = now - timedelta(days=399)

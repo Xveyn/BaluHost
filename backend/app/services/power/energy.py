@@ -365,7 +365,16 @@ def update_energy_price_config(
 
 
 def _resolve_period_range(period: str, now: datetime) -> tuple[datetime, datetime]:
-    """Map a named period to a (start, end=now) window."""
+    """Map a named period to a (start, end=now) window.
+
+    Args:
+        period: One of "today", "week", or "month". Any other value falls
+            through to the month window (start of the current month).
+        now: The reference "now" timestamp (UTC).
+
+    Returns:
+        Tuple of (start, now).
+    """
     if period == "today":
         start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     elif period == "week":
@@ -437,9 +446,13 @@ def get_cumulative_energy_data(
                  "cumulative_cost": 0.0, "instant_watts": 0.0},
             ]
             return {
-                "device_id": device_id, "device_name": device.name,
-                "period": period_label, "cost_per_kwh": cost_per_kwh,
-                "currency": "EUR", "total_kwh": 0.0, "total_cost": 0.0,
+                "device_id": device_id,
+                "device_name": device.name,
+                "period": period_label,
+                "cost_per_kwh": cost_per_kwh,
+                "currency": "EUR",
+                "total_kwh": 0.0,
+                "total_cost": 0.0,
                 "data_points": zero_points,
             }
         return {
@@ -556,19 +569,6 @@ def get_cumulative_energy_total(
         for point in device_data.get("data_points", []):
             ts = point["timestamp"]
             watts_by_ts[ts] = watts_by_ts.get(ts, 0.0) + point["instant_watts"]
-
-    if not watts_by_ts and start is not None and end is not None:
-        return {
-            "device_id": 0, "device_name": "Total", "period": period_label,
-            "cost_per_kwh": cost_per_kwh, "currency": "EUR",
-            "total_kwh": 0.0, "total_cost": 0.0,
-            "data_points": [
-                {"timestamp": start.isoformat(), "cumulative_kwh": 0.0,
-                 "cumulative_cost": 0.0, "instant_watts": 0.0},
-                {"timestamp": end.isoformat(), "cumulative_kwh": 0.0,
-                 "cumulative_cost": 0.0, "instant_watts": 0.0},
-            ],
-        }
 
     if not watts_by_ts:
         return empty_result
