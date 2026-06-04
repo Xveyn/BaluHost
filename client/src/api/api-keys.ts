@@ -14,8 +14,6 @@ export interface ApiKeyPublic {
   last_used_ip: string | null;
   use_count: number;
   created_at: string;
-  revoked_at: string | null;
-  revocation_reason: string | null;
 }
 
 export interface ApiKeyCreated {

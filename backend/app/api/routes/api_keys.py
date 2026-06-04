@@ -40,8 +40,6 @@ def _serialize_api_key(api_key) -> ApiKeyPublic:
         last_used_ip=api_key.last_used_ip,
         use_count=api_key.use_count,
         created_at=api_key.created_at.isoformat() if api_key.created_at else "",
-        revoked_at=api_key.revoked_at.isoformat() if api_key.revoked_at else None,
-        revocation_reason=api_key.revocation_reason,
     )
 
 

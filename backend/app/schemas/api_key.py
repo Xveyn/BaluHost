@@ -57,8 +57,6 @@ class ApiKeyPublic(BaseModel):
     last_used_ip: Optional[str] = None
     use_count: int
     created_at: str
-    revoked_at: Optional[str] = None
-    revocation_reason: Optional[str] = None
 
     @property
     def status(self) -> str:
