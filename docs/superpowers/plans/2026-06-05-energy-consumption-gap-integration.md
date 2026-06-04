@@ -407,7 +407,7 @@ def get_cumulative_energy_total(
             "period": period_label,
             "cost_per_kwh": cost_per_kwh,
             "currency": "EUR",
-            "total_kwh": round(total_kwh, 3),
+            "total_kwh": round(total_kwh, 4),  # 4dp to match get_cumulative_energy_data
             "total_cost": round(total_kwh * cost_per_kwh, 2),
             "data_points": data_points,
         }
