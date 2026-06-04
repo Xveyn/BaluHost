@@ -410,3 +410,27 @@ class TestTotalEqualsSumOfDevices:
                                             start=now - timedelta(hours=2), end=now)
         assert total["period"] == "custom"
         assert total["total_kwh"] == pytest.approx(a["total_kwh"] + b["total_kwh"], abs=1e-6)
+
+
+class TestPeriodStatsEnergyMatchesIntegration:
+    def test_period_total_does_not_bridge_gaps(self, db_session, smart_device):
+        now = datetime.now(timezone.utc)
+        _add_sample(db_session, smart_device.id, now - timedelta(hours=2), 100.0)
+        _add_sample(db_session, smart_device.id, now, 100.0)
+        db_session.commit()
+        stats = get_period_stats(db_session, smart_device.id,
+                                 now - timedelta(hours=3), now)
+        assert stats is not None
+        assert stats.total_energy_kwh == pytest.approx(0.0, abs=1e-6)
+
+    def test_period_total_matches_cumulative(self, db_session, smart_device):
+        now = datetime.now(timezone.utc)
+        for i in range(7):
+            _add_sample(db_session, smart_device.id,
+                        now - timedelta(minutes=60 - i * 10), 90.0)
+        db_session.commit()
+        stats = get_period_stats(db_session, smart_device.id,
+                                 now - timedelta(hours=2), now)
+        cum = get_cumulative_energy_data(db_session, smart_device.id, "today", 0.40,
+                                         start=now - timedelta(hours=2), end=now)
+        assert stats.total_energy_kwh == pytest.approx(cum["total_kwh"], abs=1e-6)

@@ -213,17 +213,17 @@ def get_period_stats(
             SmartDeviceSample.timestamp >= start_time,
             SmartDeviceSample.timestamp <= end_time,
         )
-    ).all()
+    ).order_by(SmartDeviceSample.timestamp).all()
 
     if not samples:
         return None
 
-    # Parse all samples
+    # Parse all samples (keep timestamps for integration)
     parsed = []
     for s in samples:
         p = _parse_power_from_sample(s.data_json)
         if p is not None:
-            parsed.append(p)
+            parsed.append({"timestamp": s.timestamp, **p})
 
     if not parsed:
         return None
@@ -241,8 +241,8 @@ def get_period_stats(
         min_watts = 0.0
         max_watts = 0.0
 
-    period_hours = (end_time - start_time).total_seconds() / 3600
-    total_energy_kwh = (avg_watts / 1000) * period_hours if online_samples else 0.0
+    _, total_wh = _device_cumulative_series(online_samples)
+    total_energy_kwh = total_wh / 1000.0
 
     uptime_percentage = (len(online_samples) / samples_count * 100) if samples_count > 0 else 0.0
 
