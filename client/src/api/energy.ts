@@ -143,6 +143,8 @@ export async function getCumulativeEnergy(
   end?: string,
 ): Promise<CumulativeEnergyResponse> {
   const params = new URLSearchParams();
+  // Custom range is "both or neither": only a complete start+end pair switches
+  // away from the named period. A partial pair falls back to `period`.
   if (start && end) {
     params.set('start', start);
     params.set('end', end);

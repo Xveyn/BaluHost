@@ -75,6 +75,7 @@ export type ChartTimeRange = '10m' | '1h' | '24h' | '7d' | 'today' | 'week' | 'm
  * | 10m, 1h, 24h, today | HH:mm        | 14:30        |
  * | 7d, week      | Weekday + HH:mm    | Mo 14:00     |
  * | month         | dd.MM.             | 15.01.       |
+ * | custom        | dd.MM. HH:mm       | 15.01. 14:30 |
  *
  * @param timestamp - ISO string, epoch ms, or Date
  * @param range - The currently selected time range
