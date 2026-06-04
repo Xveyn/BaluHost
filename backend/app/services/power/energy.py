@@ -218,7 +218,9 @@ def get_period_stats(
     if not samples:
         return None
 
-    # Parse all samples (keep timestamps for integration)
+    # Parse all samples (keep timestamps for integration). We can't reuse
+    # _load_parsed_online_sorted here because stats also need the OFFLINE
+    # samples for uptime_percentage / downtime_minutes.
     parsed = []
     for s in samples:
         p = _parse_power_from_sample(s.data_json)
