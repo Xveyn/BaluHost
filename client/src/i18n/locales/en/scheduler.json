@@ -54,8 +54,8 @@
   },
   "syncTab": {
     "title": "Sync Schedules",
-    "description": "User-defined sync schedules can be configured in the Settings page under the Sync tab. This section will be enhanced with direct schedule management in a future update.",
-    "goToSettings": "Go to Settings"
+    "description": "User-defined sync schedules can be configured on the Sync page. This section will be enhanced with direct schedule management in a future update.",
+    "goToSettings": "Go to Sync"
   },
   "buttons": {
     "refresh": "Refresh",
