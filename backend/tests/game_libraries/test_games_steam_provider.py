@@ -1,5 +1,6 @@
 """Tests for the Steam game library provider."""
 
+import pytest
 from pathlib import Path
 
 from app.services.game_libraries import steam
@@ -67,3 +68,53 @@ def test_get_libraries_dedupes_roots_pointing_to_same_lib(tmp_path, monkeypatch)
     monkeypatch.setattr(steam, "_CANDIDATE_ROOTS", [str(root), str(root)])
     libs = steam.SteamProvider().get_libraries()
     assert len(libs) == 1
+
+
+@pytest.mark.parametrize("name", [
+    "Proton 8.0",
+    "Proton Experimental",
+    "Proton EasyAntiCheat Runtime",
+    "Steam Linux Runtime 3.0 (sniper)",
+    "Steamworks Common Redistributables",
+    "STEAMWORKS COMMON REDISTRIBUTABLES",  # case-insensitive
+])
+def test_is_tool_app_true(name):
+    assert steam._is_tool_app(name) is True
+
+
+@pytest.mark.parametrize("name", [
+    "Counter-Strike 2",
+    "Cyberpunk 2077",
+    "App 12345",  # fallback name for missing .acf
+])
+def test_is_tool_app_false(name):
+    assert steam._is_tool_app(name) is False
+
+
+def test_get_libraries_filters_tool_apps(tmp_path, monkeypatch):
+    root = tmp_path / "SteamRoot"
+    _make_library(root, {
+        "111": (5000, "Counter-Strike 2"),
+        "222": (3000, "Cyberpunk 2077"),
+        "900": (1500, "Proton 8.0"),
+        "901": (700, "Steam Linux Runtime 3.0 (sniper)"),
+        "902": (462, "Steamworks Common Redistributables"),
+    })
+    monkeypatch.setattr(steam, "_CANDIDATE_ROOTS", [str(root)])
+
+    libs = steam.SteamProvider().get_libraries()
+    assert len(libs) == 1
+    lib = libs[0]
+    assert [g.name for g in lib.games] == ["Counter-Strike 2", "Cyberpunk 2077"]
+    assert lib.game_count == 2
+    assert lib.total_bytes == 8000  # tool bytes excluded
+
+
+def test_get_libraries_drops_tools_only_library(tmp_path, monkeypatch):
+    root = tmp_path / "SteamRoot"
+    _make_library(root, {
+        "900": (1500, "Proton 8.0"),
+        "902": (462, "Steamworks Common Redistributables"),
+    })
+    monkeypatch.setattr(steam, "_CANDIDATE_ROOTS", [str(root)])
+    assert steam.SteamProvider().get_libraries() == []

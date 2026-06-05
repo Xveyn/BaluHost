@@ -26,6 +26,19 @@ _CANDIDATE_ROOTS = [
     r"C:\Program Files\Steam",
 ]
 
+# Display-name prefixes/exact matches that identify Steam tools & runtimes,
+# not real games. Compared case-insensitively against the .acf "name".
+_TOOL_NAME_PREFIXES = ("proton", "steam linux runtime")
+_TOOL_NAME_EXACT = ("steamworks common redistributables",)
+
+
+def _is_tool_app(name: str) -> bool:
+    """True if *name* is a Steam tool/runtime (Proton, Linux Runtime, redist)."""
+    n = name.strip().lower()
+    if n in _TOOL_NAME_EXACT:
+        return True
+    return any(n.startswith(prefix) for prefix in _TOOL_NAME_PREFIXES)
+
 
 class SteamProvider:
     id = "steam"
@@ -88,11 +101,13 @@ class SteamProvider:
         games: List[GameEntry] = []
         total = 0
         for app_id, size_str in apps.items():
+            name = self._read_app_name(steamapps, str(app_id)) or f"App {app_id}"
+            if _is_tool_app(name):
+                continue
             try:
                 size = int(size_str)
             except (TypeError, ValueError):
                 size = 0
-            name = self._read_app_name(steamapps, str(app_id)) or f"App {app_id}"
             games.append(GameEntry(app_id=str(app_id), name=name, size_bytes=size))
             total += size
         games.sort(key=lambda g: g.size_bytes, reverse=True)
