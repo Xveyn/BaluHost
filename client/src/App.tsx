@@ -50,7 +50,6 @@ const UpdatePage = isDesktop ? lazyWithRetry(() => import('./pages/UpdatePage'))
 const CloudImportPage = isDesktop ? lazyWithRetry(() => import('./pages/CloudImportPage')) : null;
 const PiholePage = isDesktop ? lazyWithRetry(() => import('./pages/PiholePage')) : null;
 const SmartDevicesPage = isDesktop ? lazyWithRetry(() => import('./pages/SmartDevicesPage')) : null;
-const SyncSettings = isDesktop ? lazyWithRetry(() => import('./components/SyncSettings')) : null;
 const PluginPage = isDesktop ? lazyWithRetry(() => import('./components/PluginPage')) : null;
 
 // Pi-only pages — NOT bundled in desktop builds
@@ -212,7 +211,6 @@ function AppRoutes() {
         {isDesktop && <Route path="/settings/notifications" element={<Navigate to="/settings?tab=notifications" replace />} />}
         {NotificationsArchivePage && <Route path="/notifications" element={user ? <Layout><NotificationsArchivePage /></Layout> : <Navigate to="/login" />} />}
         {isDesktop && <Route path="/notifications/settings" element={<Navigate to="/settings?tab=notifications" replace />} />}
-        {SyncSettings && <Route path="/sync" element={user ? <Layout><SyncSettings /></Layout> : <Navigate to="/login" />} />}
         {UserManualPage && <Route path="/manual" element={user ? <Layout><UserManualPage /></Layout> : <Navigate to="/login" />} />}
         {isDesktop && <Route path="/docs" element={<Navigate to="/manual" replace />} />}
         {PluginsPage && <Route path="/plugins" element={isAdmin ? <Layout><PluginsPage /></Layout> : <Navigate to="/" />} />}
