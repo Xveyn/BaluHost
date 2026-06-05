@@ -123,6 +123,11 @@
       "deleteFiles": "Delete unnecessary files to free up space",
       "compression": "Use file compression for large archives",
       "contactAdmin": "Contact admin if you need more storage"
+    },
+    "games": {
+      "title": "Game Libraries",
+      "empty": "No game library detected",
+      "count": "{{count}} games"
     }
   },
   "activity": {

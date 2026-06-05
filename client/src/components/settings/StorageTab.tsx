@@ -8,6 +8,9 @@ import type { StorageBreakdownResponse } from '../../api/system';
 import { getUserQuota } from '../../api/vcl';
 import { getCacheOverview } from '../../api/ssd-file-cache';
 import StorageBreakdownRing from './StorageBreakdownRing';
+import GameLibrariesCard from './GameLibrariesCard';
+import { getGameLibraries } from '../../api/games';
+import type { GameLibrariesResponse } from '../../api/games';
 import type { QuotaInfo } from '../../types/vcl';
 import type { SSDCacheStats } from '../../api/ssd-file-cache';
 
@@ -29,11 +32,13 @@ export default function StorageTab({ isAdmin, onNavigateToVcl }: StorageTabProps
   const [storageBreakdown, setStorageBreakdown] = useState<StorageBreakdownResponse | null>(null);
   const [vclQuota, setVclQuota] = useState<QuotaInfo | null>(null);
   const [cacheOverview, setCacheOverview] = useState<SSDCacheStats[] | null>(null);
+  const [gameLibraries, setGameLibraries] = useState<GameLibrariesResponse | null>(null);
 
   useEffect(() => {
     loadStorageBreakdown();
     loadVclQuota();
     loadCacheOverview();
+    loadGameLibraries();
   }, []);
 
   const loadStorageBreakdown = async () => {
@@ -60,6 +65,15 @@ export default function StorageTab({ isAdmin, onNavigateToVcl }: StorageTabProps
       setCacheOverview(data);
     } catch {
       setCacheOverview([]);
+    }
+  };
+
+  const loadGameLibraries = async () => {
+    try {
+      const data = await getGameLibraries();
+      setGameLibraries(data);
+    } catch {
+      setGameLibraries({ libraries: [], total_bytes: 0, available: false });
     }
   };
 
@@ -311,6 +325,12 @@ export default function StorageTab({ isAdmin, onNavigateToVcl }: StorageTabProps
           </div>
         )}
       </div>
+
+      {/* Game Libraries */}
+      <GameLibrariesCard
+        libraries={gameLibraries?.libraries ?? null}
+        available={gameLibraries?.available ?? false}
+      />
     </>
   );
 }
