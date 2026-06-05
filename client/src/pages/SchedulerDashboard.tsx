@@ -256,7 +256,7 @@ export default function SchedulerDashboard() {
               {t('syncTab.description')}
             </p>
             <Link
-              to="/sync"
+              to="/devices?tab=schedules"
               className="inline-flex items-center gap-2 rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-700 transition-colors"
             >
               <Settings className="h-4 w-4" />
