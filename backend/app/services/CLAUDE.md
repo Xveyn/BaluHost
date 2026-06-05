@@ -111,6 +111,12 @@ Business logic layer. Routes delegate to services — services contain the actua
 **`setup/`** — First-run setup wizard: detection, step tracking, completion
 - `service.py` — Setup required detection, completed step tracking, completion flag
 
+**`game_libraries/`** — Game library storage usage (Steam now, provider-extensible)
+- `provider.py` — `GameLibraryProvider` protocol + registry seam
+- `steam.py` — Steam discovery via `libraryfolders.vdf` + `appmanifest_*.acf` (metadata only)
+- `vdf.py` — minimal Valve KeyValues parser (stdlib)
+- `service.py` — aggregate across providers, dev-mode mock
+
 ## Key Patterns
 
 - **Dev/Prod backends**: Hardware services use a protocol/interface with separate `dev_backend` (mocks) and `linux_backend` (real commands). Selected based on `settings.is_dev_mode`

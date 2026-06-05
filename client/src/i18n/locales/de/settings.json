@@ -123,6 +123,12 @@
       "deleteFiles": "Unnötige Dateien löschen, um Speicherplatz freizugeben",
       "compression": "Dateikomprimierung für große Archive verwenden",
       "contactAdmin": "Administrator kontaktieren, wenn mehr Speicher benötigt wird"
+    },
+    "games": {
+      "title": "Spielbibliotheken",
+      "empty": "Keine Spielbibliothek erkannt",
+      "count_one": "{{count}} Spiel",
+      "count_other": "{{count}} Spiele"
     }
   },
   "activity": {
