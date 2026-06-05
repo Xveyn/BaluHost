@@ -24,7 +24,7 @@ Reusable, generic building blocks. No business logic, no API calls.
 - `RaidSetupWizard.tsx` / `MockDiskWizard.tsx` — RAID setup wizards
 - `VpnManagement.tsx` — VPN client management
 - `ShareFileModal.tsx`, `CreateFileShareModal.tsx`, `EditFileShareModal.tsx` — File sharing modals
-- Settings: `AppearanceSettings.tsx`, `LanguageSettings.tsx`, `ByteUnitSettings.tsx`, `BackupSettings.tsx`, `SyncSettings.tsx`
+- Settings: `AppearanceSettings.tsx`, `LanguageSettings.tsx`, `ByteUnitSettings.tsx`, `BackupSettings.tsx`
 
 ### Feature Subdirectories
 | Directory | Feature |
@@ -52,7 +52,6 @@ Reusable, generic building blocks. No business logic, no API calls.
 | `settings/` | Settings page sections |
 | `smart-devices/` | Smart device status and control |
 | `ssd-cache/` | SSD file cache management |
-| `sync-settings/` | Desktop sync configuration |
 | `system-monitor/` | System monitor detail views |
 | `updates/` | Self-update UI |
 | `user-management/` | User CRUD, 2FA management |
