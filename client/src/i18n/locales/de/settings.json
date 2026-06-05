@@ -127,7 +127,8 @@
     "games": {
       "title": "Spielbibliotheken",
       "empty": "Keine Spielbibliothek erkannt",
-      "count": "{{count}} Spiele"
+      "count_one": "{{count}} Spiel",
+      "count_other": "{{count}} Spiele"
     }
   },
   "activity": {
