@@ -42,7 +42,9 @@ def test_provider_exception_is_swallowed(monkeypatch):
         def get_libraries(self): raise RuntimeError("nope")
     monkeypatch.setattr(service, "PROVIDERS", [Boom()])
     resp = service.get_game_libraries()
-    # available flips True (provider reported available) but no libraries.
+    # The provider reported available before raising, so `available` stays True;
+    # the exception is swallowed and yields no libraries (no mock masking it).
+    assert resp.available is True
     assert resp.libraries == []
 
 

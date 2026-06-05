@@ -4,6 +4,11 @@ Supports only the subset Steam uses in ``libraryfolders.vdf`` and
 ``appmanifest_*.acf``: quoted keys/values and ``{}`` nested blocks. No macros,
 no conditionals, no unquoted tokens. stdlib only — deliberately not the ``vdf``
 PyPI package (repo rule: no new deps for small features).
+
+``//`` line comments are NOT stripped. Steam writes these two files
+programmatically and does not emit comments, so this is a non-issue in
+practice; we intentionally avoid a comment pre-pass that could corrupt values
+containing ``//``.
 """
 from __future__ import annotations
 
