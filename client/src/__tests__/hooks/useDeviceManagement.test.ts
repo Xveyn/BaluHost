@@ -38,6 +38,11 @@ vi.mock('../../api/sync', () => ({
   listSyncSchedules: vi.fn(),
   disableSyncSchedule: vi.fn(),
   enableSyncSchedule: vi.fn(),
+  deleteSyncSchedule: vi.fn(),
+  updateSyncSchedule: vi.fn(),
+  getBandwidthLimits: vi.fn(),
+  saveBandwidthLimits: vi.fn(),
+  getSyncPreflight: vi.fn(),
 }));
 
 vi.mock('../../api/mobile', () => ({
