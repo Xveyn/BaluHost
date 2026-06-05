@@ -41,6 +41,7 @@ export default function GameLibrariesCard({ libraries, available }: GameLibrarie
           {libraries.map((lib, idx) => {
             const key = `${lib.provider}:${lib.path}:${idx}`;
             const open = !!openLibs[key];
+            const gamesMax = Math.max(...lib.games.map((g) => g.size_bytes), 1);
             return (
               <div key={key} className="p-4 rounded-xl bg-slate-800/40 border border-slate-700/30">
                 <button
@@ -69,11 +70,22 @@ export default function GameLibrariesCard({ libraries, available }: GameLibrarie
                 </button>
 
                 {open && (
-                  <ul className="mt-3 space-y-1 text-xs sm:text-sm border-t border-slate-700/40 pt-3">
+                  <ul className="mt-3 space-y-2 border-t border-slate-700/40 pt-3">
                     {lib.games.map((g) => (
-                      <li key={g.app_id} className="flex justify-between gap-2">
-                        <span className="text-slate-300 truncate">{g.name}</span>
-                        <span className="text-slate-400 tabular-nums shrink-0">{formatBytes(g.size_bytes)}</span>
+                      <li
+                        key={g.app_id}
+                        className="rounded px-2 -mx-2 py-1.5 hover:bg-slate-800/30 transition-colors"
+                      >
+                        <div className="flex justify-between gap-2 text-xs sm:text-sm">
+                          <span className="text-slate-300 truncate">{g.name}</span>
+                          <span className="text-slate-400 tabular-nums shrink-0">{formatBytes(g.size_bytes)}</span>
+                        </div>
+                        <div className="mt-1 h-1 rounded-full bg-slate-700/30 overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-indigo-500/50"
+                            style={{ width: `${Math.max((g.size_bytes / gamesMax) * 100, 1)}%` }}
+                          />
+                        </div>
                       </li>
                     ))}
                   </ul>
