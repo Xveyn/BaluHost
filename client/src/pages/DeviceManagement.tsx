@@ -122,11 +122,14 @@ export default function DeviceManagement() {
           devices={dm.devices}
           schedules={dm.schedules}
           schedulesLoading={dm.schedulesLoading}
+          sleepSchedule={dm.sleepSchedule}
+          bandwidth={dm.bandwidth}
           onCreateSchedule={dm.handleCreateSchedule}
           onDisableSchedule={dm.handleDisableSchedule}
           onEnableSchedule={dm.handleEnableSchedule}
           onDeleteSchedule={dm.handleDeleteSchedule}
           onUpdateSchedule={dm.handleUpdateSchedule}
+          onSaveBandwidth={dm.handleSaveBandwidth}
         />
       )}
 
