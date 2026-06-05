@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Calendar, Clock, History, Settings, Wrench, RefreshCw, Loader2, BarChart3, AlertTriangle } from 'lucide-react';
 import { useSchedulers, useSchedulerHistory } from '../hooks/useSchedulers';
@@ -254,13 +255,13 @@ export default function SchedulerDashboard() {
             <p className="text-sm text-slate-400 mb-6">
               {t('syncTab.description')}
             </p>
-            <a
-              href="/settings"
+            <Link
+              to="/sync"
               className="inline-flex items-center gap-2 rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-700 transition-colors"
             >
               <Settings className="h-4 w-4" />
               {t('syncTab.goToSettings')}
-            </a>
+            </Link>
           </div>
         )}
 
