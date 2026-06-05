@@ -27,7 +27,9 @@ Minimal parser for Valve's KeyValues format — just enough for `libraryfolders.
 **Files:**
 - Create: `backend/app/services/game_libraries/__init__.py`
 - Create: `backend/app/services/game_libraries/vdf.py`
-- Test: `backend/tests/game_libraries/test_vdf.py`
+- Test: `backend/tests/game_libraries/test_games_vdf.py`
+
+**Note on test filenames:** the suite uses no `__init__.py` in test subdirs and requires globally-unique test basenames (pytest import-mode=prepend). All new test files are therefore prefixed `test_games_*`.
 
 - [ ] **Step 1: Create the package init**
 
@@ -39,7 +41,7 @@ Create `backend/app/services/game_libraries/__init__.py` with a single docstring
 
 - [ ] **Step 2: Write the failing test**
 
-Create `backend/tests/game_libraries/test_vdf.py`:
+Create `backend/tests/game_libraries/test_games_vdf.py`:
 
 ```python
 """Tests for the minimal VDF (Valve KeyValues) parser."""
@@ -99,7 +101,7 @@ def test_parse_unescapes_backslashes():
 
 - [ ] **Step 3: Run test to verify it fails**
 
-Run: `cd backend && python -m pytest tests/game_libraries/test_vdf.py -v`
+Run: `cd backend && python -m pytest tests/game_libraries/test_games_vdf.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'app.services.game_libraries.vdf'`
 
 - [ ] **Step 4: Implement the parser**
@@ -173,13 +175,13 @@ def parse(text: str) -> dict:
 
 - [ ] **Step 5: Run test to verify it passes**
 
-Run: `cd backend && python -m pytest tests/game_libraries/test_vdf.py -v`
+Run: `cd backend && python -m pytest tests/game_libraries/test_games_vdf.py -v`
 Expected: PASS (4 tests)
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add backend/app/services/game_libraries/__init__.py backend/app/services/game_libraries/vdf.py backend/tests/game_libraries/test_vdf.py
+git add backend/app/services/game_libraries/__init__.py backend/app/services/game_libraries/vdf.py backend/tests/game_libraries/test_games_vdf.py
 git commit -m "feat(games): minimal VDF parser for Steam metadata"
 ```
 
@@ -191,11 +193,11 @@ Pydantic response shapes for the game-libraries API.
 
 **Files:**
 - Create: `backend/app/schemas/games.py`
-- Test: `backend/tests/game_libraries/test_schemas.py`
+- Test: `backend/tests/game_libraries/test_games_schemas.py`
 
 - [ ] **Step 1: Write the failing test**
 
-Create `backend/tests/game_libraries/test_schemas.py`:
+Create `backend/tests/game_libraries/test_games_schemas.py`:
 
 ```python
 """Tests for game library schemas."""
@@ -229,7 +231,7 @@ def test_device_id_optional():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd backend && python -m pytest tests/game_libraries/test_schemas.py -v`
+Run: `cd backend && python -m pytest tests/game_libraries/test_games_schemas.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'app.schemas.games'`
 
 - [ ] **Step 3: Implement the schemas**
@@ -270,13 +272,13 @@ class GameLibrariesResponse(BaseModel):
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd backend && python -m pytest tests/game_libraries/test_schemas.py -v`
+Run: `cd backend && python -m pytest tests/game_libraries/test_games_schemas.py -v`
 Expected: PASS (2 tests)
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add backend/app/schemas/games.py backend/tests/game_libraries/test_schemas.py
+git add backend/app/schemas/games.py backend/tests/game_libraries/test_games_schemas.py
 git commit -m "feat(games): GameLibrary response schemas"
 ```
 
@@ -289,11 +291,11 @@ The extensible seam plus the Steam implementation (vdf + acf parsing, realpath d
 **Files:**
 - Create: `backend/app/services/game_libraries/provider.py`
 - Create: `backend/app/services/game_libraries/steam.py`
-- Test: `backend/tests/game_libraries/test_steam_provider.py`
+- Test: `backend/tests/game_libraries/test_games_steam_provider.py`
 
 - [ ] **Step 1: Write the failing test**
 
-Create `backend/tests/game_libraries/test_steam_provider.py`:
+Create `backend/tests/game_libraries/test_games_steam_provider.py`:
 
 ```python
 """Tests for the Steam game library provider."""
@@ -369,7 +371,7 @@ def test_get_libraries_dedupes_roots_pointing_to_same_lib(tmp_path, monkeypatch)
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd backend && python -m pytest tests/game_libraries/test_steam_provider.py -v`
+Run: `cd backend && python -m pytest tests/game_libraries/test_games_steam_provider.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'app.services.game_libraries.steam'`
 
 - [ ] **Step 3: Implement the provider protocol**
@@ -539,13 +541,13 @@ class SteamProvider:
 
 - [ ] **Step 5: Run test to verify it passes**
 
-Run: `cd backend && python -m pytest tests/game_libraries/test_steam_provider.py -v`
+Run: `cd backend && python -m pytest tests/game_libraries/test_games_steam_provider.py -v`
 Expected: PASS (3 tests)
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add backend/app/services/game_libraries/provider.py backend/app/services/game_libraries/steam.py backend/tests/game_libraries/test_steam_provider.py
+git add backend/app/services/game_libraries/provider.py backend/app/services/game_libraries/steam.py backend/tests/game_libraries/test_games_steam_provider.py
 git commit -m "feat(games): SteamProvider with provider interface"
 ```
 
@@ -557,11 +559,11 @@ Iterate providers, aggregate, and fall back to a mock in dev mode when nothing r
 
 **Files:**
 - Create: `backend/app/services/game_libraries/service.py`
-- Test: `backend/tests/game_libraries/test_service.py`
+- Test: `backend/tests/game_libraries/test_games_service.py`
 
 - [ ] **Step 1: Write the failing test**
 
-Create `backend/tests/game_libraries/test_service.py`:
+Create `backend/tests/game_libraries/test_games_service.py`:
 
 ```python
 """Tests for the game library aggregation service."""
@@ -624,7 +626,7 @@ def test_dev_mock_when_no_real_libraries(monkeypatch):
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd backend && python -m pytest tests/game_libraries/test_service.py -v`
+Run: `cd backend && python -m pytest tests/game_libraries/test_games_service.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'app.services.game_libraries.service'`
 
 - [ ] **Step 3: Implement the service**
@@ -685,13 +687,13 @@ def get_game_libraries() -> GameLibrariesResponse:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd backend && python -m pytest tests/game_libraries/test_service.py -v`
+Run: `cd backend && python -m pytest tests/game_libraries/test_games_service.py -v`
 Expected: PASS (3 tests)
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add backend/app/services/game_libraries/service.py backend/tests/game_libraries/test_service.py
+git add backend/app/services/game_libraries/service.py backend/tests/game_libraries/test_games_service.py
 git commit -m "feat(games): provider aggregation service with dev mock"
 ```
 
