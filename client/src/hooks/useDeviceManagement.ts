@@ -18,6 +18,9 @@ import {
   enableSyncSchedule,
   deleteSyncSchedule,
   updateSyncSchedule,
+  getBandwidthLimits,
+  saveBandwidthLimits,
+  getSyncPreflight,
   type CreateScheduleRequest,
 } from '../api/sync';
 import { generateMobileToken, type MobileRegistrationToken } from '../api/mobile';
@@ -37,6 +40,9 @@ export function useDeviceManagement() {
     loading: schedulesLoading,
     refetch: refetchSchedules,
   } = useAsyncData(listSyncSchedules);
+
+  const { data: bandwidth, refetch: refetchBandwidth } = useAsyncData(getBandwidthLimits);
+  const { data: preflight } = useAsyncData(getSyncPreflight);
 
   const { confirm, dialog: confirmDialog } = useConfirmDialog();
 
@@ -153,6 +159,21 @@ export function useDeviceManagement() {
     [t, refetchSchedules],
   );
 
+  const handleSaveBandwidth = useCallback(
+    async (upload: number | null, download: number | null): Promise<boolean> => {
+      try {
+        await saveBandwidthLimits(upload, download);
+        toast.success(t('toast.bandwidthSaved'));
+        refetchBandwidth();
+        return true;
+      } catch {
+        toast.error(t('toast.bandwidthSaveFailed'));
+        return false;
+      }
+    },
+    [t, refetchBandwidth],
+  );
+
   const handleSaveDeviceName = useCallback(
     async (device: Device, newName: string) => {
       if (!newName.trim()) {
@@ -208,6 +229,9 @@ export function useDeviceManagement() {
     schedules: scheduleList,
     schedulesLoading,
     refetchSchedules,
+    bandwidth: bandwidth ?? null,
+    sleepSchedule: preflight?.sleep_schedule ?? null,
+    handleSaveBandwidth,
     mobileDevices,
     desktopDevices,
     stats,
