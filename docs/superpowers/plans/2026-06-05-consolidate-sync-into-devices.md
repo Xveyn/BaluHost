@@ -556,7 +556,7 @@ interface SchedulesTabProps {
 }
 ```
 
-- [ ] **Step 3: Destructure the new props**
+- [ ] **Step 3: Destructure the new props** (props only — do NOT add derived flags here; they go after the form state in Step 4 because they reference `timeOfDay`)
 
 Find:
 
@@ -591,17 +591,11 @@ export function SchedulesTab({
   onSaveBandwidth,
 }: SchedulesTabProps) {
   const { t } = useTranslation(['devices', 'common']);
-
-  const sleepActive = !!sleepSchedule?.enabled;
-  const createInSleepWindow =
-    sleepActive && isTimeInSleepWindow(timeOfDay, sleepSchedule!.sleep_time, sleepSchedule!.wake_time);
 ```
 
-> Note: `timeOfDay` is declared a few lines below as create-form state. `createInSleepWindow` references it; since it is used only in JSX (evaluated after render setup), move the two `const` lines to **after** the `timeOfDay` declaration if the type-checker complains about use-before-declaration. See Step 4.
+- [ ] **Step 4: Add the derived sleep flags after the form state**
 
-- [ ] **Step 4: Place the derived flags after the form state (correct ordering)**
-
-To avoid use-before-declaration, do NOT keep the two derived lines from Step 3 directly under `useTranslation`. Instead, find the create-form state block:
+Find the create-form state block:
 
 ```tsx
   // Create form state
@@ -627,14 +621,6 @@ Replace with:
   const sleepActive = !!sleepSchedule?.enabled;
   const createInSleepWindow =
     sleepActive && isTimeInSleepWindow(timeOfDay, sleepSchedule!.sleep_time, sleepSchedule!.wake_time);
-```
-
-And REMOVE the two derived lines you may have added under `useTranslation` in Step 3 (keep them only here). The `useTranslation` block should read exactly:
-
-```tsx
-  const { t } = useTranslation(['devices', 'common']);
-
-  // Create form state
 ```
 
 - [ ] **Step 5: Add the sleep warning banner + disable the Create button**
@@ -994,12 +980,12 @@ Expected: `JSON OK`
 cd client && npx tsc --noEmit
 ```
 
-Then, from the repo root, confirm only intended `/sync` mentions remain (expect only `/sync-prototype` in `App.tsx`):
+Then, from the repo root, confirm no dangling references to the deleted modules remain:
 
 ```powershell
-Get-ChildItem -Path "client/src" -Recurse -Include *.tsx,*.ts | Select-String -Pattern "[`"']/sync[`"']|to=.?/sync\b|SyncSettings|useSyncSettings" | Select-Object Path,LineNumber,Line
+Get-ChildItem -Path "client/src" -Recurse -Include *.tsx,*.ts | Select-String -Pattern "SyncSettings|useSyncSettings" | Select-Object Path,LineNumber,Line
 ```
-Expected: no matches (the `/sync-prototype` line uses `/sync-prototype`, which does not match `/sync"` or `/sync'`).
+Expected: no matches. (The type-check in Step 4 already guarantees no dangling `/sync` route import; the only remaining literal `/sync` in the tree is the intentional `/sync-prototype` redirect in `App.tsx`.)
 
 - [ ] **Step 7: Commit**
 
