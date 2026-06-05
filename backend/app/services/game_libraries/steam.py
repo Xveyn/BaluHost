@@ -101,14 +101,18 @@ class SteamProvider:
         games: List[GameEntry] = []
         total = 0
         for app_id, size_str in apps.items():
-            name = self._read_app_name(steamapps, str(app_id)) or f"App {app_id}"
-            if _is_tool_app(name):
+            name, acf_size = self._read_app_manifest(steamapps, str(app_id))
+            display_name = name or f"App {app_id}"
+            if _is_tool_app(display_name):
                 continue
-            try:
-                size = int(size_str)
-            except (TypeError, ValueError):
-                size = 0
-            games.append(GameEntry(app_id=str(app_id), name=name, size_bytes=size))
+            if acf_size is not None and acf_size > 0:
+                size = acf_size
+            else:
+                try:
+                    size = int(size_str)
+                except (TypeError, ValueError):
+                    size = 0
+            games.append(GameEntry(app_id=str(app_id), name=display_name, size_bytes=size))
             total += size
         games.sort(key=lambda g: g.size_bytes, reverse=True)
         return GameLibrary(
@@ -122,18 +126,31 @@ class SteamProvider:
         )
 
     @staticmethod
-    def _read_app_name(steamapps: Path, app_id: str) -> Optional[str]:
+    def _read_app_manifest(steamapps: Path, app_id: str) -> tuple[Optional[str], Optional[int]]:
+        """Return ``(name, size_on_disk_bytes)`` from ``appmanifest_<app_id>.acf``.
+
+        Either element is ``None`` when the manifest is missing or the field is
+        absent/unparseable. ``SizeOnDisk`` is Steam's authoritative installed size
+        (the vdf ``apps`` tally is sometimes stale/zero).
+        """
         acf = steamapps / f"appmanifest_{app_id}.acf"
         try:
             data = vdf.parse(acf.read_text(encoding="utf-8", errors="replace"))
         except OSError:
-            return None
+            return None, None
         state = data.get("AppState")
-        if isinstance(state, dict):
-            name = state.get("name")
-            if isinstance(name, str) and name.strip():
-                return name.strip()
-        return None
+        if not isinstance(state, dict):
+            return None, None
+        raw_name = state.get("name")
+        name = raw_name.strip() if isinstance(raw_name, str) and raw_name.strip() else None
+        size: Optional[int] = None
+        raw_size = state.get("SizeOnDisk")
+        if isinstance(raw_size, str):
+            try:
+                size = int(raw_size)
+            except ValueError:
+                size = None
+        return name, size
 
     @staticmethod
     def _device_id(path: str) -> Optional[int]:
