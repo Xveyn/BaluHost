@@ -4,3 +4,4 @@ export { RegisterTab } from './RegisterTab';
 export { SchedulesTab } from './SchedulesTab';
 export { EditDeviceModal } from './EditDeviceModal';
 export { QrCodeDialog } from './QrCodeDialog';
+export { BandwidthLimitsPanel } from './BandwidthLimitsPanel';

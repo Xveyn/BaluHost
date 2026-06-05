@@ -10,10 +10,24 @@ import type { MobileRegistrationToken } from '../api/mobile';
 
 type Tab = 'devices' | 'register' | 'schedules';
 
+const VALID_TABS: Tab[] = ['devices', 'register', 'schedules'];
+
+function parseTab(value: string | null): Tab {
+  return value && (VALID_TABS as string[]).includes(value) ? (value as Tab) : 'devices';
+}
+
 export default function DeviceManagement() {
   const { t } = useTranslation(['devices', 'common']);
   const [searchParams, setSearchParams] = useSearchParams();
-  const [activeTab, setActiveTab] = useState<Tab>('devices');
+  const [activeTab, setActiveTab] = useState<Tab>(() => parseTab(searchParams.get('tab')));
+
+  const handleTabChange = (tab: Tab) => {
+    setActiveTab(tab);
+    const next = new URLSearchParams(searchParams);
+    if (tab === 'devices') next.delete('tab');
+    else next.set('tab', tab);
+    setSearchParams(next, { replace: true });
+  };
   const [editingDevice, setEditingDevice] = useState<Device | null>(null);
   const [qrData, setQrData] = useState<MobileRegistrationToken | null>(null);
   const [showPairingDialog, setShowPairingDialog] = useState(false);
@@ -29,7 +43,9 @@ export default function DeviceManagement() {
   useEffect(() => {
     if (searchParams.get('pair') === '1') {
       setShowPairingDialog(true);
-      setSearchParams({}, { replace: true });
+      const next = new URLSearchParams(searchParams);
+      next.delete('pair');
+      setSearchParams(next, { replace: true });
     }
   }, []);
 
@@ -62,16 +78,16 @@ export default function DeviceManagement() {
       {/* Tabs */}
       <div className="card border-slate-800/60 bg-slate-900/55 p-1">
         <div className="flex gap-2">
-          <button onClick={() => setActiveTab('devices')} className={tabClass('devices')}>
+          <button onClick={() => handleTabChange('devices')} className={tabClass('devices')}>
             <Activity className="h-4 w-4" />
             <span className="hidden sm:inline">{t('tabs.devices')}</span>
           </button>
-          <button onClick={() => setActiveTab('register')} className={tabClass('register')}>
+          <button onClick={() => handleTabChange('register')} className={tabClass('register')}>
             <QrCodeIcon className="h-4 w-4" />
             <span className="hidden sm:inline">{t('tabs.register')}</span>
             <span className="sm:hidden">{t('tabs.registerShort')}</span>
           </button>
-          <button onClick={() => setActiveTab('schedules')} className={tabClass('schedules')}>
+          <button onClick={() => handleTabChange('schedules')} className={tabClass('schedules')}>
             <Calendar className="h-4 w-4" />
             <span className="hidden sm:inline">{t('tabs.schedules')}</span>
             <span className="sm:hidden">{t('tabs.schedulesShort')}</span>
@@ -106,11 +122,14 @@ export default function DeviceManagement() {
           devices={dm.devices}
           schedules={dm.schedules}
           schedulesLoading={dm.schedulesLoading}
+          sleepSchedule={dm.sleepSchedule}
+          bandwidth={dm.bandwidth}
           onCreateSchedule={dm.handleCreateSchedule}
           onDisableSchedule={dm.handleDisableSchedule}
           onEnableSchedule={dm.handleEnableSchedule}
           onDeleteSchedule={dm.handleDeleteSchedule}
           onUpdateSchedule={dm.handleUpdateSchedule}
+          onSaveBandwidth={dm.handleSaveBandwidth}
         />
       )}
 

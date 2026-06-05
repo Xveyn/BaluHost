@@ -17,7 +17,6 @@ Custom React hooks encapsulating data fetching, polling, and UI logic. Each hook
 | `useDeviceManagement.ts` | `api/devices` | Device list, pairing, removal |
 | `useMobile.ts` | `api/mobile` | Mobile device management |
 | `useRemoteServers.ts` | `api/remote-servers` | Remote server profiles |
-| `useSyncSettings.ts` | `api/sync` | Desktop sync folder config |
 | `useActivityFeed.ts` | `api/files` | Recent file activity stream |
 | `useLiveActivities.ts` | — | Real-time activity via polling |
 | `useDocsIndex.ts` | `api/docs` | Documentation article index |

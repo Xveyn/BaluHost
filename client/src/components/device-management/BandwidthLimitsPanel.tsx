@@ -8,8 +8,11 @@ interface BandwidthLimitsPanelProps {
   onSave: (upload: number | null, download: number | null) => Promise<boolean>;
 }
 
+const inputClass =
+  'w-full rounded-lg border border-slate-700 bg-slate-900/70 px-3 py-2 text-sm text-slate-200 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500';
+
 export function BandwidthLimitsPanel({ initialUpload, initialDownload, onSave }: BandwidthLimitsPanelProps) {
-  const { t } = useTranslation('settings');
+  const { t } = useTranslation('devices');
   const [uploadLimit, setUploadLimit] = useState<number | null>(initialUpload);
   const [downloadLimit, setDownloadLimit] = useState<number | null>(initialDownload);
 
@@ -19,31 +22,31 @@ export function BandwidthLimitsPanel({ initialUpload, initialDownload, onSave }:
   }, [initialUpload, initialDownload]);
 
   return (
-    <div className="mb-6">
-      <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
-        <HardDrive className="w-5 h-5" />
-        {t('sync.bandwidthLimits')}
+    <div className="mb-6 rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
+      <h3 className="mb-3 text-sm font-medium text-slate-300 flex items-center gap-2">
+        <HardDrive className="h-4 w-4" />
+        {t('schedules.bandwidthLimits')}
       </h3>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <input
           type="number"
-          placeholder={t('sync.uploadLimit')}
-          value={uploadLimit || ''}
+          placeholder={t('schedules.uploadLimit')}
+          value={uploadLimit ?? ''}
           onChange={(e) => setUploadLimit(e.target.value ? parseInt(e.target.value) : null)}
-          className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100"
+          className={inputClass}
         />
         <input
           type="number"
-          placeholder={t('sync.downloadLimit')}
-          value={downloadLimit || ''}
+          placeholder={t('schedules.downloadLimit')}
+          value={downloadLimit ?? ''}
           onChange={(e) => setDownloadLimit(e.target.value ? parseInt(e.target.value) : null)}
-          className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100"
+          className={inputClass}
         />
         <button
           onClick={() => onSave(uploadLimit, downloadLimit)}
-          className="px-4 py-2 bg-sky-500 hover:bg-sky-600 text-white rounded-lg transition-colors"
+          className="rounded-lg border border-sky-500/30 bg-sky-500/10 px-4 py-2 text-sm font-medium text-sky-200 hover:border-sky-500/50 hover:bg-sky-500/20 transition"
         >
-          {t('sync.saveLimits')}
+          {t('schedules.saveLimits')}
         </button>
       </div>
     </div>

@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Calendar, Clock, Plus, X, Check, Shield, Pencil, Trash2 } from 'lucide-react';
+import { Calendar, Clock, Plus, X, Check, Shield, Pencil, Trash2, AlertTriangle } from 'lucide-react';
 import { formatRelativeTime } from '../../lib/formatters';
+import { isTimeInSleepWindow } from '../../lib/sleep-utils';
 import type { Device } from '../../api/devices';
-import type { SyncSchedule, CreateScheduleRequest } from '../../api/sync';
+import type { SyncSchedule, CreateScheduleRequest, SleepScheduleInfo, BandwidthLimits } from '../../api/sync';
+import { BandwidthLimitsPanel } from './BandwidthLimitsPanel';
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const;
 
@@ -11,11 +13,14 @@ interface SchedulesTabProps {
   devices: Device[];
   schedules: SyncSchedule[];
   schedulesLoading: boolean;
+  sleepSchedule: SleepScheduleInfo | null;
+  bandwidth: BandwidthLimits | null;
   onCreateSchedule: (data: CreateScheduleRequest) => Promise<boolean>;
   onDisableSchedule: (scheduleId: number) => void;
   onEnableSchedule: (scheduleId: number) => void;
   onDeleteSchedule: (scheduleId: number) => void;
   onUpdateSchedule: (scheduleId: number, data: Record<string, unknown>) => Promise<boolean>;
+  onSaveBandwidth: (upload: number | null, download: number | null) => Promise<boolean>;
 }
 
 function resolveDeviceName(devices: Device[], deviceId: string, backendName?: string | null): string {
@@ -48,11 +53,14 @@ export function SchedulesTab({
   devices,
   schedules,
   schedulesLoading,
+  sleepSchedule,
+  bandwidth,
   onCreateSchedule,
   onDisableSchedule,
   onEnableSchedule,
   onDeleteSchedule,
   onUpdateSchedule,
+  onSaveBandwidth,
 }: SchedulesTabProps) {
   const { t } = useTranslation(['devices', 'common']);
 
@@ -63,6 +71,10 @@ export function SchedulesTab({
   const [dayOfWeek, setDayOfWeek] = useState<number | null>(null);
   const [dayOfMonth, setDayOfMonth] = useState<number | null>(null);
   const [autoVpn, setAutoVpn] = useState(false);
+
+  const sleepActive = !!sleepSchedule?.enabled;
+  const createInSleepWindow =
+    sleepActive && isTimeInSleepWindow(timeOfDay, sleepSchedule!.sleep_time, sleepSchedule!.wake_time);
 
   // Edit modal state
   const [editingSchedule, setEditingSchedule] = useState<SyncSchedule | null>(null);
@@ -209,7 +221,8 @@ export function SchedulesTab({
           <div className="flex items-end">
             <button
               onClick={handleCreate}
-              className="w-full rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-200 hover:border-emerald-500/50 hover:bg-emerald-500/20 touch-manipulation active:scale-95 flex items-center justify-center gap-2"
+              disabled={!selectedDeviceId || createInSleepWindow}
+              className="w-full rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-200 hover:border-emerald-500/50 hover:bg-emerald-500/20 disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation active:scale-95 flex items-center justify-center gap-2"
             >
               <Plus className="h-4 w-4" />
               {t('buttons.create')}
@@ -217,8 +230,27 @@ export function SchedulesTab({
           </div>
         </div>
 
+        {createInSleepWindow && (
+          <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+            <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+            <span>
+              {t('schedules.sleepWarning', {
+                sleepTime: sleepSchedule!.sleep_time,
+                wakeTime: sleepSchedule!.wake_time,
+              })}
+            </span>
+          </div>
+        )}
+
         <p className="mt-2 text-xs text-slate-500">{t('schedules.autoVpnHint')}</p>
       </div>
+
+      {/* Bandwidth Limits */}
+      <BandwidthLimitsPanel
+        initialUpload={bandwidth?.upload_speed_limit ?? null}
+        initialDownload={bandwidth?.download_speed_limit ?? null}
+        onSave={onSaveBandwidth}
+      />
 
       {/* Schedules List */}
       {schedulesLoading ? (
@@ -234,6 +266,9 @@ export function SchedulesTab({
           {schedules.map((schedule) => {
             const deviceName = resolveDeviceName(devices, schedule.device_id, schedule.device_name);
             const isEnabled = schedule.is_enabled !== false;
+            const inSleepWindow =
+              sleepActive &&
+              isTimeInSleepWindow(schedule.time_of_day, sleepSchedule!.sleep_time, sleepSchedule!.wake_time);
 
             return (
               <div
@@ -258,6 +293,18 @@ export function SchedulesTab({
                   </div>
 
                   <div className="flex items-center gap-2 flex-shrink-0">
+                    {inSleepWindow && (
+                      <span
+                        className="rounded-full px-2.5 py-1 text-xs font-medium border border-amber-500/40 bg-amber-500/15 text-amber-200 flex items-center gap-1"
+                        title={t('schedules.sleepBadge', {
+                          sleepTime: sleepSchedule!.sleep_time,
+                          wakeTime: sleepSchedule!.wake_time,
+                        })}
+                      >
+                        <AlertTriangle className="h-3 w-3" />
+                        Sleep
+                      </span>
+                    )}
                     {schedule.auto_vpn && (
                       <span className="rounded-full px-2.5 py-1 text-xs font-medium border border-sky-500/40 bg-sky-500/15 text-sky-200 flex items-center gap-1">
                         <Shield className="h-3 w-3" />

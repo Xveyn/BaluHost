@@ -28,7 +28,7 @@ All modules import from `lib/api.ts`:
 | `raid.ts` | `/api/system` | RAID status, create/delete arrays, disk management |
 | `backup.ts` | `/api/backups` | Create/restore/delete backups |
 | `shares.ts` | `/api/shares` | Public/user file sharing |
-| `sync.ts` | `/api/sync` | Desktop sync folder management |
+| `sync.ts` | `/api/sync` | Sync schedules, bandwidth limits, preflight |
 | `vcl.ts` | `/api/vcl` | File versioning (version list, restore, settings) |
 | `plugins.ts` | `/api/plugins` | Plugin CRUD, toggle, config, UI manifest |
 | `power-management.ts` | `/api/power` | CPU profiles, demands, auto-scaling |
