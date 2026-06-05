@@ -20,6 +20,7 @@ from app.api.routes import (
     fritzbox,
     docs,
     setup,
+    games,
 )
 
 api_router = APIRouter()
@@ -83,6 +84,7 @@ api_router.include_router(smart_devices.router, prefix="/smart-devices", tags=["
 api_router.include_router(dashboard.router, tags=["dashboard"])
 api_router.include_router(docs.router, tags=["docs"])
 api_router.include_router(setup.router, tags=["setup"])
+api_router.include_router(games.router, prefix="/games", tags=["games"])
 
 # Dev-only: admin → user impersonation.
 # Registered only when NAS_MODE=dev. Runtime check in the route is redundant-by-design.
