@@ -23,7 +23,88 @@ from app.services.power.energy import (
     get_cumulative_energy_data,
     get_cumulative_energy_total,
     get_hourly_samples,
+    _parse_power_from_sample,
+    _interval_energy_wh,
+    GAP_THRESHOLD_MINUTES,
 )
+
+
+class TestIntervalEnergyPrimitive:
+    def test_parse_exposes_import_fields(self):
+        live = _parse_power_from_sample(json.dumps({"current_power": 50.0, "is_online": True}))
+        assert live["imported"] is False
+        assert live["bucket_energy_kwh"] is None
+
+        imp = _parse_power_from_sample(json.dumps({
+            "watts": 100.0, "is_online": True,
+            "imported_from": "tapo_history", "bucket_energy_kwh": 0.1,
+        }))
+        assert imp["imported"] is True
+        assert imp["bucket_energy_kwh"] == 0.1
+
+    def test_imported_bucket_uses_own_energy(self):
+        t0 = datetime(2026, 1, 1, 0, 0, tzinfo=timezone.utc)
+        prev = {"timestamp": t0, "watts": 0.0, "imported": False, "bucket_energy_kwh": None}
+        cur = {"timestamp": t0 + timedelta(days=5), "watts": 100.0,
+               "imported": True, "bucket_energy_kwh": 0.1}
+        assert _interval_energy_wh(prev, cur) == pytest.approx(100.0)
+
+    def test_live_within_cap_is_integrated(self):
+        t0 = datetime(2026, 1, 1, 0, 0, tzinfo=timezone.utc)
+        prev = {"timestamp": t0, "watts": 100.0, "imported": False, "bucket_energy_kwh": None}
+        cur = {"timestamp": t0 + timedelta(minutes=10), "watts": 100.0,
+               "imported": False, "bucket_energy_kwh": None}
+        assert _interval_energy_wh(prev, cur) == pytest.approx(100.0 * (10 / 60))
+
+    def test_live_gap_beyond_cap_is_zero(self):
+        t0 = datetime(2026, 1, 1, 0, 0, tzinfo=timezone.utc)
+        prev = {"timestamp": t0, "watts": 200.0, "imported": False, "bucket_energy_kwh": None}
+        cur = {"timestamp": t0 + timedelta(hours=2), "watts": 200.0,
+               "imported": False, "bucket_energy_kwh": None}
+        assert GAP_THRESHOLD_MINUTES == 15
+        assert _interval_energy_wh(prev, cur) == 0.0
+
+
+def _add_sample(db, device_id, ts, watts=None, *, imported=False, bucket_kwh=None, online=True):
+    if imported:
+        data = {"watts": watts if watts is not None else 0.0, "is_online": online,
+                "imported_from": "tapo_history", "bucket_interval": "hourly",
+                "bucket_energy_kwh": bucket_kwh}
+    else:
+        data = {"current_power": watts if watts is not None else 0.0, "is_online": online}
+    db.add(SmartDeviceSample(device_id=device_id, capability="power_monitor",
+                             data_json=json.dumps(data), timestamp=ts))
+
+
+class TestCumulativeGapAndImport:
+    def test_long_gap_is_not_bridged(self, db_session, smart_device):
+        now = datetime.now(timezone.utc)
+        _add_sample(db_session, smart_device.id, now - timedelta(hours=2), 100.0)
+        _add_sample(db_session, smart_device.id, now, 100.0)
+        db_session.commit()
+        res = get_cumulative_energy_data(db_session, smart_device.id, "today", 0.40,
+                                         start=now - timedelta(hours=3), end=now)
+        assert res["total_kwh"] == pytest.approx(0.0, abs=1e-9)
+
+    def test_short_gap_is_integrated(self, db_session, smart_device):
+        now = datetime.now(timezone.utc)
+        _add_sample(db_session, smart_device.id, now - timedelta(minutes=10), 120.0)
+        _add_sample(db_session, smart_device.id, now, 120.0)
+        db_session.commit()
+        res = get_cumulative_energy_data(db_session, smart_device.id, "today", 0.40,
+                                         start=now - timedelta(hours=1), end=now)
+        assert res["total_kwh"] == pytest.approx(120.0 * (10 / 60) / 1000, abs=1e-6)
+
+    def test_imported_bucket_counts_own_energy(self, db_session, smart_device):
+        now = datetime.now(timezone.utc)
+        _add_sample(db_session, smart_device.id, now - timedelta(hours=2),
+                    imported=True, bucket_kwh=0.1)
+        _add_sample(db_session, smart_device.id, now - timedelta(hours=1),
+                    imported=True, bucket_kwh=0.1)
+        db_session.commit()
+        res = get_cumulative_energy_data(db_session, smart_device.id, "today", 0.40,
+                                         start=now - timedelta(hours=3), end=now)
+        assert res["total_kwh"] == pytest.approx(0.1, abs=1e-6)
 
 
 @pytest.fixture
@@ -302,3 +383,54 @@ class TestCumulativeTotalCustomRange:
         assert result["total_kwh"] == 0.0
         assert len(result["data_points"]) == 2
         assert result["data_points"][0]["timestamp"] == start.isoformat()
+
+
+class TestTotalEqualsSumOfDevices:
+    def test_total_equals_sum_of_device_totals(self, db_session):
+        now = datetime.now(timezone.utc)
+        dev_a = SmartDevice(name="A", plugin_name="tapo_smart_plug",
+                            device_type_id="tapo_p110", address="10.0.0.1",
+                            capabilities=["power_monitor"], is_active=True,
+                            is_online=True, created_by_user_id=1)
+        dev_b = SmartDevice(name="B", plugin_name="tapo_smart_plug",
+                            device_type_id="tapo_p110", address="10.0.0.2",
+                            capabilities=["power_monitor"], is_active=True,
+                            is_online=True, created_by_user_id=1)
+        db_session.add_all([dev_a, dev_b]); db_session.commit()
+        for i in range(7):
+            _add_sample(db_session, dev_a.id, now - timedelta(minutes=60 - i * 10), 100.0)
+            _add_sample(db_session, dev_b.id, now - timedelta(minutes=55 - i * 10), 50.0)
+        db_session.commit()
+
+        a = get_cumulative_energy_data(db_session, dev_a.id, "today", 0.40,
+                                       start=now - timedelta(hours=2), end=now)
+        b = get_cumulative_energy_data(db_session, dev_b.id, "today", 0.40,
+                                       start=now - timedelta(hours=2), end=now)
+        total = get_cumulative_energy_total(db_session, "today", 0.40,
+                                            start=now - timedelta(hours=2), end=now)
+        assert total["period"] == "custom"
+        assert total["total_kwh"] == pytest.approx(a["total_kwh"] + b["total_kwh"], abs=1e-6)
+
+
+class TestPeriodStatsEnergyMatchesIntegration:
+    def test_period_total_does_not_bridge_gaps(self, db_session, smart_device):
+        now = datetime.now(timezone.utc)
+        _add_sample(db_session, smart_device.id, now - timedelta(hours=2), 100.0)
+        _add_sample(db_session, smart_device.id, now, 100.0)
+        db_session.commit()
+        stats = get_period_stats(db_session, smart_device.id,
+                                 now - timedelta(hours=3), now)
+        assert stats is not None
+        assert stats.total_energy_kwh == pytest.approx(0.0, abs=1e-6)
+
+    def test_period_total_matches_cumulative(self, db_session, smart_device):
+        now = datetime.now(timezone.utc)
+        for i in range(7):
+            _add_sample(db_session, smart_device.id,
+                        now - timedelta(minutes=60 - i * 10), 90.0)
+        db_session.commit()
+        stats = get_period_stats(db_session, smart_device.id,
+                                 now - timedelta(hours=2), now)
+        cum = get_cumulative_energy_data(db_session, smart_device.id, "today", 0.40,
+                                         start=now - timedelta(hours=2), end=now)
+        assert stats.total_energy_kwh == pytest.approx(cum["total_kwh"], abs=1e-6)
