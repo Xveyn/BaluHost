@@ -1,6 +1,6 @@
 /**
- * API client for sync settings: schedules, bandwidth, devices, folders.
- * Consolidates all sync-related endpoints using apiClient (Axios).
+ * API client for sync settings: preflight check, schedules, and bandwidth limits.
+ * Consolidates sync-related endpoints using apiClient (Axios).
  */
 
 import { apiClient } from '../lib/api';
