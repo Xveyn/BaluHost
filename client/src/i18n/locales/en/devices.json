@@ -87,7 +87,13 @@
     "loadingSchedules": "Loading schedules...",
     "autoVpn": "Auto-VPN",
     "autoVpnHint": "When Auto-VPN is enabled, the device will automatically connect via VPN before syncing and disconnect afterwards.",
-    "editSchedule": "Edit Schedule"
+    "editSchedule": "Edit Schedule",
+    "bandwidthLimits": "Bandwidth Limits (bytes/sec)",
+    "uploadLimit": "Upload Limit",
+    "downloadLimit": "Download Limit",
+    "saveLimits": "Save Limits",
+    "sleepWarning": "This time falls within the sleep window ({{sleepTime}}–{{wakeTime}}). The sync will not run.",
+    "sleepBadge": "Blocked by sleep schedule ({{sleepTime}}–{{wakeTime}})"
   },
   "days": {
     "sunday": "Sunday",
@@ -149,7 +155,9 @@
     "enterDeviceName": "Please enter a device name",
     "selectDevice": "Please select a device",
     "desktopDeleteNotImplemented": "Desktop device deletion not yet implemented",
-    "deviceNameEmpty": "Device name cannot be empty"
+    "deviceNameEmpty": "Device name cannot be empty",
+    "bandwidthSaved": "Bandwidth limits saved",
+    "bandwidthSaveFailed": "Failed to save bandwidth limits"
   },
   "pairing": {
     "title": "Pair Desktop Client",

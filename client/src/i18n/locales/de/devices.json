@@ -87,7 +87,13 @@
     "loadingSchedules": "Zeitpläne werden geladen...",
     "autoVpn": "Auto-VPN",
     "autoVpnHint": "Bei aktiviertem Auto-VPN verbindet sich das Gerät vor dem Sync automatisch per VPN und trennt die Verbindung danach.",
-    "editSchedule": "Zeitplan bearbeiten"
+    "editSchedule": "Zeitplan bearbeiten",
+    "bandwidthLimits": "Bandbreitenlimits (Bytes/Sek)",
+    "uploadLimit": "Upload-Limit",
+    "downloadLimit": "Download-Limit",
+    "saveLimits": "Limits speichern",
+    "sleepWarning": "Dieser Zeitpunkt liegt im Sleep-Fenster ({{sleepTime}}–{{wakeTime}}). Der Sync wird nicht ausgeführt.",
+    "sleepBadge": "Durch Sleep-Zeitplan blockiert ({{sleepTime}}–{{wakeTime}})"
   },
   "days": {
     "sunday": "Sonntag",
@@ -149,7 +155,9 @@
     "enterDeviceName": "Bitte geben Sie einen Gerätenamen ein",
     "selectDevice": "Bitte wählen Sie ein Gerät",
     "desktopDeleteNotImplemented": "Desktop-Geräte löschen noch nicht implementiert",
-    "deviceNameEmpty": "Gerätename darf nicht leer sein"
+    "deviceNameEmpty": "Gerätename darf nicht leer sein",
+    "bandwidthSaved": "Bandbreitenlimits gespeichert",
+    "bandwidthSaveFailed": "Fehler beim Speichern der Bandbreitenlimits"
   },
   "pairing": {
     "title": "Desktop koppeln",
