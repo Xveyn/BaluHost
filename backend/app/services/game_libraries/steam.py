@@ -136,7 +136,10 @@ class SteamProvider:
         acf = steamapps / f"appmanifest_{app_id}.acf"
         try:
             data = vdf.parse(acf.read_text(encoding="utf-8", errors="replace"))
-        except OSError:
+        except Exception:
+            # Per-manifest isolation: a single unreadable/corrupt .acf must never
+            # drop the whole library. vdf.parse is non-raising by design, but we
+            # broaden the catch so that invariant holds regardless.
             return None, None
         state = data.get("AppState")
         if not isinstance(state, dict):

@@ -82,6 +82,7 @@ def test_get_libraries_dedupes_roots_pointing_to_same_lib(tmp_path, monkeypatch)
     "Steam Linux Runtime 3.0 (sniper)",
     "Steamworks Common Redistributables",
     "STEAMWORKS COMMON REDISTRIBUTABLES",  # case-insensitive
+    "  Proton 8.0  ",  # leading/trailing whitespace is stripped
 ])
 def test_is_tool_app_true(name):
     assert steam._is_tool_app(name) is True
