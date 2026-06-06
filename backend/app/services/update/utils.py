@@ -21,9 +21,18 @@ def parse_version(tag: str) -> tuple[int, int, int, str]:
     if "-" in tag:
         tag, prerelease = tag.split("-", 1)
     parts = tag.split(".")
-    major = int(parts[0]) if len(parts) > 0 else 0
-    minor = int(parts[1]) if len(parts) > 1 else 0
-    patch = int(parts[2]) if len(parts) > 2 else 0
+
+    def _safe_int(value: str) -> int:
+        # Tolerate non-numeric headers (e.g. a "[Unreleased]" CHANGELOG section)
+        # so callers never crash — keeps the public release-notes endpoint 500-free.
+        try:
+            return int(value)
+        except ValueError:
+            return 0
+
+    major = _safe_int(parts[0]) if len(parts) > 0 else 0
+    minor = _safe_int(parts[1]) if len(parts) > 1 else 0
+    patch = _safe_int(parts[2]) if len(parts) > 2 else 0
     return (major, minor, patch, prerelease)
 
 

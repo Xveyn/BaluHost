@@ -128,7 +128,10 @@ def releases_between(
     up_idx = _find_index(releases, up_to)
     nt_idx = _find_index(releases, newer_than)
     start = up_idx if up_idx is not None else 0
-    end = nt_idx if nt_idx is not None else len(releases)
+    # When the running version isn't a published release (local dev build, or
+    # aged past the fetched page), don't return the whole history as the delta —
+    # show just the target release's notes.
+    end = nt_idx if nt_idx is not None else start + 1
     if start >= end:
         return []
     return releases[start:end]

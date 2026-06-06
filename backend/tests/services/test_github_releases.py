@@ -6,9 +6,26 @@ from app.services.update.github_releases import (
 )
 
 
+from app.services.update.utils import parse_version
+
+
 def _r(tag, prerelease, body="b"):
     return GitHubRelease(tag=tag, name=tag, body_markdown=body, prerelease=prerelease,
                          published_at=None, url=f"https://x/{tag}")
+
+
+def test_parse_version_tolerates_non_numeric_headers():
+    # "[Unreleased]" sections must not crash the public fallback path.
+    assert parse_version("Unreleased") == (0, 0, 0, "")
+    assert parse_version("v1.2.x") == (1, 2, 0, "")
+
+
+def test_releases_between_unknown_current_returns_only_target():
+    rels = [_r("v1.36.0", False), _r("v1.35.0", False)]
+    # current "1.9.9+dev" isn't a published release → show just the target's notes,
+    # not the whole history.
+    items = releases_between(rels, newer_than="1.9.9", up_to="1.36.0")
+    assert [r.tag for r in items] == ["v1.36.0"]
 
 
 # Newest-first, like the GitHub API returns.
