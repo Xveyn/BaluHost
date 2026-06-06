@@ -709,6 +709,38 @@ class EventEmitter:
         """
         self.emit_sync(event_type, user_id=None, cooldown_entity=cooldown_entity, **kwargs)
 
+    def any_admin_wants_desktop_event(self, which: str) -> bool:
+        """Return True if at least one active admin wants the desktop *which* event.
+
+        *which* is "disabled" or "enabled". Reads each admin's
+        category_preferences["desktop_notifications"][which]; default True.
+        Returns True if no DB session factory is configured (e.g. very early
+        startup) so notifications are never silently lost.
+        """
+        if not self._db_session_factory:
+            return True
+        db = self._db_session_factory()
+        try:
+            from app.services.notifications.service import get_notification_service
+            from app.models.user import User
+
+            svc = get_notification_service()
+            admin_ids = [
+                uid for (uid,) in db.query(User.id).filter(
+                    User.role == "admin",
+                    User.is_active == True,
+                ).all()
+            ]
+            for admin_id in admin_ids:
+                prefs = svc.get_user_preferences(db, admin_id)
+                cat_prefs = (prefs.category_preferences or {}) if prefs else {}
+                desktop_prefs = cat_prefs.get("desktop_notifications", {})
+                if desktop_prefs.get(which, True):
+                    return True
+            return False
+        finally:
+            db.close()
+
     def _send_push_sync(
         self,
         db,
@@ -1300,3 +1332,44 @@ async def emit_system_shutdown(trigger: str) -> None:
 async def emit_system_startup(downtime_seconds: Optional[float]) -> None:
     """Async wrapper — used in `_startup()`."""
     emit_system_startup_sync(downtime_seconds)
+
+
+# ---------------------------------------------------------------------------
+# Desktop power event helpers
+# ---------------------------------------------------------------------------
+
+
+def emit_desktop_disabled_sync(username: str) -> None:
+    """Emit lifecycle.desktop_disabled (sync) — fired after a successful disable."""
+    emitter = get_event_emitter()
+    if not emitter.any_admin_wants_desktop_event("disabled"):
+        logger.debug("Desktop-disabled event suppressed: no admin wants it")
+        return
+    emitter.emit_for_admins_sync(
+        EventType.DESKTOP_DISABLED,
+        cooldown_entity="desktop",
+        username=username,
+    )
+
+
+def emit_desktop_enabled_sync(username: str) -> None:
+    """Emit lifecycle.desktop_enabled (sync) — fired after a successful enable."""
+    emitter = get_event_emitter()
+    if not emitter.any_admin_wants_desktop_event("enabled"):
+        logger.debug("Desktop-enabled event suppressed: no admin wants it")
+        return
+    emitter.emit_for_admins_sync(
+        EventType.DESKTOP_ENABLED,
+        cooldown_entity="desktop",
+        username=username,
+    )
+
+
+async def emit_desktop_disabled(username: str) -> None:
+    """Async wrapper — used in the desktop route handler."""
+    emit_desktop_disabled_sync(username)
+
+
+async def emit_desktop_enabled(username: str) -> None:
+    """Async wrapper — used in the desktop route handler."""
+    emit_desktop_enabled_sync(username)
