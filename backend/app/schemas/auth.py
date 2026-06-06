@@ -137,3 +137,42 @@ class TwoFactorStatusResponse(BaseModel):
     enabled: bool
     enabled_at: datetime | None = None
     backup_codes_remaining: int = 0
+
+
+# --- PIN login schemas ---
+
+def _validate_pin(v: str) -> str:
+    """PIN policy: 4–8 digits, no all-same, no strictly sequential pattern."""
+    if not re.fullmatch(r"\d{4,8}", v):
+        raise ValueError("PIN must be 4 to 8 digits")
+    if len(set(v)) == 1:
+        raise ValueError("PIN must not be all the same digit")
+    digits = [int(c) for c in v]
+    ascending = all(digits[i + 1] - digits[i] == 1 for i in range(len(digits) - 1))
+    descending = all(digits[i] - digits[i + 1] == 1 for i in range(len(digits) - 1))
+    if ascending or descending:
+        raise ValueError("PIN must not be a sequential pattern")
+    return v
+
+
+class PinLoginRequest(BaseModel):
+    username: str
+    pin: str
+
+
+class PinSetRequest(BaseModel):
+    pin: str
+    code: str  # fresh TOTP or backup code
+
+    @field_validator("pin")
+    @classmethod
+    def _validate(cls, v: str) -> str:
+        return _validate_pin(v)
+
+
+class PinRemoveRequest(BaseModel):
+    code: str  # fresh TOTP or backup code
+
+
+class PinStatusResponse(BaseModel):
+    pin_enabled: bool
