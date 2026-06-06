@@ -416,3 +416,56 @@ class TestActivityEndpoints:
             json={"activities": []},
         )
         assert res.status_code == 422  # Pydantic validation: min_length=1
+
+
+# ---------------------------------------------------------------------------
+# Route-level scope tests
+# ---------------------------------------------------------------------------
+
+from app.core.config import settings as app_settings
+
+
+class TestActivityRouteScope:
+    """Route-level tests for scope=mine|all on /api/activity/recent."""
+
+    def _seed_two_users_activity(self, db_session):
+        from app.models.user import User
+        from app.services.file_activity import FileActivityService
+
+        admin = db_session.query(User).filter(User.username == app_settings.admin_username).first()
+        testuser = db_session.query(User).filter(User.username == "testuser").first()
+
+        svc = FileActivityService(db_session)
+        svc.record(admin.id, "file.upload", "admin/admin.txt", "admin.txt")
+        svc.record(testuser.id, "file.upload", "testuser/user.txt", "user.txt")
+        db_session.commit()
+
+    def test_scope_mine_returns_only_own(self, client, db_session, user_headers):
+        self._seed_two_users_activity(db_session)
+        resp = client.get(
+            f"{app_settings.api_prefix}/activity/recent?scope=mine&limit=50",
+            headers=user_headers,
+        )
+        assert resp.status_code == 200
+        names = {a["file_name"] for a in resp.json()["activities"]}
+        assert names == {"user.txt"}
+
+    def test_scope_all_forbidden_for_regular_user(self, client, db_session, user_headers):
+        self._seed_two_users_activity(db_session)
+        resp = client.get(
+            f"{app_settings.api_prefix}/activity/recent?scope=all&limit=50",
+            headers=user_headers,
+        )
+        assert resp.status_code == 403
+
+    def test_scope_all_returns_cross_user_for_admin(self, client, db_session, admin_headers):
+        self._seed_two_users_activity(db_session)
+        resp = client.get(
+            f"{app_settings.api_prefix}/activity/recent?scope=all&limit=50",
+            headers=admin_headers,
+        )
+        assert resp.status_code == 200
+        activities = resp.json()["activities"]
+        names = {a["file_name"] for a in activities}
+        assert names == {"admin.txt", "user.txt"}
+        assert all(a["username"] for a in activities)
