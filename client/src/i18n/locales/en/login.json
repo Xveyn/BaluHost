@@ -24,6 +24,12 @@
     "backToLogin": "Back to login",
     "invalidCode": "Invalid verification code"
   },
+  "pin": {
+    "label": "PIN",
+    "submit": "Sign in with PIN",
+    "usePin": "Use a PIN instead",
+    "usePassword": "Use password"
+  },
   "defaultCredentials": "Default credentials",
   "systemStatus": "System Status",
   "optimal": "Optimal",

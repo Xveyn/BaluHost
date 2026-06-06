@@ -21,6 +21,7 @@ from app.api.routes import (
     docs,
     setup,
     games,
+    auth_policy,
 )
 
 api_router = APIRouter()
@@ -43,6 +44,7 @@ api_router.include_router(devices.router)
 api_router.include_router(vpn.router)
 api_router.include_router(admin_db.router)
 api_router.include_router(rate_limit_config.router, prefix="/admin", tags=["admin"])
+api_router.include_router(auth_policy.router, prefix="/admin/auth-policy", tags=["auth-policy"])
 api_router.include_router(server_profiles.router)
 api_router.include_router(vpn_profiles.router)
 api_router.include_router(metrics.router, tags=["monitoring"])

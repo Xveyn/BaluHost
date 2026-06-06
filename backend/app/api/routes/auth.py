@@ -12,6 +12,7 @@ from app.schemas.auth import (
     TwoFactorSetupResponse, TwoFactorVerifySetupRequest,
     TwoFactorDisableRequest, TwoFactorBackupCodesResponse,
     TwoFactorStatusResponse,
+    PinLoginRequest, PinSetRequest, PinRemoveRequest, PinStatusResponse,
 )
 from app.schemas.user import UserPublic, UserCreate
 from app.services import auth as auth_service
@@ -174,6 +175,14 @@ async def verify_2fa(payload: TwoFactorVerifyRequest, request: Request, response
         db=db
     )
 
+    # Open the PIN grace window from this successful TOTP (only when a PIN exists).
+    if user_record.pin_hash:
+        from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+        from app.services.auth_policy import get_auth_policy
+        window = get_auth_policy(db).pin_grace_window_seconds
+        user_record.pin_grace_until = _dt.now(_tz.utc) + _td(seconds=window)
+        db.commit()
+
     token = auth_service.create_access_token(user_record)
     user_public = user_service.serialize_user(user_record)
 
@@ -186,6 +195,77 @@ async def verify_2fa(payload: TwoFactorVerifyRequest, request: Request, response
     )
 
     return TokenResponse(access_token=token, user=user_public)
+
+
+@router.post("/login-pin")
+@limiter.limit(get_limit("auth_pin_login"))
+async def login_pin(payload: PinLoginRequest, request: Request, response: Response, db: Session = Depends(get_db)):
+    """PIN login — LOCAL CHANNEL ONLY.
+
+    Returns an access token when within the grace window, otherwise a
+    TwoFactorRequiredResponse (the client completes it via /verify-2fa).
+    """
+    from app.services import pin_service
+    from app.services.auth_policy import get_auth_policy
+    audit_logger = get_audit_logger_db()
+    ip_address = request.client.host if request.client else None
+    user_agent = request.headers.get("user-agent")
+
+    # Hard invariant: PIN login is only valid over the local channel.
+    if getattr(request.state, "channel", "remote") != "local":
+        audit_logger.log_security_event(
+            action="pin_login_remote_denied", user=payload.username,
+            details={"ip_address": ip_address}, success=False, db=db,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "error": "local_channel_required",
+                "message": "PIN login is only available from the BaluHost Companion app on the server.",
+            },
+        )
+
+    if not get_auth_policy(db).pin_login_enabled:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="PIN login is disabled")
+
+    user_record = user_service.get_user_by_username(payload.username, db=db)
+    # Generic failure — never reveal which precondition failed (no enumeration).
+    if not user_record or not user_record.pin_hash or not user_record.totp_enabled:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+
+    if pin_service.is_pin_locked(user_record):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="PIN locked — use your password")
+
+    if not pin_service.verify_pin(payload.pin, user_record.pin_hash):
+        pin_service.register_pin_failure(db, user_record)
+        audit_logger.log_security_event(
+            action="pin_login_failed", user=user_record.username,
+            details={"ip_address": ip_address}, success=False, db=db,
+        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+
+    pin_service.reset_pin_failures(db, user_record)
+
+    # Within the grace window → PIN alone suffices.
+    if pin_service.in_grace_window(user_record):
+        audit_logger.log_authentication_attempt(
+            username=user_record.username, success=True,
+            ip_address=ip_address, user_agent=user_agent, db=db,
+        )
+        audit_logger.log_security_event(
+            action="pin_login_grace", user=user_record.username,
+            details={"ip_address": ip_address}, success=True, db=db,
+        )
+        token = auth_service.create_access_token(user_record)
+        return TokenResponse(access_token=token, user=user_service.serialize_user(user_record))
+
+    # Window expired → require TOTP via the existing pending flow.
+    pending_token = security.create_2fa_pending_token(user_record.id)
+    audit_logger.log_security_event(
+        action="pin_login_2fa_required", user=user_record.username,
+        details={"ip_address": ip_address}, success=True, db=db,
+    )
+    return TwoFactorRequiredResponse(pending_token=pending_token)
 
 
 @router.post("/2fa/setup", response_model=TwoFactorSetupResponse)
@@ -344,6 +424,73 @@ async def get_2fa_status(
         enabled_at=user_record.totp_enabled_at,
         backup_codes_remaining=backup_remaining,
     )
+
+
+@router.get("/pin", response_model=PinStatusResponse)
+@user_limiter.limit(get_limit("user_operations"))
+async def get_pin_status(
+    request: Request, response: Response,
+    current_user=Depends(deps.get_current_user),
+    db: Session = Depends(get_db),
+) -> PinStatusResponse:
+    """Whether the current user has a desktop-app PIN configured."""
+    user_record = db.query(UserModel).filter(UserModel.id == current_user.id).first()
+    return PinStatusResponse(pin_enabled=bool(user_record and user_record.pin_hash))
+
+
+def _verify_fresh_totp(db: Session, user_id: int, code: str) -> bool:
+    """Verify a fresh TOTP or backup code for a PIN-management action."""
+    try:
+        if totp_service.verify_code(db, user_id, code):
+            return True
+    except ValueError:
+        pass
+    try:
+        return totp_service.verify_backup_code(db, user_id, code)
+    except ValueError:
+        return False
+
+
+@router.post("/pin")
+@limiter.limit(get_limit("auth_2fa_setup"))
+async def set_pin(
+    payload: PinSetRequest,
+    request: Request, response: Response,
+    current_user=Depends(deps.get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Set/replace the desktop-app PIN. Requires 2FA enabled + a fresh TOTP code."""
+    from app.services import pin_service
+    audit_logger = get_audit_logger_db()
+    user_record = db.query(UserModel).filter(UserModel.id == current_user.id).first()
+    if not user_record or not user_record.totp_enabled:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="2FA must be enabled before setting a PIN")
+    if not _verify_fresh_totp(db, current_user.id, payload.code):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid 2FA code")
+    pin_service.set_pin(db, user_record, payload.pin)
+    audit_logger.log_security_event(action="pin_set", user=current_user.username, success=True, db=db)
+    return {"message": "PIN set"}
+
+
+@router.delete("/pin")
+@limiter.limit(get_limit("auth_2fa_setup"))
+async def remove_pin(
+    payload: PinRemoveRequest,
+    request: Request, response: Response,
+    current_user=Depends(deps.get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Remove the desktop-app PIN. Requires a fresh TOTP code."""
+    from app.services import pin_service
+    audit_logger = get_audit_logger_db()
+    user_record = db.query(UserModel).filter(UserModel.id == current_user.id).first()
+    if not user_record:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    if not _verify_fresh_totp(db, current_user.id, payload.code):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid 2FA code")
+    pin_service.clear_pin(db, user_record)
+    audit_logger.log_security_event(action="pin_removed", user=current_user.username, success=True, db=db)
+    return {"message": "PIN removed"}
 
 
 @router.post("/2fa/backup-codes", response_model=TwoFactorBackupCodesResponse)

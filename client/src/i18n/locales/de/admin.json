@@ -463,5 +463,14 @@
       "diffFailed": "Diff konnte nicht geladen werden"
     },
     "processing": "Wird verarbeitet..."
+  },
+  "authPolicy": {
+    "title": "PIN-Login-Richtlinie",
+    "description": "Steuert das Gnadenfenster, in dem die Desktop-App-PIN ohne 2FA-Code genügt.",
+    "enabled": "PIN-Login aktiviert",
+    "window": "Gnadenfenster",
+    "saved": "Richtlinie gespeichert",
+    "saveError": "Richtlinie konnte nicht gespeichert werden",
+    "windows": { "1h": "1 Stunde", "8h": "8 Stunden", "24h": "24 Stunden", "7d": "7 Tage" }
   }
 }

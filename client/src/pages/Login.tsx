@@ -4,7 +4,8 @@ import { Eye, EyeOff } from 'lucide-react';
 import type { User } from '../types/auth';
 import logoMark from '../assets/baluhost-logo.png';
 import { localApi } from '../lib/localApi';
-import { buildApiUrl } from '../lib/api';
+import { buildApiUrl, isTauri } from '../lib/api';
+import { loginWithPin } from '../api/pin';
 import { useVersion } from '../contexts/VersionContext';
 import { DeveloperBadge } from '../components/ui/DeveloperBadge';
 import { useAuth } from '../contexts/AuthContext';
@@ -29,6 +30,8 @@ export default function Login() {
   const [totpCode, setTotpCode] = useState('');
   const totpInputRef = useRef<HTMLInputElement>(null);
   const [showPassword, setShowPassword] = useState(false);
+  const [pinMode, setPinMode] = useState(false);
+  const [pin, setPin] = useState('');
 
   // Check if local backend is available on component mount
   useEffect(() => {
@@ -138,6 +141,31 @@ export default function Login() {
       login(data.user as User, token);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Login failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePinSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    try {
+      const result = await loginWithPin(username, pin);
+      if (result.requires_2fa) {
+        setPendingToken(String(result.pending_token ?? ''));
+        setTwoFactorRequired(true);
+        setLoading(false);
+        return;
+      }
+      if (typeof result.access_token === 'string' && result.user) {
+        login(result.user, result.access_token);
+        return;
+      }
+      throw new Error('PIN login did not return a token');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'PIN login failed');
+      setPin('');
     } finally {
       setLoading(false);
     }
@@ -274,6 +302,43 @@ export default function Login() {
           ) : (
             /* Regular Login Form */
             <>
+              {pinMode ? (
+                <form onSubmit={handlePinSubmit} className="mt-8 sm:mt-10 space-y-4 sm:space-y-5">
+                  {error && (
+                    <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 sm:px-4 py-2.5 sm:py-3 text-sm text-rose-200">
+                      {error}
+                    </div>
+                  )}
+                  <div className="space-y-2">
+                    <label htmlFor="pin-username" className="text-xs font-medium uppercase tracking-[0.2em] text-slate-100-tertiary">
+                      {t('form.username')}
+                    </label>
+                    <input
+                      type="text" id="pin-username" className="input"
+                      value={username} onChange={(e) => setUsername(e.target.value)}
+                      placeholder="admin" required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label htmlFor="pin" className="text-xs font-medium uppercase tracking-[0.2em] text-slate-100-tertiary">
+                      {t('pin.label')}
+                    </label>
+                    <input
+                      type="password" id="pin"
+                      className="input text-center text-2xl tracking-[0.5em] font-mono"
+                      value={pin}
+                      onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 8))}
+                      placeholder="••••" inputMode="numeric" autoComplete="off" required
+                    />
+                  </div>
+                  <button type="submit" className="btn btn-primary w-full mt-5 sm:mt-6 touch-manipulation active:scale-[0.98]" disabled={loading || pin.length < 4}>
+                    {loading ? t('form.loading') : t('pin.submit')}
+                  </button>
+                  <button type="button" onClick={() => { setPinMode(false); setError(''); setPin(''); }} className="w-full text-center text-sm text-slate-100-tertiary hover:text-slate-100-secondary transition-colors">
+                    {t('pin.usePassword')}
+                  </button>
+                </form>
+              ) : (
               <form onSubmit={handleSubmit} className="mt-8 sm:mt-10 space-y-4 sm:space-y-5">
                 {error && (
                   <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 sm:px-4 py-2.5 sm:py-3 text-sm text-rose-200">
@@ -330,6 +395,17 @@ export default function Login() {
                   {loading ? t('form.loading') : t('form.submit')}
                 </button>
               </form>
+              )}
+
+              {isTauri && !pinMode && (
+                <button
+                  type="button"
+                  onClick={() => { setPinMode(true); setError(''); setPassword(''); }}
+                  className="mt-3 w-full text-center text-sm text-slate-100-tertiary hover:text-slate-100-secondary transition-colors"
+                >
+                  {t('pin.usePin')}
+                </button>
+              )}
 
               {devCredentials && (
                 <div className="mt-6 sm:mt-8 rounded-xl border border-slate-800 bg-slate-950-secondary p-3 sm:p-4 text-center text-xs text-slate-100-tertiary">

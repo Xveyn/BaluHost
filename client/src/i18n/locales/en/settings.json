@@ -364,5 +364,22 @@
     "lastUpdated": "Last Updated",
     "helpGoogle": "Create credentials in the Google Cloud Console under APIs & Services > Credentials.",
     "helpOneDrive": "Register an app in the Azure Portal under App registrations."
+  },
+  "pin": {
+    "title": "Desktop app PIN",
+    "description": "Sign in to the BaluHost Companion app with a PIN instead of your password (requires 2FA enabled).",
+    "enabled": "PIN active",
+    "disabled": "No PIN set",
+    "needs2fa": "Enable two-factor authentication first.",
+    "pinLabel": "PIN (4–8 digits)",
+    "confirmLabel": "Confirm PIN",
+    "codeLabel": "2FA code",
+    "save": "Save PIN",
+    "remove": "Remove PIN",
+    "mismatch": "The PINs do not match.",
+    "saved": "PIN saved",
+    "removed": "PIN removed",
+    "saveError": "Could not save PIN",
+    "removeError": "Could not remove PIN"
   }
 }

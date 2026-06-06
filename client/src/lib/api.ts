@@ -16,6 +16,10 @@ const tauriApiBase =
     ? window.__BALU_API_BASE__
     : undefined;
 
+/** True when running inside the Tauri Companion shell (local channel). Read
+ *  synchronously at module load; safe to use pre-auth on the Login screen. */
+export const isTauri = Boolean(tauriApiBase);
+
 export const API_BASE_URL =
   tauriApiBase ?? (isDevelopment ? '' : (import.meta.env.VITE_API_BASE_URL || ''));
 

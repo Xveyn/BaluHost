@@ -24,6 +24,12 @@
     "backToLogin": "Zurück zum Login",
     "invalidCode": "Ungültiger Verifizierungscode"
   },
+  "pin": {
+    "label": "PIN",
+    "submit": "Mit PIN anmelden",
+    "usePin": "Stattdessen PIN verwenden",
+    "usePassword": "Passwort verwenden"
+  },
   "defaultCredentials": "Standard-Anmeldedaten",
   "systemStatus": "System-Status",
   "optimal": "Optimal",
