@@ -94,7 +94,11 @@ export function DesktopPinSettings({ twoFactorEnabled }: Props) {
                 {t('pin.save')}
               </button>
             ) : (
-              <button className="btn btn-danger" disabled={busy || code.length < 6} onClick={onRemove}>
+              <button
+                className="btn border border-rose-500/40 bg-rose-500/10 text-rose-300 hover:border-rose-400/60 hover:bg-rose-500/20 hover:text-rose-200"
+                disabled={busy || code.length < 6}
+                onClick={onRemove}
+              >
                 {t('pin.remove')}
               </button>
             )}
