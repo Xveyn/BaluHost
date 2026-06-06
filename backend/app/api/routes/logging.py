@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db
+from app.services.permissions import is_privileged
 from app.core.config import settings
 from app.schemas.user import UserPublic
 from app.schemas.audit_log import AuditLogResponse
@@ -184,6 +185,11 @@ async def get_file_access_logs(
     Returns:
         File access log entries
     """
+    # Non-admins may only ever see their own file-access entries — prevent the
+    # widget (and any direct caller) from reading other users' paths/usernames.
+    if not is_privileged(current_user):
+        user = current_user.username
+
     # Get audit logs from database
     audit = get_audit_logger_db()
     logs = audit.get_logs(
