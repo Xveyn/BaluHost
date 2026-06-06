@@ -6,43 +6,19 @@ import {
   Clock,
   Loader2,
   Zap,
-  Sparkles,
-  Bug,
-  Wrench,
-  Cog,
-  BookOpen,
-  TestTube,
-  Paintbrush,
-  CircleDot,
   FileText,
   Package,
 } from 'lucide-react';
+import Markdown from 'react-markdown';
 import type { UpdateCheckResponse, ReleaseNotesResponse } from '../../api/updates';
 import { isUpdateInProgress, type UpdateProgressResponse } from '../../api/updates';
 import UpdateProgress from './UpdateProgress';
 
-const CATEGORY_ICONS: Record<string, React.ReactNode> = {
-  sparkles: <Sparkles className="h-4 w-4" />,
-  bug: <Bug className="h-4 w-4" />,
-  zap: <Zap className="h-4 w-4" />,
-  wrench: <Wrench className="h-4 w-4" />,
-  cog: <Cog className="h-4 w-4" />,
-  'book-open': <BookOpen className="h-4 w-4" />,
-  'test-tube': <TestTube className="h-4 w-4" />,
-  paintbrush: <Paintbrush className="h-4 w-4" />,
-  'circle-dot': <CircleDot className="h-4 w-4" />,
-};
-
-const CATEGORY_COLORS: Record<string, string> = {
-  Features: 'text-emerald-400',
-  'Bug Fixes': 'text-rose-400',
-  Performance: 'text-amber-400',
-  Refactoring: 'text-sky-400',
-  Maintenance: 'text-slate-400',
-  Documentation: 'text-violet-400',
-  Tests: 'text-cyan-400',
-  Other: 'text-slate-400',
-};
+const PROSE =
+  'prose prose-invert prose-slate max-w-none prose-sm ' +
+  'prose-headings:text-white prose-h2:text-base prose-h3:text-sm ' +
+  'prose-p:text-slate-300 prose-li:text-slate-300 prose-strong:text-white ' +
+  'prose-a:text-blue-400 prose-code:text-cyan-400';
 
 interface UpdateOverviewTabProps {
   t: (key: string, options?: Record<string, unknown>) => string;
@@ -52,14 +28,10 @@ interface UpdateOverviewTabProps {
   updateLoading: boolean;
   rollbackLoading: boolean;
   cancelLoading: boolean;
-  devUpdateLoading: boolean;
   showUpdateConfirm: boolean;
-  showDevUpdateConfirm: boolean;
   onSetShowUpdateConfirm: (show: boolean) => void;
-  onSetShowDevUpdateConfirm: (show: boolean) => void;
   onSetShowRollbackConfirm: (show: boolean) => void;
   onStartUpdate: () => void;
-  onStartDevUpdate: () => void;
   onCancel: () => void;
 }
 
@@ -71,14 +43,10 @@ export default function UpdateOverviewTab({
   updateLoading,
   rollbackLoading,
   cancelLoading,
-  devUpdateLoading,
   showUpdateConfirm,
-  showDevUpdateConfirm,
   onSetShowUpdateConfirm,
-  onSetShowDevUpdateConfirm,
   onSetShowRollbackConfirm,
   onStartUpdate,
-  onStartDevUpdate,
   onCancel,
 }: UpdateOverviewTabProps) {
   return (
@@ -116,9 +84,7 @@ export default function UpdateOverviewTab({
               </div>
               <div className="flex items-center gap-2 text-sm text-slate-400">
                 <GitBranch className="h-4 w-4" />
-                <span className="font-mono">
-                  {checkResult.current_version.commit_short}
-                </span>
+                <span className="font-mono">{checkResult.current_version.commit_short}</span>
                 {checkResult.current_version.tag && (
                   <span className="px-2 py-0.5 bg-slate-700 rounded text-xs">
                     {checkResult.current_version.tag}
@@ -132,8 +98,6 @@ export default function UpdateOverviewTab({
                   </span>
                 </div>
               ) : !checkResult.current_version.is_prerelease ? (
-                /* Pre-releases are already flagged by the amber badge next to the
-                   version; only genuine stable builds get the "Stable" indicator. */
                 <div className="flex items-center gap-2 text-sm">
                   <span className="text-emerald-400">{t('version.stable')}</span>
                 </div>
@@ -145,18 +109,12 @@ export default function UpdateOverviewTab({
         {/* Available Update */}
         <div
           className={`bg-slate-800 rounded-lg p-5 border ${
-            checkResult?.update_available
-              ? 'border-blue-500/50 bg-blue-500/5'
-              : !checkResult?.update_available && checkResult?.dev_version_available
-                ? 'border-amber-500/30 bg-amber-500/5'
-                : 'border-slate-700'
+            checkResult?.update_available ? 'border-blue-500/50 bg-blue-500/5' : 'border-slate-700'
           }`}
         >
           <div className="flex items-center gap-2 mb-4">
             {checkResult?.update_available ? (
               <Zap className="h-5 w-5 text-blue-400" />
-            ) : !checkResult?.update_available && checkResult?.dev_version_available ? (
-              <GitBranch className="h-5 w-5 text-amber-400" />
             ) : (
               <CheckCircle className="h-5 w-5 text-emerald-400" />
             )}
@@ -169,12 +127,6 @@ export default function UpdateOverviewTab({
               <div className="text-3xl font-bold text-blue-400">
                 v{checkResult.latest_version.version}
               </div>
-              <div className="flex items-center gap-2 text-sm text-slate-400">
-                <GitBranch className="h-4 w-4" />
-                <span className="font-mono">
-                  {checkResult.latest_version.commit_short}
-                </span>
-              </div>
               {checkResult.last_checked && (
                 <div className="flex items-center gap-2 text-xs text-slate-500">
                   <Clock className="h-3 w-3" />
@@ -183,84 +135,7 @@ export default function UpdateOverviewTab({
               )}
             </div>
           ) : (
-            <div className="space-y-3">
-              <p className="text-slate-400">
-                {t('version.upToDateDesc')}
-              </p>
-              {checkResult?.dev_version_available && checkResult.dev_version && (
-                <div className="pt-2 border-t border-slate-700/50 space-y-2">
-                  <div className="flex items-center gap-2 text-sm text-amber-400">
-                    <GitBranch className="h-3.5 w-3.5" />
-                    <span className="font-medium">{t('version.devVersionAvailable')}</span>
-                  </div>
-                  <div className="flex items-center gap-3 text-xs text-slate-400">
-                    <span className="font-mono">{checkResult.dev_version.commit_short}</span>
-                    <span>{t('version.devCommitsAhead', { count: checkResult.dev_commits_ahead ?? 0 })}</span>
-                  </div>
-                  {checkResult.dev_commits && checkResult.dev_commits.length > 0 && (
-                    <div className="space-y-1 max-h-48 overflow-y-auto">
-                      {checkResult.dev_commits.map((commit) => (
-                        <div key={commit.hash_short} className="flex items-start gap-2 text-xs">
-                          <span className="font-mono text-slate-500 shrink-0">{commit.hash_short}</span>
-                          <span className="text-slate-300 break-all">
-                            {commit.type && (
-                              <span className={`font-medium ${
-                                commit.type === 'feat' ? 'text-emerald-400' :
-                                commit.type === 'fix' ? 'text-blue-400' :
-                                'text-slate-400'
-                              }`}>
-                                {commit.type}{commit.scope ? `(${commit.scope})` : ''}:
-                              </span>
-                            )}{' '}
-                            {commit.message.includes(':') ? commit.message.split(':').slice(1).join(':').trim() : commit.message}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  {/* Dev Install Button */}
-                  <div className="pt-2">
-                    {!showDevUpdateConfirm ? (
-                      <button
-                        onClick={() => onSetShowDevUpdateConfirm(true)}
-                        disabled={devUpdateLoading || !!currentUpdate}
-                        className="flex items-center gap-2 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-lg transition-all touch-manipulation active:scale-95 text-xs font-medium"
-                      >
-                        <Download className="h-3.5 w-3.5" />
-                        {t('buttons.installDevVersion')}
-                      </button>
-                    ) : (
-                      <div className="space-y-2">
-                        <p className="text-xs text-amber-400/80">
-                          <AlertTriangle className="h-3 w-3 inline mr-1" />
-                          {t('version.devWarning')}
-                        </p>
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={onStartDevUpdate}
-                            disabled={devUpdateLoading}
-                            className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded text-xs transition-all touch-manipulation active:scale-95"
-                          >
-                            {devUpdateLoading ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            ) : (
-                              <Download className="h-3.5 w-3.5" />
-                            )}
-                            {t('buttons.confirmDevInstall')}
-                          </button>
-                          <button
-                            onClick={() => onSetShowDevUpdateConfirm(false)}
-                            className="px-3 py-1.5 bg-slate-600 hover:bg-slate-500 text-white rounded text-xs transition-all touch-manipulation active:scale-95"
-                          >
-                            {t('common:cancel')}
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
+            <p className="text-slate-400">{t('version.upToDateDesc')}</p>
           )}
         </div>
       </div>
@@ -282,49 +157,65 @@ export default function UpdateOverviewTab({
         </div>
       )}
 
-      {/* Release Notes */}
-      {releaseNotes && releaseNotes.categories.length > 0 && (
+      {/* Release Notes (markdown, since last stable) */}
+      {releaseNotes && releaseNotes.releases.length > 0 && (
         <div className="bg-slate-800 rounded-lg p-5 border border-slate-700">
-          <div className="flex items-center gap-3 mb-1">
+          <div className="flex flex-wrap items-center gap-3 mb-1">
             <FileText className="h-5 w-5 text-blue-400" />
             <h3 className="font-medium text-white">{t('releaseNotes.title')}</h3>
-            <span className="text-sm font-mono text-slate-400">v{releaseNotes.version}</span>
+            <span className="text-sm font-mono text-slate-400">v{releaseNotes.current_version}</span>
+            {releaseNotes.source === 'changelog' && (
+              <span className="text-xs text-amber-400/80">{t('releaseNotes.fromChangelog')}</span>
+            )}
           </div>
-          {releaseNotes.previous_version && (
+          {releaseNotes.since_version && (
             <p className="text-sm text-slate-500 mb-4 ml-8">
-              {t('releaseNotes.since', { version: releaseNotes.previous_version })}
+              {t('releaseNotes.since', { version: releaseNotes.since_version })}
             </p>
           )}
-          <div className="space-y-4 ml-8">
-            {releaseNotes.categories.map((category) => (
-              <div key={category.name}>
-                <div className="flex items-center gap-2 mb-2">
-                  <span className={CATEGORY_COLORS[category.name] || 'text-slate-400'}>
-                    {CATEGORY_ICONS[category.icon] || <CircleDot className="h-4 w-4" />}
-                  </span>
-                  <h4 className={`text-sm font-medium ${CATEGORY_COLORS[category.name] || 'text-slate-400'}`}>
-                    {category.name}
-                  </h4>
+          <div className="space-y-5 ml-8">
+            {releaseNotes.releases.map((r) => (
+              <div key={r.version}>
+                <div className="flex flex-wrap items-center gap-2 mb-1">
+                  <span className="font-medium text-white">v{r.version}</span>
+                  {r.is_prerelease && (
+                    <span className="px-2 py-0.5 bg-amber-500/20 text-amber-400 text-xs rounded">
+                      {t('preRelease.badge')}
+                    </span>
+                  )}
+                  {r.date && (
+                    <span className="text-xs text-slate-500">
+                      {new Date(r.date).toLocaleDateString()}
+                    </span>
+                  )}
+                  {r.url && (
+                    <a
+                      href={r.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-blue-400 hover:underline"
+                    >
+                      {t('releaseNotes.viewOnGitHub')}
+                    </a>
+                  )}
                 </div>
-                <ul className="space-y-1 text-sm text-slate-300 ml-6">
-                  {category.changes.map((change, j) => (
-                    <li key={j}>• {change}</li>
-                  ))}
-                </ul>
+                <div className={PROSE}>
+                  <Markdown>{r.body_markdown}</Markdown>
+                </div>
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {/* Changelog */}
+      {/* Changelog (what an update brings) */}
       {checkResult?.update_available && checkResult.changelog.length > 0 && (
         <div className="bg-slate-800 rounded-lg p-5 border border-slate-700">
           <h3 className="font-medium text-white mb-4">{t('changelog.title')}</h3>
           <div className="space-y-4">
             {checkResult.changelog.map((entry, i) => (
               <div key={i} className="border-l-2 border-blue-500/50 pl-4">
-                <div className="flex items-center gap-2 mb-2">
+                <div className="flex items-center gap-2 mb-1">
                   <span className="font-medium text-white">v{entry.version}</span>
                   {entry.is_prerelease && (
                     <span className="px-2 py-0.5 bg-amber-500/20 text-amber-400 text-xs rounded">
@@ -332,23 +223,9 @@ export default function UpdateOverviewTab({
                     </span>
                   )}
                 </div>
-                {entry.changes.length > 0 && (
-                  <ul className="space-y-1 text-sm text-slate-300">
-                    {entry.changes.map((change, j) => (
-                      <li key={j}>• {change}</li>
-                    ))}
-                  </ul>
-                )}
-                {entry.breaking_changes.length > 0 && (
-                  <div className="mt-2">
-                    <span className="text-rose-400 text-sm font-medium">
-                      {t('changelog.breakingChanges')}
-                    </span>
-                    <ul className="space-y-1 text-sm text-rose-300">
-                      {entry.breaking_changes.map((change, j) => (
-                        <li key={j}>• {change}</li>
-                      ))}
-                    </ul>
+                {entry.body_markdown && (
+                  <div className={PROSE}>
+                    <Markdown>{entry.body_markdown}</Markdown>
                   </div>
                 )}
               </div>
@@ -377,11 +254,7 @@ export default function UpdateOverviewTab({
                 disabled={updateLoading}
                 className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm transition-all touch-manipulation active:scale-95"
               >
-                {updateLoading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  t('buttons.yesUpdate')
-                )}
+                {updateLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : t('buttons.yesUpdate')}
               </button>
               <button
                 onClick={() => onSetShowUpdateConfirm(false)}
