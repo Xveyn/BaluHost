@@ -56,7 +56,21 @@
     "viewSystemLogs": "System-Logs anzeigen",
     "failedToLoad": "Aktivitäten konnten nicht geladen werden: {{error}}",
     "noRecentActivity": "Keine aktuellen Aktivitäten",
-    "operationsAppearHere": "Dateioperationen werden hier angezeigt"
+    "operationsAppearHere": "Dateioperationen werden hier angezeigt",
+    "actions": {
+      "upload": "Datei hochgeladen",
+      "download": "Datei heruntergeladen",
+      "delete": "Datei gelöscht",
+      "edit": "Datei bearbeitet",
+      "open": "Datei geöffnet",
+      "move": "Datei verschoben",
+      "rename": "Datei umbenannt",
+      "share": "Datei geteilt",
+      "permission": "Berechtigungen geändert",
+      "create": "Ordner erstellt",
+      "sync": "Synchronisierung gestartet",
+      "default": "Aktivität"
+    }
   },
   "alerts": {
     "dismiss": "Verwerfen",
