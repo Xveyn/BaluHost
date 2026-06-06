@@ -50,7 +50,19 @@ class User(Base):
     totp_enabled_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    
+
+    # PIN login (Tauri local channel) — anchored on 2FA
+    pin_hash: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    pin_grace_until: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    pin_failed_attempts: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    pin_locked_until: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     # Relationships
     mobile_devices: Mapped[List["MobileDevice"]] = relationship(
         "MobileDevice", back_populates="user", cascade="all, delete-orphan"
