@@ -1,7 +1,7 @@
 """File activity tracking API endpoints."""
 import logging
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.orm import Session
@@ -36,7 +36,7 @@ async def get_recent_activities(
     file_type: Optional[str] = None,
     since: Optional[datetime] = None,
     path_prefix: Optional[str] = None,
-    scope: str = "mine",
+    scope: Literal["mine", "all"] = "mine",
     user: UserPublic = Depends(deps.get_current_user),
     db: Session = Depends(get_db),
 ) -> ActivityListResponse:

@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from sqlalchemy.orm import Session
 
+from app.core.config import settings as app_settings
 from app.models.file_activity import FileActivity
 from app.schemas.file_activity import VALID_ACTION_TYPES
 from app.services.file_activity import FileActivityService
@@ -422,9 +423,6 @@ class TestActivityEndpoints:
 # Route-level scope tests
 # ---------------------------------------------------------------------------
 
-from app.core.config import settings as app_settings
-
-
 class TestActivityRouteScope:
     """Route-level tests for scope=mine|all on /api/activity/recent."""
 
@@ -434,6 +432,7 @@ class TestActivityRouteScope:
 
         admin = db_session.query(User).filter(User.username == app_settings.admin_username).first()
         testuser = db_session.query(User).filter(User.username == "testuser").first()
+        assert admin is not None and testuser is not None
 
         svc = FileActivityService(db_session)
         svc.record(admin.id, "file.upload", "admin/admin.txt", "admin.txt")
@@ -451,7 +450,6 @@ class TestActivityRouteScope:
         assert names == {"user.txt"}
 
     def test_scope_all_forbidden_for_regular_user(self, client, db_session, user_headers):
-        self._seed_two_users_activity(db_session)
         resp = client.get(
             f"{app_settings.api_prefix}/activity/recent?scope=all&limit=50",
             headers=user_headers,
