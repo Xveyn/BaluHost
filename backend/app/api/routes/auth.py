@@ -175,6 +175,14 @@ async def verify_2fa(payload: TwoFactorVerifyRequest, request: Request, response
         db=db
     )
 
+    # Open the PIN grace window from this successful TOTP (only when a PIN exists).
+    if user_record.pin_hash:
+        from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+        from app.services.auth_policy import get_auth_policy
+        window = get_auth_policy(db).pin_grace_window_seconds
+        user_record.pin_grace_until = _dt.now(_tz.utc) + _td(seconds=window)
+        db.commit()
+
     token = auth_service.create_access_token(user_record)
     user_public = user_service.serialize_user(user_record)
 
@@ -187,6 +195,77 @@ async def verify_2fa(payload: TwoFactorVerifyRequest, request: Request, response
     )
 
     return TokenResponse(access_token=token, user=user_public)
+
+
+@router.post("/login-pin")
+@limiter.limit(get_limit("auth_pin_login"))
+async def login_pin(payload: PinLoginRequest, request: Request, response: Response, db: Session = Depends(get_db)):
+    """PIN login — LOCAL CHANNEL ONLY.
+
+    Returns an access token when within the grace window, otherwise a
+    TwoFactorRequiredResponse (the client completes it via /verify-2fa).
+    """
+    from app.services import pin_service
+    from app.services.auth_policy import get_auth_policy
+    audit_logger = get_audit_logger_db()
+    ip_address = request.client.host if request.client else None
+    user_agent = request.headers.get("user-agent")
+
+    # Hard invariant: PIN login is only valid over the local channel.
+    if getattr(request.state, "channel", "remote") != "local":
+        audit_logger.log_security_event(
+            action="pin_login_remote_denied", user=payload.username,
+            details={"ip_address": ip_address}, success=False, db=db,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "error": "local_channel_required",
+                "message": "PIN login is only available from the BaluHost Companion app on the server.",
+            },
+        )
+
+    if not get_auth_policy(db).pin_login_enabled:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="PIN login is disabled")
+
+    user_record = user_service.get_user_by_username(payload.username, db=db)
+    # Generic failure — never reveal which precondition failed (no enumeration).
+    if not user_record or not user_record.pin_hash or not user_record.totp_enabled:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+
+    if pin_service.is_pin_locked(user_record):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="PIN locked — use your password")
+
+    if not pin_service.verify_pin(payload.pin, user_record.pin_hash):
+        pin_service.register_pin_failure(db, user_record)
+        audit_logger.log_security_event(
+            action="pin_login_failed", user=user_record.username,
+            details={"ip_address": ip_address}, success=False, db=db,
+        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+
+    pin_service.reset_pin_failures(db, user_record)
+
+    # Within the grace window → PIN alone suffices.
+    if pin_service.in_grace_window(user_record):
+        audit_logger.log_authentication_attempt(
+            username=user_record.username, success=True,
+            ip_address=ip_address, user_agent=user_agent, db=db,
+        )
+        audit_logger.log_security_event(
+            action="pin_login_grace", user=user_record.username,
+            details={"ip_address": ip_address}, success=True, db=db,
+        )
+        token = auth_service.create_access_token(user_record)
+        return TokenResponse(access_token=token, user=user_service.serialize_user(user_record))
+
+    # Window expired → require TOTP via the existing pending flow.
+    pending_token = security.create_2fa_pending_token(user_record.id)
+    audit_logger.log_security_event(
+        action="pin_login_2fa_required", user=user_record.username,
+        details={"ip_address": ip_address}, success=True, db=db,
+    )
+    return TwoFactorRequiredResponse(pending_token=pending_token)
 
 
 @router.post("/2fa/setup", response_model=TwoFactorSetupResponse)
