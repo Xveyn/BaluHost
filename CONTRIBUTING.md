@@ -197,12 +197,13 @@ npm run test
 
 ## 🔀 Git Workflow
 
-> **Important:** All contributions must go through Pull Requests targeting the `development` branch. Direct pushes to `main` or `development` are not accepted — `main` is updated exclusively by the release workflow (PR from `development` → `main` with a `release:*` label). PRs opened against `main` will be closed with a request to re-open them against `development`.
+> **Important:** All contributions go through Pull Requests targeting **`main`**. Branch off `main`, then open your PR against `main`. There is no separate integration branch — the `development` branch was retired on 2026-05-06.
 
-**Branch hierarchy:**
-- `main` — Production. Read-only for contributors. Updated automatically by the release workflow.
-- `development` — Integration branch. **Target for all PRs.**
-- `feature/*`, `fix/*`, etc. — Working branches, created from `development`.
+**Branch model:**
+- `main` — Production. Changes land only through PRs. Every merge to `main` is tagged as a pre-release and deployed to production via GitHub Actions (self-hosted runner), so keep `main` releasable.
+- `feature/*`, `fix/*`, `docs/*`, etc. — Working branches, created from `main` and merged back into `main`.
+
+Stable releases are cut separately by the maintainer via the manual `release-stable.yml` workflow (`workflow_dispatch`).
 
 ### Branch Naming
 - `feature/description` - New features
@@ -259,10 +260,10 @@ Fixes #456
 
 ### Pull Request Process
 
-1. **Create a feature branch from `development`**
+1. **Create a working branch from `main`**
    ```bash
-   git checkout development
-   git pull origin development
+   git checkout main
+   git pull origin main
    git checkout -b feature/my-feature
    ```
 
@@ -291,13 +292,13 @@ Fixes #456
    git push origin feature/my-feature
    ```
 
-6. **Open a Pull Request against `development`**
-   - **Base branch: `development`** (not `main`!)
+6. **Open a Pull Request against `main`**
+   - **Base branch: `main`**
    - Use a clear, descriptive title following Conventional Commits
    - Reference related issues (`Closes #123`)
    - Describe what changed and why
    - Include screenshots for UI changes
-   - Wait for CI to pass — auto-merge runs only on green CI
+   - Wait for CI to pass (`backend-tests`, `frontend-build`). A maintainer reviews and merges — merging to `main` creates a pre-release tag and deploys to production.
 
 ### PR Template
 
@@ -505,7 +506,7 @@ Any other relevant information.
 ## 🎓 Learning Resources
 
 ### Project-Specific
-- [TECHNICAL_DOCUMENTATION.md](TECHNICAL_DOCUMENTATION.md) - Complete feature docs
+- [TECHNICAL_DOCUMENTATION.md](docs/TECHNICAL_DOCUMENTATION.md) - Complete feature docs
 - [docs/](docs/) - Feature-specific documentation
 - [TODO.md](TODO.md) - Roadmap and planned features
 
@@ -520,7 +521,7 @@ Any other relevant information.
 
 ### Getting Help
 - Open a **Discussion** for questions
-- Join our community (TODO: Discord/Matrix link)
+- Report bugs or request features via [GitHub Issues](https://github.com/Xveyn/BaluHost/issues)
 - Check existing documentation first
 
 ### Reporting Security Issues
