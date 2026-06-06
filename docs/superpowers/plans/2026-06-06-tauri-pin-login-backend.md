@@ -629,14 +629,17 @@ async def update_auth_policy(
 
 - [ ] **Step 6: Register the router**
 
-In `backend/app/api/routes/__init__.py`, mirror an existing `api_router.include_router(...)` line and add:
+In `backend/app/api/routes/__init__.py`:
+
+1. Add `auth_policy` to the `from app.api.routes import (...)` import tuple (e.g. on the line with `setup,`/`games,` — just add `auth_policy,`).
+2. Register it next to the other `/admin` router. After the existing line
+   `api_router.include_router(rate_limit_config.router, prefix="/admin", tags=["admin"])` add:
 
 ```python
-from app.api.routes import auth_policy
 api_router.include_router(auth_policy.router, prefix="/admin/auth-policy", tags=["auth-policy"])
 ```
 
-(Place the import with the other route imports and the `include_router` with the others. Match the actual aggregator variable name used in that file — it is the same one every other route uses.)
+The aggregator is `api_router` (an `APIRouter()`), exactly like every other route module.
 
 - [ ] **Step 7: Run test to verify it passes**
 
@@ -913,10 +916,10 @@ def test_login_pin_remote_channel_forbidden(remote_client, admin_user, db_sessio
     assert r.status_code == 403
 ```
 
-> Note: the default `client` fixture runs `channel=local` (so PIN login is allowed). The
-> `remote_client` fixture is the canonical way the repo simulates `channel=remote` — mirror exactly
-> how `backend/tests/api/test_require_local_admin.py` uses it; if `remote_client` does not flip
-> `request.state.channel` on its own, re-wire `ChannelMarkerMiddleware` the same way that test does.
+> Note: the default `client` fixture runs `channel=local` (PIN login allowed). `remote_client`
+> monkeypatches `settings.channel="remote"`, which `ChannelMarkerMiddleware` reads **per-request**
+> via its channel-provider callable — so it flips `request.state.channel` with no re-wiring needed.
+> Working example to mirror: `backend/tests/api/test_power_authority_routes.py::test_put_authority_requires_local_channel`.
 
 - [ ] **Step 2: Run tests to verify they fail**
 
