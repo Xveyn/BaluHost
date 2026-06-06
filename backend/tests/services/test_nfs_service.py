@@ -36,6 +36,18 @@ class TestValidateExportPath:
             with pytest.raises(ValueError):
                 nfs_service.validate_export_path(bad)
 
+    def test_control_chars_rejected(self, monkeypatch, tmp_path):
+        monkeypatch.setattr("app.services.nfs_service.settings.nas_storage_path", str(tmp_path))
+        for bad in ["Media\nextra", "Media\r\nextra", "Media\x00null", "Media/sub\ninjected"]:
+            with pytest.raises(ValueError):
+                nfs_service.validate_export_path(bad)
+
+    def test_whitespace_in_path_rejected(self, monkeypatch, tmp_path):
+        monkeypatch.setattr("app.services.nfs_service.settings.nas_storage_path", str(tmp_path))
+        for bad in ["my folder", "Media\tx"]:
+            with pytest.raises(ValueError):
+                nfs_service.validate_export_path(bad)
+
 
 @pytest.mark.asyncio
 class TestDevModeStubs:

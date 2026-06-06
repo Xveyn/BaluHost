@@ -37,7 +37,7 @@ def _get_exports_conf_path() -> str:
 def validate_clients(clients: str) -> str:
     """Validate a single NFS client spec.
 
-    Accepts '*', an IPv4 address, an IPv4 CIDR, or a DNS hostname.
+    Accepts '*', an IP address (IPv4 or IPv6), an IP CIDR, or a DNS hostname.
     Returns the trimmed spec. Raises ValueError otherwise.
     """
     spec = (clients or "").strip()
@@ -60,6 +60,7 @@ def validate_clients(clients: str) -> str:
     # ip_address() validation, reject it — don't let it slip through as a hostname.
     if all(part.isdigit() for part in spec.split(".")):
         raise ValueError(f"Invalid IP address for NFS clients: {spec!r}")
+    # Note: NFS subdomain wildcards like "*.example.com" are intentionally not supported.
     if _HOSTNAME_RE.match(spec):
         return spec
     raise ValueError(f"Invalid NFS client spec: {spec!r}")
@@ -73,6 +74,13 @@ def validate_export_path(path: str) -> str:
     """
     storage_root = Path(settings.nas_storage_path).expanduser().resolve()
     rel = (path or "").strip().lstrip("/")
+    # The validated path is written verbatim into the exports file (consumed by
+    # `exportfs -ra`). Reject control characters and whitespace to prevent
+    # injection of extra export lines or broken `path client(opts)` tokenisation.
+    if any(ord(c) < 0x20 for c in rel):
+        raise ValueError(f"Path contains control characters: {path!r}")
+    if " " in rel or "\t" in rel:
+        raise ValueError(f"Path contains whitespace: {path!r}")
     if ".." in PurePosixPath(rel).parts:
         raise ValueError(f"Path traversal not allowed: {path!r}")
     abs_path = (storage_root / rel).resolve()
