@@ -4,6 +4,8 @@ import { useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { User, Lock, Clock, Download, Globe, GitBranch, Bell, HardDrive, Plug } from 'lucide-react';
 import TwoFactorCard from '../components/settings/TwoFactorCard';
+import { DesktopPinSettings } from '../components/settings/DesktopPinSettings';
+import { useTwoFactorStatus } from '../components/quickSettings/twoFactorStatusStore';
 import VCLTrackingPanel from '../components/vcl/VCLTrackingPanel';
 import { apiClient } from '../lib/api';
 import LanguageSettings from '../components/LanguageSettings';
@@ -38,6 +40,11 @@ export default function SettingsPage() {
     setActiveTab(tab);
     setSearchParams(tab === 'profile' ? {} : { tab });
   };
+
+  // Shared 2FA status (cached store, populated/refreshed by TwoFactorCard) —
+  // gates the Desktop-app PIN section below.
+  const twoFactorStatus = useTwoFactorStatus(true);
+  const twoFactorEnabled = twoFactorStatus?.enabled === true;
   
   // Password change
   const [currentPassword, setCurrentPassword] = useState('');
@@ -283,6 +290,9 @@ export default function SettingsPage() {
 
             {/* Two-Factor Authentication */}
             <TwoFactorCard />
+
+            {/* Desktop-app PIN (2FA-gated) */}
+            <DesktopPinSettings twoFactorEnabled={twoFactorEnabled} />
 
             {/* Active Sessions */}
             <div className="card border-slate-800/60 bg-slate-900/55">
