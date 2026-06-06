@@ -34,3 +34,4 @@ def test_nfs_export_defaults(db_session: Session):
     assert exp.read_only is False
     assert exp.root_squash is True
     assert exp.enabled is True
+    assert exp.created_at is not None

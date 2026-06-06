@@ -14,7 +14,7 @@ class NfsExport(Base):
 
     __tablename__ = "nfs_exports"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
     # Path relative to the storage root; "" means the storage root itself.
     path: Mapped[str] = mapped_column(String(1000), nullable=False, unique=True)
     # Single client spec: IPv4, IPv4/CIDR, hostname, or "*".
