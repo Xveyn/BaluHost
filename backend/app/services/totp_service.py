@@ -215,6 +215,11 @@ def disable(db: Session, user_id: int) -> None:
     user.totp_enabled = False
     user.totp_backup_codes_encrypted = None
     user.totp_enabled_at = None
+    # PIN login is anchored on 2FA — disabling 2FA must destroy the PIN.
+    user.pin_hash = None
+    user.pin_grace_until = None
+    user.pin_failed_attempts = 0
+    user.pin_locked_until = None
     db.commit()
 
 
