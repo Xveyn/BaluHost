@@ -321,11 +321,11 @@ export default function Layout({ children }: LayoutProps) {
                 {isPi ? (
                   <div className="flex h-full w-full items-center justify-center rounded-full bg-gradient-to-br from-sky-500 to-indigo-600 text-sm font-bold text-white">BP</div>
                 ) : (
-                  <img src={logoMark} alt="BalùHost logo" className="h-full w-full rounded-full" />
+                  <img src={logoMark} alt="BaluHost logo" className="h-full w-full rounded-full" />
                 )}
               </div>
               <div>
-                <p className="text-lg font-semibold tracking-wide">{isPi ? 'BaluPi' : 'BalùHost'}</p>
+                <p className="text-lg font-semibold tracking-wide">{isPi ? 'BaluPi' : 'BaluHost'}</p>
                 <p className="text-xs uppercase tracking-[0.35em] text-slate-100-tertiary">{formattedVersion}{__BUILD_TYPE__ === 'dev' && <span className="font-mono"> · {__GIT_COMMIT__}</span>}</p>
                 <DeveloperBadge />
               </div>
@@ -400,11 +400,11 @@ export default function Layout({ children }: LayoutProps) {
                 {isPi ? (
                   <div className="flex h-full w-full items-center justify-center rounded-full bg-gradient-to-br from-sky-500 to-indigo-600 text-xs font-bold text-white">BP</div>
                 ) : (
-                  <img src={logoMark} alt="BalùHost logo" className="h-full w-full rounded-full" />
+                  <img src={logoMark} alt="BaluHost logo" className="h-full w-full rounded-full" />
                 )}
               </div>
               <div>
-                <p className="text-base font-semibold tracking-wide">{isPi ? 'BaluPi' : 'BalùHost'}</p>
+                <p className="text-base font-semibold tracking-wide">{isPi ? 'BaluPi' : 'BaluHost'}</p>
                 <p className="text-[10px] uppercase tracking-[0.3em] text-slate-100-tertiary">{formattedVersion}{__BUILD_TYPE__ === 'dev' && <span className="font-mono"> · {__GIT_COMMIT__}</span>}</p>
                 <DeveloperBadge />
               </div>
@@ -517,10 +517,10 @@ export default function Layout({ children }: LayoutProps) {
                     {isPi ? (
                       <div className="flex h-full w-full items-center justify-center rounded-full bg-gradient-to-br from-sky-500 to-indigo-600 text-[10px] font-bold text-white">BP</div>
                     ) : (
-                      <img src={logoMark} alt="BalùHost" className="h-full w-full rounded-full" />
+                      <img src={logoMark} alt="BaluHost" className="h-full w-full rounded-full" />
                     )}
                   </div>
-                  <span className="text-sm font-semibold">{isPi ? 'BaluPi' : 'BalùHost'}</span>
+                  <span className="text-sm font-semibold">{isPi ? 'BaluPi' : 'BaluHost'}</span>
                 </div>
               </div>
 

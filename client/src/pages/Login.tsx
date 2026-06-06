@@ -196,7 +196,7 @@ export default function Login() {
           <div className="flex flex-col items-center text-center">
             <div className="glow-ring h-14 w-14 sm:h-16 sm:w-16">
               <div className="flex h-12 w-12 sm:h-14 sm:w-14 items-center justify-center rounded-full bg-slate-950 p-[2px] shadow-xl">
-                <img src={logoMark} alt="BalùHost logo" className="h-full w-full rounded-full" />
+                <img src={logoMark} alt="BaluHost logo" className="h-full w-full rounded-full" />
               </div>
             </div>
             <h1 className="mt-5 sm:mt-6 text-2xl sm:text-3xl font-semibold tracking-wide text-slate-100">{t('title')}</h1>
