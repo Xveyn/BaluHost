@@ -529,13 +529,15 @@ See [SECURITY.md](SECURITY.md) for the private reporting process (GitHub Securit
 
 ## 📜 Code of Conduct
 
-Be respectful, inclusive, and professional. We're all here to learn and build something great together.
+This project adopts the [Contributor Covenant](CODE_OF_CONDUCT.md) (v2.1). By participating, you agree to uphold it. In short: be respectful, inclusive, and professional — we're all here to learn and build something great together.
 
 - Be welcoming to newcomers
 - Respect differing opinions
 - Accept constructive criticism
 - Focus on what's best for the project
 - Show empathy towards others
+
+See [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) for the full text and how to report unacceptable behavior.
 
 ## 🎉 Recognition
 
