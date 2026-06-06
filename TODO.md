@@ -1,6 +1,6 @@
 # BaluHost NAS Manager - TODO List
 
-## 🚀 Production Deployment Status (25. Januar 2026)
+## 🚀 Production Deployment Status (deployed 25. Januar 2026, current v1.36.0 / Juni 2026)
 
 BaluHost ist **LIVE IN PRODUCTION**:
 - ✅ Debian 13 Server (Ryzen 5 5600GT, 16GB RAM, 250GB NVMe SSD)
@@ -10,6 +10,8 @@ BaluHost ist **LIVE IN PRODUCTION**:
 - ✅ 82 Test Files, 1465 Test Functions
 - ✅ Prometheus/Grafana Ready Monitoring
 - ✅ Structured JSON Logging
+
+> Status zuletzt geprüft: **6. Juni 2026** (siehe Review Notes am Dateiende).
 
 ---
 
@@ -108,11 +110,11 @@ BaluHost ist **LIVE IN PRODUCTION**:
 | 🧪 Test | Backend Testing | Unit Tests für alle Services erweitern | ✅ Done | Excellent test coverage across all services |
 | 🧪 Test | Backend Testing | Load Testing (Performance unter Last) | ⏳ Pending | Performance |
 | 🧪 Test | Backend Testing | Security Testing (Penetration Tests) | ⏳ Pending | Security |
-| 🧪 Test | Frontend Testing | Unit Tests mit Vitest | 🟡 Partial | Vitest konfiguriert (__tests__/setup.ts), Coverage ausbaufähig |
+| 🧪 Test | Frontend Testing | Unit Tests mit Vitest | 🟡 Partial | Echte Vitest-Suite läuft in CI (`frontend-build` → `npx vitest run`); Coverage weiter ausbaufähig |
 | 🧪 Test | Frontend Testing | E2E-Tests mit Playwright/Cypress | ✅ Done | tests/e2e/*.spec.ts (login, dashboard, file-manager, schedulers, auth-guards, ...) |
 | 🧪 Test | Frontend Testing | Visual Regression Tests | ⏳ Pending | Visual Testing |
 | 🧪 Test | Frontend Testing | Accessibility Testing | ⏳ Pending | A11y Testing |
-| 🔧 Tech Debt | Backend Refactoring | Express-Backend komplett entfernen (legacy) | ⏳ Pending | Cleanup |
+| 🔧 Tech Debt | Backend Refactoring | ~~Express-Backend komplett entfernen (legacy)~~ | ⚪ Obsolet | Kein Express/Node-Backend (mehr) vorhanden — Backend ist reines Python/FastAPI. Eintrag hinfällig (2026-06-06) |
 | 🔧 Tech Debt | Backend Refactoring | Error-Handling vereinheitlichen | ⏳ Pending | Consistency |
 | 🔧 Tech Debt | Backend Refactoring | Logging-Strategie überarbeiten | ✅ Done | JSON structured logging implemented |
 | 🔧 Tech Debt | Backend Refactoring | Type Hints in allen Python-Modulen vervollständigen | ⏳ Pending | Type Safety |
@@ -172,6 +174,8 @@ BaluHost ist **LIVE IN PRODUCTION**:
 - 🔧 Technical Debt - Refactoring & cleanup
 - ⏳ Pending - Not started
 - ✅ Done - Completed
+- 🟡 Partial - Partially implemented
+- ⚪ Obsolet - No longer applicable (dropped scope / refers to something that no longer exists)
 
 ---
 
@@ -202,4 +206,19 @@ Suggested next steps:
 - Create GitHub issues for each **High** and **Medium** item and assign priorities.
 - For development TODOs inside `backend/app/*`, keep them as in-code TODOs but reference the newly created GitHub issues.
 - Optionally, create a `TODO:dev` section in this file linking to issue IDs for tracking.
+
+---
+
+## 🔎 Review Notes (6. Juni 2026)
+
+Roadmap-Abgleich gegen den aktuellen Code-Stand (v1.36.0, Index-Suche via vectordb-search). Ergebnis: Die Status-Spalte ist weitgehend korrekt — die meisten `⏳ Pending`-Einträge sind tatsächlich noch offen. Nennenswerte Korrekturen/Befunde:
+
+- **Express-Backend (Tech Debt)** → als **⚪ Obsolet** markiert. Es existiert kein Express/Node-Backend (mehr); das Backend ist reines Python/FastAPI. Der Eintrag war eine Altlast aus einer früheren Architektur und ist nicht mehr „erledigbar".
+- **Activity Feed**: Das **Backend** dafür existiert inzwischen (`backend/app/api/routes/activity.py` + `services/file_activity.py`, neu seit dem Dezember-2025-Review). Die TODO-Zeile betrifft jedoch die **Frontend-Seite** — dafür wurde keine `ActivityPage`/Timeline-Komponente gefunden → bleibt `⏳ Pending`.
+- **Bestätigt weiterhin offen** (kein implementierender Code gefunden): Benutzer-Avatar-Upload (UI), Tag-System für Dateien, konfigurierbare Dashboard-Widgets, erweiterte/Volltext-Suche im Frontend, PWA/Service-Worker/Offline-Modus.
+- **NFS** (Backend & Frontend) weiterhin `🟡 Partial`: SMB/CIFS ist fertig (`api/routes/samba.py`, `SambaManagementCard.tsx`), NFS-Service + UI fehlen weiterhin.
+- **Frontend-Vitest**: Note präzisiert — es läuft eine echte Vitest-Suite in CI (`frontend-build`), Coverage bleibt ausbaufähig (`🟡 Partial`).
+- Aspirationale Low-Prio-Einträge (GraphQL, Kubernetes, Webhooks, DLNA/Plex-Media-Server, Video-Transcoding, React-Native/Flutter-App) sind unverändert offen und nicht weiter verifiziert — klar erkennbar noch nicht begonnen.
+
+Die in-code-TODOs aus der Sektion oben (`backup.py` Restore, `files.py` `used_bytes`-Platzhalter, `PublicSharePage` Preview) konnten per semantischer Suche nicht eindeutig verifiziert werden — Status unverändert gelassen, am besten direkt im Code prüfen, bevor sie als erledigt markiert werden.
 
