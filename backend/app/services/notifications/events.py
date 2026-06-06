@@ -31,6 +31,8 @@ _COOLDOWN_SECONDS: dict[str, int] = {
     "plugin.incompatible": 21600,      # 6h per plugin
     "lifecycle.suspend": 60,           # 1min — guard against rapid retries
     "lifecycle.resume": 60,            # 1min
+    "lifecycle.desktop_disabled": 30,  # 30s — swallow accidental double-toggle
+    "lifecycle.desktop_enabled": 30,
     # No cooldown for shutdown/startup — legitimate reboots must always notify
 }
 
@@ -120,6 +122,10 @@ class EventType(str, Enum):
     SYSTEM_RESUME = "lifecycle.resume"
     SYSTEM_SHUTDOWN = "lifecycle.shutdown"
     SYSTEM_STARTUP = "lifecycle.startup"
+
+    # Desktop power events
+    DESKTOP_DISABLED = "lifecycle.desktop_disabled"
+    DESKTOP_ENABLED = "lifecycle.desktop_enabled"
 
 
 @dataclass
@@ -421,6 +427,22 @@ EVENT_CONFIGS: dict[str, EventConfig] = {
         title_template="NAS hochgefahren",
         message_template="NAS ist wieder einsatzbereit. Letzter Shutdown vor {downtime_human}.",
         action_url="/",
+    ),
+    EventType.DESKTOP_DISABLED: EventConfig(
+        priority=1,
+        category="lifecycle",
+        notification_type="info",
+        title_template="Desktop deaktiviert",
+        message_template="Die Bildschirme wurden von {username} ausgeschaltet — die GPU kann in den Idle gehen.",
+        action_url="/admin/system-control?tab=sleep",
+    ),
+    EventType.DESKTOP_ENABLED: EventConfig(
+        priority=1,
+        category="lifecycle",
+        notification_type="info",
+        title_template="Desktop reaktiviert",
+        message_template="Die Bildschirme wurden von {username} wieder eingeschaltet.",
+        action_url="/admin/system-control?tab=sleep",
     ),
 }
 
