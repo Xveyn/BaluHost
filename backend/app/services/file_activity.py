@@ -17,6 +17,7 @@ from sqlalchemy import desc, func, and_, delete
 from sqlalchemy.orm import Session
 
 from app.models.file_activity import FileActivity
+from app.models.user import User
 from app.schemas.file_activity import (
     VALID_ACTION_TYPES,
     SHORT_RETENTION_ACTIONS,
@@ -144,12 +145,11 @@ class FileActivityService:
         """Query recent activities.
 
         When ``all_users`` is True, returns activities across every user and
-        populates ``ActivityItem.username`` (admin view). Otherwise scoped to
-        ``user_id`` with ``username`` left as None.
+        populates ``ActivityItem.username`` (admin view); ``user_id`` is ignored
+        in this mode. Otherwise scoped to ``user_id`` with ``username`` left as None.
 
         Returns (items, total_count).
         """
-        from app.models.user import User
 
         if all_users:
             query = self.db.query(FileActivity, User.username).join(
