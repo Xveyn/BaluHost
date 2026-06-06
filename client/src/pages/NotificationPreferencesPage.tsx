@@ -487,7 +487,7 @@ export default function NotificationPreferencesPage({ embedded = false }: { embe
                   onChange={(e) => setDesktopEvents((p) => ({ ...p, disabled: e.target.checked }))}
                   className="peer sr-only"
                 />
-                <span className="peer h-6 w-11 rounded-full bg-slate-700 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-slate-600 after:bg-slate-400 after:transition-all after:content-[''] peer-checked:bg-sky-500 peer-checked:after:translate-x-full peer-checked:after:border-white" />
+                <span className="peer h-6 w-11 rounded-full bg-slate-700 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-slate-600 after:bg-slate-400 after:transition-all after:content-[''] peer-checked:bg-sky-500 peer-checked:after:translate-x-full peer-checked:after:border-white peer-focus:outline-none" />
               </span>
             </label>
             <label className="flex items-center justify-between">
@@ -499,7 +499,7 @@ export default function NotificationPreferencesPage({ embedded = false }: { embe
                   onChange={(e) => setDesktopEvents((p) => ({ ...p, enabled: e.target.checked }))}
                   className="peer sr-only"
                 />
-                <span className="peer h-6 w-11 rounded-full bg-slate-700 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-slate-600 after:bg-slate-400 after:transition-all after:content-[''] peer-checked:bg-sky-500 peer-checked:after:translate-x-full peer-checked:after:border-white" />
+                <span className="peer h-6 w-11 rounded-full bg-slate-700 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-slate-600 after:bg-slate-400 after:transition-all after:content-[''] peer-checked:bg-sky-500 peer-checked:after:translate-x-full peer-checked:after:border-white peer-focus:outline-none" />
               </span>
             </label>
           </div>
