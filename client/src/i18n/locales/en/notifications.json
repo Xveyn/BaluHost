@@ -33,6 +33,12 @@
     "desktopClientDimmed": "No desktop client connected",
     "noneAssigned": "No system notifications have been assigned to you yet. Please contact an administrator."
   },
+  "desktopEvents": {
+    "title": "Desktop notifications",
+    "description": "Notify when the desktop is disabled or re-enabled",
+    "onDisable": "Notify on disable",
+    "onEnable": "Notify on re-enable"
+  },
   "buttons": {
     "save": "Save",
     "back": "Back",
