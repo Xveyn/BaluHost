@@ -59,3 +59,19 @@ def test_admin_sees_all_file_access(client, db_session, admin_headers):
     assert resp.status_code == 200
     users = {log["user"] for log in resp.json()["logs"]}
     assert {settings.admin_username, "testuser"} <= users
+
+
+def test_regular_user_stats_only_counts_own(client, db_session, user_headers):
+    _seed_file_access(db_session)
+    resp = client.get(f"{settings.api_prefix}/logging/stats?days=1", headers=user_headers)
+    assert resp.status_code == 200
+    by_user = resp.json()["file_access"]["by_user"]
+    assert set(by_user.keys()) <= {"testuser"}
+
+
+def test_admin_stats_counts_all_users(client, db_session, admin_headers):
+    _seed_file_access(db_session)
+    resp = client.get(f"{settings.api_prefix}/logging/stats?days=1", headers=admin_headers)
+    assert resp.status_code == 200
+    by_user = resp.json()["file_access"]["by_user"]
+    assert {settings.admin_username, "testuser"} <= set(by_user.keys())

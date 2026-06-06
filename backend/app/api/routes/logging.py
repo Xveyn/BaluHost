@@ -231,13 +231,18 @@ async def get_logging_stats(
     Returns:
         Statistics about disk I/O and file access
     """
-    # Get audit logs from database
+    # Non-admins only see statistics derived from their own activity.
+    scoped_user = None if is_privileged(current_user) else current_user.username
     audit = get_audit_logger_db()
-    logs = audit.get_logs(limit=10000, event_type="FILE_ACCESS", days=days, db=db)
+    logs = audit.get_logs(
+        limit=10000, event_type="FILE_ACCESS", user=scoped_user, days=days, db=db
+    )
 
     # If no real logs exist in dev mode, return mock statistics
     if settings.is_dev_mode and len(logs) == 0:
         mock_logs = _generate_mock_file_access_logs(days=days, limit=100)
+        if scoped_user is not None:
+            mock_logs = [m for m in mock_logs if m["user"] == scoped_user]
         total_ops = len(mock_logs)
         by_action = {}
         by_user = {}
