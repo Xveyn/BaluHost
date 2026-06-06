@@ -82,7 +82,7 @@ export function useActivityFeed(options: UseActivityFeedOptions = {}): UseActivi
 
       let detail = item.file_name;
       if (item.username) detail = `${item.username} • ${detail}`;
-      if (item.file_size) detail += ` (${formatBytes(item.file_size)})`;
+      if (item.file_size != null) detail += ` (${formatBytes(item.file_size)})`;
 
       return {
         id: String(item.id),
@@ -91,6 +91,8 @@ export function useActivityFeed(options: UseActivityFeedOptions = {}): UseActivi
         ago: formatRelativeTime(timestamp),
         icon,
         timestamp,
+        // The activity API records only successful operations, so this is
+        // always true (the failure-state styling in ActivityFeed is unused here).
         success: true,
       };
     },

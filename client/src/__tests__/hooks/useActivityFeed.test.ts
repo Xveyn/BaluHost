@@ -78,4 +78,12 @@ describe('useActivityFeed', () => {
     expect(result.current.activities[0].icon).toBe('download');
     expect(result.current.activities[0].detail).toBe('a.txt');
   });
+
+  it('sets error and leaves activities empty when the request fails', async () => {
+    vi.mocked(getRecentActivities).mockRejectedValueOnce(new Error('boom'));
+    const { result } = renderHook(() => useActivityFeed({ limit: 5 }));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.error).toBe('Failed to load activity feed');
+    expect(result.current.activities).toEqual([]);
+  });
 });
