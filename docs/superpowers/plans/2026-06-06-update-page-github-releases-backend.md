@@ -894,7 +894,13 @@ In `backend/app/services/update/service.py`, in `check_for_updates`, delete the 
 
 and remove the four `dev_*=...` keyword args from the `UpdateCheckResponse(...)` return.
 
-Then delete the entire `start_dev_update(...)` method from the same file.
+Then delete the entire **`start_dev_update(...)`** method (the development-branch deploy path, ~lines
+272-348) from the same file.
+
+> **CAUTION — do NOT remove `_run_dev_update(...)`.** Despite the similar name, `_run_dev_update` is
+> the shared **dev-mode in-process update simulator** that the normal `start_update` calls
+> (`asyncio.create_task(self._run_dev_update(...))`). It must stay. Only `start_dev_update` (the
+> development-*branch* method that calls `check_dev_branch`) is removed.
 
 - [ ] **Step 5: Remove the route**
 
