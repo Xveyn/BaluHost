@@ -12,6 +12,7 @@ from app.schemas.auth import (
     TwoFactorSetupResponse, TwoFactorVerifySetupRequest,
     TwoFactorDisableRequest, TwoFactorBackupCodesResponse,
     TwoFactorStatusResponse,
+    PinLoginRequest, PinSetRequest, PinRemoveRequest, PinStatusResponse,
 )
 from app.schemas.user import UserPublic, UserCreate
 from app.services import auth as auth_service
@@ -344,6 +345,73 @@ async def get_2fa_status(
         enabled_at=user_record.totp_enabled_at,
         backup_codes_remaining=backup_remaining,
     )
+
+
+@router.get("/pin", response_model=PinStatusResponse)
+@user_limiter.limit(get_limit("user_operations"))
+async def get_pin_status(
+    request: Request, response: Response,
+    current_user=Depends(deps.get_current_user),
+    db: Session = Depends(get_db),
+) -> PinStatusResponse:
+    """Whether the current user has a desktop-app PIN configured."""
+    user_record = db.query(UserModel).filter(UserModel.id == current_user.id).first()
+    return PinStatusResponse(pin_enabled=bool(user_record and user_record.pin_hash))
+
+
+def _verify_fresh_totp(db: Session, user_id: int, code: str) -> bool:
+    """Verify a fresh TOTP or backup code for a PIN-management action."""
+    try:
+        if totp_service.verify_code(db, user_id, code):
+            return True
+    except ValueError:
+        pass
+    try:
+        return totp_service.verify_backup_code(db, user_id, code)
+    except ValueError:
+        return False
+
+
+@router.post("/pin")
+@limiter.limit(get_limit("auth_2fa_setup"))
+async def set_pin(
+    payload: PinSetRequest,
+    request: Request, response: Response,
+    current_user=Depends(deps.get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Set/replace the desktop-app PIN. Requires 2FA enabled + a fresh TOTP code."""
+    from app.services import pin_service
+    audit_logger = get_audit_logger_db()
+    user_record = db.query(UserModel).filter(UserModel.id == current_user.id).first()
+    if not user_record or not user_record.totp_enabled:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="2FA must be enabled before setting a PIN")
+    if not _verify_fresh_totp(db, current_user.id, payload.code):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid 2FA code")
+    pin_service.set_pin(db, user_record, payload.pin)
+    audit_logger.log_security_event(action="pin_set", user=current_user.username, success=True, db=db)
+    return {"message": "PIN set"}
+
+
+@router.delete("/pin")
+@limiter.limit(get_limit("auth_2fa_setup"))
+async def remove_pin(
+    payload: PinRemoveRequest,
+    request: Request, response: Response,
+    current_user=Depends(deps.get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Remove the desktop-app PIN. Requires a fresh TOTP code."""
+    from app.services import pin_service
+    audit_logger = get_audit_logger_db()
+    user_record = db.query(UserModel).filter(UserModel.id == current_user.id).first()
+    if not user_record:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    if not _verify_fresh_totp(db, current_user.id, payload.code):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid 2FA code")
+    pin_service.clear_pin(db, user_record)
+    audit_logger.log_security_event(action="pin_removed", user=current_user.username, success=True, db=db)
+    return {"message": "PIN removed"}
 
 
 @router.post("/2fa/backup-codes", response_model=TwoFactorBackupCodesResponse)
