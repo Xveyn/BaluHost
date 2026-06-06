@@ -20,7 +20,7 @@ BaluHost ist **LIVE IN PRODUCTION**:
 | Priority | Area | Task | Status | Notes |
 |----------|------|------|--------|-------|
 | 🔴 High | Backend | Update telemetry/logging to surface unauthorized access attempts | ✅ Done | Security event logging implemented |
-| 🔴 High | Backend | SQLite/PostgreSQL anbinden und Mock-Daten ablösen | ✅ Done | Database Models & Session Management, PostgreSQL fully supported with docker-compose.postgres.yml |
+| 🔴 High | Backend | SQLite/PostgreSQL anbinden und Mock-Daten ablösen | ✅ Done | Database Models & Session Management; PostgreSQL fully supported (systemd install via deploy/install, DB on localhost) |
 | 🔴 High | Backend | Database Sessions in API Routes injizieren | ✅ Done | auth.py, users.py, files.py migriert |
 | 🔴 High | Backend | File Metadata Service auf Database migrieren | ✅ Done | file_metadata_db.py Service erstellt |
 | 🔴 High | Backend | Alembic Migrations Setup | ✅ Done | Schema Versionierung konfiguriert |
@@ -77,7 +77,7 @@ BaluHost ist **LIVE IN PRODUCTION**:
 | 🟢 Low | Backend | Media-Server Integration (DLNA/Plex API) | ⏳ Pending | Media Streaming |
 | 🟢 Low | Backend | Video-Transcoding Service | ⏳ Pending | Media Processing |
 | 🟢 Low | Backend | Datei-Versionierung mit Diff-Ansicht | ⏳ Pending | Advanced Versioning |
-| 🔴 High | Backend | Containerization (Docker / Docker Compose) | ✅ Done | Systemd deployment active, Docker configs available |
+| 🔴 High | Backend | Containerization (Docker / Docker Compose) | 🟡 Partial | Production deployment via systemd (deploy/install); no Dockerfile/compose ships yet |
 | 🟢 Low | Backend | Kubernetes Deployment-Manifest | ⏳ Pending | Orchestration |
 | 🟢 Low | Backend | CI/CD Pipeline (GitHub Actions) | ✅ Done | 7 workflows active |
 | 🟢 Low | Backend | API-Versionierung (v1, v2) | ⏳ Pending | API Evolution |
