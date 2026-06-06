@@ -144,7 +144,7 @@ npm run dev
 
 ### Production Deployment
 
-See [Production Quickstart](docs/deployment/PRODUCTION_QUICKSTART.md) for full instructions.
+See [Production Quickstart](docs/deployment/PRODUCTION_QUICKSTART.en.md) for full instructions.
 
 ```bash
 # Fresh install (modular installer)
@@ -172,7 +172,7 @@ push to main → CI checks (GitHub-hosted) → Deploy (self-hosted on NAS)
                                             └── Health check (auto-rollback on failure)
 ```
 
-See [Infrastructure](docs/deployment/infrastructure.md) and [Emergency Runbook](docs/deployment/emergency-runbook.md) for operational details.
+See [Infrastructure](docs/deployment/infrastructure.en.md) and [Emergency Runbook](docs/deployment/emergency-runbook.en.md) for operational details.
 
 ---
 
@@ -298,14 +298,16 @@ npm run build         # Type-check + production build
 |----------|-------------|
 | [Technical Documentation](docs/TECHNICAL_DOCUMENTATION.md) | Complete feature reference |
 | [Architecture](docs/ARCHITECTURE.md) | System design & patterns |
-| [Production Readiness](docs/deployment/PRODUCTION_READINESS.md) | Deployment checklist |
-| [Production Quickstart](docs/deployment/PRODUCTION_QUICKSTART.md) | Getting started in prod |
-| [User Guide](docs/getting-started/USER_GUIDE.md) | End-user manual |
-| [API Reference](docs/api/API_REFERENCE.md) | Full API documentation |
-| [Security Policy](docs/security/SECURITY.md) | Security guidelines |
+| [Production Readiness](docs/deployment/PRODUCTION_READINESS.en.md) | Deployment checklist |
+| [Production Quickstart](docs/deployment/PRODUCTION_QUICKSTART.en.md) | Getting started in prod |
+| [User Guide](docs/getting-started/USER_GUIDE.en.md) | End-user manual |
+| [API Reference](docs/api/API_REFERENCE.en.md) | Full API documentation |
+| [Security Policy](docs/security/SECURITY.en.md) | Security guidelines |
 | [Contributing](CONTRIBUTING.md) | Contribution workflow |
 | [Changelog](CHANGELOG.md) | Version history |
 | [TODO](TODO.md) | Roadmap |
+
+<sub>Most docs under `docs/` exist in English (`.en.md`) and German (`.de.md`) — swap the suffix for the other language.</sub>
 
 ```
 docs/
