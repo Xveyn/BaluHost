@@ -133,7 +133,7 @@ export default function PowerMenu({ isAdmin, onShutdown, onRestart, onLogout }: 
                     </div>
                     <div>
                       <p className="text-sm font-medium text-slate-100">{t('powerMenu.restart', 'Restart')}</p>
-                      <p className="text-xs text-slate-400">{t('powerMenu.restartDesc', 'Restart server')}</p>
+                      <p className="text-xs text-slate-400">{t('powerMenu.restartDesc', 'Restart BaluHost')}</p>
                     </div>
                   </button>
 
@@ -146,7 +146,7 @@ export default function PowerMenu({ isAdmin, onShutdown, onRestart, onLogout }: 
                     </div>
                     <div>
                       <p className="text-sm font-medium text-slate-100">{t('powerMenu.shutdown', 'Shutdown')}</p>
-                      <p className="text-xs text-slate-400">{t('powerMenu.shutdownDesc', 'Shut down server')}</p>
+                      <p className="text-xs text-slate-400">{t('powerMenu.shutdownDesc', 'Shut down BaluHost')}</p>
                     </div>
                   </button>
 
@@ -237,7 +237,7 @@ export default function PowerMenu({ isAdmin, onShutdown, onRestart, onLogout }: 
       <ConfirmDialog
         open={confirmAction === 'shutdown'}
         title={t('powerMenu.shutdown', 'Shutdown')}
-        message={t('powerMenu.shutdownConfirm', 'Shut down the server? All services will be stopped.')}
+        message={t('powerMenu.shutdownConfirm', 'Shut down BaluHost? All services will be stopped.')}
         confirmLabel={t('powerMenu.shutdown', 'Shutdown')}
         cancelLabel={t('buttons.cancel', 'Cancel')}
         variant="danger"
@@ -248,7 +248,7 @@ export default function PowerMenu({ isAdmin, onShutdown, onRestart, onLogout }: 
       <ConfirmDialog
         open={confirmAction === 'restart'}
         title={t('powerMenu.restart', 'Restart')}
-        message={t('powerMenu.restartConfirm', 'Restart the server? All services will be briefly interrupted.')}
+        message={t('powerMenu.restartConfirm', 'Restart BaluHost? All services will be briefly interrupted.')}
         confirmLabel={t('powerMenu.restart', 'Restart')}
         cancelLabel={t('buttons.cancel', 'Cancel')}
         variant="warning"

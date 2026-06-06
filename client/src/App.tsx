@@ -105,7 +105,7 @@ function LoadingScreen({ backendReady, backendCheckAttempts }: { backendReady: b
       </div>
       <div className="relative z-10 flex w-80 flex-col items-center gap-4 rounded-2xl border border-slate-800/60 bg-slate-900/70 px-10 py-8 shadow-[0_18px_55px_rgba(2,6,23,0.55)] backdrop-blur-xl">
         <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-950 p-[2px] shadow-xl">
-          <img src={logoMark} alt="BalùHost logo" className="h-full w-full rounded-full" />
+          <img src={logoMark} alt="BaluHost logo" className="h-full w-full rounded-full" />
         </div>
         <p className="text-sm uppercase tracking-[0.35em] text-slate-500">BaluHost</p>
         <p className="text-lg font-medium text-white">{getMessage()}{dots}</p>
