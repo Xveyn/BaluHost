@@ -144,3 +144,50 @@ def test_cooldown_suppresses_second_disable_within_window():
         emitter.emit_for_admins_sync(EventType.DESKTOP_DISABLED, cooldown_entity="desktop", username="admin")
         emitter.emit_for_admins_sync(EventType.DESKTOP_DISABLED, cooldown_entity="desktop", username="admin")
     db.add.assert_called_once()  # second suppressed by 30s cooldown
+
+
+# ---------------------------------------------------------------------------
+# Route wiring (uses TestClient + admin auth)
+# ---------------------------------------------------------------------------
+
+from app.core.config import settings
+
+_DISABLE_URL = f"{settings.api_prefix}/system/sleep/desktop/disable"
+_ENABLE_URL = f"{settings.api_prefix}/system/sleep/desktop/enable"
+
+
+def test_route_emits_on_disable_success(client, admin_headers):
+    with patch("app.api.routes.desktop.emit_desktop_disabled", new=AsyncMock()) as m:
+        r = client.post(_DISABLE_URL, headers=admin_headers)
+    assert r.status_code == 200
+    assert r.json()["success"] is True
+    m.assert_awaited_once()
+    assert m.await_args.args[0] == settings.admin_username
+
+
+def test_route_emits_on_enable_success(client, admin_headers):
+    with patch("app.api.routes.desktop.emit_desktop_enabled", new=AsyncMock()) as m:
+        r = client.post(_ENABLE_URL, headers=admin_headers)
+    assert r.status_code == 200
+    assert r.json()["success"] is True
+    m.assert_awaited_once()
+    assert m.await_args.args[0] == settings.admin_username
+
+
+def test_route_no_emit_on_disable_failure(client, admin_headers):
+    svc = MagicMock()
+    svc.disable = AsyncMock(return_value=(False, "boom"))
+    with patch("app.api.routes.desktop.get_desktop_service", return_value=svc), \
+         patch("app.api.routes.desktop.emit_desktop_disabled", new=AsyncMock()) as m:
+        r = client.post(_DISABLE_URL, headers=admin_headers)
+    assert r.status_code == 200
+    assert r.json()["success"] is False
+    m.assert_not_awaited()
+
+
+def test_route_emit_failure_does_not_break_toggle(client, admin_headers):
+    with patch("app.api.routes.desktop.emit_desktop_disabled",
+               new=AsyncMock(side_effect=RuntimeError("push down"))):
+        r = client.post(_DISABLE_URL, headers=admin_headers)
+    assert r.status_code == 200
+    assert r.json()["success"] is True
