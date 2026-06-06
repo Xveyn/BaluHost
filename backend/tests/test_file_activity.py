@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from sqlalchemy.orm import Session
 
+from app.core.config import settings as app_settings
 from app.models.file_activity import FileActivity
 from app.schemas.file_activity import VALID_ACTION_TYPES
 from app.services.file_activity import FileActivityService
@@ -202,6 +203,40 @@ class TestFileActivityService:
         assert items[0].source == "client"
         assert items[0].device_id == "pixel-7-abc"
 
+    def test_get_recent_activities_sets_user_id_and_no_username_for_mine(self, db_session: Session):
+        svc = self._make_service(db_session)
+        svc.record(7, "file.upload", "u7/a.txt", "a.txt")
+        db_session.commit()
+
+        items, total = svc.get_recent_activities(user_id=7, limit=10)
+        assert total == 1
+        assert items[0].user_id == 7
+        assert items[0].username is None
+
+    def test_get_recent_activities_all_users_returns_cross_user_with_username(self, db_session: Session):
+        from app.models.user import User
+
+        alice = User(username="alice", email="alice@example.com", hashed_password="x", role="user")
+        bob = User(username="bob", email="bob@example.com", hashed_password="x", role="user")
+        db_session.add_all([alice, bob])
+        db_session.commit()
+
+        svc = self._make_service(db_session)
+        svc.record(alice.id, "file.upload", "alice/a.txt", "a.txt")
+        svc.record(bob.id, "file.download", "bob/b.txt", "b.txt")
+        db_session.commit()
+
+        # Scoped: alice sees only her own
+        mine, mine_total = svc.get_recent_activities(user_id=alice.id, limit=10)
+        assert mine_total == 1
+        assert {i.file_name for i in mine} == {"a.txt"}
+
+        # All users: both, each with the acting username populated
+        everyone, total = svc.get_recent_activities(user_id=alice.id, limit=10, all_users=True)
+        assert total == 2
+        names = {i.file_name: i.username for i in everyone}
+        assert names == {"a.txt": "alice", "b.txt": "bob"}
+
 
 # ---------------------------------------------------------------------------
 # API-level tests
@@ -382,3 +417,53 @@ class TestActivityEndpoints:
             json={"activities": []},
         )
         assert res.status_code == 422  # Pydantic validation: min_length=1
+
+
+# ---------------------------------------------------------------------------
+# Route-level scope tests
+# ---------------------------------------------------------------------------
+
+class TestActivityRouteScope:
+    """Route-level tests for scope=mine|all on /api/activity/recent."""
+
+    def _seed_two_users_activity(self, db_session):
+        from app.models.user import User
+        from app.services.file_activity import FileActivityService
+
+        admin = db_session.query(User).filter(User.username == app_settings.admin_username).first()
+        testuser = db_session.query(User).filter(User.username == "testuser").first()
+        assert admin is not None and testuser is not None
+
+        svc = FileActivityService(db_session)
+        svc.record(admin.id, "file.upload", "admin/admin.txt", "admin.txt")
+        svc.record(testuser.id, "file.upload", "testuser/user.txt", "user.txt")
+        db_session.commit()
+
+    def test_scope_mine_returns_only_own(self, client, db_session, user_headers):
+        self._seed_two_users_activity(db_session)
+        resp = client.get(
+            f"{app_settings.api_prefix}/activity/recent?scope=mine&limit=50",
+            headers=user_headers,
+        )
+        assert resp.status_code == 200
+        names = {a["file_name"] for a in resp.json()["activities"]}
+        assert names == {"user.txt"}
+
+    def test_scope_all_forbidden_for_regular_user(self, client, db_session, user_headers):
+        resp = client.get(
+            f"{app_settings.api_prefix}/activity/recent?scope=all&limit=50",
+            headers=user_headers,
+        )
+        assert resp.status_code == 403
+
+    def test_scope_all_returns_cross_user_for_admin(self, client, db_session, admin_headers):
+        self._seed_two_users_activity(db_session)
+        resp = client.get(
+            f"{app_settings.api_prefix}/activity/recent?scope=all&limit=50",
+            headers=admin_headers,
+        )
+        assert resp.status_code == 200
+        activities = resp.json()["activities"]
+        names = {a["file_name"] for a in activities}
+        assert names == {"admin.txt", "user.txt"}
+        assert all(a["username"] for a in activities)

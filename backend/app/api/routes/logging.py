@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db
+from app.services.permissions import is_privileged
 from app.core.config import settings
 from app.schemas.user import UserPublic
 from app.schemas.audit_log import AuditLogResponse
@@ -177,13 +178,18 @@ async def get_file_access_logs(
         limit: Maximum number of logs to return (default: 100)
         days: Number of days to look back (default: 1)
         action: Filter by action type (optional)
-        user: Filter by username (optional)
+        user: Filter by username (optional). For non-privileged callers this is always overridden to the caller's own username.
         current_user: Current authenticated user
         db: Database session
 
     Returns:
         File access log entries
     """
+    # Non-admins may only ever see their own file-access entries — prevent the
+    # widget (and any direct caller) from reading other users' paths/usernames.
+    if not is_privileged(current_user):
+        user = current_user.username
+
     # Get audit logs from database
     audit = get_audit_logger_db()
     logs = audit.get_logs(
@@ -198,6 +204,8 @@ async def get_file_access_logs(
     # In dev mode, if no real logs exist, return mock data
     if settings.is_dev_mode and len(logs) == 0:
         mock_logs = _generate_mock_file_access_logs(days=days, limit=limit)
+        if not is_privileged(current_user):
+            mock_logs = [m for m in mock_logs if m["user"] == current_user.username]
         return {"dev_mode": True, "total": len(mock_logs), "logs": mock_logs}
 
     return {"dev_mode": settings.is_dev_mode, "total": len(logs), "logs": logs}
@@ -223,13 +231,18 @@ async def get_logging_stats(
     Returns:
         Statistics about disk I/O and file access
     """
-    # Get audit logs from database
+    # Non-admins only see statistics derived from their own activity.
+    scoped_user = None if is_privileged(current_user) else current_user.username
     audit = get_audit_logger_db()
-    logs = audit.get_logs(limit=10000, event_type="FILE_ACCESS", days=days, db=db)
+    logs = audit.get_logs(
+        limit=10000, event_type="FILE_ACCESS", user=scoped_user, days=days, db=db
+    )
 
     # If no real logs exist in dev mode, return mock statistics
     if settings.is_dev_mode and len(logs) == 0:
         mock_logs = _generate_mock_file_access_logs(days=days, limit=100)
+        if scoped_user is not None:
+            mock_logs = [m for m in mock_logs if m["user"] == scoped_user]
         total_ops = len(mock_logs)
         by_action = {}
         by_user = {}

@@ -6,6 +6,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useActivityFeed } from '../../hooks/useActivityFeed';
+import { useAuth } from '../../contexts/AuthContext';
 import {
   Upload,
   Download,
@@ -45,7 +46,8 @@ function ActivityIcon({ type, success }: { type: string; success: boolean }) {
 export const ActivityFeed: React.FC<ActivityFeedProps> = ({ limit = 5 }) => {
   const { t } = useTranslation(['dashboard', 'common']);
   const navigate = useNavigate();
-  const { activities, loading, error } = useActivityFeed({ limit, days: 1 });
+  const { isAdmin } = useAuth();
+  const { activities, loading, error } = useActivityFeed({ limit, allUsers: isAdmin });
 
   const handleViewLogs = () => {
     navigate('/logging');
@@ -58,12 +60,14 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({ limit = 5 }) => {
           <p className="text-xs uppercase tracking-[0.28em] text-slate-500">{t('dashboard:activity.title')}</p>
           <h2 className="mt-2 text-xl font-semibold text-white">{t('dashboard:activity.liveOperations')}</h2>
         </div>
-        <button
-          onClick={handleViewLogs}
-          className="rounded-full border border-slate-700/70 px-3 py-1 text-xs text-slate-400 transition hover:border-slate-500 hover:text-white"
-        >
-          {t('dashboard:activity.viewSystemLogs')}
-        </button>
+        {isAdmin && (
+          <button
+            onClick={handleViewLogs}
+            className="rounded-full border border-slate-700/70 px-3 py-1 text-xs text-slate-400 transition hover:border-slate-500 hover:text-white"
+          >
+            {t('dashboard:activity.viewSystemLogs')}
+          </button>
+        )}
       </div>
 
       <div className="mt-6 space-y-4">

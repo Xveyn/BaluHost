@@ -17,6 +17,7 @@ from sqlalchemy import desc, func, and_, delete
 from sqlalchemy.orm import Session
 
 from app.models.file_activity import FileActivity
+from app.models.user import User
 from app.schemas.file_activity import (
     VALID_ACTION_TYPES,
     SHORT_RETENTION_ACTIONS,
@@ -139,14 +140,25 @@ class FileActivityService:
         file_type: Optional[str] = None,
         since: Optional[datetime] = None,
         path_prefix: Optional[str] = None,
+        all_users: bool = False,
     ) -> tuple[List[ActivityItem], int]:
-        """Query recent activities for a user.
+        """Query recent activities.
+
+        When ``all_users`` is True, returns activities across every user and
+        populates ``ActivityItem.username`` (admin view); ``user_id`` is ignored
+        in this mode. Otherwise scoped to ``user_id`` with ``username`` left as None.
 
         Returns (items, total_count).
         """
-        query = self.db.query(FileActivity).filter(
-            FileActivity.user_id == user_id
-        )
+
+        if all_users:
+            query = self.db.query(FileActivity, User.username).join(
+                User, User.id == FileActivity.user_id
+            )
+        else:
+            query = self.db.query(FileActivity).filter(
+                FileActivity.user_id == user_id
+            )
 
         if action_types:
             query = query.filter(FileActivity.action_type.in_(action_types))
@@ -170,7 +182,13 @@ class FileActivityService:
             .all()
         )
 
-        items = [self._to_activity_item(r) for r in rows]
+        if all_users:
+            items = [
+                self._to_activity_item(row, username=username)
+                for (row, username) in rows
+            ]
+        else:
+            items = [self._to_activity_item(r) for r in rows]
         return items, total
 
     def get_recent_files(
@@ -275,7 +293,9 @@ class FileActivityService:
     # Helpers
     # ------------------------------------------------------------------
     @staticmethod
-    def _to_activity_item(row: FileActivity) -> ActivityItem:
+    def _to_activity_item(
+        row: FileActivity, username: Optional[str] = None
+    ) -> ActivityItem:
         metadata = None
         if row.metadata_json:
             try:
@@ -285,6 +305,8 @@ class FileActivityService:
 
         return ActivityItem(
             id=row.id,
+            user_id=row.user_id,
+            username=username,
             action_type=row.action_type,
             file_path=row.file_path,
             file_name=row.file_name,

@@ -56,7 +56,21 @@
     "viewSystemLogs": "View system logs",
     "failedToLoad": "Failed to load activity: {{error}}",
     "noRecentActivity": "No recent activity",
-    "operationsAppearHere": "File operations will appear here"
+    "operationsAppearHere": "File operations will appear here",
+    "actions": {
+      "upload": "File Uploaded",
+      "download": "File Downloaded",
+      "delete": "File Deleted",
+      "edit": "File Edited",
+      "open": "File Opened",
+      "move": "File Moved",
+      "rename": "File Renamed",
+      "share": "File Shared",
+      "permission": "Permissions Changed",
+      "create": "Folder Created",
+      "sync": "Sync Triggered",
+      "default": "Activity"
+    }
   },
   "alerts": {
     "dismiss": "Dismiss",

@@ -1,7 +1,7 @@
 """File activity tracking API endpoints."""
 import logging
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.orm import Session
@@ -18,6 +18,7 @@ from app.schemas.file_activity import (
 )
 from app.schemas.user import UserPublic
 from app.services.file_activity import FileActivityService
+from app.services.permissions import is_privileged
 
 logger = logging.getLogger(__name__)
 
@@ -35,10 +36,11 @@ async def get_recent_activities(
     file_type: Optional[str] = None,
     since: Optional[datetime] = None,
     path_prefix: Optional[str] = None,
+    scope: Literal["mine", "all"] = "mine",
     user: UserPublic = Depends(deps.get_current_user),
     db: Session = Depends(get_db),
 ) -> ActivityListResponse:
-    """Get recent file activities for the current user.
+    """Get recent file activities.
 
     Args:
         limit: Max items (1-100, default 20).
@@ -47,9 +49,15 @@ async def get_recent_activities(
         file_type: Filter by type: file, directory, image, video, document.
         since: ISO timestamp — only activities after this time.
         path_prefix: Only activities within this directory.
+        scope: ``mine`` (own activity, default) or ``all`` (admin only — every
+            user's activity, with the acting username populated).
     """
     limit = max(1, min(limit, 100))
     offset = max(0, offset)
+
+    all_users = scope == "all"
+    if all_users and not is_privileged(user):
+        raise HTTPException(status_code=403, detail="Admin access required")
 
     parsed_types: Optional[List[str]] = None
     if action_types:
@@ -64,6 +72,7 @@ async def get_recent_activities(
         file_type=file_type,
         since=since,
         path_prefix=path_prefix,
+        all_users=all_users,
     )
 
     return ActivityListResponse(
