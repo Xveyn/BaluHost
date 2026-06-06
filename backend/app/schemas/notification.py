@@ -196,9 +196,14 @@ class NotificationPreferencesBase(BaseModel):
         le=3,
         description="Minimum priority level for notifications"
     )
-    category_preferences: Optional[dict[str, CategoryPreference]] = Field(
+    # dict[str, Any] (not dict[str, CategoryPreference]) so reserved non-category
+    # keys round-trip untouched — e.g. "desktop_notifications": {disabled, enabled}.
+    # Strict per-category validation would coerce such keys to CategoryPreference
+    # and silently drop their fields. Category shapes are read defensively in
+    # NotificationService._get_category_pref.
+    category_preferences: Optional[dict[str, Any]] = Field(
         default=None,
-        description="Per-category notification settings"
+        description="Per-category notification settings (plus reserved keys like desktop_notifications)"
     )
     trash_retention_days: int = Field(
         default=7,
@@ -217,7 +222,8 @@ class NotificationPreferencesUpdate(BaseModel):
     quiet_hours_start: Optional[str] = None
     quiet_hours_end: Optional[str] = None
     min_priority: Optional[int] = Field(default=None, ge=0, le=3)
-    category_preferences: Optional[dict[str, CategoryPreference]] = None
+    # See NotificationPreferencesBase.category_preferences for why this is Any.
+    category_preferences: Optional[dict[str, Any]] = None
     trash_retention_days: Optional[int] = Field(default=None, ge=1, le=7)
 
 
