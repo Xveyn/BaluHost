@@ -69,6 +69,10 @@ export default function NotificationPreferencesPage({ embedded = false }: { embe
   const [minPriority, setMinPriority] = useState(0);
   const [trashRetentionDays, setTrashRetentionDays] = useState<number>(7);
   const [categoryPrefs, setCategoryPrefs] = useState<Record<string, CategoryPreference>>({});
+  const [desktopEvents, setDesktopEvents] = useState<{ disabled: boolean; enabled: boolean }>({
+    disabled: true,
+    enabled: true,
+  });
   const [routing, setRouting] = useState<MyNotificationRouting | null>(null);
   const [deliveryStatus, setDeliveryStatus] = useState<DeliveryStatus>({ has_mobile_devices: false, has_desktop_clients: false });
 
@@ -128,6 +132,11 @@ export default function NotificationPreferencesPage({ embedded = false }: { embe
         }
       }
       setCategoryPrefs(migrated);
+      const de = (rawPrefs as any)?.desktop_notifications;
+      setDesktopEvents({
+        disabled: de?.disabled ?? true,
+        enabled: de?.enabled ?? true,
+      });
     } catch {
       toast.error(t('common:toast.loadFailed'));
     } finally {
@@ -143,7 +152,10 @@ export default function NotificationPreferencesPage({ embedded = false }: { embe
         quiet_hours_start: quietHoursEnabled ? quietHoursStart : null,
         quiet_hours_end: quietHoursEnabled ? quietHoursEnd : null,
         min_priority: minPriority,
-        category_preferences: categoryPrefs,
+        category_preferences: {
+          ...categoryPrefs,
+          desktop_notifications: desktopEvents,
+        },
         trash_retention_days: trashRetentionDays,
       });
       toast.success(t('common:toast.saved'));
@@ -451,6 +463,45 @@ export default function NotificationPreferencesPage({ embedded = false }: { embe
                 })}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* Desktop power notifications (admin only) */}
+      {isAdmin && (
+        <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
+          <div className="mb-4 flex items-center gap-3">
+            <Monitor className="h-5 w-5 text-slate-400" />
+            <div>
+              <h2 className="text-lg font-semibold text-slate-100">{t('desktopEvents.title')}</h2>
+              <p className="text-sm text-slate-400">{t('desktopEvents.description')}</p>
+            </div>
+          </div>
+          <div className="space-y-3">
+            <label className="flex items-center justify-between">
+              <span className="text-sm text-slate-300">{t('desktopEvents.onDisable')}</span>
+              <span className="relative inline-flex cursor-pointer items-center">
+                <input
+                  type="checkbox"
+                  checked={desktopEvents.disabled}
+                  onChange={(e) => setDesktopEvents((p) => ({ ...p, disabled: e.target.checked }))}
+                  className="peer sr-only"
+                />
+                <span className="peer h-6 w-11 rounded-full bg-slate-700 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-slate-600 after:bg-slate-400 after:transition-all after:content-[''] peer-checked:bg-sky-500 peer-checked:after:translate-x-full peer-checked:after:border-white peer-focus:outline-none" />
+              </span>
+            </label>
+            <label className="flex items-center justify-between">
+              <span className="text-sm text-slate-300">{t('desktopEvents.onEnable')}</span>
+              <span className="relative inline-flex cursor-pointer items-center">
+                <input
+                  type="checkbox"
+                  checked={desktopEvents.enabled}
+                  onChange={(e) => setDesktopEvents((p) => ({ ...p, enabled: e.target.checked }))}
+                  className="peer sr-only"
+                />
+                <span className="peer h-6 w-11 rounded-full bg-slate-700 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-slate-600 after:bg-slate-400 after:transition-all after:content-[''] peer-checked:bg-sky-500 peer-checked:after:translate-x-full peer-checked:after:border-white peer-focus:outline-none" />
+              </span>
+            </label>
           </div>
         </div>
       )}

@@ -33,6 +33,12 @@
     "desktopClientDimmed": "Kein Desktop Client verbunden",
     "noneAssigned": "Dir wurden noch keine System-Benachrichtigungen zugewiesen. Wende dich an einen Administrator."
   },
+  "desktopEvents": {
+    "title": "Desktop-Benachrichtigungen",
+    "description": "Benachrichtigen, wenn der Desktop deaktiviert oder reaktiviert wird",
+    "onDisable": "Bei Deaktivierung benachrichtigen",
+    "onEnable": "Bei Reaktivierung benachrichtigen"
+  },
   "buttons": {
     "save": "Speichern",
     "back": "Zurück",

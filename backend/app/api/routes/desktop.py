@@ -10,6 +10,7 @@ from app.api.deps import get_current_user, require_power_toggle_desktop
 from app.core.rate_limiter import user_limiter, get_limit
 from app.schemas.desktop import DesktopStatus
 from app.services.power.desktop import get_desktop_service
+from app.services.notifications.events import emit_desktop_disabled, emit_desktop_enabled
 from app.services.audit.logger_db import get_audit_logger_db
 
 logger = logging.getLogger(__name__)
@@ -61,6 +62,11 @@ async def desktop_disable(
             details={"action": "desktop_disable"},
             success=True,
         )
+    if ok:
+        try:
+            await emit_desktop_disabled(current_user.username)
+        except Exception as exc:  # best-effort: never break the toggle
+            logger.warning("Desktop-disabled notification failed: %s", exc)
     return {"success": ok, "message": message}
 
 
@@ -95,4 +101,9 @@ async def desktop_enable(
             details={"action": "desktop_enable"},
             success=True,
         )
+    if ok:
+        try:
+            await emit_desktop_enabled(current_user.username)
+        except Exception as exc:  # best-effort: never break the toggle
+            logger.warning("Desktop-enabled notification failed: %s", exc)
     return {"success": ok, "message": message}
