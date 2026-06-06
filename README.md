@@ -21,28 +21,24 @@ Manage your home server end to end — file & RAID storage at the core, plus sys
 
 ## Reference System
 
-BaluHost is developed and tested against a single reference configuration — the maintainer's production box, in service since January 25, 2026:
+BaluHost is developed, tested, and run in production on a single reference machine — the maintainer's box, in service since January 25, 2026. There is no separate production environment: this same machine is both the dev/test reference and the live deployment.
 
-| Spec | Detail |
-|------|--------|
-| **OS** | Debian 13 |
-| **Kernel** | `6.12.74+deb13+1-amd64` (x86_64) |
+| Hardware | Detail |
+|----------|--------|
+| **OS / Kernel** | Debian 13 · `6.12.74+deb13+1-amd64` (x86_64) |
 | **CPU** | AMD Ryzen 5 5600GT |
 | **Memory** | 16 GB RAM |
 | **GPU** | AMD Radeon RX 7900 XT (20 GB VRAM) |
 
 The same machine doubles as a KDE Plasma desktop and — thanks to the Radeon GPU — an optional Linux gaming rig / "Steam Machine" (Proton). That gaming use case is not part of this repository; it simply shares the reference hardware.
 
-### Production Stack
-
-| Component | Status | Details |
-|-----------|--------|---------|
-| **Server** | Active | Debian 13, systemd managed |
-| **Database** | PostgreSQL 17.7 | With Alembic migrations |
-| **Proxy** | Nginx | Port 80, rate limiting, security headers |
-| **Backend** | Systemd | 4 Uvicorn workers, auto-restart |
-| **Testing** | <!-- STATS:TEST_COUNT:START -->3064 tests<!-- STATS:TEST_COUNT:END --> | <!-- STATS:TEST_FILES:START -->248 test files<!-- STATS:TEST_FILES:END -->, CI/CD via GitHub Actions |
-| **Monitoring** | Prometheus/Grafana | Ready |
+| Production Stack | Detail |
+|------------------|--------|
+| **Database** | PostgreSQL 17.7 with Alembic migrations |
+| **Proxy** | Nginx (port 80, rate limiting, security headers) |
+| **Backend** | systemd-managed, 4 Uvicorn workers on port 8000, auto-restart |
+| **Testing** | <!-- STATS:TEST_COUNT:START -->3064 tests<!-- STATS:TEST_COUNT:END --> across <!-- STATS:TEST_FILES:START -->248 test files<!-- STATS:TEST_FILES:END -->, CI/CD via GitHub Actions |
+| **Monitoring** | Prometheus / Grafana ready |
 
 ---
 

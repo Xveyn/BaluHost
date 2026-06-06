@@ -17,6 +17,16 @@ Für Codebase-Suchen **immer** den `vectordb-search` MCP verwenden statt Grep/Gl
 
 Grep/Glob nur als Fallback verwenden, wenn vectordb-search keine passenden Ergebnisse liefert.
 
+## GitHub Issues für Nebenbefunde
+
+Wenn bei Code-Änderungen, Reviews oder Recherche ein **Nebenbefund** auftaucht, der **nicht** zum aktuellen Task gehört — z. B. ein pre-existing Bug, eine Altlast, ein Out-of-Scope-Verbesserungspunkt, ein latentes Risiko oder eine sinnvolle Folgearbeit — dann **nicht still weiterarbeiten und nicht heimlich mitfixen**, sondern:
+
+1. Den Befund kurz benennen (Problem, Fundort `file:line`, warum out-of-scope).
+2. **Fragen, ob ich dafür ein GitHub-Issue anlegen soll** (`gh issue create`), bevor ich es tue.
+3. Bei Zustimmung: Issue mit klarem Titel, Problembeschreibung, Scope/Severity, Fundort und Fix-Vorschlag anlegen; passendes Label setzen; die Issue-Nummer zurückmelden.
+
+Ziel: solche Punkte landen nachvollziehbar im Issue-Tracker statt nur in einer Chat-Notiz. Im Zweifel lieber fragen als übergehen. (Beispiel-Muster: Issue #157 — pre-existing Total-Aggregations-Quirk, beim Custom-Range-Feature bemerkt.)
+
 ## Project Overview
 
 BaluHost is a full-stack self-hosted home server platform (NAS at its core) with multiple components:
