@@ -374,7 +374,7 @@
     "pinLabel": "PIN (4–8 digits)",
     "confirmLabel": "Confirm PIN",
     "codeLabel": "2FA code",
-    "codeHint": "Enter your current 2FA code from your authenticator app to confirm.",
+    "codeHint": "Enter your current 2FA code (or a backup code) to confirm.",
     "save": "Save PIN",
     "remove": "Remove PIN",
     "mismatch": "The PINs do not match.",

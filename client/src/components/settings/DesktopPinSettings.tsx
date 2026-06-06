@@ -83,9 +83,10 @@ export function DesktopPinSettings({ twoFactorEnabled }: Props) {
             </>
           )}
 
-          <input type="text" inputMode="numeric" placeholder={t('pin.codeLabel')}
+          {/* Accept a 6-digit TOTP OR an 8-char backup code (uppercase hex). */}
+          <input type="text" inputMode="text" placeholder={t('pin.codeLabel')}
             className="input" value={code}
-            onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 8))}
+            onChange={(e) => setCode(e.target.value.replace(/[^0-9a-zA-Z]/g, '').toUpperCase().slice(0, 8))}
             autoComplete="one-time-code" />
           <p className="text-xs text-slate-400">{t('pin.codeHint')}</p>
 
