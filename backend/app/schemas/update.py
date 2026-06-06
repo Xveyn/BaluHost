@@ -36,6 +36,7 @@ class ChangelogEntry(BaseModel):
     changes: list[str] = Field(default_factory=list, description="List of changes")
     breaking_changes: list[str] = Field(default_factory=list, description="Breaking changes")
     is_prerelease: bool = Field(default=False, description="Whether this is a prerelease")
+    body_markdown: Optional[str] = Field(default=None, description="Curated release notes (markdown)")
 
 
 class UpdateCheckResponse(BaseModel):
@@ -65,23 +66,6 @@ class UpdateCheckResponse(BaseModel):
         default=True,
         description="Whether update can proceed (no blockers)"
     )
-    # Dev branch info (informational only)
-    dev_version_available: bool = Field(
-        default=False,
-        description="Whether development branch has unreleased commits ahead of latest tag"
-    )
-    dev_version: Optional[VersionInfo] = Field(
-        default=None,
-        description="Development branch tip info"
-    )
-    dev_commits_ahead: Optional[int] = Field(
-        default=None,
-        description="Commits ahead of latest release"
-    )
-    dev_commits: list[CommitInfo] = Field(
-        default_factory=list,
-        description="Commit messages on dev branch since latest release"
-    )
 
 
 class UpdateStartRequest(BaseModel):
@@ -91,19 +75,6 @@ class UpdateStartRequest(BaseModel):
         default=None,
         description="Specific version to update to (default: latest)"
     )
-    skip_backup: bool = Field(
-        default=False,
-        description="Skip database backup (not recommended)"
-    )
-    force: bool = Field(
-        default=False,
-        description="Force update even with non-critical blockers"
-    )
-
-
-class DevUpdateStartRequest(BaseModel):
-    """Request to start a development branch update."""
-
     skip_backup: bool = Field(
         default=False,
         description="Skip database backup (not recommended)"
@@ -304,20 +275,30 @@ class UpdateWebSocketMessage(BaseModel):
 
 
 class ReleaseNoteCategory(BaseModel):
-    """Single category of release notes (e.g. Features, Bug Fixes)."""
+    """Legacy categorized release-note group (kept for compatibility; unused by GitHub path)."""
 
-    name: str = Field(description="Category name (e.g. 'Features', 'Bug Fixes')")
-    icon: str = Field(description="Lucide icon name (e.g. 'sparkles', 'bug')")
-    changes: list[str] = Field(default_factory=list, description="List of changes in this category")
+    name: str
+    icon: str
+    changes: list[str] = Field(default_factory=list)
+
+
+class ReleaseNoteItem(BaseModel):
+    """A single release's curated notes (one GitHub release / CHANGELOG section)."""
+
+    version: str = Field(description="Version, e.g. '1.36.0' or '1.35.1-pre.3'")
+    date: Optional[datetime] = Field(default=None, description="Release date")
+    is_prerelease: bool = Field(default=False)
+    url: Optional[str] = Field(default=None, description="Release HTML URL")
+    body_markdown: str = Field(default="", description="Curated release notes (markdown)")
 
 
 class ReleaseNotesResponse(BaseModel):
-    """Response for release notes of the current version."""
+    """Release notes since the last stable, newest first."""
 
-    version: str = Field(description="Current version (e.g. '1.5.0-alpha')")
-    previous_version: Optional[str] = Field(default=None, description="Previous version (e.g. '1.1.0-alpha')")
-    date: Optional[datetime] = Field(default=None, description="Release date")
-    categories: list[ReleaseNoteCategory] = Field(default_factory=list, description="Categorized changes")
+    current_version: str
+    since_version: Optional[str] = Field(default=None, description="The last stable the notes start from")
+    source: Literal["github", "changelog"] = "github"
+    releases: list[ReleaseNoteItem] = Field(default_factory=list)
 
 
 class UpdateAvailablePayload(BaseModel):
@@ -414,13 +395,16 @@ class CommitDiffResponse(BaseModel):
 
 
 class ReleaseInfo(BaseModel):
-    """Information about a single release (git tag)."""
+    """Information about a single release (git tag or GitHub release)."""
 
-    tag: str = Field(description="Git tag (e.g., 'v1.9.0')")
+    tag: str = Field(description="Git tag (e.g., 'v1.36.0')")
     version: str = Field(description="Version string without 'v' prefix")
     date: Optional[str] = Field(default=None, description="Release date (ISO 8601)")
-    is_prerelease: bool = Field(default=False, description="True if alpha/beta/rc/etc.")
-    commit_short: str = Field(description="Short commit hash (7 chars)")
+    is_prerelease: bool = Field(default=False)
+    commit_short: Optional[str] = Field(default=None, description="Short commit hash (git path only)")
+    name: Optional[str] = Field(default=None, description="Release name")
+    html_url: Optional[str] = Field(default=None, description="Release HTML URL")
+    body_markdown: Optional[str] = Field(default=None, description="Curated release notes (markdown)")
 
 
 class ReleaseListResponse(BaseModel):
