@@ -1,121 +1,81 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderHook, waitFor, act } from '@testing-library/react';
+import { renderHook, waitFor } from '@testing-library/react';
 import { useActivityFeed } from '../../hooks/useActivityFeed';
+import type { ActivityListResponse } from '../../api/activity';
 
-const mockLogsResponse = {
-  dev_mode: true,
+const tFn = (key: string) => key;
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({ t: tFn }),
+}));
+
+vi.mock('../../lib/errorHandling', () => ({
+  getApiErrorMessage: (_e: unknown, fallback: string) => fallback,
+}));
+
+vi.mock('../../lib/formatters', () => ({
+  formatBytes: (n: number) => `${n} B`,
+}));
+
+vi.mock('../../api/activity', () => ({
+  getRecentActivities: vi.fn(),
+}));
+
+import { getRecentActivities } from '../../api/activity';
+
+const adminResponse: ActivityListResponse = {
   total: 2,
-  logs: [
+  has_more: false,
+  activities: [
     {
-      timestamp: '2026-02-07T11:55:00Z',
-      event_type: 'file_access',
-      user: 'admin',
-      action: 'upload',
-      resource: '/docs/report.pdf',
-      success: true,
-      details: { size_bytes: 4096 },
+      id: 1, user_id: 5, username: 'alice', action_type: 'file.upload',
+      file_path: 'alice/report.pdf', file_name: 'report.pdf', is_directory: false,
+      file_size: 2048, mime_type: 'application/pdf', source: 'server',
+      device_id: null, metadata: null, created_at: new Date().toISOString(),
     },
     {
-      timestamp: '2026-02-07T11:50:00Z',
-      event_type: 'file_access',
-      user: 'user1',
-      action: 'download',
-      resource: '/images/photo.jpg',
-      success: true,
+      id: 2, user_id: 6, username: 'bob', action_type: 'folder.create',
+      file_path: 'bob/photos', file_name: 'photos', is_directory: true,
+      file_size: null, mime_type: null, source: 'server',
+      device_id: null, metadata: null, created_at: new Date().toISOString(),
     },
   ],
 };
 
-vi.mock('../../api/logging', () => ({
-  loggingApi: {
-    getFileAccessLogs: vi.fn(),
-  },
-}));
-
-import { loggingApi } from '../../api/logging';
-
 describe('useActivityFeed', () => {
   beforeEach(() => {
-    vi.mocked(loggingApi.getFileAccessLogs).mockReset();
-    vi.mocked(loggingApi.getFileAccessLogs).mockResolvedValue(mockLogsResponse);
+    vi.mocked(getRecentActivities).mockResolvedValue(adminResponse);
   });
+  afterEach(() => vi.restoreAllMocks());
 
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
+  it('requests scope=all when allUsers is true and maps action types', async () => {
+    const { result } = renderHook(() => useActivityFeed({ limit: 5, allUsers: true }));
+    await waitFor(() => expect(result.current.loading).toBe(false));
 
-  it('loads and transforms logs into activity items', async () => {
-    const { result } = renderHook(() =>
-      useActivityFeed({ refreshInterval: 0 })
-    );
-
-    await waitFor(() => {
-      expect(result.current.loading).toBe(false);
-    });
-
+    expect(getRecentActivities).toHaveBeenCalledWith({ limit: 5, scope: 'all' });
     expect(result.current.activities).toHaveLength(2);
-    expect(result.current.activities[0].title).toBe('File Uploaded');
     expect(result.current.activities[0].icon).toBe('upload');
-    expect(result.current.activities[1].title).toBe('File Downloaded');
-    expect(result.current.error).toBeNull();
+    expect(result.current.activities[1].icon).toBe('create');
+    expect(result.current.activities[0].title).toBe('activity.actions.upload');
+    expect(result.current.activities[1].title).toBe('activity.actions.create');
+    expect(result.current.activities[0].detail).toContain('alice');
   });
 
-  it('uses default options (limit=5, days=1)', async () => {
-    renderHook(() => useActivityFeed({ refreshInterval: 0 }));
-
-    await waitFor(() => {
-      expect(loggingApi.getFileAccessLogs).toHaveBeenCalled();
+  it('requests scope=mine when allUsers is false and omits username in detail', async () => {
+    vi.mocked(getRecentActivities).mockResolvedValue({
+      total: 1, has_more: false,
+      activities: [{
+        id: 9, user_id: 5, username: null, action_type: 'file.download',
+        file_path: 'me/a.txt', file_name: 'a.txt', is_directory: false,
+        file_size: null, mime_type: null, source: 'server',
+        device_id: null, metadata: null, created_at: new Date().toISOString(),
+      }],
     });
 
-    expect(loggingApi.getFileAccessLogs).toHaveBeenCalledWith({ limit: 5, days: 1 });
-  });
+    const { result } = renderHook(() => useActivityFeed({ limit: 5 }));
+    await waitFor(() => expect(result.current.loading).toBe(false));
 
-  it('passes custom options to API', async () => {
-    renderHook(() =>
-      useActivityFeed({ limit: 10, days: 7, refreshInterval: 0 })
-    );
-
-    await waitFor(() => {
-      expect(loggingApi.getFileAccessLogs).toHaveBeenCalled();
-    });
-
-    expect(loggingApi.getFileAccessLogs).toHaveBeenCalledWith({ limit: 10, days: 7 });
-  });
-
-  it('auto-refreshes with interval', async () => {
-    vi.useFakeTimers();
-
-    renderHook(() =>
-      useActivityFeed({ refreshInterval: 10000 })
-    );
-
-    // Initial call
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(10);
-    });
-    expect(loggingApi.getFileAccessLogs).toHaveBeenCalledTimes(1);
-
-    // After 10s
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(10000);
-    });
-    expect(loggingApi.getFileAccessLogs).toHaveBeenCalledTimes(2);
-
-    vi.useRealTimers();
-  });
-
-  it('handles errors', async () => {
-    vi.mocked(loggingApi.getFileAccessLogs).mockRejectedValue(new Error('Server error'));
-
-    const { result } = renderHook(() =>
-      useActivityFeed({ refreshInterval: 0 })
-    );
-
-    await waitFor(() => {
-      expect(result.current.loading).toBe(false);
-    });
-
-    expect(result.current.error).toBe('Server error');
-    expect(result.current.activities).toEqual([]);
+    expect(getRecentActivities).toHaveBeenCalledWith({ limit: 5, scope: 'mine' });
+    expect(result.current.activities[0].icon).toBe('download');
+    expect(result.current.activities[0].detail).toBe('a.txt');
   });
 });

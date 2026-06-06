@@ -1,8 +1,10 @@
 /**
- * Hook for fetching activity feed from audit logs
+ * Hook for fetching the dashboard activity feed from the user-scoped
+ * /api/activity API. Admins may request all users' activity (scope=all).
  */
 import { useState, useEffect, useCallback } from 'react';
-import { loggingApi, type FileAccessLog } from '../api/logging';
+import { useTranslation } from 'react-i18next';
+import { getRecentActivities, type ActivityItem as ApiActivityItem } from '../api/activity';
 import { formatBytes } from '../lib/formatters';
 import { getApiErrorMessage } from '../lib/errorHandling';
 
@@ -18,7 +20,7 @@ export interface ActivityItem {
 
 interface UseActivityFeedOptions {
   limit?: number;
-  days?: number;
+  allUsers?: boolean;
   refreshInterval?: number;
 }
 
@@ -29,60 +31,24 @@ interface UseActivityFeedReturn {
   refetch: () => Promise<void>;
 }
 
-// Map action to icon
-export function getActionIcon(action: string): string {
-  switch (action.toLowerCase()) {
-    case 'upload':
-      return 'upload';
-    case 'download':
-      return 'download';
-    case 'delete':
-      return 'delete';
-    case 'create':
-    case 'mkdir':
-      return 'create';
-    case 'login':
-    case 'auth':
-      return 'user';
-    case 'move':
-    case 'rename':
-      return 'move';
-    case 'copy':
-      return 'copy';
-    case 'share':
-      return 'share';
-    default:
-      return 'file';
-  }
-}
+// Map a dotted action_type (e.g. "file.upload", "folder.create") to an icon key
+// understood by ActivityFeed's ActivityIcon and to an i18n title sub-key.
+const ACTION_MAP: Record<string, { icon: string; titleKey: string }> = {
+  'file.upload': { icon: 'upload', titleKey: 'upload' },
+  'file.download': { icon: 'download', titleKey: 'download' },
+  'file.delete': { icon: 'delete', titleKey: 'delete' },
+  'file.edit': { icon: 'file', titleKey: 'edit' },
+  'file.open': { icon: 'file', titleKey: 'open' },
+  'file.move': { icon: 'move', titleKey: 'move' },
+  'file.rename': { icon: 'move', titleKey: 'rename' },
+  'file.share': { icon: 'share', titleKey: 'share' },
+  'file.permission': { icon: 'share', titleKey: 'permission' },
+  'folder.create': { icon: 'create', titleKey: 'create' },
+  'sync.triggered': { icon: 'file', titleKey: 'sync' },
+};
 
-// Map action to human-readable title
-export function getActionTitle(action: string): string {
-  switch (action.toLowerCase()) {
-    case 'upload':
-      return 'File Uploaded';
-    case 'download':
-      return 'File Downloaded';
-    case 'delete':
-      return 'File Deleted';
-    case 'create':
-    case 'mkdir':
-      return 'Created';
-    case 'login':
-      return 'User Login';
-    case 'auth':
-      return 'Authentication';
-    case 'move':
-      return 'File Moved';
-    case 'rename':
-      return 'File Renamed';
-    case 'copy':
-      return 'File Copied';
-    case 'share':
-      return 'File Shared';
-    default:
-      return action.charAt(0).toUpperCase() + action.slice(1);
-  }
+export function mapActionType(actionType: string): { icon: string; titleKey: string } {
+  return ACTION_MAP[actionType] ?? { icon: 'file', titleKey: 'default' };
 }
 
 // Format relative time
@@ -94,82 +60,63 @@ export function formatRelativeTime(date: Date): string {
   const diffHours = Math.floor(diffMinutes / 60);
   const diffDays = Math.floor(diffHours / 24);
 
-  if (diffSeconds < 60) {
-    return 'just now';
-  }
-  if (diffMinutes < 60) {
-    return `${diffMinutes} minute${diffMinutes === 1 ? '' : 's'} ago`;
-  }
-  if (diffHours < 24) {
-    return `${diffHours} hour${diffHours === 1 ? '' : 's'} ago`;
-  }
-  if (diffDays < 7) {
-    return `${diffDays} day${diffDays === 1 ? '' : 's'} ago`;
-  }
+  if (diffSeconds < 60) return 'just now';
+  if (diffMinutes < 60) return `${diffMinutes} minute${diffMinutes === 1 ? '' : 's'} ago`;
+  if (diffHours < 24) return `${diffHours} hour${diffHours === 1 ? '' : 's'} ago`;
+  if (diffDays < 7) return `${diffDays} day${diffDays === 1 ? '' : 's'} ago`;
   return date.toLocaleDateString();
 }
 
-// Transform log to activity item
-export function transformLog(log: FileAccessLog, index: number): ActivityItem {
-  const timestamp = new Date(log.timestamp);
-  const resourcePath = log.resource || '';
-  const fileName = resourcePath.split('/').pop() || resourcePath;
-
-  let detail = fileName || log.resource;
-  if (log.user && log.user !== 'unknown') {
-    detail = `${log.user} • ${detail}`;
-  }
-  if (log.details?.size_bytes) {
-    detail += ` (${formatBytes(log.details.size_bytes)})`;
-  }
-
-  return {
-    id: `${log.timestamp}-${index}`,
-    title: getActionTitle(log.action),
-    detail,
-    ago: formatRelativeTime(timestamp),
-    icon: getActionIcon(log.action),
-    timestamp,
-    success: log.success,
-  };
-}
-
 export function useActivityFeed(options: UseActivityFeedOptions = {}): UseActivityFeedReturn {
-  const { limit = 5, days = 1, refreshInterval = 30000 } = options;
+  const { limit = 5, allUsers = false, refreshInterval = 30000 } = options;
+  const { t } = useTranslation('dashboard');
 
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const toViewItem = useCallback(
+    (item: ApiActivityItem): ActivityItem => {
+      const { icon, titleKey } = mapActionType(item.action_type);
+      const timestamp = new Date(item.created_at);
+
+      let detail = item.file_name;
+      if (item.username) detail = `${item.username} • ${detail}`;
+      if (item.file_size) detail += ` (${formatBytes(item.file_size)})`;
+
+      return {
+        id: String(item.id),
+        title: t(`activity.actions.${titleKey}`),
+        detail,
+        ago: formatRelativeTime(timestamp),
+        icon,
+        timestamp,
+        success: true,
+      };
+    },
+    [t],
+  );
+
   const loadData = useCallback(async () => {
     try {
-      const response = await loggingApi.getFileAccessLogs({ limit, days });
-      const items = response.logs.map((log, idx) => transformLog(log, idx));
-      setActivities(items);
+      const response = await getRecentActivities({ limit, scope: allUsers ? 'all' : 'mine' });
+      setActivities(response.activities.map(toViewItem));
       setError(null);
     } catch (err: unknown) {
       setError(getApiErrorMessage(err, 'Failed to load activity feed'));
     }
-  }, [limit, days]);
+  }, [limit, allUsers, toViewItem]);
 
-  // Initial load
   useEffect(() => {
     setLoading(true);
     loadData().finally(() => setLoading(false));
   }, [loadData]);
 
-  // Auto-refresh
   useEffect(() => {
     if (refreshInterval <= 0) return;
-
     const interval = setInterval(loadData, refreshInterval);
     return () => clearInterval(interval);
   }, [refreshInterval, loadData]);
 
-  return {
-    activities,
-    loading,
-    error,
-    refetch: loadData,
-  };
+  return { activities, loading, error, refetch: loadData };
 }
