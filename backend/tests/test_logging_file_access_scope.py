@@ -38,6 +38,18 @@ def test_regular_user_cannot_widen_with_user_param(client, db_session, user_head
     assert users <= {"testuser"}  # empty or only own — never the admin's
 
 
+def test_regular_user_devmode_mock_is_scoped(client, db_session, user_headers):
+    # No seeding: forces the dev-mode mock fallback (real logs == 0).
+    resp = client.get(
+        f"{settings.api_prefix}/logging/file-access?days=1&limit=100",
+        headers=user_headers,
+    )
+    assert resp.status_code == 200
+    users = {log["user"] for log in resp.json()["logs"]}
+    # Non-admin must never see other users' (mock) rows.
+    assert users <= {"testuser"}
+
+
 def test_admin_sees_all_file_access(client, db_session, admin_headers):
     _seed_file_access(db_session)
     resp = client.get(

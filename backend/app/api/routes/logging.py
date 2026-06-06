@@ -178,7 +178,7 @@ async def get_file_access_logs(
         limit: Maximum number of logs to return (default: 100)
         days: Number of days to look back (default: 1)
         action: Filter by action type (optional)
-        user: Filter by username (optional)
+        user: Filter by username (optional). For non-privileged callers this is always overridden to the caller's own username.
         current_user: Current authenticated user
         db: Database session
 
@@ -204,6 +204,8 @@ async def get_file_access_logs(
     # In dev mode, if no real logs exist, return mock data
     if settings.is_dev_mode and len(logs) == 0:
         mock_logs = _generate_mock_file_access_logs(days=days, limit=limit)
+        if not is_privileged(current_user):
+            mock_logs = [m for m in mock_logs if m["user"] == current_user.username]
         return {"dev_mode": True, "total": len(mock_logs), "logs": mock_logs}
 
     return {"dev_mode": settings.is_dev_mode, "total": len(logs), "logs": logs}
