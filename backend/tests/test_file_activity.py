@@ -202,6 +202,40 @@ class TestFileActivityService:
         assert items[0].source == "client"
         assert items[0].device_id == "pixel-7-abc"
 
+    def test_get_recent_activities_sets_user_id_and_no_username_for_mine(self, db_session: Session):
+        svc = self._make_service(db_session)
+        svc.record(7, "file.upload", "u7/a.txt", "a.txt")
+        db_session.commit()
+
+        items, total = svc.get_recent_activities(user_id=7, limit=10)
+        assert total == 1
+        assert items[0].user_id == 7
+        assert items[0].username is None
+
+    def test_get_recent_activities_all_users_returns_cross_user_with_username(self, db_session: Session):
+        from app.models.user import User
+
+        alice = User(username="alice", email="alice@example.com", hashed_password="x", role="user")
+        bob = User(username="bob", email="bob@example.com", hashed_password="x", role="user")
+        db_session.add_all([alice, bob])
+        db_session.commit()
+
+        svc = self._make_service(db_session)
+        svc.record(alice.id, "file.upload", "alice/a.txt", "a.txt")
+        svc.record(bob.id, "file.download", "bob/b.txt", "b.txt")
+        db_session.commit()
+
+        # Scoped: alice sees only her own
+        mine, mine_total = svc.get_recent_activities(user_id=alice.id, limit=10)
+        assert mine_total == 1
+        assert {i.file_name for i in mine} == {"a.txt"}
+
+        # All users: both, each with the acting username populated
+        everyone, total = svc.get_recent_activities(user_id=alice.id, limit=10, all_users=True)
+        assert total == 2
+        names = {i.file_name: i.username for i in everyone}
+        assert names == {"a.txt": "alice", "b.txt": "bob"}
+
 
 # ---------------------------------------------------------------------------
 # API-level tests

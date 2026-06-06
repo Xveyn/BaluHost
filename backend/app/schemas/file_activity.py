@@ -33,6 +33,8 @@ class ActivityItem(BaseModel):
     """Single activity entry in API responses."""
 
     id: int
+    user_id: int
+    username: Optional[str] = None
     action_type: str
     file_path: str
     file_name: str
