@@ -463,5 +463,14 @@
       "diffFailed": "Failed to load diff"
     },
     "processing": "Processing..."
+  },
+  "authPolicy": {
+    "title": "PIN login policy",
+    "description": "Controls the grace window in which the desktop-app PIN suffices without a 2FA code.",
+    "enabled": "PIN login enabled",
+    "window": "Grace window",
+    "saved": "Policy saved",
+    "saveError": "Could not save policy",
+    "windows": { "1h": "1 hour", "8h": "8 hours", "24h": "24 hours", "7d": "7 days" }
   }
 }

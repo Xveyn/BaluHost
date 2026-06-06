@@ -18,6 +18,7 @@ import { ServicesTab } from '../components/services';
 import VCLSettings from '../components/vcl/VCLSettings';
 import { Link } from 'react-router-dom';
 import { RateLimitsTab } from '../components/rate-limits';
+import { AuthPolicySettings } from '../components/admin/AuthPolicySettings';
 import WebdavConnectionCard from '../components/webdav/WebdavConnectionCard';
 import SambaManagementCard from '../components/samba/SambaManagementCard';
 import SleepMode from './SleepMode';
@@ -206,7 +207,12 @@ export default function SystemControlPage() {
             </Link>
           </div>
         )}
-        {activeTab === 'ratelimits' && <RateLimitsTab />}
+        {activeTab === 'ratelimits' && (
+          <div className="space-y-6">
+            <RateLimitsTab />
+            <AuthPolicySettings />
+          </div>
+        )}
         {activeTab === 'webdav' && <WebdavConnectionCard />}
         {activeTab === 'samba' && <SambaManagementCard />}
         {activeTab === 'firebase' && <FirebaseManagementCard />}
