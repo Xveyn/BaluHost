@@ -7,6 +7,158 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.36.0] - 2026-06-06
+
+### Added
+
+- **(admin)** PIN-login policy settings card
+- **(settings)** Desktop-app PIN management section (2FA-gated)
+- **(client)** PIN login option on the Login screen (Tauri-only)
+- **(client)** isTauri flag + PIN/auth-policy API client
+- **(auth)** local-channel login-pin + grace window on verify-2fa
+- **(auth)** PIN management endpoints (status/set/remove, TOTP-gated)
+- **(auth)** admin auth-policy endpoints (pin window + kill switch)
+- **(auth)** pin_service (hash/grace/lockout) + clear PIN on 2FA disable
+- **(auth)** PIN policy validator + PIN schemas
+- **(auth)** pin columns on users + auth_policy singleton + migration
+- **(notifications)** admin toggles for desktop disable/enable notifications
+- **(notifications)** type desktop_notifications pref in update payload
+- **(desktop)** emit desktop disabled/enabled notification on success
+- **(notifications)** add desktop event gate + emit helpers
+- **(notifications)** add desktop_disabled/enabled event types, configs, cooldowns
+- **(devices)** sleep-window awareness + bandwidth panel in Schedules tab
+- **(devices)** load bandwidth limits + sleep preflight in device hook
+- **(devices)** support ?tab= deep-linking into device tabs
+- **(client)** proportional size bars in game library list
+- **(games)** filter Proton/runtime tools from libraries
+- **(client)** show Game Libraries card in Storage tab
+- **(client)** GameLibrariesCard component
+- **(client)** games API client + types
+- **(games)** GET /api/games/libraries endpoint
+- **(games)** provider aggregation service with dev mock
+- **(games)** SteamProvider with provider interface
+- **(games)** GameLibrary response schemas
+- **(games)** minimal VDF parser for Steam metadata
+- **(energy)** import-aware, gap-capped interval energy primitive
+- **(power-tab)** custom date range picker for cumulative + instant charts
+- **(dateUtils)** custom chart range format + localRangeToUtcIso helper
+- **(energy-api)** optional start/end range args on cumulative client
+- **(energy)** custom start/end query params on cumulative endpoints
+- **(energy)** arbitrary start/end window in get_cumulative_energy_total
+- **(energy)** arbitrary start/end window in get_cumulative_energy_data
+- **(plugins)** number/retention field renderer (presets + unlimited) in plugin settings
+- **(smart-device)** poller applies per-plugin configured retention
+- **(tapo)** add configurable retention_days (0=unlimited) to plugin config
+- **(system-permissions)** i18n + Desktop toggle in permissions section
+- **(system-permissions)** i18n strings for System Permissions (en+de)
+- **(system-permissions)** add can_toggle_desktop to frontend API types
+- **(system-permissions)** delegate desktop enable/disable via can_toggle_desktop
+- **(admin)** add Retention sub-tab to the database analytics view
+- **(system-permissions)** persist can_toggle_desktop in service + audit
+- **(system-permissions)** add can_toggle_desktop to permission schemas
+- **(system-permissions)** add can_toggle_desktop column + migration
+- **(admin)** RetentionSettings editor component
+- **(smart-device)** trigger daily sample cleanup from poller loop
+- **(smart-device)** category-wide sample retention preserving imported rows
+- **(monitoring)** retention API excludes POWER and rejects it on update
+- **(api-keys)** move admin tab to System Control, delete on revoke
+- **(statusbar)** translate live pills in the frontend via key+params renderer
+- **(statusbar)** emit i18n keys from backup/desktop/always_awake collectors
+- **(statusbar)** emit i18n keys from sleep/vpn/temp/scheduler collectors
+- **(statusbar)** emit i18n keys from power/pihole/uploads/sync/raid collectors
+- **(statusbar)** add live label + value i18n keys (de/en) with parity test
+- **(statusbar)** add i18n key fields to PillState schema (expand phase)
+- **(power)** add 'enable desktop' quick action to PowerMenu
+
+### Changed
+
+- **(sync)** remove redundant /sync page and dead code
+- **(devices)** move BandwidthLimitsPanel into device-management
+- **(power-tab)** dedupe range-arg derivation; fix popover re-open + Escape
+- **(energy)** drop dead total empty-window branch; style/docstring cleanup
+- **(smart-device)** isolate per-plugin cleanup failures in poller loop
+- **(smart-device)** per-plugin sample cleanup (0=unlimited)
+- **(admin)** hoist metric config to shared module, add uptime/gpu
+- **(smart-device)** capture now once + document no-await cleanup gate invariant
+- **(power)** remove dead energy.cleanup_old_samples (replaced by smart-device retention)
+- **(monitoring)** drop POWER from RetentionManager (smart-device samples owned elsewhere)
+- **(api-keys)** drop now-unused revoked_at/revocation_reason columns
+- **(statusbar)** drop legacy label field, require label_key (contract phase)
+
+### Fixed
+
+- **(settings)** accept backup codes in the PIN 2FA-code field
+- **(settings)** make PIN buttons show disabled state + clarify 2FA code is required
+- **(settings)** style the Remove PIN button (btn-danger is undefined)
+- **(notifications)** persist reserved desktop_notifications pref key
+- **(ui)** label power menu actions as BaluHost, drop accent from brand name
+- **(scheduler)** point Sync tab button to /devices?tab=schedules
+- **(scheduler)** point Sync tab button to /sync via client-side nav
+- **(games)** read game size from .acf SizeOnDisk (fixes 0 B entries)
+- **(client)** pluralize game count (1 game vs N games) via i18next count_one/other
+- **(energy)** period-stats energy uses gap-capped integration (matches chart)
+- **(energy)** Total = carry-forward sum of per-device curves (closes #157)
+- **(energy)** gap-capped import-aware integration in get_cumulative_energy_data
+- **(energy)** reject wholly-future custom range (clamp before order check)
+- **(power-tab)** pass custom range on price-edit refresh (fixes tsc -b + 422 in custom mode)
+- **(energy)** restore period pattern on cumulative endpoints; document end clamp
+- **(plugins)** ignore empty number input so clearing the field doesn't trigger the unlimited sentinel
+- **(dev)** start_dev defaults SKIP_SETUP=true (correct env name) so fresh dev DB skips wizard
+- **(admin)** use handleApiError + plural approxDays + a11y/step in RetentionSettings
+- **(statusbar)** show pill icons in the config Live Preview
+- **(statusbar)** drop removed label field from AlwaysAwakePill test fixtures
+- **(ui)** portal ConfirmDialog to document.body so it centers on the viewport
+- **(security)** use SHA-256 for advisory-lock key derivation
+- **(power)** correct boost-rules response type
+- **(security)** scrub exception text, weak hash, cleartext password (CodeQL)
+- **(ssh)** pin remote host keys via TOFU instead of AutoAddPolicy
+- **(power)** serve dynamic-mode capabilities to follower workers (fix intermittent 400)
+
+### Documentation
+
+- **(auth)** frontend implementation plan for Tauri PIN login (plan 2/2)
+- **(auth)** concrete router registration + accurate remote-channel test note in PIN plan
+- **(auth)** backend implementation plan for Tauri PIN login (plan 1/2)
+- **(auth)** spec for Tauri PIN login (2FA-gated, local-channel only)
+- **(readme)** merge redundant Reference System / Production Stack sections
+- **(notifications)** implementation plan for desktop-disable notifications
+- **(notifications)** spec for desktop-disable/enable notifications
+- drop deleted sync modules from components/hooks CLAUDE.md
+- **(sync)** refresh api/sync header + CLAUDE.md row after cleanup
+- **(plan)** de-tangle SchedulesTab steps, simplify dead-ref check
+- **(plan)** consolidate sync schedules into /devices
+- **(spec)** consolidate sync schedules into /devices
+- **(plan)** filter tools, fix sizes, proportional-bar list
+- **(spec)** also fix 0B sizes (.acf SizeOnDisk) and add proportional-bar list
+- **(spec)** filter Proton/runtime tools from game libraries
+- **(games)** note VDF comment limitation; assert available in swallow test
+- **(games)** document game_libraries service module
+- **(plan)** prefix new test files test_games_* to avoid basename collisions
+- **(plan)** Steam game library storage implementation plan
+- **(spec)** Steam game library in storage usage (provider-extensible)
+- **(energy)** note conservative under-count for malformed imports in _interval_energy_wh
+- **(energy)** note why period-stats doesn't reuse _load_parsed_online_sorted
+- **(plan)** record 4dp total_kwh rounding in Task 3 (matches sibling fn)
+- **(energy)** consistent key access + unit/contract notes in integration helpers
+- **(energy)** implementation plan for gap-capped consumption integration (#159)
+- **(energy)** spec for import-aware gap-capped consumption integration (#159)
+- **(claude)** ask before opening a GH issue for out-of-scope side-findings
+- **(energy)** document custom range invariant + custom axis format row
+- **(power)** clarify period_label placement in plan Task 2
+- **(power)** implementation plan for custom date range (Power tab)
+- **(power)** spec for custom date range in System Monitor Power tab
+- **(plugins)** implementation plan for per-plugin smart-device retention config
+- **(plugins)** spec for per-plugin smart-device retention config (Tapo)
+- **(system-permissions)** note UI rename vs kept backend identifiers
+- **(monitoring)** implementation plan for retention UI + smart-device retention
+- **(monitoring)** spec for retention UI + smart-device sample retention
+- reposition BaluHost as a self-hosted home server platform
+- **(statusbar)** refine i18n plan after self-review
+- **(statusbar)** implementation plan for live status-strip i18n
+- **(statusbar)** spec for live status-strip i18n (Option A1)
+
+---
+
 ## [1.35.0] - 2026-06-02
 
 ### Added

@@ -108,4 +108,4 @@ Each major directory has its own CLAUDE.md with structure, conventions, and patt
 - **Issues**: GitHub Issues (repository URL needed)
 - **Documentation**: See `docs/` directory
 - **Maintainer**: Xveyn
-- **Version**: 1.35.0 (as of May 2026)
+- **Version**: 1.36.0 (as of May 2026)
