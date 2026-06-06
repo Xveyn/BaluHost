@@ -72,3 +72,12 @@ async def test_check_for_updates_github(monkeypatch):
     available, latest, changelog = await b.check_for_updates("stable")
     assert available is True and latest.version == "1.36.0"
     assert changelog and changelog[0].body_markdown == "notes"
+
+
+def test_dev_endpoints_and_fields_removed():
+    import app.schemas.update as u
+    assert not hasattr(u, "DevUpdateStartRequest")
+    from app.api.routes import updates as r
+    # No start-dev route registered
+    paths = [getattr(rt, "path", "") for rt in r.router.routes]
+    assert not any(p.endswith("/start-dev") for p in paths)
