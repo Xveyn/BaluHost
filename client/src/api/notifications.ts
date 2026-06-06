@@ -49,6 +49,11 @@ export interface CategoryPreference {
   desktop: boolean;
 }
 
+export interface DesktopEventsPref {
+  disabled: boolean;
+  enabled: boolean;
+}
+
 export interface DeliveryStatus {
   has_mobile_devices: boolean;
   has_desktop_clients: boolean;
@@ -75,7 +80,7 @@ export interface NotificationPreferencesUpdate {
   quiet_hours_end?: string | null;
   min_priority?: number;
   trash_retention_days?: number;
-  category_preferences?: Record<string, CategoryPreference>;
+  category_preferences?: Record<string, CategoryPreference | DesktopEventsPref>;
 }
 
 /**
