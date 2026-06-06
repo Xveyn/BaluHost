@@ -368,11 +368,14 @@ async def update_notification_preferences(
                 detail="Invalid quiet_hours_end format. Use HH:MM",
             )
 
-    # Convert category preferences if provided
+    # Convert category preferences if provided. Values arrive as plain dicts
+    # (the field is typed dict[str, Any] so reserved keys like
+    # "desktop_notifications" round-trip), but stay tolerant of pydantic models.
     cat_prefs = None
     if body.category_preferences:
         cat_prefs = {
-            cat: pref.model_dump() for cat, pref in body.category_preferences.items()
+            cat: (pref.model_dump() if hasattr(pref, "model_dump") else pref)
+            for cat, pref in body.category_preferences.items()
         }
 
     prefs = service.update_user_preferences(

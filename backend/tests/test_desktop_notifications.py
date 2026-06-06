@@ -191,3 +191,37 @@ def test_route_emit_failure_does_not_break_toggle(client, admin_headers):
         r = client.post(_DISABLE_URL, headers=admin_headers)
     assert r.status_code == 200
     assert r.json()["success"] is True
+
+
+# ---------------------------------------------------------------------------
+# Preference persistence through the real API (PUT -> GET round-trip)
+# ---------------------------------------------------------------------------
+
+_PREFS_URL = f"{settings.api_prefix}/notifications/preferences"
+
+
+def test_desktop_notifications_pref_roundtrips_via_api(client, admin_headers):
+    """The reserved 'desktop_notifications' key must survive PUT->GET unmangled.
+
+    Regression guard: when category_preferences was typed dict[str, CategoryPreference],
+    pydantic coerced this key into a CategoryPreference and dropped {disabled, enabled},
+    so the per-event admin toggles never persisted. A normal category is included to
+    prove ordinary category prefs still round-trip after the schema loosening.
+    """
+    put = client.put(
+        _PREFS_URL,
+        headers=admin_headers,
+        json={
+            "category_preferences": {
+                "raid": {"error": True, "success": False, "mobile": True, "desktop": False},
+                "desktop_notifications": {"disabled": False, "enabled": True},
+            }
+        },
+    )
+    assert put.status_code == 200, put.text
+
+    get = client.get(_PREFS_URL, headers=admin_headers)
+    assert get.status_code == 200
+    cat_prefs = get.json()["category_preferences"]
+    assert cat_prefs["desktop_notifications"] == {"disabled": False, "enabled": True}
+    assert cat_prefs["raid"] == {"error": True, "success": False, "mobile": True, "desktop": False}
