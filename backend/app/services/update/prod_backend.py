@@ -7,10 +7,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+from app.core.config import settings
 from app.schemas.update import (
     VersionInfo,
     ChangelogEntry,
     ReleaseNotesResponse,
+    ReleaseNoteItem,
     CommitInfo,
     VersionGroup,
     CommitHistoryResponse,
@@ -20,6 +22,16 @@ from app.schemas.update import (
     ReleaseListResponse,
 )
 from app.services.update.backend import UpdateBackend
+from app.services.update.github_releases import (
+    GitHubReleasesClient,
+    GitHubRelease,
+    GitHubUnavailable,
+    filter_channel,
+    latest_for_channel,
+    notes_since_last_stable,
+    releases_between,
+)
+from app.services.update.changelog_fallback import notes_since_last_stable_from_changelog
 from app.services.update.utils import (
     ProgressCallback,
     parse_version,
@@ -40,6 +52,23 @@ class ProdUpdateBackend(UpdateBackend):
         self.repo_path = repo_path or Path(__file__).parent.parent.parent.parent.parent
         self.backend_path = self.repo_path / "backend"
         self.client_path = self.repo_path / "client"
+        self._gh = GitHubReleasesClient()
+
+    def _changelog_path(self) -> str:
+        p = Path(settings.update_changelog_path)
+        return str(p if p.is_absolute() else (self.repo_path / p))
+
+    @staticmethod
+    def _to_item(r: GitHubRelease) -> ReleaseNoteItem:
+        from datetime import datetime
+        date = None
+        if r.published_at:
+            try:
+                date = datetime.fromisoformat(r.published_at.replace("Z", "+00:00"))
+            except ValueError:
+                date = None
+        return ReleaseNoteItem(version=r.tag.lstrip("v"), date=date,
+                               is_prerelease=r.prerelease, url=r.url, body_markdown=r.body_markdown)
 
     def _run_git(self, *args: str) -> tuple[bool, str, str]:
         """Run a git command and return (success, stdout, stderr)."""
@@ -95,155 +124,52 @@ class ProdUpdateBackend(UpdateBackend):
         )
 
     async def check_for_updates(self, channel: str) -> tuple[bool, Optional[VersionInfo], list[ChangelogEntry]]:
-        """Check for updates by fetching tags and comparing versions."""
-        # Fetch tags
-        success, _, err = self._run_git("fetch", "--tags", "--force")
-        if not success:
-            logger.warning(f"Failed to fetch tags: {err}")
-            return False, None, []
-
-        # Get current version
         current = await self.get_current_version()
-        current_version = parse_version(current.version)
-
-        # Get all tags
-        success, tags_output, _ = self._run_git("tag", "-l", "--sort=-version:refname")
-        if not success or not tags_output:
+        try:
+            releases = await self._gh.list_releases()
+        except GitHubUnavailable:
             return False, None, []
 
-        tags = [t.strip() for t in tags_output.split("\n") if t.strip()]
-
-        # Filter tags based on channel
-        include_prerelease = channel == "unstable"
-        latest_tag = None
-        latest_version = current_version
-
-        for tag in tags:
-            version = parse_version(tag)
-            is_prerelease = bool(version[3])
-
-            if not include_prerelease and is_prerelease:
-                continue
-
-            if version > latest_version:
-                latest_version = version
-                latest_tag = tag
-
-        if latest_tag is None:
+        latest = latest_for_channel(releases, channel)
+        if latest is None:
             return False, None, []
 
-        # Get commit for latest tag
-        success, commit, _ = self._run_git("rev-parse", latest_tag)
-        if not success:
+        latest_v = parse_version(latest.tag)
+        current_v = parse_version(current.version)
+        if latest_v <= current_v:
             return False, None, []
 
-        # Get tag date
-        success, date_str, _ = self._run_git("log", "-1", "--format=%cI", latest_tag)
-        date = datetime.fromisoformat(date_str) if success and date_str else None
-
-        latest = VersionInfo(
-            version=version_to_string(latest_version),
-            commit=commit,
-            commit_short=commit[:7],
-            tag=latest_tag,
-            date=date,
+        latest_info = VersionInfo(
+            version=latest.tag.lstrip("v"), commit="", commit_short="",
+            tag=latest.tag, date=None, is_prerelease=latest.prerelease,
         )
-
-        # Build changelog from commit messages between versions
-        changelog = await self._build_changelog(current.commit, commit, version_to_string(latest_version))
-
-        return True, latest, changelog
-
-    async def _build_changelog(self, from_commit: str, to_commit: str, version: str = "unknown") -> list[ChangelogEntry]:
-        """Build changelog from git log between commits."""
-        success, log_output, _ = self._run_git(
-            "log", f"{from_commit}..{to_commit}",
-            "--pretty=format:%s", "--no-merges"
-        )
-
-        if not success or not log_output:
-            return []
-
-        changes = [line.strip() for line in log_output.split("\n") if line.strip()]
-
-        # Parse conventional commits for breaking changes
-        breaking = [c for c in changes if "BREAKING" in c.upper() or c.startswith("!")]
-        regular = [c for c in changes if c not in breaking]
-
-        return [
-            ChangelogEntry(
-                version=version,
-                date=datetime.now(timezone.utc),
-                changes=regular[:20],  # Limit to 20 changes
-                breaking_changes=breaking,
-                is_prerelease=False,
-            )
+        delta = releases_between(releases, newer_than=current.version, up_to=latest.tag.lstrip("v"))
+        changelog = [
+            ChangelogEntry(version=r.tag.lstrip("v"), date=None, changes=[], breaking_changes=[],
+                           is_prerelease=r.prerelease, body_markdown=r.body_markdown)
+            for r in delta
         ]
+        return True, latest_info, changelog
 
     async def get_release_notes(self) -> ReleaseNotesResponse:
-        """Get release notes by comparing current tag with the previous tag."""
-        # Get all tags sorted by semver
-        success, tags_output, _ = self._run_git("tag", "-l", "--sort=-version:refname")
-        if not success or not tags_output:
-            return ReleaseNotesResponse(version="unknown", categories=[])
-
-        tags = [t.strip() for t in tags_output.split("\n") if t.strip()]
-        if not tags:
-            return ReleaseNotesResponse(version="unknown", categories=[])
-
-        # Sort tags by semver properly
-        sorted_tags = sorted(tags, key=lambda t: parse_version(t), reverse=True)
-
-        # Get current version info
         current = await self.get_current_version()
-        current_version = parse_version(current.version)
-
-        # Find current tag and the one before it
-        current_tag: Optional[str] = None
-        previous_tag: Optional[str] = None
-
-        for i, tag in enumerate(sorted_tags):
-            if parse_version(tag) <= current_version:
-                current_tag = tag
-                if i + 1 < len(sorted_tags):
-                    previous_tag = sorted_tags[i + 1]
-                break
-
-        if not current_tag:
-            return ReleaseNotesResponse(version=current.version, categories=[])
-
-        # Get tag date
-        success, date_str, _ = self._run_git("log", "-1", "--format=%cI", current_tag)
-        tag_date = datetime.fromisoformat(date_str) if success and date_str else None
-
-        if not previous_tag:
-            # No previous tag — list all commits up to current tag
-            success, log_output, _ = self._run_git(
-                "log", current_tag, "--pretty=format:%s", "--no-merges"
-            )
-        else:
-            success, log_output, _ = self._run_git(
-                "log", f"{previous_tag}..{current_tag}",
-                "--pretty=format:%s", "--no-merges"
-            )
-
-        if not success or not log_output:
+        try:
+            releases = await self._gh.list_releases()
+            slice_, since = notes_since_last_stable(releases, current.version)
             return ReleaseNotesResponse(
-                version=current.version,
-                previous_version=previous_tag.lstrip("v") if previous_tag else None,
-                date=tag_date,
-                categories=[],
+                current_version=current.version,
+                since_version=since.lstrip("v") if since else None,
+                source="github",
+                releases=[self._to_item(r) for r in slice_],
             )
-
-        messages = [line.strip() for line in log_output.split("\n") if line.strip()]
-        categories = _parse_conventional_commits(messages)
-
-        return ReleaseNotesResponse(
-            version=current.version,
-            previous_version=previous_tag.lstrip("v") if previous_tag else None,
-            date=tag_date,
-            categories=categories,
-        )
+        except GitHubUnavailable:
+            items, since = notes_since_last_stable_from_changelog(self._changelog_path(), current.version)
+            return ReleaseNotesResponse(
+                current_version=current.version,
+                since_version=since.lstrip("v") if since else None,
+                source="changelog",
+                releases=items,
+            )
 
     async def fetch_updates(self, callback: Optional[ProgressCallback] = None) -> bool:
         if callback:
@@ -565,128 +491,17 @@ class ProdUpdateBackend(UpdateBackend):
             diff=diff_text,
         )
 
-    async def check_dev_branch(self) -> tuple[bool, Optional[VersionInfo], Optional[int], list[CommitInfo]]:
-        """Check if origin/development has unreleased commits ahead of latest tag."""
-        empty: list[CommitInfo] = []
-
-        # Fetch all refs including tags
-        success, _, err = self._run_git("fetch", "--all", "--tags", "--prune")
-        if not success:
-            logger.warning(f"Failed to fetch for dev branch check: {err}")
-            return False, None, None, empty
-
-        # Get latest tag by semver
-        success, tags_output, _ = self._run_git("tag", "-l", "--sort=-version:refname")
-        if not success or not tags_output.strip():
-            return False, None, None, empty
-
-        tags = [t.strip() for t in tags_output.split("\n") if t.strip()]
-        if not tags:
-            return False, None, None, empty
-        latest_tag = tags[0]
-
-        # Check if origin/development exists
-        success, _, _ = self._run_git("rev-parse", "--verify", "origin/development")
-        if not success:
-            return False, None, None, empty
-
-        # Count commits ahead
-        success, count_str, _ = self._run_git(
-            "rev-list", "--count", f"{latest_tag}..origin/development"
-        )
-        if not success or not count_str.strip():
-            return False, None, None, empty
-
-        commits_ahead = int(count_str.strip())
-        if commits_ahead <= 0:
-            return False, None, None, empty
-
-        # Get tip commit info
-        success, tip_output, _ = self._run_git(
-            "log", "-1", "--format=%H|%h|%aI", "origin/development"
-        )
-        if not success or not tip_output.strip():
-            return False, None, None, empty
-
-        parts = tip_output.split("|", 2)
-        if len(parts) < 3:
-            return False, None, None, empty
-
-        full_hash, short_hash, date_str = parts
-        tip_date = datetime.fromisoformat(date_str) if date_str else None
-
-        # Format version as X.Y.Z+dev.N
-        base_version = latest_tag.lstrip("v")
-        dev_version_str = f"{base_version}+dev.{commits_ahead}"
-
-        dev_info = VersionInfo(
-            version=dev_version_str,
-            commit=full_hash,
-            commit_short=short_hash,
-            tag=None,
-            date=tip_date,
-        )
-
-        # Fetch commit messages (max 50)
-        commit_list: list[CommitInfo] = []
-        success, log_output, _ = self._run_git(
-            "log", "--format=%H|%h|%s|%aI|%an",
-            f"{latest_tag}..origin/development", "--no-merges", "-50"
-        )
-        if success and log_output.strip():
-            for line in log_output.strip().split("\n"):
-                line = line.strip()
-                if not line:
-                    continue
-                log_parts = line.split("|", 4)
-                if len(log_parts) < 5:
-                    continue
-                c_hash, c_short, c_msg, c_date, c_author = log_parts
-                # Parse conventional commit type/scope
-                c_type, c_scope = None, None
-                if ":" in c_msg:
-                    prefix = c_msg.split(":", 1)[0]
-                    if "(" in prefix and prefix.endswith(")"):
-                        c_type = prefix.split("(")[0]
-                        c_scope = prefix.split("(")[1].rstrip(")")
-                    elif prefix.isalpha() or prefix.replace("!", "").isalpha():
-                        c_type = prefix.rstrip("!")
-                commit_list.append(CommitInfo(
-                    hash=c_hash, hash_short=c_short, message=c_msg,
-                    date=c_date, author=c_author, type=c_type, scope=c_scope,
-                ))
-
-        return True, dev_info, commits_ahead, commit_list
-
     async def get_all_releases(self) -> ReleaseListResponse:
-        """Get list of all releases from git tags."""
-        # Get all tags sorted by semver (newest first)
-        success, tags_output, _ = self._run_git("tag", "-l", "--sort=-version:refname")
-        if not success or not tags_output.strip():
+        try:
+            releases = await self._gh.list_releases()
+        except GitHubUnavailable:
             return ReleaseListResponse(releases=[], total=0)
-
-        tags = [t.strip() for t in tags_output.strip().split("\n") if t.strip()]
-
-        releases: list[ReleaseInfo] = []
-        for tag in tags:
-            # Get commit for this tag
-            ok, commit, _ = self._run_git("rev-parse", "--short=7", tag)
-            commit_short = commit if ok else "unknown"
-
-            # Get tag date
-            ok, date_str, _ = self._run_git("log", "-1", "--format=%aI", tag)
-            tag_date = date_str if ok and date_str else None
-
-            # Parse version to check for prerelease
-            version = tag.lstrip("v")
-            is_prerelease = bool(parse_version(tag)[3])  # tuple[3] is prerelease suffix
-
-            releases.append(ReleaseInfo(
-                tag=tag,
-                version=version,
-                date=tag_date,
-                is_prerelease=is_prerelease,
-                commit_short=commit_short,
-            ))
-
-        return ReleaseListResponse(releases=releases, total=len(releases))
+        infos = [
+            ReleaseInfo(
+                tag=r.tag, version=r.tag.lstrip("v"), date=r.published_at,
+                is_prerelease=r.prerelease, commit_short=None,
+                name=r.name, html_url=r.url, body_markdown=r.body_markdown,
+            )
+            for r in releases
+        ]
+        return ReleaseListResponse(releases=infos, total=len(infos))

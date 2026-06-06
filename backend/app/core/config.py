@@ -34,6 +34,17 @@ class Settings(BaseSettings):
         ),
     )
 
+    update_github_repo: str = Field(
+        default="Xveyn/BaluHost",
+        validation_alias="BALUHOST_UPDATE_GITHUB_REPO",
+        description="owner/repo used to read GitHub Releases for the update page.",
+    )
+    update_changelog_path: str = Field(
+        default="CHANGELOG.md",
+        validation_alias="BALUHOST_UPDATE_CHANGELOG_PATH",
+        description="Path (repo-root-relative or absolute) to the bundled CHANGELOG.md fallback.",
+    )
+
     api_prefix: str = "/api"
     api_version: str = "1"  # Current API version
     api_min_version: str = "1"  # Minimum supported API version

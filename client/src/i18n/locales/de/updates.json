@@ -48,7 +48,9 @@
   "releaseNotes": {
     "title": "Versionshinweise",
     "since": "Änderungen seit v{{version}}",
-    "empty": "Keine Versionshinweise verfügbar"
+    "empty": "Keine Versionshinweise verfügbar",
+    "fromChangelog": "aus CHANGELOG (offline)",
+    "viewOnGitHub": "Auf GitHub ansehen"
   },
   "history": {
     "title": "Update-Verlauf",

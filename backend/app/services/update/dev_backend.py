@@ -8,7 +8,6 @@ from app.schemas.update import (
     VersionInfo,
     ChangelogEntry,
     ReleaseNotesResponse,
-    ReleaseNoteCategory,
     CommitInfo,
     VersionGroup,
     CommitHistoryResponse,
@@ -101,35 +100,18 @@ class DevUpdateBackend(UpdateBackend):
         ), changelog
 
     async def get_release_notes(self) -> ReleaseNotesResponse:
-        """Return mock release notes for dev mode."""
+        from app.schemas.update import ReleaseNoteItem
         return ReleaseNotesResponse(
-            version=version_to_string(self._simulated_version),
-            previous_version=version_to_string((self._simulated_version[0], self._simulated_version[1] - 1, 0, "")) if self._simulated_version[1] > 0 else "0.0.0",
-            date=datetime.now(timezone.utc),
-            categories=[
-                ReleaseNoteCategory(
-                    name="Features",
-                    icon="sparkles",
-                    changes=[
-                        "Add SSD cache management with bcache support",
-                        "Add SMB and WebDAV service discovery",
-                        "Add WSDD deployment script for Windows network discovery",
-                    ],
-                ),
-                ReleaseNoteCategory(
-                    name="Bug Fixes",
-                    icon="bug",
-                    changes=[
-                        "Skip create_all for PostgreSQL (managed by Alembic)",
-                        "Fix storage aggregation for RAID fallback path",
-                    ],
-                ),
-                ReleaseNoteCategory(
-                    name="Performance",
-                    icon="zap",
-                    changes=[
-                        "Optimize Samba config for small-file transfers",
-                    ],
+            current_version=version_to_string(self._simulated_version),
+            since_version="0.9.0",
+            source="github",
+            releases=[
+                ReleaseNoteItem(
+                    version=version_to_string(self._simulated_version),
+                    date=datetime.now(timezone.utc),
+                    is_prerelease=False,
+                    url="https://github.com/Xveyn/BaluHost/releases",
+                    body_markdown="### Added\n- SSD cache management\n- SMB/WebDAV discovery\n\n### Fixed\n- Storage aggregation",
                 ),
             ],
         )
@@ -210,29 +192,6 @@ class DevUpdateBackend(UpdateBackend):
     async def health_check(self) -> tuple[bool, list[str]]:
         """Simulate health check."""
         return True, []
-
-    async def check_dev_branch(self) -> tuple[bool, Optional[VersionInfo], Optional[int], list[CommitInfo]]:
-        """Return mock dev branch info for dev mode."""
-        base_version = version_to_string(self._simulated_version)
-        commits_ahead = 5
-        dev_version_str = f"{base_version}+dev.{commits_ahead}"
-        now = datetime.now(timezone.utc).isoformat()
-
-        dev_info = VersionInfo(
-            version=dev_version_str,
-            commit="dev9876543210abcdef9876543210abcdef98",
-            commit_short="dev9876",
-            tag=None,
-            date=datetime.now(timezone.utc),
-        )
-        dev_commits = [
-            CommitInfo(hash="aaa1111111111111111111111111111111111111", hash_short="aaa1111", message="feat(updates): add dev branch indicator", date=now, author="Dev User", type="feat", scope="updates"),
-            CommitInfo(hash="bbb2222222222222222222222222222222222222", hash_short="bbb2222", message="fix: use available memory instead of free", date=now, author="Dev User", type="fix", scope=None),
-            CommitInfo(hash="ccc3333333333333333333333333333333333333", hash_short="ccc3333", message="chore: add pytest-cov for coverage reporting", date=now, author="Dev User", type="chore", scope=None),
-            CommitInfo(hash="ddd4444444444444444444444444444444444444", hash_short="ddd4444", message="feat: add upload queue endpoint for mobile", date=now, author="Dev User", type="feat", scope=None),
-            CommitInfo(hash="eee5555555555555555555555555555555555555", hash_short="eee5555", message="fix(ci): add git identity for auto-tag", date=now, author="Dev User", type="fix", scope="ci"),
-        ]
-        return True, dev_info, commits_ahead, dev_commits
 
     async def get_commit_history(self) -> CommitHistoryResponse:
         """Return mock commit history for dev mode."""

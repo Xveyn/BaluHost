@@ -48,7 +48,9 @@
   "releaseNotes": {
     "title": "Release Notes",
     "since": "Changes since v{{version}}",
-    "empty": "No release notes available"
+    "empty": "No release notes available",
+    "fromChangelog": "from CHANGELOG (offline)",
+    "viewOnGitHub": "View on GitHub"
   },
   "history": {
     "title": "Update History",

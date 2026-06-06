@@ -38,6 +38,7 @@ export interface ChangelogEntry {
   changes: string[];
   breaking_changes: string[];
   is_prerelease: boolean;
+  body_markdown?: string | null;
 }
 
 // Check response
@@ -50,20 +51,11 @@ export interface UpdateCheckResponse {
   last_checked: string | null;
   blockers: string[];
   can_update: boolean;
-  dev_version_available: boolean;
-  dev_version: VersionInfo | null;
-  dev_commits_ahead: number | null;
-  dev_commits: CommitInfo[];
 }
 
 // Start request/response
 export interface UpdateStartRequest {
   target_version?: string | null;
-  skip_backup?: boolean;
-  force?: boolean;
-}
-
-export interface DevUpdateStartRequest {
   skip_backup?: boolean;
   force?: boolean;
 }
@@ -163,17 +155,19 @@ export interface UpdateConfigUpdate {
 }
 
 // Release notes
-export interface ReleaseNoteCategory {
-  name: string;
-  icon: string;
-  changes: string[];
+export interface ReleaseNoteItem {
+  version: string;
+  date: string | null;
+  is_prerelease: boolean;
+  url: string | null;
+  body_markdown: string;
 }
 
 export interface ReleaseNotesResponse {
-  version: string;
-  previous_version: string | null;
-  date: string | null;
-  categories: ReleaseNoteCategory[];
+  current_version: string;
+  since_version: string | null;
+  source: 'github' | 'changelog';
+  releases: ReleaseNoteItem[];
 }
 
 // Commit history types (Versions tab)
@@ -224,7 +218,10 @@ export interface ReleaseInfo {
   version: string;
   date: string | null;
   is_prerelease: boolean;
-  commit_short: string;
+  commit_short: string | null;
+  name: string | null;
+  html_url: string | null;
+  body_markdown: string | null;
 }
 
 export interface ReleaseListResponse {
@@ -283,14 +280,6 @@ export async function checkForUpdates(): Promise<UpdateCheckResponse> {
  */
 export async function startUpdate(request?: UpdateStartRequest): Promise<UpdateStartResponse> {
   const response = await apiClient.post<UpdateStartResponse>('/api/updates/start', request ?? {});
-  return response.data;
-}
-
-/**
- * Start a development branch update
- */
-export async function startDevUpdate(request?: DevUpdateStartRequest): Promise<UpdateStartResponse> {
-  const response = await apiClient.post<UpdateStartResponse>('/api/updates/start-dev', request ?? {});
   return response.data;
 }
 

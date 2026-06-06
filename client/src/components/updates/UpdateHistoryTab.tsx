@@ -48,7 +48,16 @@ export default function UpdateHistoryTab({
               >
                 <div className="flex items-center gap-3">
                   <span className="font-mono text-white">{release.tag}</span>
-                  <span className="font-mono text-xs text-slate-500">{release.commit_short}</span>
+                  {release.html_url && (
+                    <a
+                      href={release.html_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-blue-400 hover:underline"
+                    >
+                      {t('releaseNotes.viewOnGitHub')}
+                    </a>
+                  )}
                 </div>
                 <div className="flex items-center gap-3">
                   {release.date && (

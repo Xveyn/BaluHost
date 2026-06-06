@@ -26,7 +26,6 @@ import {
 import {
   checkForUpdates,
   startUpdate,
-  startDevUpdate,
   getUpdateProgress,
   getCurrentUpdate,
   rollbackUpdate,
@@ -88,8 +87,6 @@ export default function UpdatePage() {
 
   // Confirmation states
   const [showUpdateConfirm, setShowUpdateConfirm] = useState(false);
-  const [showDevUpdateConfirm, setShowDevUpdateConfirm] = useState(false);
-  const [devUpdateLoading, setDevUpdateLoading] = useState(false);
   const [showRollbackConfirm, setShowRollbackConfirm] = useState(false);
   const [rollbackTarget, setRollbackTarget] = useState<number | null>(null);
 
@@ -232,32 +229,6 @@ export default function UpdatePage() {
     }
   };
 
-  // Start dev update
-  const handleStartDevUpdate = async () => {
-    setDevUpdateLoading(true);
-    setShowDevUpdateConfirm(false);
-    try {
-      const result = await startDevUpdate();
-      if (result.success && result.update_id) {
-        toast.success(t('toast.devUpdateStarted'));
-        const progress = await getUpdateProgress(result.update_id);
-        setCurrentUpdate(progress);
-      } else {
-        toast.error(result.message);
-      }
-    } catch (err: unknown) {
-      const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
-      if (typeof detail === 'object' && detail !== null && 'blockers' in detail) {
-        const blockers = (detail as { blockers: string[] }).blockers;
-        toast.error(t('blockers.updateBlocked', { blockers: blockers.join(', ') }));
-      } else {
-        handleApiError(err, t('toast.updateFailed'));
-      }
-    } finally {
-      setDevUpdateLoading(false);
-    }
-  };
-
   // Rollback
   const handleRollback = async (updateId?: number) => {
     setRollbackLoading(true);
@@ -375,14 +346,10 @@ export default function UpdatePage() {
           updateLoading={updateLoading}
           rollbackLoading={rollbackLoading}
           cancelLoading={cancelLoading}
-          devUpdateLoading={devUpdateLoading}
           showUpdateConfirm={showUpdateConfirm}
-          showDevUpdateConfirm={showDevUpdateConfirm}
           onSetShowUpdateConfirm={setShowUpdateConfirm}
-          onSetShowDevUpdateConfirm={setShowDevUpdateConfirm}
           onSetShowRollbackConfirm={setShowRollbackConfirm}
           onStartUpdate={handleStartUpdate}
-          onStartDevUpdate={handleStartDevUpdate}
           onCancel={handleCancel}
         />
       )}
