@@ -374,6 +374,7 @@
     "pinLabel": "PIN (4–8 Ziffern)",
     "confirmLabel": "PIN bestätigen",
     "codeLabel": "2FA-Code",
+    "codeHint": "Gib zum Bestätigen deinen aktuellen 2FA-Code (oder einen Backup-Code) ein.",
     "save": "PIN speichern",
     "remove": "PIN entfernen",
     "mismatch": "Die PINs stimmen nicht überein.",

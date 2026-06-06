@@ -83,18 +83,28 @@ export function DesktopPinSettings({ twoFactorEnabled }: Props) {
             </>
           )}
 
-          <input type="text" inputMode="numeric" placeholder={t('pin.codeLabel')}
+          {/* Accept a 6-digit TOTP OR an 8-char backup code (uppercase hex). */}
+          <input type="text" inputMode="text" placeholder={t('pin.codeLabel')}
             className="input" value={code}
-            onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 8))}
+            onChange={(e) => setCode(e.target.value.replace(/[^0-9a-zA-Z]/g, '').toUpperCase().slice(0, 8))}
             autoComplete="one-time-code" />
+          <p className="text-xs text-slate-400">{t('pin.codeHint')}</p>
 
           <div className="flex gap-2">
             {!enabled ? (
-              <button className="btn btn-primary" disabled={busy || pin.length < 4 || code.length < 6} onClick={onSave}>
+              <button
+                className="btn btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={busy || pin.length < 4 || code.length < 6}
+                onClick={onSave}
+              >
                 {t('pin.save')}
               </button>
             ) : (
-              <button className="btn btn-danger" disabled={busy || code.length < 6} onClick={onRemove}>
+              <button
+                className="btn border border-rose-500/40 bg-rose-500/10 text-rose-300 hover:border-rose-400/60 hover:bg-rose-500/20 hover:text-rose-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-rose-500/10"
+                disabled={busy || code.length < 6}
+                onClick={onRemove}
+              >
                 {t('pin.remove')}
               </button>
             )}
