@@ -677,12 +677,18 @@ Delete:
 
 - [ ] **Step 3: Update `on_mount` guard**
 
-Replace:
+The full `if not self.token:` block is 9 lines (it disables the buttons and returns). Replace the WHOLE block — only the first line changes (`self.token` → `self.app.token`); keep the button-disable loop and `return` exactly. Replace:
 ```python
         if not self.token:
             self.query_one("#power-status", Static).update(
                 "[red]No API token — admin actions disabled. Login with backend online.[/red]"
             )
+            for btn_id in ("btn-soft", "btn-wake", "btn-suspend", "btn-wol"):
+                try:
+                    self.query_one(f"#{btn_id}", Button).disabled = True
+                except Exception:
+                    pass
+            return
 ```
 with:
 ```python
@@ -690,6 +696,12 @@ with:
             self.query_one("#power-status", Static).update(
                 "[red]No API token — admin actions disabled. Login with backend online.[/red]"
             )
+            for btn_id in ("btn-soft", "btn-wake", "btn-suspend", "btn-wol"):
+                try:
+                    self.query_one(f"#{btn_id}", Button).disabled = True
+                except Exception:
+                    pass
+            return
 ```
 
 - [ ] **Step 4: Update `refresh_status`**
