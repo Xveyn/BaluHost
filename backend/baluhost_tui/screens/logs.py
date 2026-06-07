@@ -1,21 +1,14 @@
-"""Audit Log Viewer screen for BaluHost TUI."""
-import sys
-from pathlib import Path
-from datetime import datetime
-
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+"""Audit Log Viewer screen for BaluHost TUI (over the BackendClient)."""
+from __future__ import annotations
 
 from textual.app import ComposeResult
 from textual.screen import Screen, ModalScreen
-from textual.containers import Container, Vertical, Horizontal, VerticalScroll
+from textual.containers import Container, Horizontal, VerticalScroll
 from textual.widgets import Header, Footer, Static, Label, DataTable, Button, Input
 from textual.binding import Binding
 from rich.text import Text
-from rich.json import JSON
 
-from app.services.audit.logger_db import get_audit_logger_db
-from app.models.audit_log import AuditLog
-from app.core.database import SessionLocal
+from baluhost_tui.api import logging as logging_api
 
 
 class LogDetailDialog(ModalScreen):
@@ -233,7 +226,8 @@ class AuditLogViewerScreen(Screen):
     
     def __init__(self):
         super().__init__()
-        self.search_filters = {}
+        self.search_filters: dict = {}
+        self._logs_by_id: dict[int, dict] = {}
     
     def compose(self) -> ComposeResult:
         """Compose the log viewer layout."""
@@ -254,74 +248,62 @@ class AuditLogViewerScreen(Screen):
         self.set_interval(5.0, self.load_logs)
     
     def load_logs(self, limit: int = 100) -> None:
-        """Load audit logs from database."""
+        """Load audit logs from the backend API (server-side user/action filters,
+        client-side free-text search)."""
         try:
             table = self.query_one("#logs-table", DataTable)
             table.clear()
-            
-            db = SessionLocal()
-            try:
-                # Build query
-                query = db.query(AuditLog).order_by(AuditLog.timestamp.desc())
-                
-                # Apply filters
-                if self.search_filters.get('user'):
-                    query = query.filter(AuditLog.user.contains(self.search_filters['user']))
-                
-                if self.search_filters.get('action'):
-                    query = query.filter(AuditLog.action.contains(self.search_filters['action']))
-                
-                if self.search_filters.get('search'):
-                    search_term = self.search_filters['search']
-                    query = query.filter(
-                        (AuditLog.action.contains(search_term)) |
-                        (AuditLog.resource.contains(search_term)) |
-                        (AuditLog.user.contains(search_term))
-                    )
-                
-                logs = query.limit(limit).all()
-                
-                for log in logs:
-                    # Success status with color
-                    status_color = "green" if log.success else "red"
-                    status_text = Text("✓", style=status_color) if log.success else Text("✗", style=status_color)
-                    
-                    # User with color (system in gray)
-                    user = log.user or "system"
-                    user_color = "dim" if user == "system" else "white"
-                    user_text = Text(user, style=user_color)
-                    
-                    # Timestamp formatting
-                    time_str = log.timestamp.strftime("%H:%M:%S") if log.timestamp else "N/A"
-                    
-                    table.add_row(
-                        str(log.id),
-                        time_str,
-                        user_text,
-                        log.action[:30],  # Truncate long actions
-                        log.resource[:20] if log.resource else "",
-                        status_text,
-                        log.ip_address[:15] if log.ip_address else "",
-                        key=str(log.id)
-                    )
-                
-                # Update filter info
-                if self.search_filters:
-                    filter_parts = []
-                    if self.search_filters.get('search'):
-                        filter_parts.append(f"Search: {self.search_filters['search']}")
-                    if self.search_filters.get('user'):
-                        filter_parts.append(f"User: {self.search_filters['user']}")
-                    if self.search_filters.get('action'):
-                        filter_parts.append(f"Action: {self.search_filters['action']}")
-                    
-                    filter_text = " | ".join(filter_parts)
-                    self.query_one("#filter-info", Label).update(f"[yellow]Filters active:[/yellow] {filter_text}")
-                else:
-                    self.query_one("#filter-info", Label).update("[dim]No filters active[/dim]")
-                
-            finally:
-                db.close()
+
+            logs = logging_api.query_audit(
+                self.app.client,
+                limit=limit,
+                user=self.search_filters.get("user"),
+                action=self.search_filters.get("action"),
+                days=365,
+            )
+            logs = logging_api.filter_logs(logs, self.search_filters.get("search", ""))
+
+            self._logs_by_id = {}
+            for log in logs:
+                log_id = log.get("id")
+                if log_id is not None:
+                    self._logs_by_id[int(log_id)] = log
+
+                success = bool(log.get("success"))
+                status_color = "green" if success else "red"
+                status_text = Text("✓", style=status_color) if success else Text("✗", style=status_color)
+
+                user = log.get("user") or "system"
+                user_color = "dim" if user == "system" else "white"
+                user_text = Text(user, style=user_color)
+
+                ts = str(log.get("timestamp", ""))
+                time_str = ts[11:19] if len(ts) >= 19 else ts
+
+                table.add_row(
+                    str(log.get("id", "")),
+                    time_str,
+                    user_text,
+                    str(log.get("action", ""))[:30],
+                    (str(log.get("resource") or ""))[:20],
+                    status_text,
+                    (str(log.get("ip_address") or ""))[:15],
+                    key=str(log.get("id", "")),
+                )
+
+            if self.search_filters:
+                filter_parts = []
+                if self.search_filters.get("search"):
+                    filter_parts.append(f"Search: {self.search_filters['search']}")
+                if self.search_filters.get("user"):
+                    filter_parts.append(f"User: {self.search_filters['user']}")
+                if self.search_filters.get("action"):
+                    filter_parts.append(f"Action: {self.search_filters['action']}")
+                self.query_one("#filter-info", Label).update(
+                    f"[yellow]Filters active:[/yellow] {' | '.join(filter_parts)}"
+                )
+            else:
+                self.query_one("#filter-info", Label).update("[dim]No filters active[/dim]")
         except Exception as e:
             self.notify(f"Error loading logs: {str(e)}", severity="error")
     
@@ -355,37 +337,32 @@ class AuditLogViewerScreen(Screen):
         self.notify("Filters cleared", severity="information")
     
     def action_view_details(self) -> None:
-        """View details of selected log."""
+        """View details of the selected log (from the last loaded page)."""
         table = self.query_one("#logs-table", DataTable)
         if table.cursor_row is None or table.row_count == 0:
             self.notify("No log selected", severity="warning")
             return
-        
         try:
             row = table.get_row_at(table.cursor_row)
             log_id = int(row[0])
-            
-            db = SessionLocal()
-            try:
-                log = db.query(AuditLog).filter(AuditLog.id == log_id).first()
-                if not log:
-                    self.notify("Log not found", severity="error")
-                    return
-                
-                log_data = {
-                    "id": log.id,
-                    "timestamp": log.timestamp.strftime("%Y-%m-%d %H:%M:%S") if log.timestamp else "N/A",
-                    "user": log.user or "system",
-                    "action": log.action,
-                    "resource": log.resource or "N/A",
-                    "ip_address": log.ip_address or "N/A",
-                    "user_agent": log.user_agent or "N/A",
-                    "success": log.success,
-                    "details": log.details
-                }
-                
-                self.app.push_screen(LogDetailDialog(log_data))
-            finally:
-                db.close()
-        except Exception as e:
-            self.notify(f"Error: {str(e)}", severity="error")
+        except Exception:
+            self.notify("No log selected", severity="warning")
+            return
+
+        log = self._logs_by_id.get(log_id)
+        if not log:
+            self.notify("Log details unavailable — refresh and retry", severity="error")
+            return
+
+        log_data = {
+            "id": log.get("id"),
+            "timestamp": str(log.get("timestamp") or "N/A"),
+            "user": log.get("user") or "system",
+            "action": log.get("action") or "N/A",
+            "resource": log.get("resource") or "N/A",
+            "ip_address": log.get("ip_address") or "N/A",
+            "user_agent": log.get("user_agent") or "N/A",
+            "success": bool(log.get("success")),
+            "details": log.get("details"),
+        }
+        self.app.push_screen(LogDetailDialog(log_data))
