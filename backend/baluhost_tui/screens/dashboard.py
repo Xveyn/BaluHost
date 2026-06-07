@@ -1,82 +1,18 @@
-"""Dashboard screen with live system monitoring."""
-import sys
-from pathlib import Path
-from datetime import datetime
-
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+"""Dashboard screen with live system monitoring (over the BackendClient)."""
+from __future__ import annotations
 
 from textual.app import ComposeResult
 from textual.screen import Screen
 from textual.containers import Container, Horizontal, Vertical, Grid
-from textual.widgets import Header, Footer, Static, Label, ProgressBar, DataTable
+from textual.widgets import Header, Footer, Static, Label, ProgressBar
 from textual.reactive import reactive
-from rich.text import Text
 
-from app.services.telemetry import get_history, get_latest_cpu_usage, get_latest_memory_sample
-from app.services.hardware.raid import get_status as get_raid_status
-from app.services.users import list_users
-from app.services.audit.logger_db import get_audit_logger_db
-from app.core.config import settings
+from baluhost_tui.api import monitoring as monitoring_api
+from baluhost_tui.api import system as system_api
+from baluhost_tui.api import users as users_api
+from baluhost_tui.api import logging as logging_api
 from baluhost_tui.screens.users import UserManagementScreen
-
 from baluhost_tui.screens.logs import AuditLogViewerScreen
-
-
-def get_current_telemetry():
-    """Build current telemetry from latest samples."""
-    import psutil
-    
-    cpu_usage = get_latest_cpu_usage() or 0.0
-    memory_sample = get_latest_memory_sample()
-    
-    if memory_sample:
-        memory_used = memory_sample.used
-        memory_total = memory_sample.total
-    else:
-        mem = psutil.virtual_memory()
-        memory_used = mem.used
-        memory_total = mem.total
-    
-    # Storage info
-    try:
-        storage_path = settings.nas_storage_path
-        stat = psutil.disk_usage(storage_path)
-        storage_used = stat.used
-        storage_total = stat.total
-        storage_percent = stat.percent
-    except:
-        storage_used = 0
-        storage_total = 0
-        storage_percent = 0.0
-    
-    # Network - use history if available
-    history = get_history()
-    if history.network:
-        last_net = history.network[-1]
-        download_mbps = last_net.downloadMbps
-        upload_mbps = last_net.uploadMbps
-    else:
-        download_mbps = 0.0
-        upload_mbps = 0.0
-    
-    class TelemetrySnapshot:
-        def __init__(self):
-            self.system = type('SystemTelemetry', (), {
-                'cpu_usage': cpu_usage,
-                'memory_used': memory_used,
-                'memory_total': memory_total
-            })()
-            self.storage = type('StorageTelemetry', (), {
-                'used': storage_used,
-                'total': storage_total,
-                'percent': storage_percent
-            })()
-            self.network = type('NetworkTelemetry', (), {
-                'download_speed_mbps': download_mbps,
-                'upload_speed_mbps': upload_mbps
-            })()
-    
-    return TelemetrySnapshot()
 
 
 class SystemMetricsWidget(Static):
@@ -118,59 +54,44 @@ class SystemMetricsWidget(Static):
         self.set_interval(2.0, self.update_metrics)
     
     def update_metrics(self) -> None:
-        """Update system metrics from telemetry service."""
+        """Update system metrics from the backend API."""
+        client = self.app.client
+
+        cpu = monitoring_api.current_cpu(client)
+        mem = monitoring_api.current_memory(client)
+        net = monitoring_api.current_network(client)
+        stor = system_api.storage(client)
+
+        self.cpu_usage = float(cpu.get("usage_percent", 0.0)) if cpu else 0.0
+        self.memory_usage = float(mem.get("percent", 0.0)) if mem else 0.0
+        if stor and stor.get("total"):
+            self.storage_usage = round(stor["used"] / stor["total"] * 100, 1)
+        else:
+            self.storage_usage = 0.0
+        self.network_down = float(net.get("download_mbps", 0.0)) if net else 0.0
+        self.network_up = float(net.get("upload_mbps", 0.0)) if net else 0.0
+
         try:
-            telemetry = get_current_telemetry()
-            
-            self.cpu_usage = telemetry.system.cpu_usage
-            self.memory_usage = (telemetry.system.memory_used / telemetry.system.memory_total * 100) if telemetry.system.memory_total > 0 else 0
-            
-            # Storage from settings
-            if settings.nas_quota_bytes:
-                used_gb = telemetry.storage.used / (1024**3)
-                total_gb = settings.nas_quota_bytes / (1024**3)
-                self.storage_usage = (telemetry.storage.used / settings.nas_quota_bytes * 100) if settings.nas_quota_bytes > 0 else 0
-            else:
-                self.storage_usage = telemetry.storage.percent
-            
-            self.network_down = telemetry.network.download_speed_mbps
-            self.network_up = telemetry.network.upload_speed_mbps
-            
-            # Update progress bars - use try/except for each widget
-            try:
-                cpu_bar = self.query_one("#cpu-bar", ProgressBar)
-                cpu_bar.update(progress=self.cpu_usage)
-                self.query_one("#cpu-value", Label).update(f"{self.cpu_usage:.1f}%")
-            except Exception:
-                pass
-            
-            try:
-                memory_bar = self.query_one("#memory-bar", ProgressBar)
-                memory_bar.update(progress=self.memory_usage)
-                self.query_one("#memory-value", Label).update(f"{self.memory_usage:.1f}%")
-            except Exception:
-                pass
-            
-            try:
-                storage_bar = self.query_one("#storage-bar", ProgressBar)
-                storage_bar.update(progress=self.storage_usage)
-                self.query_one("#storage-value", Label).update(f"{self.storage_usage:.1f}%")
-            except Exception:
-                pass
-            
-            try:
-                self.query_one("#network-value", Label).update(
-                    f"↓ {self.network_down:.1f} Mbps  ↑ {self.network_up:.1f} Mbps"
-                )
-            except Exception:
-                pass
-        except Exception as e:
-            import traceback
-            error_msg = f"Metrics Error: {str(e)}"
-            try:
-                self.query_one("#cpu-value", Label).update(error_msg)
-            except:
-                pass
+            self.query_one("#cpu-bar", ProgressBar).update(progress=self.cpu_usage)
+            self.query_one("#cpu-value", Label).update(f"{self.cpu_usage:.1f}%")
+        except Exception:
+            pass
+        try:
+            self.query_one("#memory-bar", ProgressBar).update(progress=self.memory_usage)
+            self.query_one("#memory-value", Label).update(f"{self.memory_usage:.1f}%")
+        except Exception:
+            pass
+        try:
+            self.query_one("#storage-bar", ProgressBar).update(progress=self.storage_usage)
+            self.query_one("#storage-value", Label).update(f"{self.storage_usage:.1f}%")
+        except Exception:
+            pass
+        try:
+            self.query_one("#network-value", Label).update(
+                f"↓ {self.network_down:.1f} Mbps  ↑ {self.network_up:.1f} Mbps"
+            )
+        except Exception:
+            pass
 
 
 class RaidStatusWidget(Static):
@@ -188,36 +109,26 @@ class RaidStatusWidget(Static):
         self.set_interval(10.0, self.update_raid_status)
     
     def update_raid_status(self) -> None:
-        """Update RAID status from service."""
+        """Update RAID status from the backend API."""
         try:
-            # Check if we're in dev mode - skip mock data for TUI
-            from app.core.config import settings
-            if settings.is_dev_mode:
-                self.query_one("#raid-content", Static).update("[dim]RAID not available in TUI dev mode[/dim]")
-                return
-            
-            status = get_raid_status()
-            
-            if not status.arrays:
-                content = "[dim]No RAID arrays configured[/dim]"
+            arrays = system_api.raid_status(self.app.client)
+            if not arrays:
+                content = "[dim]No RAID arrays[/dim]"
             else:
                 lines = []
-                for array in status.arrays:
-                    # RaidArray has 'status' not 'state', and 'name' not 'device'
-                    status_lower = array.status.lower()
-                    state_color = "green" if status_lower == "active" else "yellow" if "degrad" in status_lower else "red"
-                    lines.append(f"[{state_color}]●[/{state_color}] {array.name}: {array.level} - {array.status}")
-                    # Devices is a list of RaidDevice objects with .name attribute
-                    device_names = [d.name for d in array.devices]
-                    lines.append(f"   Devices: {', '.join(device_names)}")
-                    if array.resync_progress is not None:
-                        lines.append(f"   Resync: {array.resync_progress:.1f}%")
+                for array in arrays:
+                    status = str(array.get("status", "?"))
+                    sl = status.lower()
+                    color = "green" if sl == "active" else "yellow" if "degrad" in sl else "red"
+                    lines.append(f"[{color}]●[/{color}] {array.get('name', '?')}: {array.get('level', '?')} - {status}")
+                    devices = ", ".join(d.get("name", "?") for d in array.get("devices", []))
+                    lines.append(f"   Devices: {devices}")
+                    if array.get("resync_progress") is not None:
+                        lines.append(f"   Resync: {float(array['resync_progress']):.1f}%")
                 content = "\n".join(lines)
-            
             self.query_one("#raid-content", Static).update(content)
         except Exception as e:
-            import traceback
-            self.query_one("#raid-content", Static).update(f"[red]Error: {str(e)}[/red]")
+            self.query_one("#raid-content", Static).update(f"[red]Error: {e}[/red]")
 
 
 class UsersWidget(Static):
@@ -235,27 +146,16 @@ class UsersWidget(Static):
         self.set_interval(30.0, self.update_users)
     
     def update_users(self) -> None:
-        """Update user statistics."""
+        """Update user statistics from the backend API."""
         try:
-            from app.core.database import SessionLocal
-            db = SessionLocal()
-            try:
-                users = list(list_users(db))
-                total = len(users)
-                active = sum(1 for u in users if u.is_active)
-                admins = sum(1 for u in users if u.role == "admin")
-                regular = sum(1 for u in users if u.role == "user")
-                
-                lines = [
-                    f"Total Users: {total}",
-                    f"Active: {active}",
-                    f"Admins: {admins}",
-                    f"Regular: {regular}"
-                ]
-                
-                self.query_one("#users-content", Static).update("\n".join(lines))
-            finally:
-                db.close()
+            data = users_api.list_users(self.app.client)
+            lines = [
+                f"Total Users: {data.get('total', 0)}",
+                f"Active: {data.get('active', 0)}",
+                f"Admins: {data.get('admins', 0)}",
+                f"Regular: {data.get('total', 0) - data.get('admins', 0)}",
+            ]
+            self.query_one("#users-content", Static).update("\n".join(lines))
         except Exception as e:
             self.query_one("#users-content", Static).update(f"[red]Error: {e}[/red]")
 
@@ -275,33 +175,24 @@ class AuditLogsWidget(Static):
         self.set_interval(5.0, self.update_logs)
     
     def update_logs(self) -> None:
-        """Update recent audit logs."""
+        """Update recent audit logs from the backend API."""
         try:
-            from app.core.database import SessionLocal
-            db = SessionLocal()
-            try:
-                audit_logger = get_audit_logger_db()
-                from app.models.audit_log import AuditLog
-                
-                # Get last 5 logs
-                logs = db.query(AuditLog).order_by(AuditLog.timestamp.desc()).limit(5).all()
-                
-                if not logs:
-                    content = "[dim]No recent activity[/dim]"
-                else:
-                    lines = []
-                    for log in logs:
-                        time_str = log.timestamp.strftime("%H:%M:%S")
-                        user_str = log.user or "system"
-                        action_str = log.action[:20]
-                        success_icon = "✓" if log.success else "✗"
-                        success_color = "green" if log.success else "red"
-                        lines.append(f"[{success_color}]{success_icon}[/{success_color}] {time_str} {user_str}: {action_str}")
-                    content = "\n".join(lines)
-                
-                self.query_one("#logs-content", Static).update(content)
-            finally:
-                db.close()
+            logs = logging_api.query_audit(self.app.client, limit=5)
+            if not logs:
+                content = "[dim]No recent activity[/dim]"
+            else:
+                lines = []
+                for log in logs[:5]:
+                    ts = str(log.get("timestamp", ""))
+                    time_str = ts[11:19] if len(ts) >= 19 else ts
+                    user_str = log.get("user") or "system"
+                    action_str = str(log.get("action", ""))[:20]
+                    ok = bool(log.get("success"))
+                    icon = "✓" if ok else "✗"
+                    color = "green" if ok else "red"
+                    lines.append(f"[{color}]{icon}[/{color}] {time_str} {user_str}: {action_str}")
+                content = "\n".join(lines)
+            self.query_one("#logs-content", Static).update(content)
         except Exception as e:
             self.query_one("#logs-content", Static).update(f"[red]Error: {e}[/red]")
 
