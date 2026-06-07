@@ -14,8 +14,6 @@ console = Console()
 
 
 @click.group()
-@click.option('--mode', type=click.Choice(['auto', 'local', 'remote']), default='auto',
-              help='(Legacy) connection mode for the status/users CLI commands')
 @click.option('--socket', 'socket_path', default=None,
               help='Unix socket path (prod local channel). Auto-detected when omitted.')
 @click.option('--server', default=None,
@@ -25,19 +23,18 @@ console = Console()
 @click.option('--debug/--no-debug', default=False,
               help='Enable debug logging')
 @click.pass_context
-def cli(ctx: click.Context, mode: str, socket_path: str | None, server: str | None, token: str | None, debug: bool):
+def cli(ctx: click.Context, socket_path: str | None, server: str | None, token: str | None, debug: bool):
     """BaluHost NAS Terminal Interface
     
     Manage your NAS server from the command line.
     
     Examples:
-        baluhost-tui                    # Launch interactive TUI
+        baluhost-tui                    # Launch interactive TUI (local channel)
         baluhost-tui dashboard          # Launch dashboard directly
-        baluhost-tui reset-password admin  # Emergency password reset
-        baluhost-tui --mode remote --server https://nas.local
+        baluhost-tui status             # Quick status (needs a token)
+        baluhost-tui --server http://127.0.0.1:8000
     """
     ctx.ensure_object(dict)
-    ctx.obj['mode'] = mode
     ctx.obj['socket_path'] = socket_path
     ctx.obj['server'] = server
     ctx.obj['token'] = token
@@ -63,52 +60,31 @@ def dashboard(ctx: click.Context):
 
 
 @cli.command()
-@click.argument('username')
-@click.option('--password', prompt=True, hide_input=True,
-              confirmation_prompt=True,
-              help='New password for user')
+@click.option('--token', 'token_opt', default=None, help='Auth token (overrides global)')
 @click.pass_context
-def reset_password(ctx: click.Context, username: str, password: str):
-    """Emergency password reset (requires local access)."""
-    from .commands.emergency import reset_user_password
-    
-    mode = ctx.obj['mode']
-    
-    if mode == 'remote':
-        console.print("[red]Error: Password reset requires local access[/red]")
-        console.print("Run this command on the server directly.")
-        sys.exit(1)
-    
-    try:
-        reset_user_password(username, password)
-        console.print(f"[green]✓[/green] Password reset successfully for user: {username}")
-    except Exception as e:
-        console.print(f"[red]Error:[/red] {e}")
-        sys.exit(1)
-
-
-@cli.command()
-@click.pass_context
-def status(ctx: click.Context):
-    """Quick system status check."""
+def status(ctx: click.Context, token_opt: str | None):
+    """Quick system status check (over the API)."""
     from .commands.status import show_status
-    
-    mode = ctx.obj['mode']
-    server = ctx.obj['server'] or 'http://localhost:8000'
+    from .client import BackendClient
+    from . import config
 
-    show_status(mode=mode, server=server)
+    tok = token_opt or ctx.obj.get('token') or os.environ.get('BALUHOST_TOKEN') or config.load_token()
+    client = BackendClient(socket_path=ctx.obj.get('socket_path'), server=ctx.obj.get('server'), token=tok)
+    show_status(client)
 
 
 @cli.command()
+@click.option('--token', 'token_opt', default=None, help='Auth token (overrides global)')
 @click.pass_context
-def users(ctx: click.Context):
-    """List all users."""
-    from .commands.users import list_users
-    
-    mode = ctx.obj['mode']
-    server = ctx.obj['server'] or 'http://localhost:8000'
+def users(ctx: click.Context, token_opt: str | None):
+    """List all users (over the API)."""
+    from .commands.users import render_users
+    from .client import BackendClient
+    from . import config
 
-    list_users(mode=mode, server=server)
+    tok = token_opt or ctx.obj.get('token') or os.environ.get('BALUHOST_TOKEN') or config.load_token()
+    client = BackendClient(socket_path=ctx.obj.get('socket_path'), server=ctx.obj.get('server'), token=tok)
+    render_users(client)
 
 
 @cli.command("files-download")
