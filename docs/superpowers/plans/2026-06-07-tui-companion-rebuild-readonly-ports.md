@@ -629,7 +629,7 @@ from __future__ import annotations
 from textual.app import ComposeResult
 from textual.screen import Screen
 from textual.containers import Container, Horizontal, Vertical, Grid
-from textual.widgets import Header, Footer, Static, Label, ProgressBar, DataTable
+from textual.widgets import Header, Footer, Static, Label, ProgressBar
 from textual.reactive import reactive
 
 from baluhost_tui.api import monitoring as monitoring_api
