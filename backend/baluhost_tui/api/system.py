@@ -58,3 +58,30 @@ def restart_app(client: _Client) -> tuple[bool, str]:
 def shutdown_app(client: _Client) -> tuple[bool, str]:
     """POST /api/system/shutdown — stop the backend app process."""
     return _post_action(client, "/api/system/shutdown")
+
+
+def storage(client: _Client) -> dict | None:
+    """GET /api/system/storage -> dict (total/used/available/use_percent) | None."""
+    try:
+        resp = client.get("/api/system/storage")
+        if resp.status_code != 200:
+            return None
+        data = resp.json()
+        return data if isinstance(data, dict) else None
+    except Exception:
+        return None
+
+
+def raid_status(client: _Client) -> list:
+    """GET /api/system/raid/status -> list of array dicts ([] on any failure)."""
+    try:
+        resp = client.get("/api/system/raid/status")
+        if resp.status_code != 200:
+            return []
+        data = resp.json()
+        if isinstance(data, dict):
+            arrays = data.get("arrays")
+            return arrays if isinstance(arrays, list) else []
+        return []
+    except Exception:
+        return []
