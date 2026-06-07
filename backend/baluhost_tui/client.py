@@ -93,7 +93,7 @@ class BackendClient:
     def close(self) -> None:
         self._client.close()
 
-    def __enter__(self) -> "BackendClient":
+    def __enter__(self) -> BackendClient:
         return self
 
     def __exit__(self, *exc: Any) -> None:

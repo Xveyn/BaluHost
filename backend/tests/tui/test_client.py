@@ -1,7 +1,14 @@
 """Tests for the TUI BackendClient and transport resolution."""
 from __future__ import annotations
 
-from baluhost_tui.client import resolve_transport, DEFAULT_SOCKET, DEFAULT_SERVER
+import httpx
+
+from baluhost_tui.client import (
+    BackendClient,
+    DEFAULT_SERVER,
+    DEFAULT_SOCKET,
+    resolve_transport,
+)
 
 
 def test_explicit_server_wins_over_socket():
@@ -46,10 +53,6 @@ def test_explicit_socket_path_used_even_if_missing():
     )
     assert mode == "uds"
     assert target == "/tmp/missing.sock"
-
-
-import httpx
-from baluhost_tui.client import BackendClient
 
 
 def _mock_backend_client(handler) -> BackendClient:
@@ -103,3 +106,46 @@ def test_post_sends_json_body():
     assert resp.json() == {"created": True}
     assert seen["method"] == "POST"
     assert b"1" in seen["content"]
+
+
+def test_clear_token_removes_authorization_header():
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["auth"] = request.headers.get("authorization")
+        return httpx.Response(200, json={})
+
+    client = _mock_backend_client(handler)
+    client.set_token("jwt-abc")
+    client.clear_token()
+    client.get("/api/system/channel-status")
+
+    assert seen["auth"] is None
+
+
+def test_put_passes_through_path():
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["method"] = request.method
+        seen["path"] = request.url.path
+        return httpx.Response(200, json={})
+
+    client = _mock_backend_client(handler)
+    client.put("/api/example/1")
+
+    assert seen == {"method": "PUT", "path": "/api/example/1"}
+
+
+def test_delete_passes_through_path():
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["method"] = request.method
+        seen["path"] = request.url.path
+        return httpx.Response(200, json={})
+
+    client = _mock_backend_client(handler)
+    client.delete("/api/example/1")
+
+    assert seen == {"method": "DELETE", "path": "/api/example/1"}
