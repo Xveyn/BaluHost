@@ -1,0 +1,56 @@
+"""System API wrappers: trust channel + app lifecycle (restart/shutdown).
+
+These cover the app-process restart/shutdown endpoints (admin-only, any
+channel). OS-level reboot/poweroff is an open item — no backend endpoint yet.
+"""
+from __future__ import annotations
+
+from typing import Any, Protocol
+
+
+class _Client(Protocol):
+    def get(self, path: str, **kwargs: Any) -> Any: ...
+    def post(self, path: str, **kwargs: Any) -> Any: ...
+
+
+def get_channel_status(client: _Client) -> str:
+    """GET /api/system/channel-status -> 'local' | 'remote'.
+
+    Fails safe to 'remote' on any error so the UI defaults to the
+    more-restricted view (destructive actions shown as unavailable).
+    """
+    try:
+        resp = client.get("/api/system/channel-status")
+        data = resp.json()
+        channel = data.get("channel") if isinstance(data, dict) else None
+        return channel if channel in ("local", "remote") else "remote"
+    except Exception:
+        return "remote"
+
+
+def _post_action(client: _Client, path: str) -> tuple[bool, str]:
+    try:
+        resp = client.post(path, json={})
+        if resp.status_code >= 400:
+            try:
+                detail = resp.json().get("detail", "")
+            except Exception:
+                detail = ""
+            return False, f"HTTP {resp.status_code}: {detail}".strip()
+        try:
+            message = resp.json().get("message", "ok")
+        except Exception:
+            message = "ok"
+        return True, message
+    except Exception as exc:
+        return False, f"request failed: {exc}"
+
+
+def restart_app(client: _Client) -> tuple[bool, str]:
+    """POST /api/system/restart — restart the backend app process."""
+    return _post_action(client, "/api/system/restart")
+
+
+def shutdown_app(client: _Client) -> tuple[bool, str]:
+    """POST /api/system/shutdown — stop the backend app process."""
+    return _post_action(client, "/api/system/shutdown")
