@@ -514,6 +514,30 @@ with:
     ctx.obj['debug'] = debug
 ```
 
+- [ ] **Step 1b: Update the `cli()` docstring examples (remove stale `reset-password` / `--mode`)**
+
+Replace:
+
+```python
+    Examples:
+        baluhost-tui                    # Launch interactive TUI
+        baluhost-tui dashboard          # Launch dashboard directly
+        baluhost-tui reset-password admin  # Emergency password reset
+        baluhost-tui --mode remote --server https://nas.local
+    """
+```
+
+with:
+
+```python
+    Examples:
+        baluhost-tui                    # Launch interactive TUI (local channel)
+        baluhost-tui dashboard          # Launch dashboard directly
+        baluhost-tui status             # Quick status (needs a token)
+        baluhost-tui --server http://127.0.0.1:8000
+    """
+```
+
 - [ ] **Step 2: Delete the `reset_password` command**
 
 Remove the entire command (the offline reset now lives in `backend/scripts/reset_password.py`):
@@ -652,10 +676,9 @@ Run: `git rm backend/baluhost_tui/context.py`
 Run: `cd backend ; python -c "import baluhost_tui.app, baluhost_tui.main, baluhost_tui.commands.status, baluhost_tui.commands.users, baluhost_tui.commands.files; print('OK')"`
 Expected: `OK`.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 4: Commit** (deletion already staged by Step 2's `git rm` — do NOT run `git rm` again)
 
 ```
-git rm backend/baluhost_tui/context.py
 git commit -m "refactor(tui): delete context.py (no importers after CLI port)"
 ```
 
