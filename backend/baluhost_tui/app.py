@@ -128,6 +128,9 @@ class BaluHostApp(App):
         if not self.current_user:
             self.notify("Please login first", severity="error")
             return
+        if (self.current_user or {}).get("role") != "admin":
+            self.notify("Admin role required", severity="error")
+            return
         self.push_screen(RaidControlScreen())
     
     def action_logs(self) -> None:
