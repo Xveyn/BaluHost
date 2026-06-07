@@ -14,28 +14,28 @@ console = Console()
 
 
 @click.group()
-@click.option('--mode', type=click.Choice(['auto', 'local', 'remote']), default='auto',
-              help='Connection mode: auto (detect), local (direct DB), remote (API)')
-@click.option('--server', default='http://localhost:8000',
-              help='Server URL for remote mode')
+@click.option('--socket', 'socket_path', default=None,
+              help='Unix socket path (prod local channel). Auto-detected when omitted.')
+@click.option('--server', default=None,
+              help='Server URL (dev TCP, e.g. http://127.0.0.1:8000). Auto-detected when omitted.')
 @click.option('--token', default=None,
-              help='Bearer token for remote API access')
+              help='Bearer token for API access')
 @click.option('--debug/--no-debug', default=False,
               help='Enable debug logging')
 @click.pass_context
-def cli(ctx: click.Context, mode: str, server: str, token: str | None, debug: bool):
+def cli(ctx: click.Context, socket_path: str | None, server: str | None, token: str | None, debug: bool):
     """BaluHost NAS Terminal Interface
     
     Manage your NAS server from the command line.
     
     Examples:
-        baluhost-tui                    # Launch interactive TUI
+        baluhost-tui                    # Launch interactive TUI (local channel)
         baluhost-tui dashboard          # Launch dashboard directly
-        baluhost-tui reset-password admin  # Emergency password reset
-        baluhost-tui --mode remote --server https://nas.local
+        baluhost-tui status             # Quick status (needs a token)
+        baluhost-tui --server http://127.0.0.1:8000
     """
     ctx.ensure_object(dict)
-    ctx.obj['mode'] = mode
+    ctx.obj['socket_path'] = socket_path
     ctx.obj['server'] = server
     ctx.obj['token'] = token
     ctx.obj['debug'] = debug
@@ -44,81 +44,47 @@ def cli(ctx: click.Context, mode: str, server: str, token: str | None, debug: bo
 @cli.command()
 @click.pass_context
 def dashboard(ctx: click.Context):
-    """Launch the interactive TUI dashboard."""
+    """Launch the interactive TUI (UDS in prod, TCP loopback in dev)."""
     from .app import BaluHostApp
-    
-    mode = ctx.obj['mode']
-    server = ctx.obj['server']
+    from .client import BackendClient
+
+    socket_path = ctx.obj.get('socket_path')
+    server = ctx.obj.get('server')
     token = ctx.obj.get('token') or os.environ.get('BALUHOST_TOKEN')
-    
-    console.print(f"[cyan]Starting BaluHost TUI[/cyan] (mode: {mode})")
-    
-    app = BaluHostApp(mode=mode, server=server, token=token)
+
+    client = BackendClient(socket_path=socket_path, server=server)
+    console.print("[cyan]Starting BaluHost TUI[/cyan] (local channel)")
+
+    app = BaluHostApp(client=client, token=token)
     app.run()
 
 
 @cli.command()
-@click.argument('username')
-@click.option('--password', prompt=True, hide_input=True,
-              confirmation_prompt=True,
-              help='New password for user')
+@click.option('--token', 'token_opt', default=None, help='Auth token (overrides global)')
 @click.pass_context
-def reset_password(ctx: click.Context, username: str, password: str):
-    """Emergency password reset (requires local access)."""
-    from .commands.emergency import reset_user_password
-    
-    mode = ctx.obj['mode']
-    
-    if mode == 'remote':
-        console.print("[red]Error: Password reset requires local access[/red]")
-        console.print("Run this command on the server directly.")
-        sys.exit(1)
-    
-    try:
-        reset_user_password(username, password)
-        console.print(f"[green]✓[/green] Password reset successfully for user: {username}")
-    except Exception as e:
-        console.print(f"[red]Error:[/red] {e}")
-        sys.exit(1)
-
-
-@cli.command()
-@click.pass_context
-def status(ctx: click.Context):
-    """Quick system status check."""
+def status(ctx: click.Context, token_opt: str | None):
+    """Quick system status check (over the API)."""
     from .commands.status import show_status
-    
-    mode = ctx.obj['mode']
-    server = ctx.obj['server']
-    
-    show_status(mode=mode, server=server)
+    from .client import BackendClient
+    from . import config
+
+    tok = token_opt or ctx.obj.get('token') or os.environ.get('BALUHOST_TOKEN') or config.load_token()
+    client = BackendClient(socket_path=ctx.obj.get('socket_path'), server=ctx.obj.get('server'), token=tok)
+    show_status(client)
 
 
 @cli.command()
+@click.option('--token', 'token_opt', default=None, help='Auth token (overrides global)')
 @click.pass_context
-def users(ctx: click.Context):
-    """List all users."""
-    from .commands.users import list_users
-    
-    mode = ctx.obj['mode']
-    server = ctx.obj['server']
-    
-    list_users(mode=mode, server=server)
+def users(ctx: click.Context, token_opt: str | None):
+    """List all users (over the API)."""
+    from .commands.users import render_users
+    from .client import BackendClient
+    from . import config
 
-
-@cli.command()
-@click.pass_context
-def files(ctx: click.Context):
-    """Open file browser TUI."""
-    from .app import BaluHostApp
-
-    mode = ctx.obj['mode']
-    server = ctx.obj['server']
-    token = ctx.obj.get('token') or os.environ.get('BALUHOST_TOKEN')
-
-    console.print(f"[cyan]Starting BaluHost TUI - Files[/cyan] (mode: {mode})")
-    app = BaluHostApp(mode=mode, server=server, token=token)
-    app.run()
+    tok = token_opt or ctx.obj.get('token') or os.environ.get('BALUHOST_TOKEN') or config.load_token()
+    client = BackendClient(socket_path=ctx.obj.get('socket_path'), server=ctx.obj.get('server'), token=tok)
+    render_users(client)
 
 
 @cli.command("files-download")

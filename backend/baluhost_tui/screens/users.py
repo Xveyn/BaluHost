@@ -1,23 +1,14 @@
-"""User Management screen for BaluHost TUI."""
-import sys
-from pathlib import Path
-from datetime import datetime
-
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+"""User Management screen for BaluHost TUI (over the BackendClient)."""
+from __future__ import annotations
 
 from textual.app import ComposeResult
 from textual.screen import Screen, ModalScreen
-from textual.containers import Container, Vertical, Horizontal, Grid
-from textual.widgets import Header, Footer, Static, Label, DataTable, Button, Input, Select
+from textual.containers import Container, Horizontal
+from textual.widgets import Header, Footer, Label, DataTable, Button, Input, Select
 from textual.binding import Binding
 from rich.text import Text
 
-from app.services.users import list_users, create_user, update_user, delete_user, get_user
-from app.core.database import SessionLocal
-from passlib.context import CryptContext
-
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+from baluhost_tui.api import users as users_api
 
 
 class CreateUserDialog(ModalScreen):
@@ -384,7 +375,11 @@ class DeleteConfirmDialog(ModalScreen):
 
 class UserManagementScreen(Screen):
     """User management screen with CRUD operations."""
-    
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._users_by_id: dict[int, dict] = {}
+
     CSS = """
     UserManagementScreen {
         background: $surface;
@@ -432,37 +427,41 @@ class UserManagementScreen(Screen):
         self.load_users()
     
     def load_users(self) -> None:
-        """Load users from database."""
+        """Load users from the backend API."""
         try:
             table = self.query_one("#users-table", DataTable)
             table.clear()
-            
-            db = SessionLocal()
-            try:
-                users = list(list_users(db))
-                
-                for user in users:
-                    status_color = "green" if user.is_active else "red"
-                    status_text = Text("✓", style=status_color) if user.is_active else Text("✗", style=status_color)
-                    
-                    role_color = "yellow" if user.role == "admin" else "white"
-                    role_text = Text(user.role, style=role_color)
-                    
-                    created_str = user.created_at.strftime("%Y-%m-%d") if user.created_at else "N/A"
-                    
-                    table.add_row(
-                        str(user.id),
-                        user.username,
-                        user.email or "",
-                        role_text,
-                        status_text,
-                        created_str,
-                        key=str(user.id)
-                    )
-                
-                self.notify(f"Loaded {len(users)} users", severity="information")
-            finally:
-                db.close()
+
+            data = users_api.list_users(self.app.client)
+            users = data.get("users", [])
+            self._users_by_id = {}
+            for user in users:
+                uid = user.get("id")
+                if uid is not None:
+                    self._users_by_id[int(uid)] = user
+
+                is_active = bool(user.get("is_active"))
+                status_color = "green" if is_active else "red"
+                status_text = Text("✓", style=status_color) if is_active else Text("✗", style=status_color)
+
+                role = user.get("role", "user")
+                role_color = "yellow" if role == "admin" else "white"
+                role_text = Text(str(role), style=role_color)
+
+                created = str(user.get("created_at") or "")
+                created_str = created[:10] if created else "N/A"
+
+                table.add_row(
+                    str(user.get("id", "")),
+                    user.get("username", ""),
+                    user.get("email") or "",
+                    role_text,
+                    status_text,
+                    created_str,
+                    key=str(user.get("id", "")),
+                )
+
+            self.notify(f"Loaded {len(users)} users", severity="information")
         except Exception as e:
             self.notify(f"Error loading users: {str(e)}", severity="error")
     
@@ -475,153 +474,110 @@ class UserManagementScreen(Screen):
         self.load_users()
     
     def action_new_user(self) -> None:
-        """Create new user."""
+        """Create a new user via the API."""
         def handle_result(data):
-            if data:
-                try:
-                    db = SessionLocal()
-                    try:
-                        # Hash password
-                        hashed_password = pwd_context.hash(data['password'])
-                        
-                        # Create user
-                        from app.schemas.user import UserCreate
-                        user_data = UserCreate(
-                            username=data['username'],
-                            email=data['email'] if data['email'] else None,
-                            password=data['password'],
-                            role=data['role']
-                        )
-                        
-                        new_user = create_user(user_data, db)
-                        self.notify(f"User '{new_user.username}' created successfully", severity="information")
-                        self.load_users()
-                    finally:
-                        db.close()
-                except Exception as e:
-                    self.notify(f"Error creating user: {str(e)}", severity="error")
-        
+            if not data:
+                return
+            ok, msg = users_api.create_user(
+                self.app.client,
+                username=data["username"],
+                password=data["password"],
+                email=data.get("email") or None,
+                role=data.get("role", "user"),
+            )
+            self.notify(msg, severity="information" if ok else "error")
+            if ok:
+                self.load_users()
+
         self.app.push_screen(CreateUserDialog(), handle_result)
     
     def action_edit_user(self) -> None:
-        """Edit selected user."""
+        """Edit the selected user via the API."""
         table = self.query_one("#users-table", DataTable)
         if table.cursor_row is None or table.row_count == 0:
             self.notify("No user selected", severity="warning")
             return
-        
-        try:
-            row = table.get_row_at(table.cursor_row)
-            row_key = row[0]
-        except Exception as e:
-            self.notify("No user selected", severity="warning")
-            return
-        
-        try:
-            db = SessionLocal()
-            try:
-                user = get_user(int(row_key), db)
-                if not user:
-                    self.notify("User not found", severity="error")
-                    return
-                
-                user_data = {
-                    "id": user.id,
-                    "username": user.username,
-                    "email": user.email or "",
-                    "role": user.role,
-                    "is_active": user.is_active
-                }
-                
-                def handle_result(data):
-                    if data:
-                        try:
-                            db = SessionLocal()
-                            try:
-                                from app.schemas.user import UserUpdate
-                                update_data = UserUpdate(
-                                    email=data['email'] if data['email'] else None,
-                                    role=data['role'],
-                                    is_active=data['is_active']
-                                )
-                                update_user(user.id, update_data, db)
-                                self.notify(f"User '{user.username}' updated successfully", severity="information")
-                                self.load_users()
-                            finally:
-                                db.close()
-                        except Exception as e:
-                            self.notify(f"Error updating user: {str(e)}", severity="error")
-                
-                self.app.push_screen(EditUserDialog(user_data), handle_result)
-            finally:
-                db.close()
-        except Exception as e:
-            self.notify(f"Error: {str(e)}", severity="error")
-    
-    def action_reset_password(self) -> None:
-        """Reset password for selected user."""
-        table = self.query_one("#users-table", DataTable)
-        if table.cursor_row is None or table.row_count == 0:
-            self.notify("No user selected", severity="warning")
-            return
-        
         try:
             row = table.get_row_at(table.cursor_row)
             user_id = int(row[0])
-            username = row[1]
-        except Exception as e:
+        except Exception:
             self.notify("No user selected", severity="warning")
             return
-        
+
+        user = self._users_by_id.get(user_id)
+        if not user:
+            self.notify("User not found — refresh and retry", severity="error")
+            return
+
+        user_data = {
+            "id": user.get("id"),
+            "username": user.get("username", ""),
+            "email": user.get("email") or "",
+            "role": user.get("role", "user"),
+            "is_active": bool(user.get("is_active")),
+        }
+
+        def handle_result(data):
+            if not data:
+                return
+            ok, msg = users_api.update_user(
+                self.app.client,
+                user_id,
+                email=data.get("email") or None,
+                role=data.get("role"),
+                is_active=data.get("is_active"),
+            )
+            self.notify(msg, severity="information" if ok else "error")
+            if ok:
+                self.load_users()
+
+        self.app.push_screen(EditUserDialog(user_data), handle_result)
+    
+    def action_reset_password(self) -> None:
+        """Reset the selected user's password via the API."""
+        table = self.query_one("#users-table", DataTable)
+        if table.cursor_row is None or table.row_count == 0:
+            self.notify("No user selected", severity="warning")
+            return
+        try:
+            row = table.get_row_at(table.cursor_row)
+            user_id = int(row[0])
+            username = str(row[1])
+        except Exception:
+            self.notify("No user selected", severity="warning")
+            return
+
         def handle_result(new_password):
-            if new_password:
-                try:
-                    db = SessionLocal()
-                    try:
-                        user = get_user(user_id, db)
-                        if user:
-                            user.hashed_password = pwd_context.hash(new_password)
-                            db.commit()
-                            self.notify(f"Password reset for '{username}'", severity="information")
-                        else:
-                            self.notify("User not found", severity="error")
-                    finally:
-                        db.close()
-                except Exception as e:
-                    self.notify(f"Error resetting password: {str(e)}", severity="error")
-        
+            if not new_password:
+                return
+            ok, msg = users_api.set_password(self.app.client, user_id, new_password)
+            self.notify(f"{username}: {msg}", severity="information" if ok else "error")
+
         self.app.push_screen(PasswordResetDialog(username), handle_result)
     
     def action_delete_user(self) -> None:
-        """Delete selected user."""
+        """Delete the selected user via the API."""
         table = self.query_one("#users-table", DataTable)
         if table.cursor_row is None or table.row_count == 0:
             self.notify("No user selected", severity="warning")
             return
-        
         try:
             row = table.get_row_at(table.cursor_row)
             user_id = int(row[0])
-            username = row[1]
-            # row[3] is a Text object, need to extract plain text
-            role_text = row[3]
-            role = str(role_text.plain if hasattr(role_text, 'plain') else role_text).lower()
-            is_admin = "admin" in role
-        except Exception as e:
-            self.notify(f"Error: {str(e)}", severity="error")
+            username = str(row[1])
+        except Exception:
+            self.notify("No user selected", severity="warning")
             return
-        
+
+        cached = self._users_by_id.get(user_id, {})
+        is_admin = str(cached.get("role", "")).lower() == "admin"
+
         def handle_result(confirmed):
-            if confirmed:
-                try:
-                    db = SessionLocal()
-                    try:
-                        delete_user(user_id, db)
-                        self.notify(f"User '{username}' deleted", severity="information")
-                        self.load_users()
-                    finally:
-                        db.close()
-                except Exception as e:
-                    self.notify(f"Error deleting user: {str(e)}", severity="error")
-        
+            if not confirmed:
+                return
+            ok, msg = users_api.delete_user(self.app.client, user_id)
+            self.notify(f"{username}: {msg}", severity="information" if ok else "error")
+            if ok:
+                self.load_users()
+
         self.app.push_screen(DeleteConfirmDialog(username, is_admin), handle_result)

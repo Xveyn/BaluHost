@@ -10,7 +10,8 @@ from textual.containers import Container, Horizontal
 from textual.widgets import Header, Footer, Button, Label, Static
 from textual.binding import Binding
 
-from baluhost_tui.context import get_context
+from baluhost_tui.api import system as system_api
+from baluhost_tui.widgets.confirm import ConfirmDialog
 
 
 _ACTIONS: dict[str, str] = {
@@ -64,12 +65,6 @@ class PowerActionsScreen(Screen):
     Button { margin: 0 1; }
     """
 
-    def __init__(self, mode: str, server: str, token: str | None) -> None:
-        super().__init__()
-        self.mode = mode
-        self.server = server
-        self.token = token
-
     def compose(self) -> ComposeResult:
         yield Header()
         with Container(id="power-container"):
@@ -80,14 +75,17 @@ class PowerActionsScreen(Screen):
                 yield Button("Wake", id="btn-wake", variant="success")
                 yield Button("Suspend", id="btn-suspend", variant="warning")
                 yield Button("WoL", id="btn-wol", variant="default")
+            with Horizontal(classes="power-row"):
+                yield Button("Restart App", id="btn-restart-app", variant="warning")
+                yield Button("Shutdown App", id="btn-shutdown-app", variant="error")
         yield Footer()
 
     def on_mount(self) -> None:
-        if not self.token:
+        if not self.app.token:
             self.query_one("#power-status", Static).update(
                 "[red]No API token — admin actions disabled. Login with backend online.[/red]"
             )
-            for btn_id in ("btn-soft", "btn-wake", "btn-suspend", "btn-wol"):
+            for btn_id in ("btn-soft", "btn-wake", "btn-suspend", "btn-wol", "btn-restart-app", "btn-shutdown-app"):
                 try:
                     self.query_one(f"#{btn_id}", Button).disabled = True
                 except Exception:
@@ -96,8 +94,7 @@ class PowerActionsScreen(Screen):
         self.refresh_status()
 
     def refresh_status(self) -> None:
-        with get_context(mode=self.mode, server=self.server, token=self.token) as ctx:
-            status = fetch_status(ctx.get_api_client())
+        status = fetch_status(self.app.client)
         if status is None:
             self.query_one("#power-status", Static).update("[red]Failed to load status[/red]")
             return
@@ -116,12 +113,38 @@ class PowerActionsScreen(Screen):
         self.refresh_status()
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
+        bid = event.button.id or ""
+        if bid == "btn-restart-app":
+            self._confirm_lifecycle(
+                "Restart App",
+                "Restart the BaluHost backend service? Active connections drop briefly.",
+                system_api.restart_app,
+            )
+            return
+        if bid == "btn-shutdown-app":
+            self._confirm_lifecycle(
+                "Shutdown App",
+                "Stop the BaluHost backend service? The API goes offline until restarted.",
+                system_api.shutdown_app,
+            )
+            return
         action_map = {"btn-soft": "soft", "btn-wake": "wake", "btn-suspend": "suspend", "btn-wol": "wol"}
-        action = action_map.get(event.button.id or "")
+        action = action_map.get(bid)
         if not action:
             return
-        with get_context(mode=self.mode, server=self.server, token=self.token) as ctx:
-            ok, msg = perform_action(ctx.get_api_client(), action)
+        ok, msg = perform_action(self.app.client, action)
         self.notify(msg, severity="information" if ok else "error")
         if ok:
             self.refresh_status()
+
+    def _confirm_lifecycle(self, title: str, message: str, fn) -> None:
+        """Push a ConfirmDialog; on confirm call fn(client) and notify the result."""
+        def _cb(confirmed):
+            if not confirmed:
+                return
+            ok, msg = fn(self.app.client)
+            self.notify(msg, severity="information" if ok else "error")
+
+        self.app.push_screen(
+            ConfirmDialog(title=title, message=message, confirm_label=title), _cb
+        )

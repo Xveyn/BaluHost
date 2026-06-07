@@ -10,8 +10,6 @@ from textual.containers import Container
 from textual.widgets import Header, Footer, Label, DataTable
 from textual.binding import Binding
 
-from baluhost_tui.context import get_context
-
 
 def fetch_services(client: httpx.Client) -> list[dict[str, Any]]:
     """GET /api/admin/services. Returns [] on any failure."""
@@ -53,12 +51,6 @@ class ServiceHealthScreen(Screen):
     #services-title { text-style: bold; color: $accent; margin-bottom: 1; }
     """
 
-    def __init__(self, mode: str, server: str, token: str | None) -> None:
-        super().__init__()
-        self.mode = mode
-        self.server = server
-        self.token = token
-
     def compose(self) -> ComposeResult:
         yield Header()
         with Container(id="services-container"):
@@ -70,7 +62,7 @@ class ServiceHealthScreen(Screen):
         table = self.query_one("#services-table", DataTable)
         table.add_columns("Name", "State", "Uptime (s)", "Errors")
         table.cursor_type = "row"
-        if not self.token:
+        if not self.app.token:
             self.notify("No API token — service actions unavailable", severity="warning")
             return
         self.load_services()
@@ -78,8 +70,7 @@ class ServiceHealthScreen(Screen):
     def load_services(self) -> None:
         table = self.query_one("#services-table", DataTable)
         table.clear()
-        with get_context(mode=self.mode, server=self.server, token=self.token) as ctx:
-            services = fetch_services(ctx.get_api_client())
+        services = fetch_services(self.app.client)
         if not services:
             table.add_row("(none)", "-", "-", "-", key="__empty__")
             return
@@ -98,15 +89,14 @@ class ServiceHealthScreen(Screen):
         self.load_services()
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
-        if not self.token:
+        if not self.app.token:
             self.notify("No API token", severity="error")
             return
         key = event.row_key
         name = key.value if hasattr(key, "value") else str(key)
         if name is None or name in ("__empty__", ""):
             return
-        with get_context(mode=self.mode, server=self.server, token=self.token) as ctx:
-            ok, msg = restart_service(ctx.get_api_client(), name)
+        ok, msg = restart_service(self.app.client, name)
         self.notify(f"{name}: {msg}", severity="information" if ok else "error")
         if ok:
             self.load_services()
