@@ -18,6 +18,9 @@ def get_channel_status(client: _Client) -> str:
 
     Fails safe to 'remote' on any error so the UI defaults to the
     more-restricted view (destructive actions shown as unavailable).
+
+    NOTE: this endpoint is auth-gated. Call only after set_token() /
+    api.auth.login() succeeds; a 401 is silently absorbed as 'remote'.
     """
     try:
         resp = client.get("/api/system/channel-status")
@@ -36,7 +39,8 @@ def _post_action(client: _Client, path: str) -> tuple[bool, str]:
                 detail = resp.json().get("detail", "")
             except Exception:
                 detail = ""
-            return False, f"HTTP {resp.status_code}: {detail}".strip()
+            msg = f"HTTP {resp.status_code}: {detail}" if detail else f"HTTP {resp.status_code}"
+            return False, msg
         try:
             message = resp.json().get("message", "ok")
         except Exception:

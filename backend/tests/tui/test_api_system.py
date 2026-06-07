@@ -57,3 +57,18 @@ def test_shutdown_app_reports_failure_on_4xx():
     ok, msg = shutdown_app(client)
     assert ok is False
     assert "403" in msg or "nope" in msg.lower()
+
+
+def test_get_channel_status_defaults_to_remote_on_401():
+    """An auth-gated 401 (no token set) is absorbed as 'remote'."""
+    client = _FakeClient()
+    client.responses[("GET", "/api/system/channel-status")] = _Resp(401, {"detail": "Not authenticated"})
+    assert get_channel_status(client) == "remote"
+
+
+def test_post_action_message_has_no_trailing_colon_when_detail_empty():
+    client = _FakeClient()
+    client.responses[("POST", "/api/system/restart")] = _Resp(500, {})
+    ok, msg = restart_app(client)
+    assert ok is False
+    assert msg == "HTTP 500"
