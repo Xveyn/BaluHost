@@ -7,7 +7,7 @@ from app.api.routes import (
     monitoring_gpu,
     power, power_presets, gpu_power, fans, service_status, schedulers, plugins,
     plugins_marketplace, benchmark,
-    notifications, updates, chunked_upload, webdav, samba, cloud, cloud_export,
+    notifications, updates, chunked_upload, webdav, samba, nfs, cloud, cloud_export,
     sleep,
     desktop,
     api_keys, desktop_pairing, ssd_file_cache, migration, pihole, env_config,
@@ -67,6 +67,7 @@ api_router.include_router(notifications.router, tags=["notifications"])
 api_router.include_router(updates.router, tags=["updates"])
 api_router.include_router(webdav.router, tags=["webdav"])
 api_router.include_router(samba.router, tags=["samba"])
+api_router.include_router(nfs.router, tags=["nfs"])
 api_router.include_router(cloud.router, prefix="/cloud", tags=["cloud-import"])
 api_router.include_router(cloud_export.router, prefix="/cloud-export", tags=["cloud-export"])
 api_router.include_router(sleep.router, prefix="/system/sleep", tags=["sleep-mode"])
