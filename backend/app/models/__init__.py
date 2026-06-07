@@ -93,6 +93,7 @@ from app.models.ad_discovery import (
     AdDiscoveryConfig,
 )
 from app.models.file_activity import FileActivity
+from app.models.nfs_export import NfsExport
 from app.models.fritzbox import FritzBoxConfig
 from app.models.power_permissions import UserPowerPermission
 from app.models.power_boost_rule import PowerBoostRule
@@ -199,6 +200,7 @@ __all__ = [
     "AdDiscoveryCustomListDomain",
     "AdDiscoveryConfig",
     "FileActivity",
+    "NfsExport",
     "FritzBoxConfig",
     "UserPowerPermission",
     "PowerBoostRule",
