@@ -85,3 +85,30 @@ def raid_status(client: _Client) -> list:
         return []
     except Exception:
         return []
+
+
+def delete_array(client: _Client, array: str, force: bool = False) -> tuple[bool, str]:
+    """POST /api/system/raid/delete-array (local-channel) -> (ok, message).
+
+    On a remote channel the backend returns 403 with a dict detail
+    {error, message}; that message is surfaced to the user.
+    """
+    try:
+        resp = client.post(
+            "/api/system/raid/delete-array", json={"array": array, "force": force}
+        )
+        if resp.status_code >= 400:
+            try:
+                detail = resp.json().get("detail", "")
+            except Exception:
+                detail = ""
+            if isinstance(detail, dict):
+                detail = detail.get("message") or detail.get("error") or str(detail)
+            msg = f"HTTP {resp.status_code}: {detail}".rstrip().rstrip(":").rstrip()
+            return False, msg or f"HTTP {resp.status_code}"
+        try:
+            return True, resp.json().get("message", "Array deleted")
+        except Exception:
+            return True, "Array deleted"
+    except Exception as exc:
+        return False, f"request failed: {exc}"
