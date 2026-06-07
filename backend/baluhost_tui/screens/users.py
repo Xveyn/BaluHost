@@ -4,7 +4,7 @@ from __future__ import annotations
 from textual.app import ComposeResult
 from textual.screen import Screen, ModalScreen
 from textual.containers import Container, Horizontal
-from textual.widgets import Header, Footer, Static, Label, DataTable, Button, Input, Select
+from textual.widgets import Header, Footer, Label, DataTable, Button, Input, Select
 from textual.binding import Binding
 from rich.text import Text
 
