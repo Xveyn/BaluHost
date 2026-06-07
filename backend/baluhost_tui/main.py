@@ -55,7 +55,7 @@ def dashboard(ctx: click.Context):
     server = ctx.obj.get('server')
     token = ctx.obj.get('token') or os.environ.get('BALUHOST_TOKEN')
 
-    client = BackendClient(socket_path=socket_path, server=server, token=token)
+    client = BackendClient(socket_path=socket_path, server=server)
     console.print("[cyan]Starting BaluHost TUI[/cyan] (local channel)")
 
     app = BaluHostApp(client=client, token=token)
