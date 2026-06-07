@@ -8,6 +8,7 @@ from textual.widgets import Header, Footer, Static, Label, Button, Input
 from textual.binding import Binding
 
 from baluhost_tui.api import auth as auth_api
+from baluhost_tui import config
 
 
 class LoginScreen(Screen):
@@ -175,6 +176,10 @@ class LoginScreen(Screen):
 
         self.app.token = token
         self.app.current_user = user
+        try:
+            config.save_token(token)
+        except Exception:
+            pass  # token persistence is best-effort; login still succeeds
         self.notify(f"Willkommen {user.get('username', username)}!", severity="information")
 
         from baluhost_tui.screens.dashboard import DashboardScreen
