@@ -38,6 +38,7 @@ Owned paths:
 | `deploy-production.yml` | **`self-hosted, prod`** | `push: main`, `workflow_dispatch` |
 | `raid-mdadm-selfhosted.yml` | **`self-hosted, linux, mdadm`** | `workflow_dispatch` only |
 | `tauri-build.yml` | `ubuntu-latest` | `push: main`, tag, `workflow_dispatch` |
+| `tui-build.yml` | `ubuntu-latest` | `push: main`, tag, `workflow_dispatch` |
 
 PR-triggered workflows MUST NOT use the production-privileged `BaluNode` runner. The `ci-sandbox` runner is the **only** self-hosted runner permitted to execute PR-triggered code, and only via the two-layer isolation described below.
 

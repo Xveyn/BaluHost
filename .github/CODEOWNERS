@@ -16,6 +16,10 @@
 /.github/workflows/  @Xveyn
 /.github/CODEOWNERS  @Xveyn
 /.github/workflows/tauri-build.yml @Xveyn
+/.github/workflows/tui-build.yml @Xveyn
+
+# Standalone TUI packaging (PyInstaller entry + .deb build)
+/backend/packaging/tui/ @Xveyn
 
 # Deploy scripts, systemd units, sudoers templates, runner bootstrap
 /deploy/             @Xveyn
