@@ -21,6 +21,7 @@ import { RateLimitsTab } from '../components/rate-limits';
 import { AuthPolicySettings } from '../components/admin/AuthPolicySettings';
 import WebdavConnectionCard from '../components/webdav/WebdavConnectionCard';
 import SambaManagementCard from '../components/samba/SambaManagementCard';
+import NfsManagementCard from '../components/nfs/NfsManagementCard';
 import SleepMode from './SleepMode';
 import SsdFileCacheTab from '../components/ssd-cache/SsdFileCacheTab';
 import { SystemVariablesTab } from '../components/env-config';
@@ -29,7 +30,7 @@ import BaluPiSetup from '../components/balupi/BaluPiSetup';
 import { StatusBarConfigTab } from '../components/status-bar-config';
 import ApiKeysTab from '../components/settings/ApiKeysTab';
 
-type TabType = 'energy' | 'fan' | 'sleep' | 'raid' | 'backup' | 'ssdcache' | 'vpn' | 'webdav' | 'samba' | 'firebase' | 'services' | 'vcl' | 'smart' | 'ratelimits' | 'envconfig' | 'balupi' | 'statusbar' | 'apikeys';
+type TabType = 'energy' | 'fan' | 'sleep' | 'raid' | 'backup' | 'ssdcache' | 'vpn' | 'webdav' | 'samba' | 'nfs' | 'firebase' | 'services' | 'vcl' | 'smart' | 'ratelimits' | 'envconfig' | 'balupi' | 'statusbar' | 'apikeys';
 type CategoryType = 'hardware' | 'storage' | 'network' | 'system';
 
 interface TabConfig {
@@ -74,6 +75,7 @@ const CATEGORIES: CategoryConfig[] = [
       { id: 'vpn', labelKey: 'systemControl.tabs.vpn', icon: <Shield className="h-5 w-5" /> },
       { id: 'webdav', labelKey: 'systemControl.tabs.webdav', icon: <FolderOpen className="h-5 w-5" /> },
       { id: 'samba', labelKey: 'systemControl.tabs.samba', icon: <Share2 className="h-5 w-5" /> },
+      { id: 'nfs', labelKey: 'systemControl.tabs.nfs', icon: <Server className="h-5 w-5" /> },
       { id: 'firebase', labelKey: 'systemControl.tabs.firebase', icon: <Bell className="h-5 w-5" /> },
     ],
   },
@@ -215,6 +217,7 @@ export default function SystemControlPage() {
         )}
         {activeTab === 'webdav' && <WebdavConnectionCard />}
         {activeTab === 'samba' && <SambaManagementCard />}
+        {activeTab === 'nfs' && <NfsManagementCard />}
         {activeTab === 'firebase' && <FirebaseManagementCard />}
         {activeTab === 'envconfig' && <SystemVariablesTab />}
         {activeTab === 'balupi' && <BaluPiSetup />}

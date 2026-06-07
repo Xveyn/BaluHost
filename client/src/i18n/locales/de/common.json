@@ -180,6 +180,7 @@
       "rateLimits": "Rate Limits",
       "webdav": "WebDAV",
       "samba": "SMB/CIFS",
+      "nfs": "NFS",
       "sleep": "Schlafmodus",
       "ssdCache": "SSD Cache",
       "envConfig": "Systemvariablen",
