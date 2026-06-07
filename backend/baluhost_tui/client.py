@@ -12,7 +12,7 @@ from typing import Any, Callable
 import httpx
 
 DEFAULT_SOCKET = "/run/baluhost/local.sock"
-DEFAULT_SERVER = "http://127.0.0.1:3001"
+DEFAULT_SERVER = "http://127.0.0.1:8000"
 
 
 def resolve_transport(
