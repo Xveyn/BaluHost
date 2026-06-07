@@ -15,15 +15,17 @@ console = Console()
 
 @click.group()
 @click.option('--mode', type=click.Choice(['auto', 'local', 'remote']), default='auto',
-              help='Connection mode: auto (detect), local (direct DB), remote (API)')
-@click.option('--server', default='http://localhost:8000',
-              help='Server URL for remote mode')
+              help='(Legacy) connection mode for the status/users CLI commands')
+@click.option('--socket', 'socket_path', default=None,
+              help='Unix socket path (prod local channel). Auto-detected when omitted.')
+@click.option('--server', default=None,
+              help='Server URL (dev TCP, e.g. http://127.0.0.1:3001). Auto-detected when omitted.')
 @click.option('--token', default=None,
-              help='Bearer token for remote API access')
+              help='Bearer token for API access')
 @click.option('--debug/--no-debug', default=False,
               help='Enable debug logging')
 @click.pass_context
-def cli(ctx: click.Context, mode: str, server: str, token: str | None, debug: bool):
+def cli(ctx: click.Context, mode: str, socket_path: str | None, server: str | None, token: str | None, debug: bool):
     """BaluHost NAS Terminal Interface
     
     Manage your NAS server from the command line.
@@ -36,6 +38,7 @@ def cli(ctx: click.Context, mode: str, server: str, token: str | None, debug: bo
     """
     ctx.ensure_object(dict)
     ctx.obj['mode'] = mode
+    ctx.obj['socket_path'] = socket_path
     ctx.obj['server'] = server
     ctx.obj['token'] = token
     ctx.obj['debug'] = debug
@@ -44,16 +47,18 @@ def cli(ctx: click.Context, mode: str, server: str, token: str | None, debug: bo
 @cli.command()
 @click.pass_context
 def dashboard(ctx: click.Context):
-    """Launch the interactive TUI dashboard."""
+    """Launch the interactive TUI (UDS in prod, TCP loopback in dev)."""
     from .app import BaluHostApp
-    
-    mode = ctx.obj['mode']
-    server = ctx.obj['server']
+    from .client import BackendClient
+
+    socket_path = ctx.obj.get('socket_path')
+    server = ctx.obj.get('server')
     token = ctx.obj.get('token') or os.environ.get('BALUHOST_TOKEN')
-    
-    console.print(f"[cyan]Starting BaluHost TUI[/cyan] (mode: {mode})")
-    
-    app = BaluHostApp(mode=mode, server=server, token=token)
+
+    client = BackendClient(socket_path=socket_path, server=server, token=token)
+    console.print("[cyan]Starting BaluHost TUI[/cyan] (local channel)")
+
+    app = BaluHostApp(client=client, token=token)
     app.run()
 
 
@@ -89,8 +94,8 @@ def status(ctx: click.Context):
     from .commands.status import show_status
     
     mode = ctx.obj['mode']
-    server = ctx.obj['server']
-    
+    server = ctx.obj['server'] or 'http://localhost:8000'
+
     show_status(mode=mode, server=server)
 
 
@@ -101,24 +106,9 @@ def users(ctx: click.Context):
     from .commands.users import list_users
     
     mode = ctx.obj['mode']
-    server = ctx.obj['server']
-    
+    server = ctx.obj['server'] or 'http://localhost:8000'
+
     list_users(mode=mode, server=server)
-
-
-@cli.command()
-@click.pass_context
-def files(ctx: click.Context):
-    """Open file browser TUI."""
-    from .app import BaluHostApp
-
-    mode = ctx.obj['mode']
-    server = ctx.obj['server']
-    token = ctx.obj.get('token') or os.environ.get('BALUHOST_TOKEN')
-
-    console.print(f"[cyan]Starting BaluHost TUI - Files[/cyan] (mode: {mode})")
-    app = BaluHostApp(mode=mode, server=server, token=token)
-    app.run()
 
 
 @cli.command("files-download")
