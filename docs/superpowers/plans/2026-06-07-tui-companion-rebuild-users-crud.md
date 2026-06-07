@@ -281,7 +281,32 @@ The four modal dialog classes stay unchanged. Only the import block and the `Use
 
 - [ ] **Step 1: Replace the import region**
 
-Replace the top of `backend/baluhost_tui/screens/users.py` — lines 1–20, from `"""User Management screen for BaluHost TUI."""` through the `pwd_context = CryptContext(...)` line (read the file to confirm the exact extent: it ends at the `pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")` line, with a blank line or two after it before `class CreateUserDialog`). Use this as old_string (verbatim from the file) and replace with:
+Replace the top of `backend/baluhost_tui/screens/users.py`. The exact old_string (verbatim — lines 1–20, the module docstring through the `pwd_context = ...` line; do NOT include the trailing blank lines before `class CreateUserDialog`) is:
+
+```python
+"""User Management screen for BaluHost TUI."""
+import sys
+from pathlib import Path
+from datetime import datetime
+
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+from textual.app import ComposeResult
+from textual.screen import Screen, ModalScreen
+from textual.containers import Container, Vertical, Horizontal, Grid
+from textual.widgets import Header, Footer, Static, Label, DataTable, Button, Input, Select
+from textual.binding import Binding
+from rich.text import Text
+
+from app.services.users import list_users, create_user, update_user, delete_user, get_user
+from app.core.database import SessionLocal
+from passlib.context import CryptContext
+
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+```
+
+Replace it with:
 
 ```python
 """User Management screen for BaluHost TUI (over the BackendClient)."""
