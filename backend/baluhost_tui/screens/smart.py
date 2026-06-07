@@ -11,8 +11,6 @@ from textual.containers import Container
 from textual.widgets import Header, Footer, Label, DataTable
 from textual.binding import Binding
 
-from baluhost_tui.context import get_context
-
 
 def fetch_smart(client: httpx.Client) -> list[dict[str, Any]]:
     """GET /api/system/smart/status. Accepts {devices: [...]} or [...]. Returns [] on failure."""
@@ -70,12 +68,6 @@ class SmartScreen(Screen):
     #smart-title { text-style: bold; color: $accent; margin-bottom: 1; }
     """
 
-    def __init__(self, mode: str, server: str, token: str | None) -> None:
-        super().__init__()
-        self.mode = mode
-        self.server = server
-        self.token = token
-
     def compose(self) -> ComposeResult:
         yield Header()
         with Container(id="smart-container"):
@@ -87,7 +79,7 @@ class SmartScreen(Screen):
         table = self.query_one("#smart-table", DataTable)
         table.add_columns("Device", "Health", "Temp °C", "Power-On h", "Reallocated")
         table.cursor_type = "row"
-        if not self.token:
+        if not self.app.token:
             self.notify("No API token — SMART data unavailable", severity="warning")
             return
         self.load_smart()
@@ -95,8 +87,7 @@ class SmartScreen(Screen):
     def load_smart(self) -> None:
         table = self.query_one("#smart-table", DataTable)
         table.clear()
-        with get_context(mode=self.mode, server=self.server, token=self.token) as ctx:
-            disks = fetch_smart(ctx.get_api_client())
+        disks = fetch_smart(self.app.client)
         if not disks:
             table.add_row("(none)", "-", "-", "-", "-", key="__empty__")
             return
