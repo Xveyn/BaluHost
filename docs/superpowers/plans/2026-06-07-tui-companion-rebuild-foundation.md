@@ -660,6 +660,7 @@ The existing `app.py`/`main.py` are untouched in this plan, so `baluhost-tui` be
 - `widgets/confirm.py` (`ConfirmDialog` + pure `confirm_matches()` validator, type-to-confirm).
 - Rewire `main.py` (`--socket`/`--server` replacing `--mode`) and `app.py` (single `self.client`, pass to screens).
 - New JWT-only `LoginScreen` (remove direct-DB; show clear message on `403 local_channel_required`; handle `TwoFactorRequired`).
+  - NOTE (from Plan 1 review): `GET /api/system/channel-status` is auth-gated, so the client must `set_token()` (i.e. login must succeed) BEFORE any `get_channel_status()` call, or it always reads "remote".
 - Port `services`, `smart`, `power` (+ app-restart/shutdown actions) onto `BackendClient`.
 - Port `dashboard`, `users` (remove direct-DB) + `users` **bulk-delete**.
 - `RAID` **create-array/delete-array/format-disk** behind `ConfirmDialog`.
