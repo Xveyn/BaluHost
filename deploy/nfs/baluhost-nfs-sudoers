@@ -1,0 +1,6 @@
+# BaluHost NFS sudoers rules
+# Install: sudo cp baluhost-nfs-sudoers /etc/sudoers.d/baluhost-nfs
+# Verify:  sudo visudo -c
+
+sven ALL=(ALL) NOPASSWD: /usr/sbin/exportfs -ra
+sven ALL=(ALL) NOPASSWD: /usr/sbin/exportfs -r
