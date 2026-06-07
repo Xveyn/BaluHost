@@ -10,8 +10,6 @@ from textual.containers import Container, Horizontal
 from textual.widgets import Header, Footer, Button, Label, Static
 from textual.binding import Binding
 
-from baluhost_tui.context import get_context
-
 
 _ACTIONS: dict[str, str] = {
     "soft": "/api/system/sleep/soft",
@@ -64,12 +62,6 @@ class PowerActionsScreen(Screen):
     Button { margin: 0 1; }
     """
 
-    def __init__(self, mode: str, server: str, token: str | None) -> None:
-        super().__init__()
-        self.mode = mode
-        self.server = server
-        self.token = token
-
     def compose(self) -> ComposeResult:
         yield Header()
         with Container(id="power-container"):
@@ -83,7 +75,7 @@ class PowerActionsScreen(Screen):
         yield Footer()
 
     def on_mount(self) -> None:
-        if not self.token:
+        if not self.app.token:
             self.query_one("#power-status", Static).update(
                 "[red]No API token — admin actions disabled. Login with backend online.[/red]"
             )
@@ -96,8 +88,7 @@ class PowerActionsScreen(Screen):
         self.refresh_status()
 
     def refresh_status(self) -> None:
-        with get_context(mode=self.mode, server=self.server, token=self.token) as ctx:
-            status = fetch_status(ctx.get_api_client())
+        status = fetch_status(self.app.client)
         if status is None:
             self.query_one("#power-status", Static).update("[red]Failed to load status[/red]")
             return
@@ -120,8 +111,7 @@ class PowerActionsScreen(Screen):
         action = action_map.get(event.button.id or "")
         if not action:
             return
-        with get_context(mode=self.mode, server=self.server, token=self.token) as ctx:
-            ok, msg = perform_action(ctx.get_api_client(), action)
+        ok, msg = perform_action(self.app.client, action)
         self.notify(msg, severity="information" if ok else "error")
         if ok:
             self.refresh_status()
