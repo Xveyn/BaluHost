@@ -22,6 +22,19 @@ class TestNfsAuth:
         r = _create(client, user_headers)
         assert r.status_code == 403
 
+    def test_update_forbidden_for_regular_user(self, client, user_headers):
+        r = client.put(
+            f"{settings.api_prefix}/nfs/exports/1",
+            json={"path": "Media", "clients": "192.168.1.0/24", "read_only": False,
+                  "root_squash": True, "enabled": True, "comment": None},
+            headers=user_headers,
+        )
+        assert r.status_code == 403
+
+    def test_delete_forbidden_for_regular_user(self, client, user_headers):
+        r = client.delete(f"{settings.api_prefix}/nfs/exports/1", headers=user_headers)
+        assert r.status_code == 403
+
 
 class TestNfsCrud:
     def test_status_ok_for_admin(self, client, admin_headers):
@@ -69,3 +82,16 @@ class TestNfsCrud:
     def test_bad_clients_rejected(self, client, admin_headers):
         r = _create(client, admin_headers, path="Bad", clients="not a host!")
         assert r.status_code == 422
+
+    def test_update_missing_returns_404(self, client, admin_headers):
+        r = client.put(
+            f"{settings.api_prefix}/nfs/exports/999999",
+            json={"path": "Ghost", "clients": "192.168.1.0/24", "read_only": False,
+                  "root_squash": True, "enabled": True, "comment": None},
+            headers=admin_headers,
+        )
+        assert r.status_code == 404
+
+    def test_delete_missing_returns_404(self, client, admin_headers):
+        r = client.delete(f"{settings.api_prefix}/nfs/exports/999999", headers=admin_headers)
+        assert r.status_code == 404

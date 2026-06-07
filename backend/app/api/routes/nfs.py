@@ -34,7 +34,11 @@ def _get_local_ip() -> str:
 
 
 def _to_response(exp: NfsExport, server_ip: str) -> NfsExportResponse:
-    abs_path = nfs_service.validate_export_path(exp.path)
+    try:
+        abs_path = nfs_service.validate_export_path(exp.path)
+        mount_target = f"{server_ip}:{abs_path}"
+    except ValueError:
+        mount_target = f"{server_ip}:<invalid path>"
     return NfsExportResponse(
         id=exp.id,
         path=exp.path,
@@ -43,7 +47,7 @@ def _to_response(exp: NfsExport, server_ip: str) -> NfsExportResponse:
         root_squash=exp.root_squash,
         enabled=exp.enabled,
         comment=exp.comment,
-        mount_target=f"{server_ip}:{abs_path}",
+        mount_target=mount_target,
     )
 
 
