@@ -458,6 +458,26 @@ if [[ "${SYNC_PERMISSIONS:-0}" == "1" || "${SYNC_PERMISSIONS,,}" == "true" ]]; t
         log_warn "Hardware sudoers script not found at $HARDWARE_SUDOERS_SCRIPT (skipping)."
     fi
 
+    # Power sudoers: power-profiles-daemon stop/start/mask/unmask + logind idle
+    # helper + sddm desktop-toggle grants. The installer renders @@BALUHOST_USER@@
+    # from the running service user and validates with visudo before replacing the
+    # live file. This is the path by which sudoers-baluhost-power template changes
+    # reach an installed box; it also clears the obsolete /etc/sudoers.d/baluhost-ppd
+    # workaround once superseded. Invoked with no env vars (like the others): the
+    # deploy sudoers rule whitelists this exact `bash <abs-path>` invocation, and the
+    # script's internal TEMPLATE default (/opt/baluhost/...) matches the prod INSTALL_DIR.
+    POWER_SUDOERS_SCRIPT="$INSTALL_DIR/deploy/scripts/install-power-sudoers.sh"
+    if [[ -f "$POWER_SUDOERS_SCRIPT" ]]; then
+        log_info "Re-applying power sudoers..."
+        if sudo bash "$POWER_SUDOERS_SCRIPT"; then
+            log_info "Power sudoers sync OK."
+        else
+            log_warn "Power sudoers sync failed (non-fatal — deploy continues)."
+        fi
+    else
+        log_warn "Power sudoers script not found at $POWER_SUDOERS_SCRIPT (skipping)."
+    fi
+
     # Future permission scripts go here following the same pattern:
     # if [[ -f "$INSTALL_DIR/deploy/scripts/install-<thing>-permissions.sh" ]]; then ...
 else
