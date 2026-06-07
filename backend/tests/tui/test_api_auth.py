@@ -60,3 +60,27 @@ def test_login_wraps_transport_error_in_login_error():
 
     with pytest.raises(LoginError):
         login(_Boom(), "admin", "pw")
+
+
+def test_me_returns_user_dict():
+    class _C:
+        def get(self, path: str, **_: Any):
+            assert path == "/api/auth/me"
+            return _Resp(200, {"id": 1, "username": "admin", "role": "admin"})
+
+    from baluhost_tui.api.auth import me
+
+    user = me(_C())
+    assert user["username"] == "admin"
+    assert user["role"] == "admin"
+
+
+def test_me_raises_login_error_on_non_200():
+    class _C:
+        def get(self, path: str, **_: Any):
+            return _Resp(401, {"detail": "Not authenticated"})
+
+    from baluhost_tui.api.auth import me, LoginError
+
+    with pytest.raises(LoginError):
+        me(_C())

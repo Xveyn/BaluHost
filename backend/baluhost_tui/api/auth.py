@@ -53,3 +53,25 @@ def login(client: _Client, username: str, password: str) -> str:
     if resp.status_code == 401:
         raise LoginError("invalid username or password")
     raise LoginError(f"login failed: HTTP {resp.status_code}")
+
+
+class _ClientGet(Protocol):
+    def get(self, path: str, **kwargs: Any) -> Any: ...
+
+
+def me(client: _ClientGet) -> dict:
+    """GET /api/auth/me -> the current user dict (id, username, role, ...).
+
+    Raises LoginError on a non-200 response or a non-dict body. Call only
+    after the client has a token set (api.auth.login + client.set_token).
+    """
+    try:
+        resp = client.get("/api/auth/me")
+    except Exception as exc:
+        raise LoginError(f"request failed: {exc}") from exc
+    if resp.status_code != 200:
+        raise LoginError(f"failed to fetch current user: HTTP {resp.status_code}")
+    data = resp.json()
+    if not isinstance(data, dict):
+        raise LoginError("unexpected /me response")
+    return data
