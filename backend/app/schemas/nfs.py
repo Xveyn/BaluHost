@@ -23,7 +23,7 @@ class NfsExportBase(BaseModel):
     @classmethod
     def _validate_path(cls, v: str) -> str:
         validate_export_path(v)  # raises ValueError on traversal/escape/invalid chars
-        return (v or "").strip().lstrip("/")
+        return (v or "").strip().strip("/")
 
 
 class NfsExportCreate(NfsExportBase):

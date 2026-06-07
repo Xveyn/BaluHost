@@ -73,7 +73,7 @@ def validate_export_path(path: str) -> str:
     path that resolves outside the storage root.
     """
     storage_root = Path(settings.nas_storage_path).expanduser().resolve()
-    rel = (path or "").strip().lstrip("/")
+    rel = (path or "").strip().strip("/")
     # The validated path is written verbatim into the exports file (consumed by
     # `exportfs -ra`). Reject control characters and whitespace to prevent
     # injection of extra export lines or broken `path client(opts)` tokenisation.

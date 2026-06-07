@@ -95,3 +95,8 @@ class TestNfsCrud:
     def test_delete_missing_returns_404(self, client, admin_headers):
         r = client.delete(f"{settings.api_prefix}/nfs/exports/999999", headers=admin_headers)
         assert r.status_code == 404
+
+    def test_trailing_slash_path_deduplicated(self, client, admin_headers):
+        assert _create(client, admin_headers, path="Media").status_code == 201
+        # "Media/" normalizes to "Media" -> duplicate path -> 409
+        assert _create(client, admin_headers, path="Media/").status_code == 409
