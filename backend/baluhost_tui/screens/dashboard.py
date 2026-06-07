@@ -18,7 +18,7 @@ from app.services.users import list_users
 from app.services.audit.logger_db import get_audit_logger_db
 from app.core.config import settings
 from baluhost_tui.screens.users import UserManagementScreen
-from baluhost_tui.screens.files import FileBrowserScreen
+
 from baluhost_tui.screens.logs import AuditLogViewerScreen
 
 
@@ -362,7 +362,7 @@ class DashboardScreen(Screen):
         ("q", "quit", "Quit"),
         ("r", "refresh", "Refresh"),
         ("u", "users_screen", "Users"),
-        ("f", "files_screen", "Files"),
+
         ("l", "logs_screen", "Logs"),
     ]
     
@@ -394,14 +394,6 @@ class DashboardScreen(Screen):
             self.app.push_screen(UserManagementScreen())
         except Exception as exc:
             self.notify(f"Failed to open Users screen: {exc}", severity="error")
-    
-    def action_files_screen(self) -> None:
-        """Navigate to files screen."""
-        try:
-            # start at storage root
-            self.app.push_screen(FileBrowserScreen(start_path='/', mode=self.app.mode, server=self.app.server, token=getattr(self.app, 'token', None)))
-        except Exception as exc:
-            self.notify(f"Failed to open File Browser: {exc}", severity="error")
     
     def action_logs_screen(self) -> None:
         """Navigate to logs screen."""
