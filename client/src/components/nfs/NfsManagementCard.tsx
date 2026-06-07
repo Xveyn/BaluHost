@@ -139,8 +139,7 @@ export default function NfsManagementCard() {
       </div>
 
       <div>
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-base font-medium text-white">{t('nfs.title')}</h3>
+        <div className="flex items-center justify-end mb-3">
           <button
             onClick={openAdd}
             className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-500 transition-colors"
@@ -169,7 +168,8 @@ export default function NfsManagementCard() {
                 {exports.map((exp) => (
                   <tr key={exp.id} className="hover:bg-slate-800/30 transition-colors text-sm">
                     <td className="px-4 py-3 text-white font-medium">
-                      {exp.path || <span className="text-slate-500">{t('nfs.wholeRoot')}</span>}
+                      <div>{exp.path || <span className="text-slate-500">{t('nfs.wholeRoot')}</span>}</div>
+                      <code className="mt-1 block text-[11px] font-mono text-slate-500 break-all">{exp.mount_target}</code>
                     </td>
                     <td className="px-4 py-3 font-mono text-slate-300">{exp.clients}</td>
                     <td className="px-4 py-3 text-slate-300">
@@ -186,7 +186,6 @@ export default function NfsManagementCard() {
                           <Trash2 className="h-4 w-4" />
                         </button>
                       </div>
-                      <code className="mt-1 block text-[11px] font-mono text-slate-500 break-all">{exp.mount_target}</code>
                     </td>
                   </tr>
                 ))}
