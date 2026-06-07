@@ -42,11 +42,21 @@ def test_login_raises_login_error_on_401():
 
 def test_login_raises_two_factor_required_on_pending_token():
     client = _FakeClient(_Resp(200, {"pending_token": "pend-123"}))
-    with pytest.raises(TwoFactorRequired):
+    with pytest.raises(TwoFactorRequired) as exc_info:
         login(client, "admin", "pw")
+    assert exc_info.value.pending_token == "pend-123"
 
 
 def test_login_raises_login_error_on_unexpected_200_shape():
     client = _FakeClient(_Resp(200, {"something_else": 1}))
     with pytest.raises(LoginError):
         login(client, "admin", "pw")
+
+
+def test_login_wraps_transport_error_in_login_error():
+    class _Boom:
+        def post(self, *_: Any, **__: Any):
+            raise RuntimeError("connection refused")
+
+    with pytest.raises(LoginError):
+        login(_Boom(), "admin", "pw")

@@ -10,7 +10,7 @@ from typing import Any, Protocol
 
 
 class _Client(Protocol):
-    def post(self, path: str, json: Any = ..., **kwargs: Any) -> Any: ...
+    def post(self, path: str, json: Any = None, **kwargs: Any) -> Any: ...
 
 
 class LoginError(Exception):
