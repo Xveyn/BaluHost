@@ -41,11 +41,11 @@ def main() -> int:
 
     new_password = getpass.getpass("New password: ")
     confirm = getpass.getpass("Confirm password: ")
-    if new_password != confirm:
-        print("Error: passwords do not match", file=sys.stderr)
-        return 1
     if not new_password:
         print("Error: password cannot be empty", file=sys.stderr)
+        return 1
+    if new_password != confirm:
+        print("Error: passwords do not match", file=sys.stderr)
         return 1
     try:
         reset_user_password(args.username, new_password)
