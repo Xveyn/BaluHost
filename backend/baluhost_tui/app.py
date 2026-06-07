@@ -4,14 +4,11 @@ from textual.containers import Container, Vertical
 from textual.widgets import Header, Footer, Button, Static
 from textual.binding import Binding
 
-from app.core.config import settings
-from app.services.users import ensure_admin_user
-
+from baluhost_tui.client import BackendClient
 from baluhost_tui.screens.login import LoginScreen
 from baluhost_tui.screens.dashboard import DashboardScreen
 from baluhost_tui.screens.users import UserManagementScreen
 from baluhost_tui.screens.logs import AuditLogViewerScreen
-from baluhost_tui.screens.files import FileBrowserScreen
 from baluhost_tui.screens.raid import RaidControlScreen
 from baluhost_tui.screens.power import PowerActionsScreen
 from baluhost_tui.screens.services import ServiceHealthScreen
@@ -75,7 +72,6 @@ class BaluHostApp(App):
         Binding("q", "quit", "Quit", priority=True),
         Binding("d", "dashboard", "Dashboard"),
         Binding("u", "users", "Users"),
-        Binding("f", "files", "Files"),
         Binding("l", "logs", "Logs"),
         Binding("R", "raid", "RAID Controls"),
         Binding("p", "power", "Power"),
@@ -83,26 +79,22 @@ class BaluHostApp(App):
         Binding("S", "smart", "SMART"),
     ]
     
-    def __init__(self, mode: str = 'auto', server: str = 'http://localhost:8000', token: str | None = None):
+    def __init__(self, client: BackendClient | None = None, token: str | None = None):
         """Initialize app.
-        
+
         Args:
-            mode: Connection mode (auto, local, remote)
-            server: Server URL for remote mode
+            client: Pre-built BackendClient (UDS in prod / TCP loopback in dev).
+                    Built with defaults (auto-detect transport) when omitted.
+            token: Optional pre-supplied bearer token (set on the client).
         """
         super().__init__()
-        self.mode = mode
-        self.server = server
+        self.client = client if client is not None else BackendClient()
         self.token = token
+        if token:
+            self.client.set_token(token)
         self.title = "BaluHost NAS TUI"
-        self.sub_title = f"Mode: {mode}"
-        self.current_user = None  # Will be set after login
-        
-        # Ensure admin user exists (same as backend does)
-        try:
-            ensure_admin_user(settings)
-        except Exception as e:
-            pass  # Will be handled by login screen
+        self.sub_title = "Companion (local channel)"
+        self.current_user = None  # Set after login
     
     def on_mount(self) -> None:
         """Show login screen on startup."""
@@ -131,14 +123,6 @@ class BaluHostApp(App):
             return
         self.push_screen(UserManagementScreen())
     
-    def action_files(self) -> None:
-        """Show file browser."""
-        if not self.current_user:
-            self.notify("Please login first", severity="error")
-            return
-        # start at storage root
-        self.push_screen(FileBrowserScreen(start_path='/', mode=self.mode, server=self.server, token=self.token))
-
     def action_raid(self) -> None:
         """Show RAID controls screen."""
         if not self.current_user:
@@ -161,7 +145,7 @@ class BaluHostApp(App):
         if (self.current_user or {}).get("role") != "admin":
             self.notify("Admin role required", severity="error")
             return
-        self.push_screen(PowerActionsScreen(mode=self.mode, server=self.server, token=self.token))
+        self.push_screen(PowerActionsScreen())
 
     def action_services(self) -> None:
         """Show service health & restart."""
@@ -171,7 +155,7 @@ class BaluHostApp(App):
         if (self.current_user or {}).get("role") != "admin":
             self.notify("Admin role required", severity="error")
             return
-        self.push_screen(ServiceHealthScreen(mode=self.mode, server=self.server, token=self.token))
+        self.push_screen(ServiceHealthScreen())
 
     def action_smart(self) -> None:
         """Show SMART / disk-health screen."""
@@ -181,4 +165,4 @@ class BaluHostApp(App):
         if (self.current_user or {}).get("role") != "admin":
             self.notify("Admin role required", severity="error")
             return
-        self.push_screen(SmartScreen(mode=self.mode, server=self.server, token=self.token))
+        self.push_screen(SmartScreen())
