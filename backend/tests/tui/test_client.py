@@ -46,3 +46,60 @@ def test_explicit_socket_path_used_even_if_missing():
     )
     assert mode == "uds"
     assert target == "/tmp/missing.sock"
+
+
+import httpx
+from baluhost_tui.client import BackendClient
+
+
+def _mock_backend_client(handler) -> BackendClient:
+    """Build a BackendClient backed by an httpx.MockTransport for offline tests."""
+    transport = httpx.MockTransport(handler)
+    raw = httpx.Client(transport=transport, base_url="http://localhost")
+    return BackendClient(_client=raw)
+
+
+def test_get_passes_through_path():
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["method"] = request.method
+        seen["path"] = request.url.path
+        return httpx.Response(200, json={"ok": True})
+
+    client = _mock_backend_client(handler)
+    resp = client.get("/api/admin/services")
+
+    assert resp.status_code == 200
+    assert resp.json() == {"ok": True}
+    assert seen == {"method": "GET", "path": "/api/admin/services"}
+
+
+def test_set_token_adds_authorization_header():
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["auth"] = request.headers.get("authorization")
+        return httpx.Response(200, json={})
+
+    client = _mock_backend_client(handler)
+    client.set_token("jwt-abc")
+    client.get("/api/system/channel-status")
+
+    assert seen["auth"] == "Bearer jwt-abc"
+
+
+def test_post_sends_json_body():
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["method"] = request.method
+        seen["content"] = request.content
+        return httpx.Response(200, json={"created": True})
+
+    client = _mock_backend_client(handler)
+    resp = client.post("/api/users/bulk-delete", json=[1, 2, 3])
+
+    assert resp.json() == {"created": True}
+    assert seen["method"] == "POST"
+    assert b"1" in seen["content"]
