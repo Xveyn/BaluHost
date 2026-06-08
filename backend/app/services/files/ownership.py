@@ -742,17 +742,3 @@ def enforce_residency(
         violations=violations,
         fixed_count=fixed_count
     )
-
-
-def check_active_uploads(path: str) -> bool:
-    """
-    Check if there are active uploads to the given path.
-    
-    This is a placeholder - implementation depends on chunked upload tracking.
-    
-    Returns:
-        True if active uploads exist, False otherwise
-    """
-    # TODO: Integrate with chunked_upload.py to check active uploads
-    # For now, return False (allow transfer)
-    return False
