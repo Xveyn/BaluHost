@@ -220,6 +220,110 @@ class TestSyncBackgroundDispatch:
         assert not hasattr(scheduler, "scheduler")
 
 
+class TestScheduledSyncHonestAccounting:
+    """Issue #175: a scheduled sync must not claim success while doing nothing.
+
+    The real transfers are client-driven (BaluDesk/BaluApp pull). The server-side
+    schedule only records that the window elapsed; it must never set ``last_run_at``
+    for work that did not happen, and must never mutate the device's change token
+    (which would falsely mark files as synced the client never fetched).
+    """
+
+    def _make_user(self, db: Session):
+        from app.schemas.user import UserCreate
+        from app.services import users as user_service
+
+        return user_service.create_user(
+            UserCreate(
+                username="syncacct",
+                email="syncacct@test.com",
+                password="Syncpass123!",
+                role="user",
+            ),
+            db=db,
+        )
+
+    def _run(self, coro):
+        import asyncio
+
+        loop = asyncio.new_event_loop()
+        try:
+            return loop.run_until_complete(coro)
+        finally:
+            loop.close()
+
+    @staticmethod
+    def _aware(dt: datetime) -> datetime:
+        """Normalize a (possibly naive, from SQLite) datetime to aware UTC."""
+        return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
+
+    def test_unregistered_device_does_not_claim_a_run(self, db_session: Session):
+        """A due schedule for an unregistered device advances next_run but never
+        sets last_run_at (nothing actually ran)."""
+        from app.models.sync_progress import SyncSchedule
+        from app.services.sync.background import SyncBackgroundScheduler
+
+        user = self._make_user(db_session)
+        past = datetime.now(timezone.utc) - timedelta(minutes=5)
+        sched = SyncSchedule(
+            user_id=user.id,
+            device_id="ghost-device",
+            schedule_type="daily",
+            time_of_day="02:00",
+            is_active=True,
+            next_run_at=past,
+        )
+        db_session.add(sched)
+        db_session.commit()
+        db_session.refresh(sched)
+
+        bg = SyncBackgroundScheduler()
+        self._run(bg.execute_scheduled_sync(sched, db_session))
+
+        db_session.refresh(sched)
+        assert sched.last_run_at is None  # nothing ran → no false "last run"
+        # next_run advanced so the worker does not re-evaluate every 5-min tick
+        assert self._aware(sched.next_run_at) > datetime.now(timezone.utc)
+
+    def test_registered_device_records_run_without_mutating_token(self, db_session: Session):
+        """A registered device records the run (last_run_at set, next_run advanced)
+        but the change token is left untouched — the client still drives transfers."""
+        from app.models.sync_progress import SyncSchedule
+        from app.models.sync_state import SyncState
+        from app.services.sync.background import SyncBackgroundScheduler
+
+        user = self._make_user(db_session)
+        state = SyncState(
+            user_id=user.id,
+            device_id="desk-1",
+            device_name="Desk",
+            last_change_token="TOKEN-XYZ",
+        )
+        db_session.add(state)
+        past = datetime.now(timezone.utc) - timedelta(minutes=5)
+        sched = SyncSchedule(
+            user_id=user.id,
+            device_id="desk-1",
+            schedule_type="daily",
+            time_of_day="02:00",
+            is_active=True,
+            next_run_at=past,
+        )
+        db_session.add(sched)
+        db_session.commit()
+        db_session.refresh(sched)
+        db_session.refresh(state)
+
+        bg = SyncBackgroundScheduler()
+        self._run(bg.execute_scheduled_sync(sched, db_session))
+
+        db_session.refresh(sched)
+        db_session.refresh(state)
+        assert sched.last_run_at is not None
+        assert self._aware(sched.next_run_at) > datetime.now(timezone.utc)
+        assert state.last_change_token == "TOKEN-XYZ"  # pull model — never mutated server-side
+
+
 class TestSchedulerExecution:
     """Tests for execution history tracking."""
 

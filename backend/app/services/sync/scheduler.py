@@ -1,21 +1,24 @@
 """Service for scheduled automatic syncs."""
 
-from datetime import datetime, time, timedelta, timezone
-from typing import Optional, Callable
+from datetime import datetime, timedelta, timezone
+from typing import Optional
 from sqlalchemy.orm import Session
-import asyncio
 
 from app.models.sync_progress import SyncSchedule
-from app.services.sync.file_sync import FileSyncService
 from app.services.sync.sleep_check import is_time_in_sleep_window
 
 
 class SyncSchedulerService:
-    """Handle scheduled automatic synchronizations."""
-    
+    """Handle scheduled automatic synchronizations.
+
+    This service owns schedule CRUD and next-run computation only. The actual
+    transfers are client-driven (BaluDesk/BaluApp pull); the server-side
+    evaluation of a due schedule lives in ``app.services.sync.background`` and is
+    invoked by the central scheduler worker (see issue #175).
+    """
+
     def __init__(self, db: Session):
         self.db = db
-        self.sync_service = FileSyncService(db)
         self._scheduler_tasks = {}
     
     def create_schedule(
@@ -172,29 +175,6 @@ class SyncSchedulerService:
             "auto_vpn": schedule.auto_vpn,
         }
     
-    async def run_due_syncs(self):
-        """
-        Check and run all due syncs.
-        This should be called periodically by a background task.
-        """
-        now = datetime.now(timezone.utc)
-        
-        due_schedules = self.db.query(SyncSchedule).filter(
-            SyncSchedule.is_active == True,
-            SyncSchedule.next_run_at <= now
-        ).all()
-        
-        for schedule in due_schedules:
-            try:
-                # TODO: Trigger actual sync
-                # await self._execute_sync(schedule)
-                
-                schedule.last_run_at = now
-                self._calculate_next_run(schedule)
-                self.db.commit()
-            except Exception as e:
-                print(f"Error running sync {schedule.id}: {e}")
-    
     def _get_sleep_config(self):
         """Load sleep config from DB for validation."""
         from sqlalchemy import select
@@ -265,72 +245,3 @@ class SyncSchedulerService:
         elif schedule.schedule_type == "on_change":
             # No scheduled time, runs on file change
             schedule.next_run_at = None
-    
-    async def _execute_sync(self, schedule: SyncSchedule):
-        """Execute a sync for a schedule."""
-        # Implement a lightweight server-side sync planner.
-        # The real client/device will consume these instructions and perform file transfers.
-        from datetime import datetime as _dt
-        from app.models.sync_state import SyncState, SyncMetadata
-        now = _dt.utcnow()
-
-        # Find registered sync state for this device
-        sync_state = self.db.query(SyncState).filter(
-            SyncState.user_id == schedule.user_id,
-            SyncState.device_id == schedule.device_id
-        ).first()
-
-        if not sync_state:
-            # Nothing to do if device is not registered
-            return {
-                "schedule_id": schedule.id,
-                "status": "no_device_registered"
-            }
-
-        # Gather pending metadata for this sync_state
-        pending = self.db.query(SyncMetadata).filter(
-            SyncMetadata.sync_state_id == sync_state.id
-        ).all()
-
-        plan = {"to_download": [], "to_delete": [], "conflicts": []}
-
-        for meta in pending:
-            # Simple heuristic:
-            # - if conflict detected -> report conflict
-            # - if marked deleted on server -> instruct deletion
-            # - otherwise instruct client to download server version
-            if meta.conflict_detected:
-                plan["conflicts"].append({
-                    "file_metadata_id": meta.file_metadata_id,
-                    "local_modified_at": meta.local_modified_at.isoformat() if meta.local_modified_at else None,
-                    "server_modified_at": meta.server_modified_at.isoformat() if meta.server_modified_at else None,
-                })
-            elif meta.is_deleted:
-                plan["to_delete"].append({
-                    "file_metadata_id": meta.file_metadata_id
-                })
-            else:
-                plan["to_download"].append({
-                    "file_metadata_id": meta.file_metadata_id,
-                    "content_hash": meta.content_hash,
-                    "file_size": meta.file_size,
-                    "server_modified_at": meta.server_modified_at.isoformat() if meta.server_modified_at else None
-                })
-
-            # mark that we've scheduled this metadata for sync
-            meta.sync_modified_at = now
-
-        # Update sync_state timestamps and change token
-        sync_state.last_sync = now
-        sync_state.last_change_token = self.sync_service._generate_change_token()
-
-        # Persist changes
-        self.db.commit()
-
-        return {
-            "schedule_id": schedule.id,
-            "device_id": schedule.device_id,
-            "status": "scheduled",
-            "plan": plan,
-            "executed_at": now.isoformat()
-        }
