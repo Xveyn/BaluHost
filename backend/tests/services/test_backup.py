@@ -287,3 +287,75 @@ def test_download_backup(backup_service: BackupService, temp_backup_dir: Path, d
     # Test non-existent backup
     no_path = backup_service.download_backup(99999)
     assert no_path is None
+
+
+class TestConfigBackup:
+    """Issue #176: includes_config must write a real, secret-free config snapshot
+    and restore it as a reference (never auto-applied)."""
+
+    def test_config_backup_writes_redacted_snapshot(
+        self, backup_service: BackupService, temp_backup_dir: Path, monkeypatch
+    ):
+        import json
+        import tarfile
+        from app.services.backup import service as backup_module
+
+        sentinel = "SUPER-SECRET-SENTINEL-9f3a2c"
+        monkeypatch.setattr(backup_module.settings, "SECRET_KEY", sentinel)
+        monkeypatch.setattr(backup_service, "backup_dir", temp_backup_dir)
+
+        backup = backup_service.create_backup(
+            backup_data=BackupCreate(
+                backup_type="full",
+                includes_database=False,
+                includes_files=False,
+                includes_config=True,
+            ),
+            creator_id=1,
+            creator_username="test_user",
+        )
+
+        assert backup.status == "completed"
+        archive = Path(backup.filepath)
+        with tarfile.open(archive, "r:gz") as tar:
+            assert "backup/config/settings.snapshot.json" in tar.getnames()
+            text = tar.extractfile(
+                "backup/config/settings.snapshot.json"
+            ).read().decode("utf-8")
+
+        snapshot = json.loads(text)
+        # Non-secret value preserved, secret redacted by name
+        assert snapshot["settings"]["app_name"]
+        assert snapshot["settings"]["SECRET_KEY"] == "***REDACTED***"
+        assert "SECRET_KEY" in snapshot["_meta"]["redacted_fields"]
+        # The real secret value must never land in the snapshot
+        assert sentinel not in text
+
+    def test_config_restore_extracts_reference_without_autoapply(
+        self, backup_service: BackupService, temp_backup_dir: Path, monkeypatch
+    ):
+        monkeypatch.setattr(backup_service, "backup_dir", temp_backup_dir)
+
+        backup = backup_service.create_backup(
+            backup_data=BackupCreate(
+                backup_type="full",
+                includes_database=False,
+                includes_files=False,
+                includes_config=True,
+            ),
+            creator_id=1,
+            creator_username="test_user",
+        )
+
+        ok = backup_service.restore_backup(
+            backup_id=backup.id,
+            user="test_user",
+            restore_database=False,
+            restore_files=False,
+            restore_config=True,
+        )
+
+        assert ok is True
+        ref_dirs = list(temp_backup_dir.glob("restored-config-*"))
+        assert len(ref_dirs) == 1
+        assert (ref_dirs[0] / "settings.snapshot.json").exists()

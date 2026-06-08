@@ -1,7 +1,9 @@
             # ...existing code...
 
 """Backup service for creating and restoring system backups."""
+import json
 import os
+import re
 import shutil
 import subprocess
 import tarfile
@@ -21,6 +23,17 @@ from app.services.audit.logger_db import AuditLoggerDB
 import logging
 
 logger = logging.getLogger(__name__)
+
+# Settings field names whose values must never leave the box in a backup archive.
+# Matched as a case-insensitive substring of the field name. Intentionally broad:
+# over-redacting a harmless field (e.g. token_algorithm) is safe, leaking a secret
+# is not. Database-stored config (monitoring/fan/power/scheduler/...) is captured by
+# the database backup, so the config snapshot only records process-level settings.
+_CONFIG_REDACT_RE = re.compile(
+    r"password|secret|token|private_key|api_key|_key|database_url",
+    re.IGNORECASE,
+)
+_REDACTED_PLACEHOLDER = "***REDACTED***"
 
 
 class BackupService:
@@ -213,16 +226,20 @@ class BackupService:
                 if backup_data.includes_config:
                     config_dir = temp_path / "config"
                     config_dir.mkdir(parents=True, exist_ok=True)
+                    snapshot_summary = self._write_config_snapshot(config_dir)
                     logger.log_event(
                         event_type="BACKUP",
                         action="copy_config",
                         user=creator_username,
                         resource=filename,
                         success=True,
-                        details={"step": "config_staged"},
+                        details={
+                            "step": "config_snapshot_written",
+                            "files": snapshot_summary["files"],
+                            "redacted_field_count": snapshot_summary["redacted_count"],
+                        },
                         db=self.db
                     )
-                    # TODO: Add config files if needed
 
                 # Create tar.gz archive
                 with tarfile.open(filepath, "w:gz") as tar:
@@ -387,6 +404,7 @@ class BackupService:
         if not filepath.exists():
             return False
         
+        config_reference_path: Optional[str] = None
         try:
             # Extract backup to temporary directory
             with tempfile.TemporaryDirectory(dir=str(self.backup_dir)) as temp_dir:
@@ -443,9 +461,20 @@ class BackupService:
                 if restore_config and backup.includes_config:
                     config_backup = backup_root / "config"
                     if config_backup.exists():
-                        # TODO: Implement config restore if needed
-                        pass
-            
+                        # The config snapshot is a secret-free DISASTER-RECOVERY
+                        # REFERENCE. We deliberately do NOT auto-apply it: process
+                        # settings come from the environment / .env, and overwriting
+                        # live secrets or machine-specific paths from a backup would
+                        # be unsafe and could break a running box. Instead we copy it
+                        # out to a persistent location for manual review (#176).
+                        ref_dir = self.backup_dir / (
+                            f"restored-config-{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+                        )
+                        if ref_dir.exists():
+                            shutil.rmtree(ref_dir)
+                        shutil.copytree(config_backup, ref_dir)
+                        config_reference_path = str(ref_dir)
+
             # Log audit event
             logger = AuditLoggerDB()
             logger.log_event(
@@ -454,10 +483,17 @@ class BackupService:
                 user=user,
                 resource=backup.filename,
                 success=True,
-                details={"backup_id": backup_id, "restore_database": restore_database, "restore_files": restore_files},
+                details={
+                    "backup_id": backup_id,
+                    "restore_database": restore_database,
+                    "restore_files": restore_files,
+                    "restore_config": restore_config,
+                    "config_reference_path": config_reference_path,
+                    "config_auto_applied": False,
+                },
                 db=self.db
             )
-            
+
             return True
             
         except Exception as e:
@@ -680,6 +716,45 @@ class BackupService:
         if db_type == "sqlite":
             return db_path
         raise ValueError("_get_database_path() only supports SQLite. Use _get_database_info() instead.")
+
+    def _write_config_snapshot(self, config_dir: Path) -> dict:
+        """Write a secret-free snapshot of effective process settings for DR reference.
+
+        DB-stored configuration (monitoring/fan/power/scheduler/notification/...) is
+        already captured by the database backup; this only records the process-level
+        settings that live outside the database (mostly env-derived). Every field whose
+        name matches a secret pattern is redacted, so the archive never carries
+        credentials (issue #176). The snapshot is reference-only — restore never
+        auto-applies it.
+
+        Returns:
+            dict: {"files": [...written filenames...], "redacted_count": int}
+        """
+        data = settings.model_dump(mode="json")
+        redacted_fields = []
+        for key in data:
+            if _CONFIG_REDACT_RE.search(key):
+                data[key] = _REDACTED_PLACEHOLDER
+                redacted_fields.append(key)
+
+        snapshot = {
+            "_meta": {
+                "schema": "baluhost.config-snapshot/v1",
+                "created_at": datetime.now().isoformat(),
+                "note": (
+                    "Secret values are redacted. This snapshot is a disaster-recovery "
+                    "reference only and is NOT automatically applied on restore."
+                ),
+                "redacted_fields": sorted(redacted_fields),
+            },
+            "settings": data,
+        }
+
+        snapshot_path = config_dir / "settings.snapshot.json"
+        snapshot_path.write_text(
+            json.dumps(snapshot, indent=2, sort_keys=True), encoding="utf-8"
+        )
+        return {"files": ["settings.snapshot.json"], "redacted_count": len(redacted_fields)}
     
     def _cleanup_old_backups(self) -> None:
         """Remove old backups based on retention policy."""
