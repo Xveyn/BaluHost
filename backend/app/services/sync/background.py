@@ -71,9 +71,19 @@ class SyncBackgroundScheduler:
             db.close()
 
     async def execute_scheduled_sync(self, schedule: SyncSchedule, db: Session) -> None:
-        """Execute a single scheduled sync."""
+        """Process a single due sync schedule.
+
+        Important: BaluHost sync is **client-driven** — BaluDesk/BaluApp pull the
+        server on their own timer. There is no server→client push channel for
+        desktop clients, so the server cannot "run" a sync on the client's behalf.
+        This method therefore only *records* that the schedule's window elapsed:
+        it advances ``next_run_at``, and sets ``last_run_at`` only when the device
+        is actually registered. It deliberately does NOT compute a sync plan or
+        mutate the device's ``last_change_token`` — doing so would falsely mark
+        files as synced that the client never fetched (see issue #175).
+        """
         self.logger.info(
-            "Executing scheduled sync %s for user %s", schedule.id, schedule.user_id
+            "Evaluating scheduled sync %s for user %s", schedule.id, schedule.user_id
         )
 
         sync_service = FileSyncService(db)
@@ -86,18 +96,54 @@ class SyncBackgroundScheduler:
             )
 
             if sync_status.get("status") == "not_registered":
-                self.logger.warning("Device %s not registered", schedule.device_id)
+                # Nothing the server can honestly do: the device never registered
+                # for sync. Do NOT set last_run_at (it did not run), but still
+                # advance next_run_at so the worker stops re-evaluating this
+                # schedule on every tick.
+                self.logger.warning(
+                    "Scheduled sync %s skipped: device %s not registered",
+                    schedule.id,
+                    schedule.device_id,
+                )
+                audit_logger.log_event(
+                    event_type="SYNC",
+                    user=str(schedule.user_id),
+                    action="scheduled_sync_skipped",
+                    resource=schedule.device_id,
+                    details={
+                        "schedule_id": schedule.id,
+                        "device_id": schedule.device_id,
+                        "reason": "device_not_registered",
+                    },
+                    success=False,
+                )
+                self._calculate_next_run(schedule)
+                db.commit()
                 return
+
+            pending = sync_status.get("pending_changes", 0)
+            conflicts = sync_status.get("conflicts", 0)
+
+            self.logger.info(
+                "Scheduled sync window passed for schedule %s (device %s): "
+                "%s pending change(s), %s conflict(s) await the client",
+                schedule.id,
+                schedule.device_id,
+                pending,
+                conflicts,
+            )
 
             audit_logger.log_event(
                 event_type="SYNC",
                 user=str(schedule.user_id),
-                action="scheduled_sync_executed",
+                action="scheduled_sync_window_passed",
                 resource=schedule.device_id,
                 details={
                     "schedule_id": schedule.id,
                     "device_id": schedule.device_id,
                     "schedule_type": schedule.schedule_type,
+                    "pending_changes": pending,
+                    "conflicts": conflicts,
                 },
                 success=True,
             )
@@ -106,10 +152,8 @@ class SyncBackgroundScheduler:
             self._calculate_next_run(schedule)
             db.commit()
 
-            self.logger.info("Sync %s completed successfully", schedule.id)
-
         except Exception as e:
-            self.logger.error("Sync %s failed: %s", schedule.id, e)
+            self.logger.error("Scheduled sync %s failed: %s", schedule.id, e)
             audit_logger.log_event(
                 event_type="SYNC",
                 user=str(schedule.user_id),
