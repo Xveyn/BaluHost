@@ -108,6 +108,10 @@ async def create_nfs_export(
         await nfs_service.regenerate_exports_config()
         await nfs_service.apply_exports()
     except Exception as e:
+        try:
+            db.rollback()
+        except Exception:
+            pass
         audit.log_event(
             event_type="SYSTEM_CONFIG", user=current_admin.username,
             action="nfs_export_created", resource=payload.path,
@@ -164,6 +168,10 @@ async def update_nfs_export(
         await nfs_service.regenerate_exports_config()
         await nfs_service.apply_exports()
     except Exception as e:
+        try:
+            db.rollback()
+        except Exception:
+            pass
         audit.log_event(
             event_type="SYSTEM_CONFIG", user=current_admin.username,
             action="nfs_export_updated", resource=payload.path,
@@ -203,6 +211,10 @@ async def delete_nfs_export(
         await nfs_service.regenerate_exports_config()
         await nfs_service.apply_exports()
     except Exception as e:
+        try:
+            db.rollback()
+        except Exception:
+            pass
         audit.log_event(
             event_type="SYSTEM_CONFIG", user=current_admin.username,
             action="nfs_export_deleted", resource=path,

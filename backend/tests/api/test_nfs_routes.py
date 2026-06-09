@@ -144,6 +144,45 @@ class TestNfsAudit:
         assert row is not None
         assert row.resource == "AuditUpd"
 
+    def test_update_missing_writes_failure(self, client, admin_headers, db_session, audit_enabled):
+        r = client.put(
+            f"{settings.api_prefix}/nfs/exports/999777",
+            json={"path": "Ghost", "clients": "192.168.1.0/24", "read_only": False,
+                  "root_squash": True, "enabled": True, "comment": None},
+            headers=admin_headers,
+        )
+        assert r.status_code == 404
+        row = (
+            db_session.query(AuditLog)
+            .filter(AuditLog.action == "nfs_export_updated", AuditLog.success == False)  # noqa: E712
+            .order_by(AuditLog.id.desc())
+            .first()
+        )
+        assert row is not None
+        assert row.resource == "999777"
+        assert row.error_message == "Export not found"
+
+    def test_update_duplicate_path_writes_failure(self, client, admin_headers, db_session, audit_enabled):
+        first_id = _create(client, admin_headers, path="UpdDupA").json()["id"]
+        _create(client, admin_headers, path="UpdDupB")
+        # Try to rename the first export onto the second's path -> 409
+        r = client.put(
+            f"{settings.api_prefix}/nfs/exports/{first_id}",
+            json={"path": "UpdDupB", "clients": "192.168.1.0/24", "read_only": False,
+                  "root_squash": True, "enabled": True, "comment": None},
+            headers=admin_headers,
+        )
+        assert r.status_code == 409
+        row = (
+            db_session.query(AuditLog)
+            .filter(AuditLog.action == "nfs_export_updated", AuditLog.success == False)  # noqa: E712
+            .order_by(AuditLog.id.desc())
+            .first()
+        )
+        assert row is not None
+        assert row.resource == "UpdDupB"
+        assert row.error_message == "An export for this path already exists"
+
     def test_delete_writes_audit(self, client, admin_headers, db_session, audit_enabled):
         export_id = _create(client, admin_headers, path="AuditDel").json()["id"]
         r = client.delete(f"{settings.api_prefix}/nfs/exports/{export_id}", headers=admin_headers)
