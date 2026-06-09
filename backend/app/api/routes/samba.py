@@ -93,6 +93,11 @@ async def toggle_smb_user(
     audit = get_audit_logger_db()
     action = "smb_access_enabled" if payload.enabled else "smb_access_disabled"
 
+    # NOTE: set_smb_enabled() commits the smb_enabled flag immediately. If a Samba
+    # service call below then fails, the DB flag stays flipped (db.rollback() in the
+    # except has nothing to undo) while the daemon was never updated — so a
+    # success=False audit entry can coexist with a committed flag change. Pre-existing
+    # behavior of set_smb_enabled; documented here for audit-log readers.
     user = user_service.set_smb_enabled(user_id, payload.enabled, db=db)
     if not user:
         audit.log_event(

@@ -80,3 +80,23 @@ class TestSambaToggleAudit:
         assert row is not None
         assert row.resource == "999999"
         assert row.error_message == "User not found"
+
+    def test_enable_with_password_records_synced_without_leaking_password(
+        self, client, admin_headers, regular_user, db_session, audit_enabled, mock_samba
+    ):
+        secret = "SuperSecret123!"
+        r = _toggle(client, admin_headers, regular_user.id, True, password=secret)
+        assert r.status_code == 200, r.text
+        row = (
+            db_session.query(AuditLog)
+            .filter(AuditLog.action == "smb_access_enabled", AuditLog.success == True)  # noqa: E712
+            .order_by(AuditLog.id.desc())
+            .first()
+        )
+        assert row is not None
+        # details must record that a password was synced...
+        assert '"password_synced": true' in (row.details or "")
+        # ...but the password value itself must NEVER be persisted anywhere on the row.
+        assert secret not in (row.details or "")
+        assert secret not in (row.error_message or "")
+        assert secret not in (row.resource or "")
