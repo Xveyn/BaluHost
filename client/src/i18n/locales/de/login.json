@@ -21,6 +21,9 @@
     "verify": "Verifizieren",
     "verifying": "Verifiziere...",
     "useBackupCode": "Backup-Code verwenden",
+    "useAuthenticatorCode": "Authenticator-Code verwenden",
+    "backupCodeLabel": "Backup-Code",
+    "backupCodePlaceholder": "A1B2C3D4",
     "backToLogin": "Zurück zum Login",
     "invalidCode": "Ungültiger Verifizierungscode"
   },
