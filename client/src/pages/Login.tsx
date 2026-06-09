@@ -5,6 +5,7 @@ import type { User } from '../types/auth';
 import logoMark from '../assets/baluhost-logo.png';
 import { localApi } from '../lib/localApi';
 import { buildApiUrl, isTauri } from '../lib/api';
+import { sanitizeTwoFactorCode, isTwoFactorCodeComplete } from '../lib/twoFactorCode';
 import { loginWithPin } from '../api/pin';
 import { useVersion } from '../contexts/VersionContext';
 import { DeveloperBadge } from '../components/ui/DeveloperBadge';
@@ -28,6 +29,7 @@ export default function Login() {
   const [twoFactorRequired, setTwoFactorRequired] = useState(false);
   const [pendingToken, setPendingToken] = useState('');
   const [totpCode, setTotpCode] = useState('');
+  const [backupMode, setBackupMode] = useState(false);
   const totpInputRef = useRef<HTMLInputElement>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [pinMode, setPinMode] = useState(false);
@@ -208,6 +210,7 @@ export default function Login() {
     setTwoFactorRequired(false);
     setPendingToken('');
     setTotpCode('');
+    setBackupMode(false);
     setError('');
   };
 
@@ -261,7 +264,7 @@ export default function Login() {
 
               <div className="space-y-2">
                 <label htmlFor="totp-code" className="text-xs font-medium uppercase tracking-[0.2em] text-slate-100-tertiary">
-                  {t('twoFactor.codeLabel')}
+                  {backupMode ? t('twoFactor.backupCodeLabel') : t('twoFactor.codeLabel')}
                 </label>
                 <input
                   ref={totpInputRef}
@@ -269,24 +272,26 @@ export default function Login() {
                   id="totp-code"
                   className="input text-center text-2xl tracking-[0.5em] font-mono"
                   value={totpCode}
-                  onChange={(e) => {
-                    const val = e.target.value.replace(/\D/g, '').slice(0, 8);
-                    setTotpCode(val);
-                  }}
-                  placeholder={t('twoFactor.codePlaceholder')}
-                  autoComplete="one-time-code"
-                  inputMode="numeric"
+                  onChange={(e) => setTotpCode(sanitizeTwoFactorCode(e.target.value, backupMode))}
+                  placeholder={backupMode ? t('twoFactor.backupCodePlaceholder') : t('twoFactor.codePlaceholder')}
+                  autoComplete={backupMode ? 'off' : 'one-time-code'}
+                  inputMode={backupMode ? 'text' : 'numeric'}
+                  maxLength={8}
                   required
                 />
-                <p className="text-xs text-slate-100-tertiary text-center mt-1">
-                  {t('twoFactor.useBackupCode')}
-                </p>
+                <button
+                  type="button"
+                  onClick={() => { setBackupMode((v) => !v); setTotpCode(''); setError(''); }}
+                  className="w-full text-center text-xs text-slate-100-tertiary hover:text-slate-100-secondary transition-colors mt-1"
+                >
+                  {backupMode ? t('twoFactor.useAuthenticatorCode') : t('twoFactor.useBackupCode')}
+                </button>
               </div>
 
               <button
                 type="submit"
                 className="btn btn-primary w-full mt-5 sm:mt-6 touch-manipulation active:scale-[0.98]"
-                disabled={loading || totpCode.length < 6}
+                disabled={loading || !isTwoFactorCodeComplete(totpCode, backupMode)}
               >
                 {loading ? t('twoFactor.verifying') : t('twoFactor.verify')}
               </button>
