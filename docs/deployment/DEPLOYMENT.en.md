@@ -2,13 +2,17 @@
 
 Guide for installing BaluHost on a production server.
 
+> **Supported OS:** Debian 12 (bookworm) / 13 (trixie) only.
+> See [Feature Dependencies](./FEATURE_DEPENDENCIES.en.md) for the per-feature
+> package matrix and activation (interactive prompt or `ENABLE_*` config flags).
+
 ## Prerequisites
 
 ### Hardware
 - **CPU:** 2+ cores (4+ recommended)
 - **RAM:** 4 GB minimum (8 GB+ recommended)
 - **Storage:** 100 GB+ (depends on data volume)
-- **OS:** Debian 12+, Ubuntu 22.04+ or compatible Linux distribution
+- **OS:** Debian 12 (bookworm) or 13 (trixie) only (the installer's preflight rejects other distributions)
 
 ### Software
 - Python 3.11+

@@ -10,6 +10,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib/common.sh"
 source "$SCRIPT_DIR/lib/config.sh"
+source "$SCRIPT_DIR/lib/features.sh"
 
 # ─── Version ─────────────────────────────────────────────────────────
 readonly INSTALLER_VERSION="1.0.0"
@@ -29,6 +30,7 @@ readonly -a MODULES=(
     "11-nginx"
     "12-start-services"
     "13-power-helpers"
+    "14-optional-features"
 )
 
 # ─── Usage ───────────────────────────────────────────────────────────
@@ -136,6 +138,20 @@ gather_input() {
     fi
 
     echo ""
+    log_step "Optional Features"
+    echo "Enable extra features now? Each pulls in additional system packages."
+    echo "Answer N to any you don't need — you can enable them later by setting"
+    echo "ENABLE_<NAME>=true in the config and re-running module 14-optional-features."
+    echo ""
+    for fkey in "${FEATURE_KEYS[@]}"; do
+        if confirm "Enable $(feature_label "$fkey")?"; then
+            export "ENABLE_$fkey=true"
+        else
+            export "ENABLE_$fkey=false"
+        fi
+    done
+
+    echo ""
     log_step "Configuration Summary"
     echo "  Install directory:  $INSTALL_DIR"
     echo "  System user:        $BALUHOST_USER"
@@ -145,6 +161,12 @@ gather_input() {
     echo "  Git branch:         $GIT_BRANCH"
     echo "  Admin username:     $ADMIN_USERNAME"
     echo "  Admin email:        $ADMIN_EMAIL"
+    local _enabled_summary=""
+    for fkey in "${FEATURE_KEYS[@]}"; do
+        local _v="ENABLE_$fkey"
+        [[ "${!_v:-false}" == "true" ]] && _enabled_summary+="$fkey "
+    done
+    echo "  Optional features:  ${_enabled_summary:-none}"
     echo ""
 
     if ! confirm "Proceed with installation?"; then
