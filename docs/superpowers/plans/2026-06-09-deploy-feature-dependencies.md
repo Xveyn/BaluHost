@@ -21,7 +21,7 @@
   - `deploy/samba/setup-samba.sh` — installs `samba samba-common-bin`; reads `SERVICE_USER` / `STORAGE_GROUP` from env (defaults `sven`/`baluhost`).
   - `deploy/nfs/setup-nfs.sh` — installs `nfs-kernel-server`; reads `SERVICE_USER` / `STORAGE_GROUP` from env.
   - `deploy/wsdd/setup-wsdd.sh` — installs `wsdd2`/`wsdd`; no user param needed.
-  - `deploy/scripts/install-avahi.sh` — installs `avahi-daemon avahi-utils` itself; non-interactive `main`.
+  - `deploy/scripts/install-avahi.sh` — installs `avahi-daemon avahi-utils` itself. **On first install it is non-interactive**, but on a re-run (avahi already present) its `main()` prompts `read -p "reconfigure? (y/N)"`. The dispatcher's `_run_script` redirects stdin from `/dev/null`, so a re-run reads EOF and safely skips reconfiguration instead of hanging.
 - Template `deploy/install/templates/baluhost-hardware-sudoers` exists.
 - A module's `SCRIPT_DIR` is `deploy/install` (computed as `dirname/..`). The deploy root is therefore `$SCRIPT_DIR/..`.
 
@@ -166,6 +166,25 @@ run_feature SAMBA
   && ok "SAMBA passes configured user/group" || bad "SAMBA env not propagated"
 [[ "$(logcount '^apt:')" == "0" ]] && ok "SAMBA installs no module packages" || bad "SAMBA apt-installed packages"
 
+echo "== run_feature NFS (env propagation, self-installs) =="
+reset
+run_feature NFS
+[[ "$(logcount 'setup-nfs.sh SERVICE_USER=testuser STORAGE_GROUP=testgroup')" == "1" ]] \
+  && ok "NFS passes configured user/group" || bad "NFS env not propagated"
+[[ "$(logcount '^apt:')" == "0" ]] && ok "NFS installs no module packages" || bad "NFS apt-installed packages"
+
+echo "== run_feature WSDD (self-installs, no user/pkg) =="
+reset
+run_feature WSDD
+[[ "$(logcount 'setup-wsdd.sh')" == "1" ]] && ok "WSDD runs its setup script" || bad "WSDD script not run"
+[[ "$(logcount '^apt:')" == "0" ]] && ok "WSDD installs no module packages" || bad "WSDD apt-installed packages"
+
+echo "== run_feature MDNS (self-installs avahi) =="
+reset
+run_feature MDNS
+[[ "$(logcount 'install-avahi.sh')" == "1" ]] && ok "MDNS runs install-avahi.sh" || bad "MDNS script not run"
+[[ "$(logcount '^apt:')" == "0" ]] && ok "MDNS installs no module packages" || bad "MDNS apt-installed packages"
+
 echo "== run_feature VPN (package + user arg) =="
 reset
 run_feature VPN
@@ -278,13 +297,17 @@ _apt_install() {
 }
 
 # Run an external setup script as a subprocess. Overridden in tests.
+# stdin is redirected from /dev/null so any stray interactive prompt in a
+# called script (e.g. install-avahi.sh asks "reconfigure? (y/N)" when avahi is
+# already installed) cannot hang a non-interactive installer run — it reads EOF
+# and takes its safe default (skip reconfiguration).
 _run_script() {
     local script="$1"; shift
     if [[ ! -f "$script" ]]; then
         log_error "Setup script not found: $script"
         return 1
     fi
-    bash "$script" "$@"
+    bash "$script" "$@" </dev/null
 }
 
 # ─── Shared hardware sudoers (RAID + SMART) ──────────────────────────
@@ -349,7 +372,7 @@ run_feature() {
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `bash deploy/install/verify/test-features.sh`
-Expected: each line `ok`, final line `PASS=12 FAILED=0`, exit 0.
+Expected: every assertion prints `ok`, the final line shows `FAILED=0` (the `PASS=` number is informational, not asserted), exit 0.
 
 - [ ] **Step 5: Syntax check both files**
 
@@ -404,8 +427,12 @@ fi
 log_info "Enabled features: ${selected[*]}"
 
 # Refresh package index once before installing feature packages.
+# Guard it: under `set -e` a bare failing apt-get update would abort the module
+# before the per-feature loop can record failures and print the summary.
 log_info "Updating package index..."
-apt-get update -qq
+if ! apt-get update -qq; then
+    log_warn "apt-get update failed; continuing with the existing (possibly stale) index."
+fi
 
 declare -a OK_FEATURES=()
 declare -a FAILED_FEATURES=()
@@ -468,10 +495,12 @@ source "$SCRIPT_DIR/lib/features.sh"
 
 - [ ] **Step 2: Register the module**
 
-In the `MODULES` array, after the `"13-power-helpers"` entry, add a line:
+The `MODULES` array is declared `readonly -a MODULES=( … )` (around line 18). Insert `"14-optional-features"` as a new line **inside** that literal, immediately after the `"13-power-helpers"` line and before the closing `)`. Do NOT append with `MODULES+=(…)` — the array is read-only and that would fail at runtime.
 
 ```bash
+    "13-power-helpers"
     "14-optional-features"
+)
 ```
 
 - [ ] **Step 3: Add the interactive feature-selection block**
@@ -730,7 +759,7 @@ Expected: all exit 0, no output.
 - [ ] **Step 2: Run the offline dispatcher test**
 
 Run: `bash deploy/install/verify/test-features.sh`
-Expected: `PASS=12 FAILED=0`, exit 0.
+Expected: final line shows `FAILED=0`, exit 0 (every assertion prints `ok`).
 
 - [ ] **Step 3: Confirm module registration**
 
