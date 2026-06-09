@@ -1,6 +1,5 @@
 """API routes for rate limit configuration (admin only)."""
 
-from typing import List
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 

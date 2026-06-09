@@ -13,10 +13,9 @@ import logging
 import os
 import re
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 from app.schemas.gpu_power import (
-    AmdProfileMode,
     AmdStateConfig,
     GpuPowerCapabilities,
     GpuPowerConfig,

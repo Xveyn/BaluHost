@@ -5,7 +5,6 @@ Provides endpoints for managing power presets that define
 CPU clock speeds for each service power property level.
 """
 
-from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 

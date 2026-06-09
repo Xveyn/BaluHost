@@ -5,10 +5,7 @@ Used by FanControlService to look up any temperature regardless of origin.
 """
 from __future__ import annotations
 
-import asyncio
-import json
 import logging
-import uuid
 from typing import Awaitable, Callable, Dict, List, Literal, Optional, Protocol, runtime_checkable
 
 logger = logging.getLogger(__name__)

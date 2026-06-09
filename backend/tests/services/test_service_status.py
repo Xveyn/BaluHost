@@ -75,7 +75,8 @@ class TestServiceRegistration:
 
     def test_register_service_basic(self):
         """Test basic service registration."""
-        status_fn = lambda: {"is_running": True}
+        def status_fn():
+            return {"is_running": True}
 
         register_service(
             name="test_service",

@@ -373,7 +373,7 @@ class PowerManagerService:
             if config:
                 success, _ = await self._backend.apply_profile(config)
                 if not success:
-                    logger.warning(f"Could not re-apply profile after backend switch")
+                    logger.warning("Could not re-apply profile after backend switch")
 
             logger.info(f"Switched power backend: {previous_backend} -> {new_backend_name}")
 

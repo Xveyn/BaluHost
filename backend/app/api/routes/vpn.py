@@ -17,7 +17,6 @@ from app.schemas.vpn import (
     VPNClientUpdate,
     VPNConfigResponse,
     VPNServerConfig,
-    VPNStatusResponse,
     FritzBoxConfigUpload,
     FritzBoxConfigResponse,
     FritzBoxConfigSummary,

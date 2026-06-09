@@ -121,7 +121,7 @@ class BackupScheduler:
         execution_id = log_scheduler_execution("backup", job_id="backup_periodic")
 
         logger.info("="*60)
-        logger.info(f"[BackupScheduler] Periodic backup triggered")
+        logger.info("[BackupScheduler] Periodic backup triggered")
         logger.info(f"[BackupScheduler] Interval: {settings.backup_auto_interval_hours}h")
         logger.info("="*60)
 

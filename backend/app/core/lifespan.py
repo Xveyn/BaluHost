@@ -19,7 +19,6 @@ from fastapi import FastAPI
 from app.core.config import settings
 from app.core.service_registry import (
     MONITORING_WORKER_SERVICES,
-    make_db_status_reader,
     register_all_services,
 )
 from app.services.service_status import (

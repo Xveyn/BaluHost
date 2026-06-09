@@ -89,7 +89,6 @@ async def list_suspects(
 ):
     """Get paginated list of ad domain suspects with optional filters."""
     from app.models.ad_discovery import AdDiscoverySuspect
-    import sqlalchemy as sa
 
     q = db.query(AdDiscoverySuspect)
     if suspect_status:

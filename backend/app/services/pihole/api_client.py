@@ -9,7 +9,9 @@ from urllib.parse import quote
 
 import httpx
 
-from app.services.monitoring.shm import SHM_DIR, read_shm, write_shm
+# SHM_DIR is re-exported here only so tests can monkeypatch
+# ``app.services.pihole.api_client.SHM_DIR``; not referenced directly.
+from app.services.monitoring.shm import SHM_DIR, read_shm, write_shm  # noqa: F401
 
 logger = logging.getLogger(__name__)
 

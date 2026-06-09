@@ -15,7 +15,7 @@ from app.schemas.backup import (
     BackupRestoreRequest,
     BackupRestoreResponse
 )
-from app.services.backup import get_backup_service, BackupService
+from app.services.backup import get_backup_service
 from app.plugins.emit import emit_hook
 from app.core.rate_limiter import user_limiter, get_limit
 

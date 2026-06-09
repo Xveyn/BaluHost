@@ -22,7 +22,6 @@ from typing import Callable, Optional
 from app.services.monitoring.shm import (
     TELEMETRY_FILE,
     DISK_IO_FILE,
-    POWER_MONITOR_FILE,
     ORCHESTRATOR_STATUS_FILE,
     ORCHESTRATOR_DATA_FILE,
     HEARTBEAT_FILE,
@@ -121,7 +120,6 @@ class MonitoringWorker:
         last_heartbeat = 0.0
         last_telemetry = 0.0
         last_disk_io = 0.0
-        last_power = 0.0
         last_orchestrator = 0.0
         last_orchestrator_data = 0.0
         last_command_poll = 0.0

@@ -13,13 +13,12 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import desc, func, and_, delete
+from sqlalchemy import desc, func, and_
 from sqlalchemy.orm import Session
 
 from app.models.file_activity import FileActivity
 from app.models.user import User
 from app.schemas.file_activity import (
-    VALID_ACTION_TYPES,
     SHORT_RETENTION_ACTIONS,
     ActivityItem,
     RecentFileItem,

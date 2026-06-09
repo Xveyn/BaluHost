@@ -4,13 +4,16 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone, timedelta
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import func as sa_func
 from sqlalchemy.orm import Session
 
 from app.services.pihole.ad_discovery.scorer import Scorer, ScoredResult
 from app.services.pihole.ad_discovery.community_matcher import CommunityMatcher, MatchResult
+
+if TYPE_CHECKING:
+    from app.models.ad_discovery import AdDiscoverySuspect
 
 logger = logging.getLogger(__name__)
 

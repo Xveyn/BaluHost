@@ -111,7 +111,7 @@ class PerformanceBenchmark:
             
             # Create test file
             test_data = os.urandom(size_kb * 1024)
-            temp_file = Path(tempfile.gettempdir()) / f"bench_download_source.tmp"
+            temp_file = Path(tempfile.gettempdir()) / "bench_download_source.tmp"
             temp_file.write_bytes(test_data)
             
             for i in range(iterations):
@@ -387,7 +387,7 @@ async def run_all_benchmarks():
     
     # Database
     db_1000 = benchmark.results["database_queries_1000"]
-    print(f"\n🗄️  Database (1000 records):")
+    print("\n🗄️  Database (1000 records):")
     print(f"   Find: {db_1000['find_by_id_avg_ms']:.3f}ms")
     print(f"   Filter: {db_1000['filter_by_path_avg_ms']:.3f}ms")
     

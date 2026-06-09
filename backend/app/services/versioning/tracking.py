@@ -6,9 +6,8 @@ In manual mode: only explicitly tracked files are versioned.
 """
 import fnmatch
 import time
-from typing import Optional, Dict, List, Tuple
+from typing import Dict, Tuple
 from sqlalchemy.orm import Session
-from sqlalchemy import and_
 
 from app.models.vcl import VCLSettings, VCLFileTracking
 from app.models.file_metadata import FileMetadata
@@ -79,7 +78,7 @@ class VCLTrackingService:
         # 2. Parent directory rules (walk upward)
         path_parts = file_path.split("/")
         for i in range(len(path_parts) - 1, 0, -1):
-            parent_path = "/".join(path_parts[:i])
+            "/".join(path_parts[:i])
             for rule in rules:
                 if rule.file_id and rule.is_directory:
                     # Check if this rule's file is a parent directory

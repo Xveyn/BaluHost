@@ -138,7 +138,7 @@ def analyze_data_integrity(sqlite_path: Path):
         if orphaned > 0:
             issues.append(f"[!] Warning: {orphaned} orphaned files (owner doesn't exist)")
         else:
-            print(f"[OK] No orphaned files")
+            print("[OK] No orphaned files")
             checks_passed += 1
 
         # Check 3: VPN clients without users
@@ -180,7 +180,7 @@ def analyze_data_integrity(sqlite_path: Path):
         if null_usernames > 0:
             issues.append(f"[X] Error: {null_usernames} users with NULL username")
         else:
-            print(f"[OK] No NULL usernames")
+            print("[OK] No NULL usernames")
             checks_passed += 1
 
         # Summary
@@ -359,12 +359,12 @@ def main():
     if issues:
         print(f"[!] {len(issues)} data integrity warnings (non-critical)")
     else:
-        print(f"[OK] Data integrity: Perfect!")
+        print("[OK] Data integrity: Perfect!")
 
     if deps_ok:
-        print(f"[OK] Dependencies: All installed")
+        print("[OK] Dependencies: All installed")
     else:
-        print(f"[!] Dependencies: Some missing (see above)")
+        print("[!] Dependencies: Some missing (see above)")
 
     print("\nNext Steps:")
     if not deps_ok:

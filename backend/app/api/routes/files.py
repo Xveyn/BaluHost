@@ -1,8 +1,7 @@
 from typing import Optional
 from pathlib import Path, PurePosixPath
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Header, Request, Response, UploadFile, status
-from fastapi import Body
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile, status
 from pydantic import BaseModel
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
@@ -10,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.api import deps
 from app.core.database import get_db
 from app.core.power_rating import requires_power
-from app.core.rate_limiter import limiter, user_limiter, get_limit
+from app.core.rate_limiter import user_limiter, get_limit
 from app.schemas.power import ServicePowerProperty
 from app.schemas.files import (
     FileListResponse,
@@ -35,7 +34,6 @@ from app.schemas.user import UserPublic
 from app.services import files as file_service
 from app.services.files.operations import (
     is_path_shared_with_user,
-    get_share_permissions,
     list_shared_with_me,
     list_user_root,
     SHARED_WITH_ME_DIR,

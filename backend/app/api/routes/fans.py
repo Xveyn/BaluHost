@@ -6,11 +6,9 @@ from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy import select, func
-from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, get_current_admin, get_db
+from app.api.deps import get_current_user, get_current_admin
 from app.core.rate_limiter import user_limiter, get_limit
-from app.core.config import get_settings
 from app.models.user import User
 from app.schemas.fans import (
     FanStatusResponse,
@@ -178,7 +176,7 @@ async def set_fan_pwm(
         if not success:
             raise HTTPException(
                 status_code=400,
-                detail=f"Failed to set PWM (fan not in manual mode or not found)"
+                detail="Failed to set PWM (fan not in manual mode or not found)"
             )
 
         return SetFanPWMResponse(

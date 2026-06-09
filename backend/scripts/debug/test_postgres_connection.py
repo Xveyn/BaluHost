@@ -41,9 +41,9 @@ def test_connection(postgres_url: str) -> bool:
             # Get PostgreSQL version
             result = conn.execute(text("SELECT version()"))
             version = result.fetchone()[0]
-            print(f"✓ Connection successful!")
+            print("✓ Connection successful!")
             print()
-            print(f"PostgreSQL Version:")
+            print("PostgreSQL Version:")
             print(f"  {version.split(',')[0]}")
             print()
 

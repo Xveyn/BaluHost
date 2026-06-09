@@ -72,10 +72,10 @@ def init_database():
         command.stamp(alembic_cfg, "head")
 
         print("\n✅ Database initialization completed successfully!")
-        print(f"\nAdmin credentials:")
+        print("\nAdmin credentials:")
         print(f"  Username: {settings.admin_username}")
         print("  Password: (as configured in your environment / .env.production)")
-        print(f"\n⚠️  IMPORTANT: Change the admin password after first login!")
+        print("\n⚠️  IMPORTANT: Change the admin password after first login!")
 
     except Exception as e:
         print(f"❌ Error during initialization: {e}")

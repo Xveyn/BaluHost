@@ -11,11 +11,10 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timedelta, timezone
 from threading import Lock
-from typing import Dict, List, Optional, Type
+from typing import Dict, List, Optional
 
 import psutil
 
-from app.models.base import Base
 from app.models.monitoring import ProcessSample
 from app.schemas.monitoring import ProcessSampleSchema
 from sqlalchemy.orm import Session

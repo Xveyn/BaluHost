@@ -10,7 +10,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from app.models import VPNProfile, VPNType, ServerProfile
+from app.models import VPNProfile, VPNType
 from app.services.vpn.encryption import VPNEncryption
 
 logger = logging.getLogger(__name__)

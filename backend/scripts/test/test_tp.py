@@ -94,7 +94,7 @@ async def test_new_api():
     # Current Power
     try:
         current_power = await energy.get_current_power()
-        print(f"\n=== CURRENT POWER ===")
+        print("\n=== CURRENT POWER ===")
         print(f"Value: {current_power}")
         print(f"Type: {type(current_power)}")
     except Exception as e:
@@ -105,16 +105,16 @@ async def test_new_api():
     # Energy Usage
     try:
         energy_data = await energy.get_energy_usage()
-        print(f"\n=== ENERGY USAGE (RAW) ===")
+        print("\n=== ENERGY USAGE (RAW) ===")
         print(f"Type: {type(energy_data)}")
         print(f"Data: {energy_data}")
 
         if hasattr(energy_data, '__dict__'):
-            print(f"\n=== ATTRIBUTES ===")
+            print("\n=== ATTRIBUTES ===")
             for key, val in energy_data.__dict__.items():
                 print(f"  {key}: {val} (type: {type(val).__name__})")
         elif isinstance(energy_data, dict):
-            print(f"\n=== DICT BREAKDOWN ===")
+            print("\n=== DICT BREAKDOWN ===")
             for key, value in energy_data.items():
                 print(f"  {key}: {value} (type: {type(value).__name__})")
     except Exception as e:
@@ -147,7 +147,7 @@ async def test_old_api():
         return
 
     # Alle Methoden anzeigen
-    print(f"\n=== AVAILABLE METHODS ===")
+    print("\n=== AVAILABLE METHODS ===")
     methods = [m for m in dir(device) if not m.startswith('_') and callable(getattr(device, m))]
     for m in methods:
         print(f"  - {m}")
@@ -156,12 +156,12 @@ async def test_old_api():
     if hasattr(device, 'get_energy_usage'):
         try:
             energy_data = await device.get_energy_usage()
-            print(f"\n=== ENERGY USAGE (RAW) ===")
+            print("\n=== ENERGY USAGE (RAW) ===")
             print(f"Type: {type(energy_data)}")
             print(f"Data: {energy_data}")
 
             if isinstance(energy_data, dict):
-                print(f"\n=== DICT BREAKDOWN ===")
+                print("\n=== DICT BREAKDOWN ===")
                 for key, value in energy_data.items():
                     print(f"  {key}: {value} (type: {type(value).__name__})")
         except Exception as e:

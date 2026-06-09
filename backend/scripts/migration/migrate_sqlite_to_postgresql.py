@@ -168,7 +168,7 @@ class SQLiteToPostgreSQLMigrator:
                     logger.info(f"   → {len(rows)} Zeilen zu migrieren")
                     
                     if len(rows) == 0:
-                        logger.info(f"   → Tabelle ist leer, skip data insert")
+                        logger.info("   → Tabelle ist leer, skip data insert")
                         self.migration_log.append({
                             "step": f"migrate_table_{table_name}",
                             "status": "success",

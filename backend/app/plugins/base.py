@@ -4,7 +4,7 @@ Provides the abstract base class that all plugins must extend,
 along with supporting data structures.
 """
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Callable, Coroutine, Dict, List, Literal, Optional
 
 from fastapi import APIRouter

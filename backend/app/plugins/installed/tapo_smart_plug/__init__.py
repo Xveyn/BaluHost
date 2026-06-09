@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -27,6 +27,15 @@ from app.plugins.smart_device.capabilities import (
     PowerReading,
     SwitchState,
 )
+
+if TYPE_CHECKING:
+    from datetime import date
+
+    from app.plugins.smart_device.schemas import (
+        ImportHistoryConflictStrategy,
+        ImportHistoryInterval,
+        ImportHistoryResponse,
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -280,7 +289,6 @@ class TapoSmartPlugPlugin(SmartDevicePlugin):
                 InvalidAuthentication,
             )
 
-            original_init = InvalidAuthentication.__init__
 
             # Only patch if the bug is still present
             try:

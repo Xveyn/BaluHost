@@ -9,7 +9,7 @@ Stores benchmark runs and individual test results for historical analysis:
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Optional, List
+from typing import Optional, List
 
 from sqlalchemy import Column, Integer, BigInteger, Float, DateTime, String, ForeignKey, Enum as SQLEnum
 from sqlalchemy.orm import relationship, Mapped

@@ -307,7 +307,8 @@ class BrokenPollerPlugin(SmartDevicePlugin):
         return {}
 ''')
 
-    import importlib.util, sys
+    import importlib.util
+    import sys
     module_name = "test_broken_poller_plugin"
     spec = importlib.util.spec_from_file_location(
         module_name,

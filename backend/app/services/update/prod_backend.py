@@ -3,7 +3,7 @@ import json
 import logging
 import re
 import subprocess
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -26,7 +26,6 @@ from app.services.update.github_releases import (
     GitHubReleasesClient,
     GitHubRelease,
     GitHubUnavailable,
-    filter_channel,
     latest_for_channel,
     notes_since_last_stable,
     releases_between,
@@ -38,7 +37,6 @@ from app.services.update.utils import (
     version_to_string,
     get_installed_version,
     _CONVENTIONAL_RE,
-    _parse_conventional_commits,
 )
 
 logger = logging.getLogger(__name__)

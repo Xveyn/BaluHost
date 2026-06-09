@@ -179,7 +179,7 @@ async def delete_user(
         await samba_service.reload_samba()
 
     username = user.username
-    deleted = user_service.delete_user(user_id, db=db)
+    user_service.delete_user(user_id, db=db)
 
     audit_logger.log_user_management(
         action="user_deleted",

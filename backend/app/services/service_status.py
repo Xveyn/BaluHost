@@ -15,11 +15,10 @@ import shutil
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Callable, Any
+from typing import Dict, List, Optional, Callable, Any
 
 import psutil
 
-from app.core.config import settings
 from app.schemas.service_status import (
     ServiceStateEnum,
     ServiceStatusResponse,

@@ -2,7 +2,7 @@
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import String, DateTime, Integer, Text, Index, Enum as SQLEnum
+from sqlalchemy import String, DateTime, Integer, Text, Index
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
 import enum

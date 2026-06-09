@@ -19,7 +19,6 @@ from app.schemas.mobile import (
     MobilePowerSummary,
     TapoDevicePowerInfo,
     CameraBackupSettings,
-    CameraBackupStatus,
     SyncFolder as SyncFolderSchema,
     SyncFolderCreate,
     SyncFolderUpdate,

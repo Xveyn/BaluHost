@@ -4,10 +4,10 @@ import hashlib
 from pathlib import Path
 from uuid import uuid4
 from datetime import datetime, timedelta, timezone
-from typing import Optional, BinaryIO
+from typing import Optional
 from sqlalchemy.orm import Session
 
-from app.models.sync_progress import ChunkedUpload, SyncBandwidthLimit, SyncSchedule, SelectiveSync
+from app.models.sync_progress import ChunkedUpload, SyncBandwidthLimit
 from app.models.file_metadata import FileMetadata
 from app.core.config import settings
 

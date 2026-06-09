@@ -39,7 +39,6 @@ from app.services.plugin_marketplace import (
     IndexFetchError,
     IndexParseError,
     MarketplaceService,
-    PluginNotFoundError,
 )
 
 logger = logging.getLogger(__name__)

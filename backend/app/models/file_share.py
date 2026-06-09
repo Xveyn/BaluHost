@@ -2,8 +2,8 @@
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import String, DateTime, Integer, Boolean, ForeignKey, UniqueConstraint
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import DateTime, Integer, Boolean, ForeignKey, UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
 
 from app.models.base import Base

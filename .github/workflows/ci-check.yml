@@ -34,7 +34,7 @@ jobs:
           done
           echo "Identity OK: $(whoami) uid=$(id -u) groups=$(id -nG)"
 
-      - name: Run backend tests in rootless Podman container
+      - name: Lint + backend tests in rootless Podman container
         env:
           TEST_IMAGE: docker.io/library/python:3.11-slim
         run: |
@@ -45,7 +45,7 @@ jobs:
             -w /work/backend \
             -e NAS_MODE=dev \
             "$TEST_IMAGE" \
-            bash -c "set -euo pipefail; pip install --no-cache-dir -e '.[dev]' && python -m pytest -q --timeout=120 -n auto --no-cov"
+            bash -c "set -euo pipefail; pip install --no-cache-dir -e '.[dev]' && python -m ruff check . && python -m pytest -q --timeout=120 -n auto --no-cov"
 
   frontend-build:
     runs-on: ubuntu-latest

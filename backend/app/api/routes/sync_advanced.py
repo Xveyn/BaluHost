@@ -3,7 +3,6 @@
 from fastapi import APIRouter, Depends, HTTPException, File, Request, Response, UploadFile, status
 from sqlalchemy.orm import Session
 
-from app import api
 from app.api import deps
 from app.api.deps import require_sync_allowed
 from app.core.database import get_db
@@ -12,18 +11,11 @@ from app.services.sync.progressive import ProgressiveSyncService
 from app.services.sync.scheduler import SyncSchedulerService
 from app.core.rate_limiter import user_limiter, get_limit
 from app.schemas.sync import (
-    RegisterDeviceRequest,
-    SyncStatusResponse,
     StartChunkedUploadRequest,
-    UploadChunkResponse,
-    UploadProgressResponse,
     SetBandwidthLimitRequest,
-    BandwidthLimitResponse,
     CreateSyncScheduleRequest,
     UpdateSyncScheduleRequest,
-    SyncScheduleResponse,
     SelectiveSyncRequest,
-    SelectiveSyncResponse,
 )
 
 router = APIRouter(prefix="/sync", tags=["sync"])

@@ -1,10 +1,8 @@
 """Progressive sync with chunked uploads for large files."""
 
-from pathlib import Path
-from uuid import uuid4
-from datetime import datetime, timedelta
-from sqlalchemy import Column, Integer, BigInteger, String, DateTime, Float, Boolean, ForeignKey
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from datetime import datetime
+from sqlalchemy import Integer, BigInteger, String, DateTime, Boolean, ForeignKey
+from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
 
 from app.models.base import Base

@@ -4,7 +4,7 @@ Database models for sleep mode.
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, Text
+from sqlalchemy import Integer, String, Float, Boolean, DateTime, Text
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
 

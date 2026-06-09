@@ -89,7 +89,9 @@ def _run_smartctl(smartctl_path: str, dev_type: str, device_name: str) -> tuple[
     (SMART command failed, disk failing, error-log entries, self-test log
     entries) are informational — the JSON output is still valid.
     """
-    import json, subprocess, re as _re
+    import json
+    import subprocess
+    import re as _re
     base_args = ["sudo", "-n", smartctl_path, '-H', '-i', '-l', 'selftest', '-j', '-d', dev_type, device_name]
     if not _re.search(r'nvme', dev_type, _re.IGNORECASE) and 'nvme' not in device_name.lower():
         base_args.insert(3, '-A')

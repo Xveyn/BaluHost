@@ -8,7 +8,6 @@ import logging
 import time
 from typing import Dict, Optional, TYPE_CHECKING
 from dataclasses import dataclass
-from datetime import datetime
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
@@ -202,7 +201,7 @@ class VCLCache:
         vcl_service = VCLService(db)
         
         try:
-            version = vcl_service.create_version(
+            vcl_service.create_version(
                 file=pending.file,
                 content=pending.content,
                 user_id=pending.user_id,

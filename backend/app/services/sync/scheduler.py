@@ -1,9 +1,8 @@
 """Service for scheduled automatic syncs."""
 
-from datetime import datetime, time, timedelta, timezone
-from typing import Optional, Callable
+from datetime import datetime, timedelta, timezone
+from typing import Optional
 from sqlalchemy.orm import Session
-import asyncio
 
 from app.models.sync_progress import SyncSchedule
 from app.services.sync.file_sync import FileSyncService

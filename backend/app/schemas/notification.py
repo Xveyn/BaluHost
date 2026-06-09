@@ -1,5 +1,5 @@
 """Notification request and response schemas."""
-from datetime import datetime, time, timezone
+from datetime import datetime, timezone
 from typing import Optional, Literal, Any
 
 from pydantic import BaseModel, Field

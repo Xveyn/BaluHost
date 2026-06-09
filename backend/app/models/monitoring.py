@@ -14,7 +14,7 @@ from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import Column, Integer, BigInteger, Float, DateTime, String, Boolean, Enum as SQLEnum, JSON
-from sqlalchemy.orm import Mapped, relationship
+from sqlalchemy.orm import Mapped
 import enum
 
 from app.models.base import Base

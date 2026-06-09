@@ -11,15 +11,9 @@ from alembic import context
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # Import app models and config
-from app.core.config import settings
 from app.core.database import DATABASE_URL
 from app.models.base import Base
 # Import all models to ensure they are registered with Base
-from app.models import (
-    User, FileMetadata, ServerProfile, VPNProfile,
-    # Monitoring models
-    CpuSample, MemorySample, NetworkSample, DiskIoSample, ProcessSample, MonitoringConfig
-)
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

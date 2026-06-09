@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Optional, Tuple, List
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
-from sqlalchemy import func, select, update
+from sqlalchemy import func, update
 
 from app.models.vcl import FileVersion, VersionBlob, VCLSettings, VCLStats
 from app.models.file_metadata import FileMetadata

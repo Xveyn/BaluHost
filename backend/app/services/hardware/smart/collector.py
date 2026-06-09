@@ -28,7 +28,8 @@ _device_type_overrides: dict[str, str] = {}
 
 def _read_real_smart_data() -> SmartStatusResponse:
     """Optimierte SMART-Erfassung mit paralleler Verarbeitung und reduzierten Flags."""
-    import json, subprocess, re
+    import json
+    import subprocess
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
     smartctl_path = _get_smartctl_path()

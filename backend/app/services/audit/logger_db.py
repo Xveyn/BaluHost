@@ -6,10 +6,9 @@ import logging
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, Optional, List
 
-from sqlalchemy import select, desc, and_, not_
+from sqlalchemy import select, desc, not_
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
 from app.core.database import get_db
 from app.models.audit_log import AuditLog
 

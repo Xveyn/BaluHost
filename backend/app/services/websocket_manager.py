@@ -6,7 +6,7 @@ Manages WebSocket connections and broadcasts notifications to connected clients.
 import asyncio
 import logging
 from typing import Optional, Any
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from fastapi import WebSocket
 

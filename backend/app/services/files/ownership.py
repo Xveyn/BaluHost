@@ -16,11 +16,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal, Optional, cast
 
-from sqlalchemy import select, or_, text, true
+from sqlalchemy import select, text, true
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.database import SessionLocal
+# SessionLocal is re-exported here only so tests can monkeypatch
+# ``app.services.files.ownership.SessionLocal``; not referenced directly.
+from app.core.database import SessionLocal  # noqa: F401
 from app.models.file_metadata import FileMetadata
 from app.models.file_share import FileShare
 from app.models.user import User
@@ -718,7 +720,7 @@ def enforce_residency(
                 
                 fixed_count += 1
                 
-            except Exception as e:
+            except Exception:
                 logger.exception("Failed to fix residency violation for %s", violation.path)
                 continue
         

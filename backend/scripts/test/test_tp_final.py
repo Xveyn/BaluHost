@@ -65,11 +65,11 @@ async def main():
 
         # Step 4: Update device to fetch latest state
         await device.update()
-        print(f"✓ Device updated")
+        print("✓ Device updated")
 
         # Display device info
         info = device.device_info
-        print(f"\nDevice Information:")
+        print("\nDevice Information:")
         print(f"  Model: {info.model}")
         print(f"  Nickname: {info.friendly_name}")
         print(f"  MAC: {info.mac}")
@@ -83,7 +83,7 @@ async def main():
             sys.exit(1)
 
         energy = device.get_component(EnergyComponent)
-        print(f"\n✓ EnergyComponent available")
+        print("\n✓ EnergyComponent available")
 
         # Step 6: Get power and energy data
         power_info = energy.power_info
@@ -110,17 +110,17 @@ async def main():
         print(f"\n{'='*70}")
         print("POWER MONITORING DATA")
         print(f"{'='*70}")
-        print(f"\nCurrent Power Consumption:")
+        print("\nCurrent Power Consumption:")
         print(f"  Power: {watts:.1f} W")
         print(f"  Voltage: {voltage:.1f} V (estimated)")
         print(f"  Current: {current_amps:.3f} A (calculated)")
 
-        print(f"\nEnergy Usage (Today):")
+        print("\nEnergy Usage (Today):")
         print(f"  Energy: {energy_kwh:.3f} kWh ({today_energy_wh} Wh)")
         print(f"  Runtime: {today_runtime_min} minutes ({today_runtime_min/60:.1f} hours)")
         print(f"  Avg Power: {(today_energy_wh/today_runtime_min*60):.1f} W" if today_runtime_min > 0 else "  Avg Power: N/A")
 
-        print(f"\nEnergy Usage (This Month):")
+        print("\nEnergy Usage (This Month):")
         print(f"  Energy: {month_kwh:.3f} kWh ({month_energy_wh} Wh)")
         print(f"  Runtime: {month_runtime_min} minutes ({month_runtime_min/60:.1f} hours)")
 
@@ -137,7 +137,7 @@ async def main():
         print(f"{'='*70}")
 
         # Raw data for debugging
-        print(f"\nRaw API Response:")
+        print("\nRaw API Response:")
         print(f"  power_info: {power_info.info}")
         print(f"  energy_info: {energy_info.info}")
 

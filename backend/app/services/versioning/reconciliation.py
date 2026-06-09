@@ -3,9 +3,9 @@
 Scans for mismatches between FileVersion.user_id and FileMetadata.owner_id,
 and bulk-updates ownership + rebalances quotas.
 """
-from typing import Optional, List, Dict
+from typing import Optional, Dict
 from sqlalchemy.orm import Session
-from sqlalchemy import func, update as sql_update
+from sqlalchemy import update as sql_update
 
 from app.models.vcl import FileVersion, VCLSettings
 from app.models.file_metadata import FileMetadata

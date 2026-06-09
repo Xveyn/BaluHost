@@ -9,8 +9,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base
 
 if TYPE_CHECKING:
-    from app.models.file_metadata import FileMetadata
-    from app.models.user import User
+    pass
 
 
 class VersionBlob(Base):

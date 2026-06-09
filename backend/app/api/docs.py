@@ -1,6 +1,5 @@
 """Custom Swagger UI with BaluHost styling."""
 
-from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi import APIRouter
 from fastapi.responses import HTMLResponse
 
@@ -739,7 +738,7 @@ async def custom_swagger_ui_html():
 @router.get("/redoc", response_class=HTMLResponse, include_in_schema=False)
 async def custom_redoc_html():
     """Custom ReDoc with BaluHost styling."""
-    html = f"""
+    html = """
     <!DOCTYPE html>
     <html lang="en">
     <head>
@@ -747,40 +746,40 @@ async def custom_redoc_html():
         <title>BaluHost API Documentation - ReDoc</title>
         <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏠</text></svg>">
         <style>
-            body {{
+            body {
                 margin: 0;
                 padding: 0;
                 background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 25%, #1e293b 50%, #0c0a1f 75%, #020617 100%) !important;
                 background-attachment: fixed !important;
-            }}
+            }
             
-            .menu-content {{
+            .menu-content {
                 background: rgba(15, 23, 42, 0.85) !important;
                 backdrop-filter: blur(12px) !important;
-            }}
+            }
             
-            .api-content {{
+            .api-content {
                 background: transparent !important;
-            }}
+            }
             
-            h1, h2, h3, h4, h5, h6 {{
+            h1, h2, h3, h4, h5, h6 {
                 color: #e2e8f0 !important;
-            }}
+            }
             
-            p, span, div {{
+            p, span, div {
                 color: #94a3b8 !important;
-            }}
+            }
             
-            code {{
+            code {
                 background: rgba(0, 0, 0, 0.4) !important;
                 color: #60a5fa !important;
-            }}
+            }
             
-            pre {{
+            pre {
                 background: rgba(0, 0, 0, 0.6) !important;
                 border: 1px solid rgba(148, 163, 184, 0.2) !important;
                 border-radius: 8px !important;
-            }}
+            }
         </style>
     </head>
     <body>

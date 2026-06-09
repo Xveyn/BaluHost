@@ -10,7 +10,6 @@ from app.schemas.system import SmartAttribute, SmartDevice, SmartSelfTest, Smart
 
 
 def _mock_status() -> SmartStatusResponse:
-    from app.core.config import settings
     from app.services import files as file_service
 
     now = datetime.now(tz=timezone.utc)

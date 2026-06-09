@@ -22,19 +22,15 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api import deps
-from app.core.config import settings
 from app.core.database import get_db
 from app.schemas.user import UserPublic
 from app.services.files.chunked_upload import get_chunked_upload_manager
 from app.services.files.operations import (
     ROOT_DIR,
     FileAccessError,
-    QuotaExceededError,
     _resolve_path,
     _schedule_vcl_version,
-    calculate_available_bytes,
     calculate_available_bytes_async,
-    calculate_used_bytes,
     get_owner,
     is_in_shared_dir,
 )
