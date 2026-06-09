@@ -105,6 +105,18 @@ fi
 log "Enabling systemd lingering for '$RUNNER_USER'..."
 loginctl enable-linger "$RUNNER_USER"
 
+# Reconcile rootless Podman state now that the user manager + /run/user/<uid> are
+# persistent. `loginctl enable-linger` (above) is the DURABLE fix — it keeps the
+# pause process alive across logout/reboot — but it does not retroactively repair
+# state that already went stale (e.g. from an earlier non-lingered session, which is
+# why #127 recurred even though linger was already in this script). A one-time
+# `podman system migrate` reconciles that stale pause.pid so the first `podman run`
+# does not hit 'invalid internal status ... could not find any running process'.
+# (migrate alone is only a temporary fix — linger is what makes it survive reboots.)
+# Best-effort here; the linger + `podman info` self-tests below are the gate.
+log "Reconciling rootless Podman state ('podman system migrate')..."
+as_runner bash -lc 'podman system migrate' || true
+
 # ---------- Step 5: GitHub Actions runner agent ----------
 if [[ -x "$RUNNER_DIR/config.sh" ]] && [[ -f "$RUNNER_DIR/.runner" ]]; then
   log "Runner agent already installed; skipping download. Re-registration follows."
@@ -181,6 +193,19 @@ for grp in docker sudo wheel; do
   fi
 done
 log "  [OK] ci-runner not in docker/sudo/wheel groups (current: $RUNNER_GROUPS)"
+
+# Podman base health (issue #127): linger must be active and `podman info` must
+# succeed — catches the stale rootless pause-process failure before any container
+# actually runs (clearer diagnostic than a failing `podman run`).
+if [[ "$(loginctl show-user "$RUNNER_USER" -p Linger --value 2>/dev/null)" != "yes" ]]; then
+  fail "systemd linger is not enabled for $RUNNER_USER — rootless pause process will die on idle/reboot (issue #127). Run: loginctl enable-linger $RUNNER_USER"
+fi
+log "  [OK] systemd linger enabled for $RUNNER_USER"
+
+if ! as_runner bash -lc 'podman info >/dev/null 2>&1'; then
+  fail "rootless 'podman info' failed for $RUNNER_USER — stale pause process? Run: sudo -u $RUNNER_USER -H bash -lc 'podman system migrate'"
+fi
+log "  [OK] rootless 'podman info' healthy"
 
 # 7d: rootless podman works.
 HELLO_OUT=$(as_runner podman run --rm docker.io/library/hello-world 2>&1 || true)
