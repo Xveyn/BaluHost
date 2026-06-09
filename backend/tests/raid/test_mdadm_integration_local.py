@@ -1,3 +1,9 @@
+"""Parsing-level tests for MdadmRaidBackend using a fake `_run` (no real mdadm).
+
+Despite the historical "integration" filename, these inject canned subprocess
+output and verify parsing only — no mdadm, sudo, or block devices are touched.
+Real hardware coverage lives in `test_mdadm_loopback.py` (ubuntu-latest CI).
+"""
 import json
 import subprocess
 from types import SimpleNamespace
