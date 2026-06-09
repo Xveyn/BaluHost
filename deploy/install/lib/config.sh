@@ -30,6 +30,18 @@ unset _balu_dir_owner _balu_dir_group
 : "${GIT_REPO:=https://github.com/Xveyn/BaluHost.git}"
 : "${GIT_BRANCH:=main}"
 
+# ─── Optional Feature Flags ──────────────────────────────────────────
+# Each gates a feature in module 14-optional-features. Default false so an
+# install without explicit opt-in behaves exactly as before (core NAS only).
+: "${ENABLE_RAID:=false}"
+: "${ENABLE_SMART:=false}"
+: "${ENABLE_VPN:=false}"
+: "${ENABLE_CLOUD:=false}"
+: "${ENABLE_SAMBA:=false}"
+: "${ENABLE_NFS:=false}"
+: "${ENABLE_WSDD:=false}"
+: "${ENABLE_MDNS:=false}"
+
 # ─── Load Config ─────────────────────────────────────────────────────
 
 load_config() {
@@ -71,6 +83,14 @@ TOKEN_SECRET=${TOKEN_SECRET}
 VPN_ENCRYPTION_KEY=${VPN_ENCRYPTION_KEY}
 GIT_REPO=${GIT_REPO}
 GIT_BRANCH=${GIT_BRANCH}
+ENABLE_RAID=${ENABLE_RAID}
+ENABLE_SMART=${ENABLE_SMART}
+ENABLE_VPN=${ENABLE_VPN}
+ENABLE_CLOUD=${ENABLE_CLOUD}
+ENABLE_SAMBA=${ENABLE_SAMBA}
+ENABLE_NFS=${ENABLE_NFS}
+ENABLE_WSDD=${ENABLE_WSDD}
+ENABLE_MDNS=${ENABLE_MDNS}
 EOF
 
     chmod 600 "$BALUHOST_CONFIG"
