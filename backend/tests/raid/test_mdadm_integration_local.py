@@ -31,7 +31,7 @@ Number   Major   Minor   RaidDevice State
    1       8       17        1      spare         /dev/sdb1
 """
 
-    def fake_run(command, *, check: bool = True, capture_output: bool = True, text: bool = True, timeout: int = 60) -> subprocess.CompletedProcess[str]:
+    def fake_run(command, *, check: bool = True, timeout: int = 60, stdin_input: str | None = None) -> subprocess.CompletedProcess[str]:
         cmd_key = " ".join(command)
         if "mdadm --detail --scan" in cmd_key:
             return subprocess.CompletedProcess(command, 0, stdout="ARRAY /dev/md0\n", stderr="")
@@ -87,7 +87,7 @@ def test_get_available_disks_with_mocked_lsblk_and_raid():
         ]
     }
 
-    def fake_run(command, *, check: bool = True, capture_output: bool = True, text: bool = True, timeout: int = 60) -> subprocess.CompletedProcess[str]:
+    def fake_run(command, *, check: bool = True, timeout: int = 60, stdin_input: str | None = None) -> subprocess.CompletedProcess[str]:
         if command[0] == "lsblk":
             return subprocess.CompletedProcess(command, 0, stdout=json.dumps(lsblk_json), stderr="")
         raise RuntimeError(f"Unexpected command in test fake: {' '.join(command)}")
