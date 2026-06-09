@@ -144,6 +144,11 @@ npm run dev
 
 ### Production Deployment
 
+> **Supported OS:** The production installer targets **Debian 12/13 only**.
+> Optional features (RAID, SMART, VPN, Samba, NFS, Cloud, mDNS) are off by
+> default — see [Feature Dependencies](docs/deployment/FEATURE_DEPENDENCIES.en.md)
+> for the package matrix and how to enable them.
+
 See [Production Quickstart](docs/deployment/PRODUCTION_QUICKSTART.en.md) for full instructions.
 
 ```bash

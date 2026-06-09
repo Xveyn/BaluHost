@@ -2,6 +2,11 @@
 
 Anleitung zur Installation von BaluHost auf einem Produktionsserver.
 
+> **Unterstütztes OS:** Nur Debian 12 (bookworm) / 13 (trixie).
+> Siehe [Feature-Abhängigkeiten](./FEATURE_DEPENDENCIES.de.md) für die Paket-
+> Matrix pro Feature und die Aktivierung (interaktive Abfrage oder `ENABLE_*`-
+> Config-Flags).
+
 ## Voraussetzungen
 
 ### Hardware
