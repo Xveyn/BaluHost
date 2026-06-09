@@ -36,7 +36,7 @@ Owned paths:
 | `playwright-e2e.yml` | `ubuntu-latest` | `pull_request`, `push: main` |
 | `release-stable.yml` | `ubuntu-latest` | `workflow_dispatch` |
 | `deploy-production.yml` | **`self-hosted, prod`** | `push: main`, `workflow_dispatch` |
-| `raid-mdadm-selfhosted.yml` | **`self-hosted, linux, mdadm`** | `workflow_dispatch` only |
+| `raid-mdadm-loopback.yml` | `ubuntu-latest` | `pull_request` (paths: raid), `workflow_dispatch` |
 | `tauri-build.yml` | `ubuntu-latest` | `push: main`, tag, `workflow_dispatch` |
 | `tui-build.yml` | `ubuntu-latest` | `push: main`, tag, `workflow_dispatch` |
 
@@ -51,7 +51,7 @@ Self-hosted production runners (`BaluNode`) only see code that has already lande
 
 A workflow on `ci-sandbox` that runs `pip install` directly on the runner host (instead of inside `podman run`) breaks Layer B. The Reviewer Checklist below catches this.
 
-**Stale-label gap (2026-05-12)**: `raid-mdadm-selfhosted.yml` requires the `mdadm` label, but the `BaluNode` runner only has `self-hosted, Linux, X64`. The workflow currently cannot acquire a runner and would hang indefinitely if dispatched. Either add the `mdadm` label to `BaluNode` (config in `/opt/actions-runner/.runner` or via the GitHub UI) or change the workflow to drop the label requirement.
+**Resolved (2026-06-09)**: the dead `raid-mdadm-selfhosted.yml` (which required a non-existent `mdadm` runner label and only ran mock tests anyway) was retired and replaced by `raid-mdadm-loopback.yml` on `ubuntu-latest`. Real mdadm coverage now runs on ephemeral GitHub-hosted VMs against loop-device arrays — no self-hosted runner, no production-disk risk (issue #185).
 
 ### Layer 3 — `github.actor == 'Xveyn'` Allowlist
 
@@ -142,6 +142,6 @@ When reviewing changes that touch CI/CD, deploy scripts, or these rules:
 4. **CODEOWNERS is advisory on `main`** — See the deliberate gap above.
 5. **In-repo CODEOWNERS for paths outside the repo (e.g., GitHub environment settings) is impossible** — Layer 4 protections must be re-verified manually after any account/plan change (see Repo Settings table).
 6. **`enforce_admins: false` on main branch protection** — Xveyn (owner/admin) can bypass branch protection (force-push, skip status checks). Intentional for solo-dev emergency hotfix capability; the production environment reviewer (Layer 4) still gates the actual deploy.
-7. **`raid-mdadm-selfhosted.yml` runner label mismatch** — Workflow requires `mdadm` label, `BaluNode` runner only has `self-hosted, Linux, X64`. Not a security risk (workflow simply cannot acquire a runner); flagged for cleanup if/when the workflow is needed.
+7. **`raid-mdadm-selfhosted.yml` runner label mismatch — resolved (2026-06-09)** — The dead workflow was retired and replaced by `raid-mdadm-loopback.yml` on `ubuntu-latest` (loop-device mdadm tests). No self-hosted runner is involved, so the label-mismatch gap no longer exists (issue #185).
 8. **`ci-runner` and its containers have unrestricted egress** — A maliciously approved PR can exfiltrate the workdir contents and make outbound calls to arbitrary hosts. Mitigations: the `ci-tests` environment gate (manual approval), the limited blast radius (workdir contains only PR code), no production secrets reachable. Future tightening: egress firewall allowing only `pypi.org`, `files.pythonhosted.org`, `api.github.com`, `objects.githubusercontent.com`, `registry.docker.io`.
 9. **`baluhost` user may stop/start/mask/unmask `power-profiles-daemon`** — Added in `deploy/install/templates/sudoers-baluhost-power` for the CPU power authority feature (`backend/app/services/power/ppd_authority.py`). Intentional and tightly scoped: four explicit `systemctl <verb> power-profiles-daemon` invocations, no `ALL`, no wildcards, single target unit. Blast radius is limited to that one systemd unit; it grants no general service control. The verbs are exercised only behind the local-channel + admin gate (`require_local_admin`) on `PUT /api/power/authority`.
