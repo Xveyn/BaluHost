@@ -1,5 +1,7 @@
 """Route tests for /api/nfs (admin-only NFS export management)."""
+import pytest
 from app.core.config import settings
+from app.models.audit_log import AuditLog
 
 
 def _create(client, headers, **over):
@@ -100,3 +102,144 @@ class TestNfsCrud:
         assert _create(client, admin_headers, path="Media").status_code == 201
         # "Media/" normalizes to "Media" -> duplicate path -> 409
         assert _create(client, admin_headers, path="Media/").status_code == 409
+
+
+@pytest.fixture
+def audit_enabled():
+    """Ensure the global audit logger is enabled (a prior test may have disabled it)."""
+    from app.services.audit.logger_db import get_audit_logger_db
+    get_audit_logger_db().enable()
+
+
+class TestNfsAudit:
+    def test_create_writes_audit(self, client, admin_headers, db_session, audit_enabled):
+        r = _create(client, admin_headers, path="AuditMedia")
+        assert r.status_code == 201, r.text
+        row = (
+            db_session.query(AuditLog)
+            .filter(AuditLog.action == "nfs_export_created", AuditLog.success == True)  # noqa: E712
+            .order_by(AuditLog.id.desc())
+            .first()
+        )
+        assert row is not None
+        assert row.event_type == "SYSTEM_CONFIG"
+        assert row.resource == "AuditMedia"
+        assert row.user == settings.admin_username
+
+    def test_update_writes_audit(self, client, admin_headers, db_session, audit_enabled):
+        export_id = _create(client, admin_headers, path="AuditUpd").json()["id"]
+        r = client.put(
+            f"{settings.api_prefix}/nfs/exports/{export_id}",
+            json={"path": "AuditUpd", "clients": "192.168.1.0/24", "read_only": True,
+                  "root_squash": True, "enabled": True, "comment": None},
+            headers=admin_headers,
+        )
+        assert r.status_code == 200
+        row = (
+            db_session.query(AuditLog)
+            .filter(AuditLog.action == "nfs_export_updated", AuditLog.success == True)  # noqa: E712
+            .order_by(AuditLog.id.desc())
+            .first()
+        )
+        assert row is not None
+        assert row.resource == "AuditUpd"
+
+    def test_update_missing_writes_failure(self, client, admin_headers, db_session, audit_enabled):
+        r = client.put(
+            f"{settings.api_prefix}/nfs/exports/999777",
+            json={"path": "Ghost", "clients": "192.168.1.0/24", "read_only": False,
+                  "root_squash": True, "enabled": True, "comment": None},
+            headers=admin_headers,
+        )
+        assert r.status_code == 404
+        row = (
+            db_session.query(AuditLog)
+            .filter(AuditLog.action == "nfs_export_updated", AuditLog.success == False)  # noqa: E712
+            .order_by(AuditLog.id.desc())
+            .first()
+        )
+        assert row is not None
+        assert row.resource == "999777"
+        assert row.error_message == "Export not found"
+
+    def test_update_duplicate_path_writes_failure(self, client, admin_headers, db_session, audit_enabled):
+        first_id = _create(client, admin_headers, path="UpdDupA").json()["id"]
+        _create(client, admin_headers, path="UpdDupB")
+        # Try to rename the first export onto the second's path -> 409
+        r = client.put(
+            f"{settings.api_prefix}/nfs/exports/{first_id}",
+            json={"path": "UpdDupB", "clients": "192.168.1.0/24", "read_only": False,
+                  "root_squash": True, "enabled": True, "comment": None},
+            headers=admin_headers,
+        )
+        assert r.status_code == 409
+        row = (
+            db_session.query(AuditLog)
+            .filter(AuditLog.action == "nfs_export_updated", AuditLog.success == False)  # noqa: E712
+            .order_by(AuditLog.id.desc())
+            .first()
+        )
+        assert row is not None
+        assert row.resource == "UpdDupB"
+        assert row.error_message == "An export for this path already exists"
+
+    def test_delete_writes_audit(self, client, admin_headers, db_session, audit_enabled):
+        export_id = _create(client, admin_headers, path="AuditDel").json()["id"]
+        r = client.delete(f"{settings.api_prefix}/nfs/exports/{export_id}", headers=admin_headers)
+        assert r.status_code == 204
+        row = (
+            db_session.query(AuditLog)
+            .filter(AuditLog.action == "nfs_export_deleted", AuditLog.success == True)  # noqa: E712
+            .order_by(AuditLog.id.desc())
+            .first()
+        )
+        assert row is not None
+        assert row.resource == "AuditDel"
+
+    def test_delete_missing_writes_failure(self, client, admin_headers, db_session, audit_enabled):
+        r = client.delete(f"{settings.api_prefix}/nfs/exports/888888", headers=admin_headers)
+        assert r.status_code == 404
+        row = (
+            db_session.query(AuditLog)
+            .filter(AuditLog.action == "nfs_export_deleted", AuditLog.success == False)  # noqa: E712
+            .order_by(AuditLog.id.desc())
+            .first()
+        )
+        assert row is not None
+        assert row.resource == "888888"
+        assert row.error_message == "Export not found"
+
+    def test_duplicate_create_writes_failure(self, client, admin_headers, db_session, audit_enabled):
+        assert _create(client, admin_headers, path="AuditDup").status_code == 201
+        assert _create(client, admin_headers, path="AuditDup").status_code == 409
+        row = (
+            db_session.query(AuditLog)
+            .filter(AuditLog.action == "nfs_export_created", AuditLog.success == False)  # noqa: E712
+            .order_by(AuditLog.id.desc())
+            .first()
+        )
+        assert row is not None
+        assert row.resource == "AuditDup"
+
+    def test_create_service_failure_writes_failure_audit(
+        self, client, admin_headers, db_session, audit_enabled, monkeypatch
+    ):
+        from app.services import nfs_service
+
+        async def _boom(*args, **kwargs):
+            raise RuntimeError("apply failed")
+
+        monkeypatch.setattr(nfs_service, "apply_exports", _boom)
+
+        with pytest.raises(Exception):
+            _create(client, admin_headers, path="BoomNfs")
+
+        row = (
+            db_session.query(AuditLog)
+            .filter(AuditLog.action == "nfs_export_created", AuditLog.success == False)  # noqa: E712
+            .order_by(AuditLog.id.desc())
+            .first()
+        )
+        assert row is not None
+        assert row.resource == "BoomNfs"
+        assert "apply failed" in (row.error_message or "")

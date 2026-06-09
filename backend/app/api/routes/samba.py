@@ -20,6 +20,7 @@ from app.schemas.samba import (
 )
 from app.schemas.webdav import OsConnectionInfo
 from app.services import samba_service, users as user_service
+from app.services.audit.logger_db import get_audit_logger_db
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +82,7 @@ async def toggle_smb_user(
     request: Request, response: Response,
     user_id: int,
     payload: SambaUserToggleRequest,
-    _admin=Depends(deps.get_current_admin),
+    current_admin=Depends(deps.get_current_admin),
     db: Session = Depends(get_db),
 ):
     """Toggle SMB access for a user (admin only).
@@ -89,21 +90,54 @@ async def toggle_smb_user(
     When enabling, an optional password can be provided for immediate sync.
     Without a password the user must change their password for SMB to work.
     """
+    audit = get_audit_logger_db()
+    action = "smb_access_enabled" if payload.enabled else "smb_access_disabled"
+
+    # NOTE: set_smb_enabled() commits the smb_enabled flag immediately. If a Samba
+    # service call below then fails, the DB flag stays flipped (db.rollback() in the
+    # except has nothing to undo) while the daemon was never updated — so a
+    # success=False audit entry can coexist with a committed flag change. Pre-existing
+    # behavior of set_smb_enabled; documented here for audit-log readers.
     user = user_service.set_smb_enabled(user_id, payload.enabled, db=db)
     if not user:
+        audit.log_event(
+            event_type="SYSTEM_CONFIG", user=current_admin.username,
+            action=action, resource=str(user_id),
+            success=False, error_message="User not found", db=db,
+        )
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
-    if payload.enabled:
-        # Sync password if provided
-        if payload.password:
-            await samba_service.sync_smb_password(user.username, payload.password)
-        await samba_service.enable_smb_user(user.username)
-    else:
-        await samba_service.disable_smb_user(user.username)
+    password_synced = False
+    try:
+        if payload.enabled:
+            # Sync password if provided
+            if payload.password:
+                await samba_service.sync_smb_password(user.username, payload.password)
+                password_synced = True
+            await samba_service.enable_smb_user(user.username)
+        else:
+            await samba_service.disable_smb_user(user.username)
 
-    # Regenerate shares config and reload
-    await samba_service.regenerate_shares_config()
-    await samba_service.reload_samba()
+        # Regenerate shares config and reload
+        await samba_service.regenerate_shares_config()
+        await samba_service.reload_samba()
+    except Exception as e:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        audit.log_event(
+            event_type="SYSTEM_CONFIG", user=current_admin.username,
+            action=action, resource=user.username,
+            success=False, error_message=str(e), db=db,
+        )
+        raise
+
+    audit.log_event(
+        event_type="SYSTEM_CONFIG", user=current_admin.username,
+        action=action, resource=user.username,
+        success=True, details={"enabled": payload.enabled, "password_synced": password_synced}, db=db,
+    )
 
     return {
         "user_id": user.id,

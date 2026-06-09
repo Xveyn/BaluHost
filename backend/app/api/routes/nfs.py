@@ -17,6 +17,7 @@ from app.schemas.nfs import (
     NfsStatusResponse,
 )
 from app.services import nfs_service
+from app.services.audit.logger_db import get_audit_logger_db
 
 logger = logging.getLogger(__name__)
 
@@ -80,21 +81,48 @@ async def list_nfs_exports(
 async def create_nfs_export(
     request: Request, response: Response,
     payload: NfsExportCreate,
-    _admin=Depends(deps.get_current_admin),
+    current_admin=Depends(deps.get_current_admin),
     db: Session = Depends(get_db),
 ):
     """Create an NFS export (admin only)."""
+    audit = get_audit_logger_db()
     if db.query(NfsExport).filter(NfsExport.path == payload.path).first():
+        audit.log_event(
+            event_type="SYSTEM_CONFIG", user=current_admin.username,
+            action="nfs_export_created", resource=payload.path,
+            success=False, error_message="An export for this path already exists", db=db,
+        )
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="An export for this path already exists")
     exp = NfsExport(
         path=payload.path, clients=payload.clients, read_only=payload.read_only,
         root_squash=payload.root_squash, enabled=payload.enabled, comment=payload.comment,
     )
-    db.add(exp)
-    db.commit()
-    db.refresh(exp)
-    await nfs_service.regenerate_exports_config()
-    await nfs_service.apply_exports()
+    details = {
+        "clients": payload.clients, "read_only": payload.read_only,
+        "root_squash": payload.root_squash, "enabled": payload.enabled,
+    }
+    try:
+        db.add(exp)
+        db.commit()
+        db.refresh(exp)
+        await nfs_service.regenerate_exports_config()
+        await nfs_service.apply_exports()
+    except Exception as e:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        audit.log_event(
+            event_type="SYSTEM_CONFIG", user=current_admin.username,
+            action="nfs_export_created", resource=payload.path,
+            success=False, error_message=str(e), db=db,
+        )
+        raise
+    audit.log_event(
+        event_type="SYSTEM_CONFIG", user=current_admin.username,
+        action="nfs_export_created", resource=exp.path,
+        success=True, details=details, db=db,
+    )
     return _to_response(exp, _get_local_ip())
 
 
@@ -104,14 +132,25 @@ async def update_nfs_export(
     request: Request, response: Response,
     export_id: int,
     payload: NfsExportUpdate,
-    _admin=Depends(deps.get_current_admin),
+    current_admin=Depends(deps.get_current_admin),
     db: Session = Depends(get_db),
 ):
     """Update an NFS export (admin only)."""
+    audit = get_audit_logger_db()
     exp = db.query(NfsExport).filter(NfsExport.id == export_id).first()
     if not exp:
+        audit.log_event(
+            event_type="SYSTEM_CONFIG", user=current_admin.username,
+            action="nfs_export_updated", resource=str(export_id),
+            success=False, error_message="Export not found", db=db,
+        )
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Export not found")
     if payload.path != exp.path and db.query(NfsExport).filter(NfsExport.path == payload.path).first():
+        audit.log_event(
+            event_type="SYSTEM_CONFIG", user=current_admin.username,
+            action="nfs_export_updated", resource=payload.path,
+            success=False, error_message="An export for this path already exists", db=db,
+        )
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="An export for this path already exists")
     exp.path = payload.path
     exp.clients = payload.clients
@@ -119,10 +158,31 @@ async def update_nfs_export(
     exp.root_squash = payload.root_squash
     exp.enabled = payload.enabled
     exp.comment = payload.comment
-    db.commit()
-    db.refresh(exp)
-    await nfs_service.regenerate_exports_config()
-    await nfs_service.apply_exports()
+    details = {
+        "clients": payload.clients, "read_only": payload.read_only,
+        "root_squash": payload.root_squash, "enabled": payload.enabled,
+    }
+    try:
+        db.commit()
+        db.refresh(exp)
+        await nfs_service.regenerate_exports_config()
+        await nfs_service.apply_exports()
+    except Exception as e:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        audit.log_event(
+            event_type="SYSTEM_CONFIG", user=current_admin.username,
+            action="nfs_export_updated", resource=payload.path,
+            success=False, error_message=str(e), db=db,
+        )
+        raise
+    audit.log_event(
+        event_type="SYSTEM_CONFIG", user=current_admin.username,
+        action="nfs_export_updated", resource=exp.path,
+        success=True, details=details, db=db,
+    )
     return _to_response(exp, _get_local_ip())
 
 
@@ -131,15 +191,39 @@ async def update_nfs_export(
 async def delete_nfs_export(
     request: Request, response: Response,
     export_id: int,
-    _admin=Depends(deps.get_current_admin),
+    current_admin=Depends(deps.get_current_admin),
     db: Session = Depends(get_db),
 ):
     """Delete an NFS export (admin only)."""
+    audit = get_audit_logger_db()
     exp = db.query(NfsExport).filter(NfsExport.id == export_id).first()
     if not exp:
+        audit.log_event(
+            event_type="SYSTEM_CONFIG", user=current_admin.username,
+            action="nfs_export_deleted", resource=str(export_id),
+            success=False, error_message="Export not found", db=db,
+        )
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Export not found")
-    db.delete(exp)
-    db.commit()
-    await nfs_service.regenerate_exports_config()
-    await nfs_service.apply_exports()
+    path = exp.path
+    try:
+        db.delete(exp)
+        db.commit()
+        await nfs_service.regenerate_exports_config()
+        await nfs_service.apply_exports()
+    except Exception as e:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        audit.log_event(
+            event_type="SYSTEM_CONFIG", user=current_admin.username,
+            action="nfs_export_deleted", resource=path,
+            success=False, error_message=str(e), db=db,
+        )
+        raise
+    audit.log_event(
+        event_type="SYSTEM_CONFIG", user=current_admin.username,
+        action="nfs_export_deleted", resource=path,
+        success=True, details={"export_id": export_id}, db=db,
+    )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
