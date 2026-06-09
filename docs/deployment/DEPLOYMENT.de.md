@@ -13,7 +13,7 @@ Anleitung zur Installation von BaluHost auf einem Produktionsserver.
 - **CPU:** 2+ Kerne (4+ empfohlen)
 - **RAM:** 4 GB Minimum (8 GB+ empfohlen)
 - **Speicher:** 100 GB+ (je nach Datenvolumen)
-- **OS:** Debian 12+, Ubuntu 22.04+ oder kompatible Linux-Distribution
+- **OS:** Nur Debian 12 (bookworm) oder 13 (trixie) (der Preflight des Installers lehnt andere Distributionen ab)
 
 ### Software
 - Python 3.11+
