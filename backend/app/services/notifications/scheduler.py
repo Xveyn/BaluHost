@@ -1,7 +1,7 @@
 """Notification scheduler for device expiration warnings."""
 
 from datetime import datetime, timedelta, timezone
-from typing import Any, List, Optional, Tuple
+from typing import Any, Tuple
 import logging
 
 from sqlalchemy.orm import Session
@@ -240,7 +240,7 @@ class NotificationScheduler:
         execution_id = log_scheduler_execution("notification_check", job_id="notification_check")
 
         logger.info("="*60)
-        logger.info(f"[NotificationScheduler] Periodic check triggered")
+        logger.info("[NotificationScheduler] Periodic check triggered")
         logger.info("="*60)
 
         db = SessionLocal()

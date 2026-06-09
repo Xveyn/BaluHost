@@ -1,6 +1,5 @@
 """API routes for plugin management."""
 import logging
-from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import FileResponse
@@ -15,7 +14,6 @@ from app.plugins.permissions import PermissionManager
 from app.services import plugin_service
 from app.schemas.plugin import (
     DashboardPanelToggleRequest,
-    InstalledPluginSchema,
     PermissionInfo,
     PermissionListResponse,
     PluginConfigResponse,

@@ -6,9 +6,12 @@ import logging
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy.orm import Session
+
+if TYPE_CHECKING:
+    from app.models.ad_discovery import AdDiscoveryCustomList
 
 logger = logging.getLogger(__name__)
 

@@ -62,7 +62,6 @@ def _generate_synthetic_uptime_history(
     Used as last-resort fallback when neither memory buffer nor database
     has history data (e.g. monitoring_worker not running).
     """
-    import time as _time
     import psutil
     from app.services.telemetry import _SERVER_START_TIME
     from app.core.config import settings

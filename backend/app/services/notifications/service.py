@@ -9,13 +9,11 @@ from datetime import datetime, time, timezone
 from typing import Optional, Any
 
 from sqlalchemy.orm import Session
-from sqlalchemy import desc, and_, func, or_
+from sqlalchemy import desc, func, or_
 
 from app.models.notification import (
     Notification,
     NotificationPreferences,
-    NotificationType,
-    NotificationCategory,
 )
 from app.models.user import User
 

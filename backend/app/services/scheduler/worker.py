@@ -24,7 +24,6 @@ from app.models.scheduler_history import (
     SchedulerExecution,
     SchedulerConfig,
     SchedulerStatus,
-    TriggerType,
 )
 from app.models.scheduler_state import SchedulerState
 from app.schemas.scheduler import SCHEDULER_REGISTRY

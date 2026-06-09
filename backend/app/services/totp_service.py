@@ -10,7 +10,6 @@ import json
 import secrets
 import base64
 from datetime import datetime, timezone
-from typing import Optional
 
 import pyotp
 import qrcode

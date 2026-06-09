@@ -261,7 +261,8 @@ class KdeAdapter:
         new_text = _serialize_kde_groups(groups)
 
         # Atomic write: tempfile in same dir + os.replace
-        import os, tempfile  # noqa: PLC0415
+        import os
+        import tempfile  # noqa: PLC0415
         fd, tmp_path = tempfile.mkstemp(
             prefix=".powerdevilrc.", dir=str(_KDE_POWERDEVIL_RC.parent)
         )

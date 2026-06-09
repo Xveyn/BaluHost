@@ -22,16 +22,16 @@ import sys
 import types
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Literal, Optional, Sequence, Set
+from typing import Any, Dict, List, Literal, Optional, Sequence, Set
 
 from fastapi import APIRouter
 from sqlalchemy.orm import Session
 
-from app.plugins.base import BackgroundTaskSpec, PluginBase, PluginMetadata, PluginUIManifest
+from app.plugins.base import BackgroundTaskSpec, PluginBase
 from app.plugins.events import EventManager, get_event_manager, start_event_manager, stop_event_manager
 from app.plugins.hooks import create_plugin_manager
 from app.plugins.manifest import ManifestError, PluginManifest, load_manifest
-from app.plugins.permissions import DANGEROUS_PERMISSIONS, PermissionManager
+from app.plugins.permissions import PermissionManager
 
 
 logger = logging.getLogger(__name__)

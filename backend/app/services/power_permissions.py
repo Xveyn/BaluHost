@@ -1,7 +1,6 @@
 """Service for managing per-user power permissions."""
 
 import logging
-from typing import Optional
 
 from sqlalchemy.orm import Session
 

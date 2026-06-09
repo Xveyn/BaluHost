@@ -81,7 +81,7 @@ async def _ensure_system_user(username: str) -> None:
     if rc == 0:
         return  # already exists
 
-    service_user = os.getenv("USER", "sven")
+    os.getenv("USER", "sven")
     rc, stdout, stderr = await _run_cmd([
         "sudo", "useradd",
         "--system",

@@ -30,7 +30,7 @@ async def test_sensors():
     history = telemetry.get_telemetry_history()
     if history.cpu:
         latest = history.cpu[-1]
-        print(f"Latest CPU telemetry:")
+        print("Latest CPU telemetry:")
         print(f"  Usage: {latest.usage}%")
         print(f"  Frequency: {latest.frequency_mhz} MHz")
         print(f"  Temperature: {latest.temperature_celsius}°C")

@@ -85,7 +85,6 @@ async def get_disk_io_history(request: Request, response: Response, _: UserPubli
     history = disk_monitor.get_disk_io_history()
     from app.schemas.system import DiskIOHistory, DiskIOSample
     from app.services.hardware.smart import get_smart_device_models, get_smart_device_order
-    import re
     import platform
 
     model_map = get_smart_device_models()

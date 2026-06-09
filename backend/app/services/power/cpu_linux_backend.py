@@ -197,7 +197,7 @@ class LinuxCpuPowerBackend(CpuPowerBackend):
             else:
                 # Only log once per apply_profile call (first CPU)
                 if len(self._permission_errors) == 0:
-                    logger.warning(f"Permission denied for cpufreq writes (sudo not available)")
+                    logger.warning("Permission denied for cpufreq writes (sudo not available)")
                 self._permission_errors.append(f"Permission denied: {path.name}")
                 return False, "permission_denied"
 
@@ -312,7 +312,7 @@ class LinuxCpuPowerBackend(CpuPowerBackend):
             logger.info(
                 f"Applied profile '{config.profile.value}': "
                 f"governor={config.governor}, EPP={config.energy_performance_preference}"
-                + (f" (using sudo)" if self._use_sudo else "")
+                + (" (using sudo)" if self._use_sudo else "")
             )
             return True, None
         else:

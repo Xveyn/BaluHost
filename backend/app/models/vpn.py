@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Optional
 from app.models.base import Base
 
 if TYPE_CHECKING:
-    from app.models.user import User
+    pass
 
 
 class VPNConfig(Base):

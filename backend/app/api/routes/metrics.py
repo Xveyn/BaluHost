@@ -24,7 +24,6 @@ from prometheus_client import (
 )
 import psutil
 import time
-from typing import Optional
 
 from app.api import deps
 from app.core.config import settings

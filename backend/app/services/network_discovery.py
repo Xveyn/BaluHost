@@ -104,13 +104,13 @@ class NetworkDiscoveryService:
             self.zeroconf.register_service(self.webdav_service_info)
             self.zeroconf.register_service(self.smb_service_info)
 
-            logger.info(f"✓ mDNS service started:")
+            logger.info("✓ mDNS service started:")
             logger.info(f"  - API: https://{local_ip}:{self.port}")
             logger.info(f"  - WebDAV: {webdav_scheme}://{local_ip}:{self.webdav_port}/")
             logger.info(f"  - SMB: smb://{local_ip}/")
             logger.info(f"  - WebDAV service type: {webdav_service_type}")
             logger.info(f"  - Service name: {service_name}")
-            logger.info(f"  - Discovery enabled for local network")
+            logger.info("  - Discovery enabled for local network")
             
         except Exception as e:
             if settings.is_dev_mode:

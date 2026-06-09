@@ -3,7 +3,6 @@ import json
 import logging
 import secrets
 from datetime import datetime, timezone
-from typing import Optional
 from urllib.parse import urlencode
 
 from sqlalchemy.orm import Session

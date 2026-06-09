@@ -48,7 +48,7 @@ async def main():
     energy = device.get_component(EnergyComponent)
 
     print(f"\nDevice: {device.device_info.friendly_name}")
-    print(f"Sampling every 2 seconds...\n")
+    print("Sampling every 2 seconds...\n")
     print(f"{'Time':<10} {'Watts':<10} {'Raw (mW)':<12} {'PowerInfo':<12}")
     print("-" * 70)
 

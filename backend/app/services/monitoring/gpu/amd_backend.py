@@ -236,7 +236,7 @@ class AmdGpuBackend:
             return struct.unpack_from("<H", buf, off)[0]
 
         gfx_raw = u16(36)
-        mm_raw = u16(38)
+        u16(38)
         vcn = [u16(152 + i * 2) for i in range(4)]
 
         def pct(x: Optional[int]) -> Optional[float]:

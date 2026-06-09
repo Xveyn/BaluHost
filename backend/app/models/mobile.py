@@ -5,7 +5,6 @@ from typing import Optional
 
 from sqlalchemy import String, DateTime, Boolean, Integer, ForeignKey, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy.sql import func
 
 from app.models.base import Base
 import uuid

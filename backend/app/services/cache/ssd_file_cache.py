@@ -13,7 +13,7 @@ from typing import Optional, List
 
 from cachetools import TTLCache
 from sqlalchemy.orm import Session
-from sqlalchemy import update as sql_update, func
+from sqlalchemy import update as sql_update
 from sqlalchemy.exc import IntegrityError
 
 from app.models.ssd_file_cache import SSDCacheEntry, SSDCacheConfig

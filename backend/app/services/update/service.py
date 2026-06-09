@@ -577,7 +577,7 @@ class UpdateService:
             if update and update.backup_id:
                 try:
                     from app.services.backup import BackupService
-                    backup_service = BackupService(self.db)
+                    BackupService(self.db)
                     # Note: Would need to implement restore functionality
                     logger.info(f"Would restore backup {update.backup_id}")
                 except Exception as e:

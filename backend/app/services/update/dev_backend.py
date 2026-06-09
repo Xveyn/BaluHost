@@ -19,7 +19,6 @@ from app.schemas.update import (
 from app.services.update.backend import UpdateBackend
 from app.services.update.utils import (
     ProgressCallback,
-    parse_version,
     version_to_string,
     get_installed_version,
 )

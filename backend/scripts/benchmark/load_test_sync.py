@@ -482,7 +482,7 @@ class LoadTester:
     
     def _print_report(self, report: Dict):
         """Print formatted load test report."""
-        print(f"\n📊 Results:")
+        print("\n📊 Results:")
         print(f"   Total Operations: {report['total_operations']}")
         print(f"   Successful: {report['successful']} ({report['success_rate']:.1f}%)")
         print(f"   Failed: {report['failed']}")

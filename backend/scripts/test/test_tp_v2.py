@@ -33,7 +33,7 @@ async def test_plugp100_v5():
         # Connect to device
         device = await device_factory.connect(config)
 
-        print(f"✓ Connected successfully")
+        print("✓ Connected successfully")
         print(f"Device type: {type(device).__name__}")
 
         # Update device to fetch latest state and components
@@ -68,26 +68,26 @@ async def test_plugp100_v5():
                 print(f"EnergyComponent methods: {energy_methods}")
 
                 # Get power info
-                print(f"\n=== Power Info ===")
+                print("\n=== Power Info ===")
                 if hasattr(energy, 'power_info'):
                     power_info = energy.power_info
                     print(f"Type: {type(power_info)}")
                     print(f"Data: {power_info}")
 
                     if hasattr(power_info, '__dict__'):
-                        print(f"\n=== Power Info Attributes ===")
+                        print("\n=== Power Info Attributes ===")
                         for key, val in power_info.__dict__.items():
                             print(f"  {key}: {val} (type: {type(val).__name__})")
 
                 # Get energy info
-                print(f"\n=== Energy Info ===")
+                print("\n=== Energy Info ===")
                 if hasattr(energy, 'energy_info'):
                     energy_info = energy.energy_info
                     print(f"Type: {type(energy_info)}")
                     print(f"Data: {energy_info}")
 
                     if hasattr(energy_info, '__dict__'):
-                        print(f"\n=== Energy Info Attributes ===")
+                        print("\n=== Energy Info Attributes ===")
                         for key, val in energy_info.__dict__.items():
                             print(f"  {key}: {val} (type: {type(val).__name__})")
             else:

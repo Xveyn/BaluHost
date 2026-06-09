@@ -8,7 +8,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import subprocess
-from typing import Optional
 
 from app.services.power import config_store
 

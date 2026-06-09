@@ -8,7 +8,6 @@ from sqlalchemy.orm import Session
 
 from app.api import deps
 from app.core.rate_limiter import user_limiter, get_limit
-from app.core.config import settings
 from app.core.database import get_db
 from app.schemas.samba import (
     SambaStatusResponse,
@@ -154,7 +153,7 @@ async def get_samba_connection_info(
     db: Session = Depends(get_db),
 ):
     """Get SMB mount instructions for the current user."""
-    user = user_service.get_user(current_user.id, db=db)
+    user_service.get_user(current_user.id, db=db)
     is_admin = current_user.role == "admin"
 
     share_name = "BaluHost" if is_admin else f"BaluHost-{current_user.username}"

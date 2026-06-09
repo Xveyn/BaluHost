@@ -5,12 +5,11 @@ Uses Linux tools: wodim, readom, cdparanoia, cd-info, eject.
 """
 import asyncio
 import logging
-import os
 import re
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from app.core.config import settings
 
@@ -18,13 +17,7 @@ from .browsing import BrowsingMixin
 from .burning import BurningMixin
 from .models import (
     AudioTrack,
-    BlankMediaInfo,
-    BlankMode,
-    DiscFile,
-    DiscFileListResponse,
-    DiscFileType,
     DriveInfo,
-    FilePreviewResponse,
     JobStatus,
     JobType,
     MediaType,
@@ -359,7 +352,7 @@ class OpticalDriveService(ReadingMixin, BurningMixin, BrowsingMixin):
                 # Determine media type from udev properties
                 audio_tracks = int(udev_props.get("ID_CDROM_MEDIA_TRACK_COUNT_AUDIO", "0"))
                 data_tracks = int(udev_props.get("ID_CDROM_MEDIA_TRACK_COUNT_DATA", "0"))
-                total_track_count = int(udev_props.get("ID_CDROM_MEDIA_TRACK_COUNT", "0"))
+                int(udev_props.get("ID_CDROM_MEDIA_TRACK_COUNT", "0"))
                 media_state = udev_props.get("ID_CDROM_MEDIA_STATE", "")
 
                 # Check for audio CD

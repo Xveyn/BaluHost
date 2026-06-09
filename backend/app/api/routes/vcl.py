@@ -140,7 +140,6 @@ async def restore_file_version(
         404: Version not found or user has no access
         500: Restore operation failed
     """
-    import shutil
     from pathlib import Path
     from app.core.config import settings
 

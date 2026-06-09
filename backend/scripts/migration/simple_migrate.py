@@ -148,7 +148,7 @@ def main():
             common_columns = source_columns & model_columns
 
             if not common_columns:
-                print(f"  Warning: No common columns found, skipping")
+                print("  Warning: No common columns found, skipping")
                 continue
 
             # Read all rows from source
@@ -156,7 +156,7 @@ def main():
             count = len(source_rows)
 
             if count == 0:
-                print(f"  No data to migrate")
+                print("  No data to migrate")
                 continue
 
             print(f"  Found {count} rows")

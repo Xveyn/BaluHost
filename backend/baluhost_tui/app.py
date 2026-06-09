@@ -1,7 +1,7 @@
 """Main TUI application using Textual."""
 from textual.app import App, ComposeResult
-from textual.containers import Container, Vertical
-from textual.widgets import Header, Footer, Button, Static
+from textual.containers import Container
+from textual.widgets import Header, Footer, Static
 from textual.binding import Binding
 
 from baluhost_tui.client import BackendClient

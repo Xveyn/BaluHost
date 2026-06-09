@@ -105,17 +105,17 @@ def test_wizard():
     print("   • RAID-Level: RAID 0, 1, 5, 6, 10 unterstützt")
     
     if len(free_disks) >= 2:
-        print(f"   • ✅ Kann RAID 0/1 erstellen (2+ Disks vorhanden)")
+        print("   • ✅ Kann RAID 0/1 erstellen (2+ Disks vorhanden)")
     else:
         print(f"   • ❌ RAID 0/1 nicht möglich (nur {len(free_disks)} Disk)")
     
     if len(free_disks) >= 3:
-        print(f"   • ✅ Kann RAID 5 erstellen (3+ Disks vorhanden)")
+        print("   • ✅ Kann RAID 5 erstellen (3+ Disks vorhanden)")
     else:
         print(f"   • ❌ RAID 5 nicht möglich (nur {len(free_disks)} Disks)")
     
     if len(free_disks) >= 4:
-        print(f"   • ✅ Kann RAID 6/10 erstellen (4+ Disks vorhanden)")
+        print("   • ✅ Kann RAID 6/10 erstellen (4+ Disks vorhanden)")
     else:
         print(f"   • ❌ RAID 6/10 nicht möglich (nur {len(free_disks)} Disks)")
     

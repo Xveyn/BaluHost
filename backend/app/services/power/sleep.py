@@ -14,9 +14,6 @@ import abc
 import asyncio
 import json
 import logging
-import shutil
-import socket
-import struct
 import time
 from collections import deque
 from datetime import datetime, timezone, timedelta
@@ -970,7 +967,6 @@ class SleepManagerService:
             except Exception as exc:
                 logger.warning("Post-clear inhibitor reconcile failed (true suspend): %s", exc)
 
-        prev_state = self._current_state
 
         # Defense-in-depth: block all non-MANUAL suspend paths during an active
         # core-uptime window. Per-loop guards (idle/schedule/escalation) already

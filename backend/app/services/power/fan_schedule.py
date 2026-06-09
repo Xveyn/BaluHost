@@ -12,7 +12,7 @@ from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 
 from app.models.fans import FanConfig, FanScheduleEntry, FanCurveProfile
-from app.schemas.fans import FanCurvePoint, FanMode
+from app.schemas.fans import FanCurvePoint
 
 logger = logging.getLogger(__name__)
 

@@ -114,7 +114,7 @@ async def get_vcl_overview(
             vcl_service.recalculate_stats()
             db.commit()
             stats = db.query(VCLStats).first()
-        except Exception as e:
+        except Exception:
             db.rollback()
             # If stats creation fails, return empty stats
             stats = None
@@ -185,7 +185,7 @@ async def list_user_quotas(
 
     # Create missing settings in batch (avoid locks)
     from app.services.versioning.vcl import VCLService
-    vcl_service = VCLService(db)
+    VCLService(db)
 
     for user_obj in all_users:
         if user_obj.id not in existing_settings:

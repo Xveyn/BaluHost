@@ -6,7 +6,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from sqlalchemy.orm import Session
-from sqlalchemy.sql import func
 
 from app import __version__
 from app.models.version_history import VersionHistory

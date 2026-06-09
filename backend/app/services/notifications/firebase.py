@@ -47,7 +47,7 @@ class FirebaseService:
             return True
         
         try:
-            settings = get_settings()
+            get_settings()
             
             # Try to load credentials from environment variable first
             credentials_json = os.getenv("FIREBASE_CREDENTIALS_JSON")
@@ -267,7 +267,7 @@ class FirebaseService:
             }
             
         except messaging.UnregisteredError:
-            print(f"[Firebase] ⚠️ Device token no longer valid (unregistered)")
+            print("[Firebase] ⚠️ Device token no longer valid (unregistered)")
             return {
                 "success": False,
                 "message_id": None,

@@ -132,7 +132,7 @@ def main():
                 common_cols = source_cols & target_cols
 
                 if not common_cols:
-                    print(f"  Warning: No common columns, skipping")
+                    print("  Warning: No common columns, skipping")
                     continue
 
                 # Read data from source
@@ -142,7 +142,7 @@ def main():
                 count = len(rows)
 
                 if count == 0:
-                    print(f"  No data to migrate")
+                    print("  No data to migrate")
                     continue
 
                 print(f"  Found {count} rows, migrating {len(common_cols)} columns")
@@ -181,7 +181,7 @@ def main():
 
             except Exception as e:
                 print(f"  Error migrating {table_name}: {e}")
-                print(f"  Continuing with next table...")
+                print("  Continuing with next table...")
                 continue
 
     print()

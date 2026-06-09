@@ -1,8 +1,8 @@
 """Service for file sharing functionality."""
 from datetime import datetime, timezone
-from typing import List, Optional, Tuple
-from sqlalchemy import select, func, and_, or_
-from sqlalchemy.orm import Session, joinedload
+from typing import List, Optional
+from sqlalchemy import select, func, or_
+from sqlalchemy.orm import Session
 
 from app.models.file_share import FileShare
 from app.models.file_metadata import FileMetadata

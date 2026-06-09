@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Optional
 from sqlalchemy import Integer, Float, String, DateTime, ForeignKey
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
 

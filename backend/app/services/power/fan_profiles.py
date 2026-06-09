@@ -5,10 +5,9 @@ profiles/presets to fans.
 """
 import json
 import logging
-from typing import Dict, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 from sqlalchemy import select, func
-from sqlalchemy.orm import Session
 
 from app.models.fans import FanConfig, FanCurveProfile
 from app.schemas.fans import FanCurvePoint

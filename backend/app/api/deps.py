@@ -278,7 +278,6 @@ async def verify_mobile_device_token(
         HTTPException(401): If device token has expired
         HTTPException(403): If device not found or inactive
     """
-    from datetime import datetime
     from app.models.mobile import MobileDevice
     
     # First get the current user (validates JWT)

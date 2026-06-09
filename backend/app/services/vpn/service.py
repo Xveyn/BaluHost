@@ -7,13 +7,12 @@ import base64
 import subprocess
 import tempfile
 from typing import Optional
-from datetime import datetime, timedelta, timezone
-from pathlib import Path
+from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.models.vpn import VPNClient, VPNConfig
-from app.schemas.vpn import VPNClientCreate, VPNConfigResponse
+from app.schemas.vpn import VPNConfigResponse
 
 logger = logging.getLogger(__name__)
 

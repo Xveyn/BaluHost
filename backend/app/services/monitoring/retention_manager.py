@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Dict, Optional
+from typing import Dict
 
 from sqlalchemy.orm import Session
 

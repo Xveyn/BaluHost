@@ -80,7 +80,7 @@ class FritzBoxVPNService:
                             config['endpoint'] = value
                             debug_lines.append(f"  -> Endpoint saved: {value}")
                         else:
-                            debug_lines.append(f"  -> Endpoint EMPTY!")
+                            debug_lines.append("  -> Endpoint EMPTY!")
                     elif key == 'persistentkeepalive':
                         try:
                             config['persistent_keepalive'] = int(value)

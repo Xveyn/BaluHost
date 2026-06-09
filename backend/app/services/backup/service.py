@@ -308,7 +308,6 @@ class BackupService:
     
 
     from cachetools import cached, TTLCache
-    from functools import lru_cache
 
     _backups_cache = TTLCache(maxsize=16, ttl=60)  # 60 Sekunden Cache
 
@@ -321,14 +320,6 @@ class BackupService:
         backups = self.db.query(Backup).order_by(Backup.created_at.desc()).all()
         return [BackupInDB.model_validate(b) for b in backups]
 
-    @lru_cache(maxsize=32)
-    def get_backup_by_id(self, backup_id: int) -> Optional[BackupInDB]:
-        """
-        Holt Backup-Metadaten nach ID, cached nach backup_id für Performance.
-        """
-        backup = self.db.query(Backup).filter(Backup.id == backup_id).first()
-        return BackupInDB.model_validate(backup) if backup else None
-    
     def get_backup_by_id(self, backup_id: int) -> Optional[BackupInDB]:
         """Get backup by ID."""
         backup = self.db.query(Backup).filter(Backup.id == backup_id).first()
@@ -589,7 +580,7 @@ class BackupService:
 
         try:
             # Execute pg_dump with 5 minute timeout
-            result = subprocess.run(
+            subprocess.run(
                 pg_dump_cmd,
                 env=env,
                 capture_output=True,
@@ -668,7 +659,7 @@ class BackupService:
                 env["PGPASSWORD"] = password
 
             # Execute psql with 10 minute timeout
-            result = subprocess.run(
+            subprocess.run(
                 psql_cmd,
                 env=env,
                 capture_output=True,

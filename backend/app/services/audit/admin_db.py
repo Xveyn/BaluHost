@@ -1,10 +1,8 @@
 from typing import List, Optional, Dict, Any
-import json
 import re
 import os
 
 from sqlalchemy import inspect, select, Table, MetaData, text, asc, desc, or_, func
-from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
 from app.core import database

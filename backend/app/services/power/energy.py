@@ -11,13 +11,11 @@ import json
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Optional
-from sqlalchemy import func, and_, cast, Float
+from sqlalchemy import and_
 from sqlalchemy.orm import Session
 
 from app.models.smart_device import SmartDevice, SmartDeviceSample
 from app.models.energy_price_config import EnergyPriceConfig
-from app.core.config import settings
-from app.core.database import DATABASE_URL
 
 logger = logging.getLogger(__name__)
 

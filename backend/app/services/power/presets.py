@@ -10,7 +10,6 @@ import logging
 from typing import List, Optional
 
 from sqlalchemy import select, update
-from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
 from app.models.power_preset import PowerPreset
@@ -18,8 +17,6 @@ from app.schemas.power import (
     ServicePowerProperty,
     PowerPresetCreate,
     PowerPresetUpdate,
-    PowerPresetResponse,
-    PowerPresetSummary,
 )
 
 logger = logging.getLogger(__name__)

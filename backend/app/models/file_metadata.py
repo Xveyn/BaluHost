@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional, List
 
-from sqlalchemy import String, DateTime, Integer, BigInteger, Boolean, ForeignKey, Text
+from sqlalchemy import String, DateTime, Integer, BigInteger, Boolean, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 

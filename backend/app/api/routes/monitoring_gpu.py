@@ -4,7 +4,6 @@ Kept separate from monitoring.py because that file is already large.
 Registered under the same /api/monitoring prefix in routes/__init__.py.
 """
 from datetime import datetime, timedelta, timezone
-from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy.orm import Session

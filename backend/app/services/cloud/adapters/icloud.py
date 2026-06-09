@@ -1,7 +1,6 @@
 """iCloud adapter using pyicloud library."""
 import asyncio
 import logging
-from datetime import datetime
 from functools import partial
 from pathlib import Path
 from typing import Callable, Optional
