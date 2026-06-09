@@ -96,7 +96,9 @@ def test_degrade_rebuild_finalize_cycle(loop_raid, monkeypatch):
     backend.create_array(
         CreateArrayRequest(name=ARRAY_NAME, level="raid1", devices=[loop_a, loop_b])
     )
-    assert _array_named(backend.get_status(), ARRAY_NAME).status == "optimal"
+    created = _array_named(backend.get_status(), ARRAY_NAME)
+    assert created is not None
+    assert created.status == "optimal"
 
     backend.degrade(RaidSimulationRequest(array=ARRAY_NAME, device=loop_a))
     degraded = _array_named(backend.get_status(), ARRAY_NAME)
