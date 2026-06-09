@@ -100,3 +100,26 @@ class TestSambaToggleAudit:
         assert secret not in (row.details or "")
         assert secret not in (row.error_message or "")
         assert secret not in (row.resource or "")
+
+    def test_enable_service_failure_writes_failure_audit(
+        self, client, admin_headers, regular_user, db_session, audit_enabled, mock_samba, monkeypatch
+    ):
+        from app.services import samba_service
+
+        async def _boom(*args, **kwargs):
+            raise RuntimeError("smb enable failed")
+
+        monkeypatch.setattr(samba_service, "enable_smb_user", _boom)
+
+        with pytest.raises(Exception):
+            _toggle(client, admin_headers, regular_user.id, True)
+
+        row = (
+            db_session.query(AuditLog)
+            .filter(AuditLog.action == "smb_access_enabled", AuditLog.success == False)  # noqa: E712
+            .order_by(AuditLog.id.desc())
+            .first()
+        )
+        assert row is not None
+        assert row.resource == regular_user.username
+        assert "smb enable failed" in (row.error_message or "")

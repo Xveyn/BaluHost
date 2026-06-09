@@ -220,3 +220,26 @@ class TestNfsAudit:
         )
         assert row is not None
         assert row.resource == "AuditDup"
+
+    def test_create_service_failure_writes_failure_audit(
+        self, client, admin_headers, db_session, audit_enabled, monkeypatch
+    ):
+        from app.services import nfs_service
+
+        async def _boom(*args, **kwargs):
+            raise RuntimeError("apply failed")
+
+        monkeypatch.setattr(nfs_service, "apply_exports", _boom)
+
+        with pytest.raises(Exception):
+            _create(client, admin_headers, path="BoomNfs")
+
+        row = (
+            db_session.query(AuditLog)
+            .filter(AuditLog.action == "nfs_export_created", AuditLog.success == False)  # noqa: E712
+            .order_by(AuditLog.id.desc())
+            .first()
+        )
+        assert row is not None
+        assert row.resource == "BoomNfs"
+        assert "apply failed" in (row.error_message or "")
