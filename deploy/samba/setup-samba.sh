@@ -33,9 +33,18 @@ chmod 644 "$SHARES_CONF"
 
 # 4. Install sudoers
 echo "[4/5] Installing sudoers rules..."
-cp "$SCRIPT_DIR/baluhost-samba-sudoers" /etc/sudoers.d/baluhost-samba
-chmod 440 /etc/sudoers.d/baluhost-samba
-visudo -c
+# Substitute the @@BALUHOST_USER@@ placeholder, validate in isolation, then
+# install — never write an unvalidated file into /etc/sudoers.d (a malformed
+# drop-in can break sudo system-wide).
+SUDOERS_TMP=$(mktemp)
+trap 'rm -f "$SUDOERS_TMP"' EXIT
+sed "s|@@BALUHOST_USER@@|$SERVICE_USER|g" "$SCRIPT_DIR/baluhost-samba-sudoers" > "$SUDOERS_TMP"
+if ! visudo -cf "$SUDOERS_TMP" >/dev/null 2>&1; then
+    echo "ERROR: generated sudoers file fails visudo syntax check." >&2
+    visudo -cf "$SUDOERS_TMP" || true
+    exit 1
+fi
+install -m 440 -o root -g root "$SUDOERS_TMP" /etc/sudoers.d/baluhost-samba
 
 # 5. Enable and start smbd
 echo "[5/5] Starting Samba..."
