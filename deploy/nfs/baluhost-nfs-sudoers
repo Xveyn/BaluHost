@@ -1,6 +1,8 @@
 # BaluHost NFS sudoers rules
-# Install: sudo cp baluhost-nfs-sudoers /etc/sudoers.d/baluhost-nfs
-# Verify:  sudo visudo -c
+# Installed by setup-nfs.sh, which substitutes the service-user placeholder on
+# each rule line with the actual service user, validates the result with
+# `visudo -cf`, then installs it to /etc/sudoers.d/baluhost-nfs (mode 440).
+# Verify: sudo visudo -cf /etc/sudoers.d/baluhost-nfs
 
-sven ALL=(ALL) NOPASSWD: /usr/sbin/exportfs -ra
-sven ALL=(ALL) NOPASSWD: /usr/sbin/exportfs -r
+@@BALUHOST_USER@@ ALL=(ALL) NOPASSWD: /usr/sbin/exportfs -ra
+@@BALUHOST_USER@@ ALL=(ALL) NOPASSWD: /usr/sbin/exportfs -r

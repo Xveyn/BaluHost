@@ -1,9 +1,11 @@
 # BaluHost Samba sudoers rules
-# Install: sudo cp baluhost-samba-sudoers /etc/sudoers.d/baluhost-samba
-# Verify:  sudo visudo -c
+# Installed by setup-samba.sh, which substitutes the service-user placeholder on
+# each rule line with the actual service user, validates the result with
+# `visudo -cf`, then installs it to /etc/sudoers.d/baluhost-samba (mode 440).
+# Verify: sudo visudo -cf /etc/sudoers.d/baluhost-samba
 
-sven ALL=(ALL) NOPASSWD: /usr/bin/smbpasswd
-sven ALL=(ALL) NOPASSWD: /usr/bin/smbcontrol
-sven ALL=(ALL) NOPASSWD: /usr/bin/smbstatus
-sven ALL=(ALL) NOPASSWD: /usr/sbin/useradd
-sven ALL=(ALL) NOPASSWD: /usr/sbin/userdel
+@@BALUHOST_USER@@ ALL=(ALL) NOPASSWD: /usr/bin/smbpasswd
+@@BALUHOST_USER@@ ALL=(ALL) NOPASSWD: /usr/bin/smbcontrol
+@@BALUHOST_USER@@ ALL=(ALL) NOPASSWD: /usr/bin/smbstatus
+@@BALUHOST_USER@@ ALL=(ALL) NOPASSWD: /usr/sbin/useradd
+@@BALUHOST_USER@@ ALL=(ALL) NOPASSWD: /usr/sbin/userdel

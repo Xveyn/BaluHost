@@ -24,9 +24,18 @@ chown "$SERVICE_USER:$STORAGE_GROUP" "$EXPORTS_CONF"
 chmod 644 "$EXPORTS_CONF"
 
 echo "[3/4] Installing sudoers rules..."
-cp "$SCRIPT_DIR/baluhost-nfs-sudoers" /etc/sudoers.d/baluhost-nfs
-chmod 440 /etc/sudoers.d/baluhost-nfs
-visudo -c
+# Substitute the @@BALUHOST_USER@@ placeholder, validate in isolation, then
+# install — never write an unvalidated file into /etc/sudoers.d (a malformed
+# drop-in can break sudo system-wide).
+SUDOERS_TMP=$(mktemp)
+trap 'rm -f "$SUDOERS_TMP"' EXIT
+sed "s|@@BALUHOST_USER@@|$SERVICE_USER|g" "$SCRIPT_DIR/baluhost-nfs-sudoers" > "$SUDOERS_TMP"
+if ! visudo -cf "$SUDOERS_TMP" >/dev/null 2>&1; then
+    echo "ERROR: generated sudoers file fails visudo syntax check." >&2
+    visudo -cf "$SUDOERS_TMP" || true
+    exit 1
+fi
+install -m 440 -o root -g root "$SUDOERS_TMP" /etc/sudoers.d/baluhost-nfs
 
 echo "[4/4] Enabling nfs-server..."
 systemctl enable --now nfs-server
