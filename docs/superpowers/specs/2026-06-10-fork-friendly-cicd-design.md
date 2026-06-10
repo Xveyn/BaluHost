@@ -74,13 +74,15 @@ backend-tests:
 | Workflow | Guard auf dem Job |
 |---|---|
 | `playwright-e2e.yml` → `mock-e2e` | `vars.ENABLE_PLAYWRIGHT_E2E != 'false'` (zusätzlich zur bestehenden Bedingung) |
-| `raid-mdadm-loopback.yml` | `vars.ENABLE_RAID_LOOPBACK != 'false'` |
+| `raid-mdadm-loopback.yml` | `vars.ENABLE_RAID_LOOPBACK != 'false'` — **Runner NIE konfigurierbar**, siehe Kasten unten |
 | `tauri-build.yml` | `vars.ENABLE_TAURI_BUILD != 'false'` |
 | `tui-build.yml` | `vars.ENABLE_TUI_BUILD != 'false'` |
 | `deploy-pi.yml` | `github.repository == 'Xveyn/BaluHost' \|\| vars.ENABLE_DEPLOY_PI == 'true'` |
 | `release-stable.yml` | `github.repository == 'Xveyn/BaluHost' \|\| vars.ENABLE_RELEASE_STABLE == 'true'` |
 
 Ungeguarded bleiben: `frontend-build` (Kern-CI), `create-release` (tag-getrieben, nur `GITHUB_TOKEN`), `live-e2e` (bereits secret+environment-gated), `deploy-production` (Actor-Gate deckt Forks ab; Datei bleibt unangetastet).
+
+> **Harte Leitplanke — mdadm-Tests laufen IMMER GitHub-hosted:** `raid-mdadm-loopback.yml` bleibt fest auf `runs-on: ubuntu-latest`. Der Runner ist **nicht** konfigurierbar — weder über Vars noch über die Config-Datei. Echte `mdadm`-Kommandos auf einem self-hosted Runner könnten reale Disks bzw. das Deployment-System zerstören; genau deshalb wurden diese Tests in #185 auf ephemere GitHub-VMs mit Loop-Devices verlegt. Der Toggle `ENABLE_RAID_LOOPBACK` schaltet nur an/aus. Zweite Absicherung: Die Loopback-Tests aktivieren sich nur bei `BALUHOST_MDADM_LOOPBACK=1` — die `backend-tests` (deren Runner konfigurierbar ist) setzen dieses Flag nicht und führen daher nie mdadm-Kommandos aus; das muss so bleiben.
 
 Hinweis Upstream-Semantik: Im kanonischen Repo sind die `!= 'false'`-Toggles faktisch immer an (Vars dort ungesetzt); die `== 'true'`-Workflows sind durch den `github.repository`-Anteil hart an. Reguläre CI/CD upstream ist damit nicht abschaltbar — gewollt.
 
@@ -146,7 +148,7 @@ systemctl cat baluhost-backend | grep -E 'ExecStart|User=|WorkingDirectory'
 - **`docs/deployment/SELF_HOSTING.de.md` + `.en.md`** (neues Dokument, zweisprachig nach Repo-Muster): Fork einrichten → `ci-config.conf` aus `ci-config.example.conf` kopieren und ausfüllen → `scripts/configure-ci.sh` ausführen → optional eigenen Test-Runner registrieren → optional Self-Host-Deploy (`install.sh`, Runner-Label, `ENABLE_DEPLOY_FORK`, Environment-Schutz). Inkl. Tabelle aller Config-Keys und Troubleshooting (hängende/failende Workflows vor dieser Änderung).
 - **`CONTRIBUTING.md`**: kurzer Abschnitt „CI in your fork" mit Verweis auf SELF_HOSTING.
 - **`README.md`**: Link auf SELF_HOSTING.
-- **`.claude/rules/ci-cd-security.md`**: Layer 2 um die vars-getriebene Runner-Wahl ergänzen (inkl. Begründung, warum Vars PR-sicher sind); `deploy-fork.yml` in die Workflow-Tabelle; Reviewer-Checklist erweitern: „Ändert eine Änderung die `github.repository == 'Xveyn/BaluHost'`-Bedingungen oder die `contains(vars.BACKEND_TEST_RUNNER, 'self-hosted')`-Gate-Logik?".
+- **`.claude/rules/ci-cd-security.md`**: Layer 2 um die vars-getriebene Runner-Wahl ergänzen (inkl. Begründung, warum Vars PR-sicher sind); `deploy-fork.yml` in die Workflow-Tabelle; Reviewer-Checklist erweitern: „Ändert eine Änderung die `github.repository == 'Xveyn/BaluHost'`-Bedingungen oder die `contains(vars.BACKEND_TEST_RUNNER, 'self-hosted')`-Gate-Logik?" und „Macht eine Änderung den Runner von `raid-mdadm-loopback.yml` konfigurierbar oder setzt `BALUHOST_MDADM_LOOPBACK` außerhalb dieses Workflows? Wenn ja — blocken (mdadm nie auf self-hosted)".
 - **`.github/CODEOWNERS`**: `deploy-fork.yml` ist über `/.github/workflows/` bereits abgedeckt; `ci-config.example.conf` + `scripts/configure-ci.sh` aufnehmen.
 
 ## 7. Sicherheits-Leitplanken (Review-Kriterien für die Umsetzung)
@@ -156,7 +158,8 @@ systemctl cat baluhost-backend | grep -E 'ExecStart|User=|WorkingDirectory'
 3. Kein Workflow erhält einen `pull_request`-/`pull_request_target`-Trigger auf self-hosted Runner.
 4. `deploy-fork.yml` ist upstream tot (Repo-Guard) und CODEOWNERS-geschützt.
 5. Keine neuen Secrets; `DEPLOY_PAT`/`BALUPI_DEPLOY_KEY` werden in keinen neuen Kontext exponiert.
-6. Jede Workflow-Änderung gegen die Reviewer-Checklist in `ci-cd-security.md` prüfen.
+6. `raid-mdadm-loopback.yml` bleibt hart auf `ubuntu-latest` (Runner nicht konfigurierbar) und `backend-tests` setzt nie `BALUHOST_MDADM_LOOPBACK=1` — mdadm darf auf keinem self-hosted System laufen (Disk-/Deploy-Brick-Gefahr).
+7. Jede Workflow-Änderung gegen die Reviewer-Checklist in `ci-cd-security.md` prüfen.
 
 ## 8. Verifikation / Akzeptanztests
 
