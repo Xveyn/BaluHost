@@ -8,6 +8,8 @@ on:
 
 jobs:
   build:
+    # vars.ENABLE_TAURI_BUILD: fork toggle (#207), default on; unset upstream.
+    if: vars.ENABLE_TAURI_BUILD != 'false'
     # MUST stay on GitHub-hosted runner per .claude/rules/ci-cd-security.md
     # Layer 2 (no self-hosted for PR-touched code paths).
     runs-on: ubuntu-latest

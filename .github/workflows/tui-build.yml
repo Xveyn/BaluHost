@@ -8,6 +8,8 @@ on:
 
 jobs:
   build:
+    # vars.ENABLE_TUI_BUILD: fork toggle (#207), default on; unset upstream.
+    if: vars.ENABLE_TUI_BUILD != 'false'
     # MUST stay on a GitHub-hosted runner per .claude/rules/ci-cd-security.md
     # Layer 2 (no self-hosted for releasable / PR-touched build paths).
     runs-on: ubuntu-latest
