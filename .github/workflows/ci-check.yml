@@ -2,7 +2,7 @@ name: CI Check
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main]  # development branch retired 2026-05-06; do not re-add
   workflow_call:
 
 permissions:
@@ -15,9 +15,13 @@ jobs:
     # repo variable BACKEND_TEST_RUNNER (JSON array, set by
     # scripts/configure-ci.sh), falling back to a secret-free ubuntu-latest VM.
     # PR code cannot influence this: repository literal + vars only.
+    # NOTE: the inner strings are JSON-encoded because the whole expression
+    # feeds fromJSON(); the quotes in '"ubuntu-latest"' are load-bearing.
     runs-on: ${{ fromJSON(github.repository == 'Xveyn/BaluHost' && '["self-hosted","ci-sandbox"]' || vars.BACKEND_TEST_RUNNER || '"ubuntu-latest"') }}
     # ci-tests approval gate: always for upstream PRs (as before); in forks
-    # only when the fork opted into a self-hosted test runner.
+    # only when the fork opted into a self-hosted test runner. Detection is
+    # contains() on the JSON-array string written by scripts/configure-ci.sh
+    # (e.g. '["self-hosted","my-box"]') — re-verify if that format changes.
     environment: ${{ (github.event_name == 'pull_request' && (github.repository == 'Xveyn/BaluHost' || contains(vars.BACKEND_TEST_RUNNER, 'self-hosted'))) && 'ci-tests' || '' }}
     timeout-minutes: 15
 
