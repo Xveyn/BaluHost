@@ -2,7 +2,7 @@ name: Deploy Pi Frontend
 
 on:
   push:
-    branches: [main, development]
+    branches: [main]
     paths:
       - 'client/**'
       - '.github/workflows/deploy-pi.yml'
@@ -13,6 +13,9 @@ permissions:
 
 jobs:
   deploy:
+    # Upstream always on; forks opt in via vars (needs BALUPI_DEPLOY_KEY
+    # secret) — otherwise skip cleanly instead of failing (#207).
+    if: github.repository == 'Xveyn/BaluHost' || vars.ENABLE_DEPLOY_PI == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5

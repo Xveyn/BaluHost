@@ -14,6 +14,9 @@ permissions:
 
 jobs:
   release:
+    # Upstream always on; forks opt in via vars (needs DEPLOY_PAT secret) —
+    # otherwise skip cleanly instead of failing (#207).
+    if: github.repository == 'Xveyn/BaluHost' || vars.ENABLE_RELEASE_STABLE == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
