@@ -23,9 +23,9 @@ permissions:
 jobs:
   mock-e2e:
     name: Mocked E2E (fast)
-    runs-on: ubuntu-latest
     # vars.ENABLE_PLAYWRIGHT_E2E: fork toggle (#207), default on; unset upstream.
     if: vars.ENABLE_PLAYWRIGHT_E2E != 'false' && (github.event_name != 'workflow_dispatch' || github.event.inputs.run == 'mock')
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
 
@@ -47,9 +47,11 @@ jobs:
 
   live-e2e:
     name: Live E2E (gated)
+    # Toggle repeated here on purpose: the needs:-skip cascade already covers
+    # this today, but an explicit guard survives future needs: refactors.
+    if: vars.ENABLE_PLAYWRIGHT_E2E != 'false' && github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     needs: mock-e2e
-    if: github.event_name == 'workflow_dispatch'
     environment: live-e2e
     steps:
       - uses: actions/checkout@v5
