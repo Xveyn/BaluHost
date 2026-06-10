@@ -15,7 +15,7 @@ Ein frischer Fork funktioniert ohne jede Einrichtung:
 | Workflow | Verhalten in Ihrem Fork |
 |---|---|
 | `ci-check` (Backend-Tests + Frontend-Build) | Läuft auf GitHub-gehosteten Runnern; Backend-Tests werden in einem rootless-Podman-Container auf `ubuntu-latest` ausgeführt |
-| `playwright-e2e` (gemockt) | Läuft auf `ubuntu-latest` |
+| `playwright-e2e` (gemockt) | Läuft auf `ubuntu-latest` (PRs und Pushes auf `main`) |
 | `raid-mdadm-loopback` | Läuft auf `ubuntu-latest` (PRs, die RAID-Pfade berühren) |
 | `tauri-build`, `tui-build` | Laufen auf `ubuntu-latest` (Push auf main / Tags) |
 | `create-release` | Läuft bei Tag-Push (benötigt nur `GITHUB_TOKEN`) |
@@ -23,7 +23,7 @@ Ein frischer Fork funktioniert ohne jede Einrichtung:
 | `deploy-production` | Inaktiv (actor-gated auf den Maintainer) |
 | `deploy-fork` | Übersprungen bis zur Aktivierung (siehe unten) |
 
-Hinweis: Ein direkter Push auf `main` des Forks löst `ci-check` nicht aus —
+Hinweis: Ein direkter Push auf `main` des Forks löst `ci-check` nicht aus (andere Workflows wie `playwright-e2e` oder die Build-Workflows werden bei Push jedoch ausgelöst) —
 öffnen Sie einen PR innerhalb Ihres Forks, um CI auszuführen, oder aktivieren
 Sie `deploy-fork` (das vor dem Deployment `ci-check` aufruft).
 
@@ -57,7 +57,10 @@ gesetzte Variablen sind Teil des Designs (nicht gesetzt = Standardverhalten).
    diese beim ersten Einsatz ungeschützt an — wer jemals PRs von Fremden in
    seinen Fork akzeptiert, sollte sich als required reviewer für `ci-tests`
    unter Settings → Environments eintragen. Niemals PR-Code von nicht
-   vertrauenswürdigen Personen auf wichtiger Hardware ausführen.
+   vertrauenswürdigen Personen auf wichtiger Hardware ausführen. Die
+   Gate-Erkennung basiert auf dem JSON-Array-Format, das `configure-ci.sh`
+   schreibt — wer `BACKEND_TEST_RUNNER` manuell setzt, muss den Literalwert
+   `self-hosted` im Wert beibehalten.
 
 Die RAID-mdadm-Loopback-Tests sind die bewusste Ausnahme: Ihr Runner ist
 **immer GitHub-gehostet** und lässt sich nicht konfigurieren. Echte
@@ -103,9 +106,12 @@ Pipeline vorbehalten.
 - **`backend-tests` hängt dauerhaft** — `BACKEND_TEST_RUNNER` zeigt auf
   Labels, zu denen kein Online-Runner existiert. Prüfen mit
   `gh api repos/<you>/<fork>/actions/runners`.
-- **`deploy-fork` schlägt sofort fehl** — `ENABLE_DEPLOY_FORK=true` erfordert
-  `DEPLOY_FORK_RUNNER_LABELS`; der Runner muss auf der Zielmaschine online sein
-  und das Installationsverzeichnis eine abgeschlossene
+- **`deploy-fork` schlägt fehl** — `configure-ci.sh` lehnt `ENABLE_DEPLOY_FORK=true`
+  ohne `DEPLOY_FORK_RUNNER_LABELS` ab (gespeichert als Variable `DEPLOY_FORK_RUNNER`).
+  Werden die Variablen manuell gesetzt und `DEPLOY_FORK_RUNNER` fehlt, fällt der
+  Job auf eine GitHub-VM zurück und schlägt in `ci-deploy.sh` fehl.
+  Andernfalls gilt: Der Runner muss auf der Zielmaschine online sein und das
+  Installationsverzeichnis eine abgeschlossene
   `deploy/install/install.sh`-Einrichtung enthalten.
 - **PRs von Erstbeitragenden starten kein CI** — Standardverhalten von GitHub;
   den Lauf im Actions-Tab genehmigen („Approve and run").

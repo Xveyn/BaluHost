@@ -15,7 +15,7 @@ A fresh fork works without any setup:
 | Workflow | Behavior in your fork |
 |---|---|
 | `ci-check` (backend tests + frontend build) | Runs on GitHub-hosted runners; backend tests execute inside a rootless Podman container on `ubuntu-latest` |
-| `playwright-e2e` (mocked) | Runs on `ubuntu-latest` |
+| `playwright-e2e` (mocked) | Runs on `ubuntu-latest` (PRs and pushes to `main`) |
 | `raid-mdadm-loopback` | Runs on `ubuntu-latest` (PRs touching RAID paths) |
 | `tauri-build`, `tui-build` | Run on `ubuntu-latest` (push to main / tags) |
 | `create-release` | Runs on tag push (only needs `GITHUB_TOKEN`) |
@@ -23,7 +23,7 @@ A fresh fork works without any setup:
 | `deploy-production` | Dead (actor-gated to the maintainer) |
 | `deploy-fork` | Skipped until you opt in (see below) |
 
-Note: pushing directly to your fork's `main` does not trigger `ci-check` —
+Note: pushing directly to your fork's `main` does not trigger `ci-check` (other workflows like `playwright-e2e` or the builds do fire on push) —
 open a PR inside your fork to run CI, or enable `deploy-fork` (which calls
 `ci-check` before deploying).
 
@@ -55,7 +55,9 @@ on `vars.ENABLE_*` — that is expected: unset variables are part of the design
    unprotected on first use — if you ever accept PRs from strangers into your
    fork, add yourself as a required reviewer for `ci-tests` in your fork's
    Settings → Environments. Never run PR code from people you don't trust on
-   hardware you care about.
+   hardware you care about. The gate detection relies on the JSON-array format
+   `configure-ci.sh` writes — if you set `BACKEND_TEST_RUNNER` by hand, keep
+   the literal `self-hosted` in the value.
 
 The RAID mdadm loopback tests are the deliberate exception: their runner is
 **always GitHub-hosted** and cannot be configured. Real `mdadm` commands could
@@ -96,8 +98,11 @@ NOT part of fork deploys — that stays exclusive to the canonical pipeline.
   without adding the secret to your fork. Disable it or add the secret.
 - **`backend-tests` hangs forever** — your `BACKEND_TEST_RUNNER` points at
   labels no online runner has. Check `gh api repos/<you>/<fork>/actions/runners`.
-- **`deploy-fork` fails immediately** — `ENABLE_DEPLOY_FORK=true` requires
-  `DEPLOY_FORK_RUNNER_LABELS`; the runner must be online on the target box and
-  the install dir must contain a completed `deploy/install/install.sh` setup.
+- **`deploy-fork` fails** — `configure-ci.sh` refuses `ENABLE_DEPLOY_FORK=true`
+  without `DEPLOY_FORK_RUNNER_LABELS` (stored as the `DEPLOY_FORK_RUNNER`
+  variable). If you set the variables by hand and `DEPLOY_FORK_RUNNER` is
+  missing, the job falls back to a GitHub VM and fails inside `ci-deploy.sh`.
+  Otherwise: the runner must be online on the target box and the install dir
+  must contain a completed `deploy/install/install.sh` setup.
 - **First-time contributors' PRs don't run CI** — standard GitHub behavior;
   approve the run in the Actions tab ("Approve and run").
