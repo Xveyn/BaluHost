@@ -1,0 +1,55 @@
+name: Deploy Fork
+
+# Self-host deploy for FORKS only (#207). Dead in the canonical repo
+# (repository guard below); upstream deploys via deploy-production.yml.
+# Prerequisites on the target box (see docs/deployment/SELF_HOSTING.en.md):
+#   1. One-time install via deploy/install/install.sh (Debian).
+#   2. A self-hosted runner registered with the labels in
+#      vars.DEPLOY_FORK_RUNNER (set via scripts/configure-ci.sh).
+#   3. Optional but recommended: protect the fork-production environment
+#      with required reviewers in your fork settings.
+# No pre-release tagging here — that stays exclusive to deploy-production.yml.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      sync_permissions:
+        description: "Re-apply OS-level permission grants (udev / polkit / sudoers)."
+        type: boolean
+        required: false
+        default: false
+
+concurrency:
+  group: fork-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  ci-check:
+    if: vars.ENABLE_DEPLOY_FORK == 'true' && github.repository != 'Xveyn/BaluHost'
+    uses: ./.github/workflows/ci-check.yml
+
+  deploy:
+    needs: ci-check
+    if: vars.ENABLE_DEPLOY_FORK == 'true' && github.repository != 'Xveyn/BaluHost'
+    runs-on: ${{ fromJSON(vars.DEPLOY_FORK_RUNNER) }}
+    environment: fork-production
+    timeout-minutes: 30
+
+    steps:
+      - name: Run deploy script
+        env:
+          INSTALL_DIR: ${{ vars.DEPLOY_FORK_INSTALL_DIR || '/opt/baluhost' }}
+          DEPLOY_ACTOR: ${{ github.actor }}
+          SYNC_PERMISSIONS: ${{ inputs.sync_permissions == true && '1' || '0' }}
+        run: |
+          export GITHUB_ACTOR="$DEPLOY_ACTOR"
+          "$INSTALL_DIR/deploy/scripts/ci-deploy.sh"
+
+      - name: Show deploy state
+        if: always()
+        run: cat "${{ vars.DEPLOY_FORK_INSTALL_DIR || '/opt/baluhost' }}/.deploy-state" 2>/dev/null || echo "No deploy state file"
