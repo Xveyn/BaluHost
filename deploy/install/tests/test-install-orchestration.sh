@@ -86,15 +86,17 @@ exit 0
 EOF
 
     # Failing verify stub — install.sh runs it with `|| true`, so the
-    # completion banner must still appear.
+    # completion banner must still appear. Strict mode like the real script.
     cat > "$SANDBOX/verify/verify-install.sh" <<'EOF'
 #!/bin/bash
+set -euo pipefail
 echo "VERIFY-RAN"
 exit 1
 EOF
 }
 
 cleanup() { rm -rf "$SANDBOX"; }
+trap 'rm -rf "${SANDBOX:-}"' EXIT
 
 # ─── Tests 1 + 2 + 6: full run, config round-trip, verify tolerance ──────────
 
@@ -199,6 +201,17 @@ else
     fail "config round-trip broke special characters: $RT_OUTPUT"
 fi
 cleanup
+
+# ─── Guard: verify-install.sh must not use ((var++)) under set -e ───────────
+# ((PASS++)) with PASS=0 evaluates to 0 → exit status 1 → errexit kills the
+# script at the first check. Masked while the script was sourced with
+# `|| true`; real since install.sh executes it via `bash` (#212 review).
+
+if grep -qE '\(\([A-Za-z_]+\+\+\)\)' "$INSTALL_SRC/verify/verify-install.sh"; then
+    fail "verify-install.sh uses ((var++)) — dies under set -e when var is 0"
+else
+    pass "verify-install.sh free of ((var++)) errexit trap"
+fi
 
 # ─── Summary ─────────────────────────────────────────────────────────────────
 

@@ -17,10 +17,10 @@ check() {
     shift
     if "$@" &>/dev/null; then
         log_info "PASS: $label"
-        ((PASS++))
+        PASS=$((PASS + 1))
     else
         log_error "FAIL: $label"
-        ((FAIL++))
+        FAIL=$((FAIL + 1))
     fi
 }
 
@@ -55,10 +55,10 @@ if [[ -f "$ENV_FILE" ]]; then
     local_perms=$(stat -c %a "$ENV_FILE" 2>/dev/null || echo "unknown")
     if [[ "$local_perms" == "600" ]]; then
         log_info "PASS: .env.production has mode 600"
-        ((PASS++))
+        PASS=$((PASS + 1))
     else
         log_error "FAIL: .env.production has mode $local_perms (expected 600)"
-        ((FAIL++))
+        FAIL=$((FAIL + 1))
     fi
 fi
 

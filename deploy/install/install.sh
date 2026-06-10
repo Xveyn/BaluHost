@@ -17,6 +17,9 @@ source "$SCRIPT_DIR/lib/common.sh"
 set -a
 source "$SCRIPT_DIR/lib/config.sh"
 set +a
+# set -a also gave config.sh's functions the export attribute; children
+# re-source config.sh themselves, so drop the functions from the environment.
+export -fn load_config save_config
 source "$SCRIPT_DIR/lib/features.sh"
 
 # ─── Version ─────────────────────────────────────────────────────────

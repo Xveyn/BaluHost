@@ -68,6 +68,8 @@ save_config() {
     # DATABASE_URL is deliberately NOT persisted: it is derived state that
     # embeds POSTGRES_PASSWORD (module 07 rebuilds it; module 08 reads
     # .env.production) — persisting it would duplicate the secret.
+    # Keep this list in sync with the defaults above and (for ENABLE_* flags)
+    # with FEATURE_KEYS in lib/features.sh.
     local -a config_vars=(
         INSTALL_DIR BALUHOST_USER BALUHOST_GROUP FRONTEND_STATIC_DIR
         POSTGRES_DB POSTGRES_USER POSTGRES_PASSWORD
@@ -78,6 +80,10 @@ save_config() {
         ENABLE_SAMBA ENABLE_NFS ENABLE_WSDD ENABLE_MDNS
     )
 
+    # Write to a temp file and move into place: an interrupted write must not
+    # truncate the only transport channel for generated secrets, and the file
+    # must never exist world-readable, not even briefly.
+    local tmp_file="$BALUHOST_CONFIG.tmp"
     {
         echo "# BaluHost Install Configuration"
         echo "# Generated: $(date -Iseconds)"
@@ -87,8 +93,9 @@ save_config() {
         for var in "${config_vars[@]}"; do
             printf '%s=%q\n' "$var" "${!var:-}"
         done
-    } > "$BALUHOST_CONFIG"
+    } > "$tmp_file"
 
-    chmod 600 "$BALUHOST_CONFIG"
+    chmod 600 "$tmp_file"
+    mv "$tmp_file" "$BALUHOST_CONFIG"
     log_info "Config saved to $BALUHOST_CONFIG (mode 600)"
 }
