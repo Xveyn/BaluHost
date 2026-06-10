@@ -195,6 +195,13 @@ npm run test
 - Tests should be deterministic (no random failures)
 - Use dev-mode fixtures for reproducibility
 
+### CI in your fork
+
+Your fork runs the BaluHost CI pipeline out of the box on GitHub-hosted
+runners — open a PR inside your fork to trigger it. To choose which workflows
+run, or to run backend tests / deploys on your own hardware, see
+[Self-Hosting & Fork CI/CD](docs/deployment/SELF_HOSTING.en.md).
+
 ## 🔀 Git Workflow
 
 > **Important:** All contributions go through Pull Requests targeting **`main`**. Branch off `main`, then open your PR against `main`. There is no separate integration branch — the `development` branch was retired on 2026-05-06.

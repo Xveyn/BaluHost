@@ -177,7 +177,7 @@ push to main → CI checks (GitHub-hosted) → Deploy (self-hosted on NAS)
                                             └── Health check (auto-rollback on failure)
 ```
 
-See [Infrastructure](docs/deployment/infrastructure.en.md) and [Emergency Runbook](docs/deployment/emergency-runbook.en.md) for operational details.
+See [Infrastructure](docs/deployment/infrastructure.en.md) and [Emergency Runbook](docs/deployment/emergency-runbook.en.md) for operational details. Forks can run this pipeline themselves — see [Self-Hosting & Fork CI/CD](docs/deployment/SELF_HOSTING.en.md).
 
 ---
 
