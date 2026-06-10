@@ -69,15 +69,22 @@ set_var() {
 del_var() {
     if [[ "$DRY_RUN" == 1 ]]; then
         echo "[dry-run] gh variable delete $1 --repo $REPO (default — variable removed)"
-    else
-        gh variable delete "$1" --repo "$REPO" 2>/dev/null || true
+        return
+    fi
+    local err
+    if err=$(gh variable delete "$1" --repo "$REPO" 2>&1); then
         echo "default $1 (variable removed)"
+    elif grep -qiE 'not found|404' <<< "$err"; then
+        echo "default $1 (was not set)"
+    else
+        die "could not delete variable $1: $err"
     fi
 }
 
 # "a, b" -> ["self-hosted","a","b"] ('self-hosted' always implied, deduped)
 labels_to_json() {
     local out='["self-hosted"' part
+    local -a parts
     IFS=',' read -ra parts <<< "${1:-}"
     for part in "${parts[@]}"; do
         part="${part#"${part%%[![:space:]]*}"}"; part="${part%"${part##*[![:space:]]}"}"
