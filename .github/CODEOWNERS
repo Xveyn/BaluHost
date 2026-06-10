@@ -25,6 +25,8 @@
 /deploy/             @Xveyn
 /scripts/bootstrap-runner-ubuntu.sh  @Xveyn
 /scripts/bootstrap-ci-runner.sh      @Xveyn
+/ci-config.example.conf              @Xveyn
+/scripts/configure-ci.sh             @Xveyn
 
 # Tauri Companion app (Rust shell + config)
 /client/src-tauri/   @Xveyn
