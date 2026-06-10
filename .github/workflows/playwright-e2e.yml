@@ -12,7 +12,7 @@ name: Playwright E2E
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main ]
   pull_request:
     branches: [ '*' ]
   workflow_dispatch: {}
@@ -24,7 +24,8 @@ jobs:
   mock-e2e:
     name: Mocked E2E (fast)
     runs-on: ubuntu-latest
-    if: github.event_name != 'workflow_dispatch' || github.event.inputs.run == 'mock'
+    # vars.ENABLE_PLAYWRIGHT_E2E: fork toggle (#207), default on; unset upstream.
+    if: vars.ENABLE_PLAYWRIGHT_E2E != 'false' && (github.event_name != 'workflow_dispatch' || github.event.inputs.run == 'mock')
     steps:
       - uses: actions/checkout@v5
 
