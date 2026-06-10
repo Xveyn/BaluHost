@@ -22,6 +22,8 @@ Owned paths:
 - `/deploy/` — deploy scripts, systemd units, sudoers templates, nginx config
 - `/scripts/bootstrap-runner-ubuntu.sh` — VM runner provisioning (legacy)
 - `/scripts/bootstrap-ci-runner.sh` — sandbox CI runner provisioning (ci-sandbox label)
+- `/ci-config.example.conf` — fork CI config template (repo root)
+- `/scripts/configure-ci.sh` — fork CI config apply script
 - `/.claude/rules/ci-cd-security.md` — these rules
 - `/.claude/rules/security.md`, `/.claude/rules/security-agent.md`
 
