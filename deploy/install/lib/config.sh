@@ -63,36 +63,41 @@ save_config() {
     config_dir=$(dirname "$BALUHOST_CONFIG")
     mkdir -p "$config_dir"
 
-    cat > "$BALUHOST_CONFIG" <<EOF
-# BaluHost Install Configuration
-# Generated: $(date -Iseconds)
-# Mode 600 — do not share this file.
+    # %q-quote every value so load_config can source the file safely even
+    # when values (e.g. ADMIN_PASSWORD) contain spaces, quotes or $.
+    # DATABASE_URL is deliberately NOT persisted: it is derived state that
+    # embeds POSTGRES_PASSWORD (module 07 rebuilds it; module 08 reads
+    # .env.production) — persisting it would duplicate the secret.
+    # Keep this list in sync with the defaults above and (for ENABLE_* flags)
+    # with FEATURE_KEYS in lib/features.sh.
+    local -a config_vars=(
+        INSTALL_DIR BALUHOST_USER BALUHOST_GROUP FRONTEND_STATIC_DIR
+        POSTGRES_DB POSTGRES_USER POSTGRES_PASSWORD
+        ADMIN_USERNAME ADMIN_PASSWORD ADMIN_EMAIL
+        SECRET_KEY TOKEN_SECRET VPN_ENCRYPTION_KEY
+        GIT_REPO GIT_BRANCH
+        ENABLE_RAID ENABLE_SMART ENABLE_VPN ENABLE_CLOUD
+        ENABLE_SAMBA ENABLE_NFS ENABLE_WSDD ENABLE_MDNS
+    )
 
-INSTALL_DIR=${INSTALL_DIR}
-BALUHOST_USER=${BALUHOST_USER}
-BALUHOST_GROUP=${BALUHOST_GROUP}
-FRONTEND_STATIC_DIR=${FRONTEND_STATIC_DIR}
-POSTGRES_DB=${POSTGRES_DB}
-POSTGRES_USER=${POSTGRES_USER}
-POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-ADMIN_USERNAME=${ADMIN_USERNAME}
-ADMIN_PASSWORD=${ADMIN_PASSWORD}
-ADMIN_EMAIL=${ADMIN_EMAIL}
-SECRET_KEY=${SECRET_KEY}
-TOKEN_SECRET=${TOKEN_SECRET}
-VPN_ENCRYPTION_KEY=${VPN_ENCRYPTION_KEY}
-GIT_REPO=${GIT_REPO}
-GIT_BRANCH=${GIT_BRANCH}
-ENABLE_RAID=${ENABLE_RAID}
-ENABLE_SMART=${ENABLE_SMART}
-ENABLE_VPN=${ENABLE_VPN}
-ENABLE_CLOUD=${ENABLE_CLOUD}
-ENABLE_SAMBA=${ENABLE_SAMBA}
-ENABLE_NFS=${ENABLE_NFS}
-ENABLE_WSDD=${ENABLE_WSDD}
-ENABLE_MDNS=${ENABLE_MDNS}
-EOF
+    # Write to a temp file and move into place: an interrupted write must not
+    # truncate the only transport channel for generated secrets, and the file
+    # must never exist world-readable, not even briefly — so create it empty,
+    # chmod 600 first, and only then write (`>` truncates, keeps the mode).
+    local tmp_file="$BALUHOST_CONFIG.tmp"
+    : > "$tmp_file"
+    chmod 600 "$tmp_file"
+    {
+        echo "# BaluHost Install Configuration"
+        echo "# Generated: $(date -Iseconds)"
+        echo "# Mode 600 — do not share this file."
+        echo ""
+        local var
+        for var in "${config_vars[@]}"; do
+            printf '%s=%q\n' "$var" "${!var:-}"
+        done
+    } > "$tmp_file"
 
-    chmod 600 "$BALUHOST_CONFIG"
+    mv "$tmp_file" "$BALUHOST_CONFIG"
     log_info "Config saved to $BALUHOST_CONFIG (mode 600)"
 }

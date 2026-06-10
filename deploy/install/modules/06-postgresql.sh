@@ -3,6 +3,8 @@
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$SCRIPT_DIR/lib/common.sh"
+source "$SCRIPT_DIR/lib/config.sh"
+load_config
 
 # ─── Main ───────────────────────────────────────────────────────────
 
@@ -38,6 +40,9 @@ if [[ -z "${POSTGRES_PASSWORD:-}" ]]; then
     POSTGRES_PASSWORD=$(generate_db_password)
     log_info "Generated random PostgreSQL password."
     export POSTGRES_PASSWORD
+    # This module runs in a child process of install.sh — the generated
+    # password reaches later modules only via the config file (#212).
+    save_config
 fi
 
 # --- Create PostgreSQL user ---

@@ -3,6 +3,8 @@
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$SCRIPT_DIR/lib/common.sh"
+source "$SCRIPT_DIR/lib/config.sh"
+load_config
 
 # ─── Main ───────────────────────────────────────────────────────────
 
@@ -39,6 +41,10 @@ if [[ -z "${VPN_ENCRYPTION_KEY:-}" ]]; then
 else
     log_info "VPN_ENCRYPTION_KEY already set, reusing."
 fi
+
+# This module runs in a child process of install.sh — generated secrets
+# reach the orchestrator and any resumed run only via the config file (#212).
+save_config
 
 # --- Build DATABASE_URL ---
 if [[ -z "${DATABASE_URL:-}" ]]; then
