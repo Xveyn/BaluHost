@@ -82,8 +82,11 @@ save_config() {
 
     # Write to a temp file and move into place: an interrupted write must not
     # truncate the only transport channel for generated secrets, and the file
-    # must never exist world-readable, not even briefly.
+    # must never exist world-readable, not even briefly — so create it empty,
+    # chmod 600 first, and only then write (`>` truncates, keeps the mode).
     local tmp_file="$BALUHOST_CONFIG.tmp"
+    : > "$tmp_file"
+    chmod 600 "$tmp_file"
     {
         echo "# BaluHost Install Configuration"
         echo "# Generated: $(date -Iseconds)"
@@ -95,7 +98,6 @@ save_config() {
         done
     } > "$tmp_file"
 
-    chmod 600 "$tmp_file"
     mv "$tmp_file" "$BALUHOST_CONFIG"
     log_info "Config saved to $BALUHOST_CONFIG (mode 600)"
 }

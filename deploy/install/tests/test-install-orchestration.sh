@@ -207,7 +207,7 @@ cleanup
 # script at the first check. Masked while the script was sourced with
 # `|| true`; real since install.sh executes it via `bash` (#212 review).
 
-if grep -qE '\(\([A-Za-z_]+\+\+\)\)' "$INSTALL_SRC/verify/verify-install.sh"; then
+if grep -qE '\(\([[:space:]]*[A-Za-z_]+\+\+[[:space:]]*\)\)' "$INSTALL_SRC/verify/verify-install.sh"; then
     fail "verify-install.sh uses ((var++)) — dies under set -e when var is 0"
 else
     pass "verify-install.sh free of ((var++)) errexit trap"
