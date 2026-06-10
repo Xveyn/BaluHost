@@ -258,3 +258,16 @@ systemctl status postgresql
 **Last Updated:** January 25, 2026 23:40 CET
 **Deployment Status:** ✅ PRODUCTION - STABLE
 **Uptime Target:** 99.9%
+
+## Legacy-Frontend-Unit (BaluNode)
+
+Stand 2026-06-10 läuft auf BaluNode noch eine Legacy-`baluhost-frontend.service`,
+die `/home/sven/projects/BaluHost` referenziert. Sie ist redundant: nginx
+serviert das statische Frontend aus `/opt/baluhost/client/dist`. Empfohlene
+Bereinigung auf der Box:
+
+    sudo systemctl disable --now baluhost-frontend.service
+    sudo rm /etc/systemd/system/baluhost-frontend.service
+    sudo systemctl daemon-reload
+
+Die Repo-Kopien der Legacy-Units (`deploy/systemd/`) wurden mit #207 entfernt.

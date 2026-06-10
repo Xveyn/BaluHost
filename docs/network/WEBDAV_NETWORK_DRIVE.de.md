@@ -47,7 +47,7 @@ Der WebDAV-Worker wird automatisch als Unterprozess gestartet.
 
 ### Produktion
 
-**Systemd-Service** (`deploy/systemd/baluhost-webdav.service`):
+**Systemd-Service** (`deploy/install/templates/baluhost-webdav.service`):
 
 ```bash
 sudo systemctl enable baluhost-webdav
@@ -305,7 +305,7 @@ Der WebDAV-Tab ist Teil der **System Control Page** (`client/src/pages/SystemCon
 | `backend/app/api/routes/webdav.py` | REST-API-Endpunkte |
 | `backend/app/schemas/webdav.py` | Pydantic-Antwortmodelle |
 | `backend/app/models/webdav_state.py` | Datenbankmodell |
-| `deploy/systemd/baluhost-webdav.service` | Systemd-Unit-Datei |
+| `deploy/install/templates/baluhost-webdav.service` | Systemd-Unit-Datei |
 | `client/src/components/webdav/WebdavConnectionCard.tsx` | Frontend-Komponente |
 | `client/src/api/webdav.ts` | Frontend-API-Client |
 

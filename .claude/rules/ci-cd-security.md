@@ -22,6 +22,8 @@ Owned paths:
 - `/deploy/` — deploy scripts, systemd units, sudoers templates, nginx config
 - `/scripts/bootstrap-runner-ubuntu.sh` — VM runner provisioning (legacy)
 - `/scripts/bootstrap-ci-runner.sh` — sandbox CI runner provisioning (ci-sandbox label)
+- `/ci-config.example.conf` — fork CI config template (repo root)
+- `/scripts/configure-ci.sh` — fork CI config apply script
 - `/.claude/rules/ci-cd-security.md` — these rules
 - `/.claude/rules/security.md`, `/.claude/rules/security-agent.md`
 
@@ -30,12 +32,13 @@ Owned paths:
 | Workflow | Runner | Triggers |
 |---|---|---|
 | `ci-check.yml` `frontend-build` | `ubuntu-latest` | `pull_request`, `workflow_call` |
-| `ci-check.yml` `backend-tests` | **`self-hosted, ci-sandbox`** (rootless Podman) | `pull_request` (gated by `ci-tests` env), `workflow_call` (ungated) |
+| `ci-check.yml` `backend-tests` | **upstream: `self-hosted, ci-sandbox` (hardcoded repo literal); forks: `vars.BACKEND_TEST_RUNNER`, default `ubuntu-latest`** (rootless Podman everywhere) | `pull_request` (gated by `ci-tests` env), `workflow_call` (ungated) |
 | `create-release.yml` | `ubuntu-latest` | tag push (`v*-pre.*`) |
 | `deploy-pi.yml` | `ubuntu-latest` | `workflow_dispatch` |
 | `playwright-e2e.yml` | `ubuntu-latest` | `pull_request`, `push: main` |
 | `release-stable.yml` | `ubuntu-latest` | `workflow_dispatch` |
 | `deploy-production.yml` | **`self-hosted, prod`** | `push: main`, `workflow_dispatch` |
+| `deploy-fork.yml` | **fork-configured via `vars.DEPLOY_FORK_RUNNER`** | `push: main`, `workflow_dispatch` — dead upstream (repo guard on every job) |
 | `raid-mdadm-loopback.yml` | `ubuntu-latest` | `pull_request` (paths: raid), `workflow_dispatch` |
 | `tauri-build.yml` | `ubuntu-latest` | `push: main`, tag, `workflow_dispatch` |
 | `tui-build.yml` | `ubuntu-latest` | `push: main`, tag, `workflow_dispatch` |
@@ -50,6 +53,20 @@ Self-hosted production runners (`BaluNode`) only see code that has already lande
 - **Layer B — Rootless Podman container.** Untrusted code (`pip install`, `pytest`, anything in the PR) never executes directly on the runner host. Workflows wrap the test invocation in `podman run --rm` against a pinned image (`docker.io/library/python:3.11-slim`), with only the workspace bind-mounted. The container sees no host filesystem outside the bind-mount; container-root is mapped to `ci-runner`'s subuid range. No Docker daemon, no `/var/run/docker.sock`, no `docker` group.
 
 A workflow on `ci-sandbox` that runs `pip install` directly on the runner host (instead of inside `podman run`) breaks Layer B. The Reviewer Checklist below catches this.
+
+**Fork configurability (#207).** Runner selection and workflow toggles for forks
+are driven exclusively by `github.repository == 'Xveyn/BaluHost'` literals and
+server-side Repository Variables (`vars.*`, set via `scripts/configure-ci.sh`).
+Upstream behavior is hardcoded and needs no variables; PR code cannot influence
+runner choice or environment gates through either mechanism. The `ci-tests`
+gate condition on `pull_request` events is
+`github.repository == 'Xveyn/BaluHost' || contains(vars.BACKEND_TEST_RUNNER, 'self-hosted')`.
+`raid-mdadm-loopback.yml` is deliberately NOT runner-configurable: real mdadm on
+a self-hosted box could destroy disks — only the on/off toggle
+`ENABLE_RAID_LOOPBACK` exists, and `BALUHOST_MDADM_LOOPBACK=1` is never set
+outside that workflow. Note: IDE/actionlint warnings like "Context access might
+be invalid: ENABLE_*" on the toggle vars are expected — the variables are
+intentionally unset upstream (unset → `''` → defaults apply).
 
 **Resolved (2026-06-09)**: the dead `raid-mdadm-selfhosted.yml` (which required a non-existent `mdadm` runner label and only ran mock tests anyway) was retired and replaced by `raid-mdadm-loopback.yml` on `ubuntu-latest`. Real mdadm coverage now runs on ephemeral GitHub-hosted VMs against loop-device arrays — no self-hosted runner, no production-disk risk (issue #185).
 
@@ -128,6 +145,8 @@ When reviewing changes that touch CI/CD, deploy scripts, or these rules:
 - [ ] **Sudoers / systemd**: Changes under `deploy/install/templates/` to sudoers or service units? Verify the new rules are scoped to specific binaries with explicit args (no `ALL`, no globs that match user-controlled paths).
 - [ ] **Deploy script**: Changes to `deploy/scripts/ci-deploy.sh`? Verify no new shell injection surfaces (user-controlled env vars interpolated into commands), no new `sudo` invocations without sudoers entries, rollback path still works.
 - [ ] **Workflow secrets**: New `secrets.*` references? Confirm the secret exists, is scoped correctly, and is not echoed/logged.
+- [ ] **Fork-config gate logic**: Does a change touch the `github.repository == 'Xveyn/BaluHost'` literals or the `contains(vars.BACKEND_TEST_RUNNER, 'self-hosted')` environment-gate condition in `ci-check.yml`/`deploy-fork.yml`? If it weakens the upstream-hardcoded path or derives gates from PR-controlled data — block.
+- [ ] **mdadm runner pin**: Does a change make the `raid-mdadm-loopback.yml` runner configurable, or set `BALUHOST_MDADM_LOOPBACK` outside that workflow? If yes — block (mdadm must never run on self-hosted hardware).
 
 ---
 

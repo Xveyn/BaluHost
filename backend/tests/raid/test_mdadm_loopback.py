@@ -8,6 +8,7 @@ everywhere else (dev machines, normal CI).
 """
 import os
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
@@ -35,13 +36,28 @@ def _sudo(*args: str, check: bool = True) -> subprocess.CompletedProcess:
     )
 
 
+def _wait_node_gone(path: str, timeout: float = 10.0) -> bool:
+    """Wait for a device node to disappear — udev removes it asynchronously
+    after `mdadm --stop`, so a bare existence check right after a previous
+    test's teardown is a race (flaked in CI on 2026-06-10)."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if not Path(path).exists():
+            return True
+        time.sleep(0.2)
+    return not Path(path).exists()
+
+
 @pytest.fixture
 def loop_raid(tmp_path):
     """Provision two loop devices; guarantee teardown of array + loops + files."""
     loops: list[str] = []
     files: list[Path] = []
-    # Defensive: the array name must be free on this (ephemeral) host.
-    assert not Path(ARRAY_PATH).exists(), f"{ARRAY_PATH} already exists on this host"
+    # Defensive: the array name must be free on this (ephemeral) host. Stop
+    # any leftover array first, then wait out udev's asynchronous node removal
+    # instead of asserting on a racy snapshot.
+    _sudo("mdadm", "--stop", ARRAY_PATH, check=False)
+    assert _wait_node_gone(ARRAY_PATH), f"{ARRAY_PATH} already exists on this host"
     try:
         for i in range(2):
             f = tmp_path / f"disk{i}.img"
@@ -53,6 +69,7 @@ def loop_raid(tmp_path):
     finally:
         # Stop array if present, zero superblocks, detach loops, remove files.
         _sudo("mdadm", "--stop", ARRAY_PATH, check=False)
+        _wait_node_gone(ARRAY_PATH)
         for lp in loops:
             _sudo("mdadm", "--zero-superblock", lp, check=False)
             _sudo("losetup", "-d", lp, check=False)

@@ -13,6 +13,11 @@ permissions:
 
 jobs:
   mdadm-loopback:
+    # vars.ENABLE_RAID_LOOPBACK: fork toggle (#207), default on; unset upstream.
+    if: vars.ENABLE_RAID_LOOPBACK != 'false'
+    # SECURITY: runs-on MUST stay ubuntu-latest and MUST NOT become
+    # configurable. Real mdadm commands on a self-hosted runner could destroy
+    # disks / the deployment system (see #185 and ci-cd-security.md).
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
