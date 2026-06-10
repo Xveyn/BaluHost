@@ -36,7 +36,10 @@ jobs:
   deploy:
     needs: ci-check
     if: vars.ENABLE_DEPLOY_FORK == 'true' && github.repository != 'Xveyn/BaluHost'
-    runs-on: ${{ fromJSON(vars.DEPLOY_FORK_RUNNER) }}
+    # Fallback is defense-in-depth for hand-set vars (ENABLE_DEPLOY_FORK=true
+    # without DEPLOY_FORK_RUNNER): ci-deploy.sh then fails fast on a throwaway
+    # VM with a clear error instead of an opaque fromJSON parse failure.
+    runs-on: ${{ fromJSON(vars.DEPLOY_FORK_RUNNER || '"ubuntu-latest"') }}
     environment: fork-production
     timeout-minutes: 30
 
@@ -52,4 +55,6 @@ jobs:
 
       - name: Show deploy state
         if: always()
-        run: cat "${{ vars.DEPLOY_FORK_INSTALL_DIR || '/opt/baluhost' }}/.deploy-state" 2>/dev/null || echo "No deploy state file"
+        env:
+          INSTALL_DIR: ${{ vars.DEPLOY_FORK_INSTALL_DIR || '/opt/baluhost' }}
+        run: cat "$INSTALL_DIR/.deploy-state" 2>/dev/null || echo "No deploy state file"
