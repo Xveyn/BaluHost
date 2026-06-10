@@ -9,7 +9,14 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib/common.sh"
+# set -a: export the config defaults so they reach the child bash processes
+# that run_module spawns (same env-based contract as run-update.sh). Verified:
+# bash gives := expansions under set -a the export attribute. The
+# save_config + load_config round-trip before the module loop additionally
+# guarantees every value is exported regardless of how it was assigned.
+set -a
 source "$SCRIPT_DIR/lib/config.sh"
+set +a
 source "$SCRIPT_DIR/lib/features.sh"
 
 # ─── Version ─────────────────────────────────────────────────────────
@@ -72,8 +79,12 @@ run_module() {
     fi
 
     log_step "Running module: $module_name"
-    # Source the module so it inherits our environment (config variables)
-    if source "$module_path"; then
+    # Execute the module in a child bash process (same contract as
+    # deploy/update/run-update.sh). Config flows IN via exported variables;
+    # generated values flow OUT via the config file (modules 06/07 call
+    # save_config, the loop below re-runs load_config). Executing instead of
+    # sourcing keeps a module's `exit` from terminating the installer (#212).
+    if bash "$module_path"; then
         log_info "Module $module_name completed successfully."
         return 0
     else
@@ -188,10 +199,12 @@ main() {
                 ;;
             --config)
                 BALUHOST_CONFIG="$2"
+                export BALUHOST_CONFIG
                 shift 2
                 ;;
             --non-interactive)
                 NON_INTERACTIVE=true
+                export NON_INTERACTIVE
                 shift
                 ;;
             --list-modules)
@@ -236,10 +249,13 @@ main() {
     # Gather user input
     gather_input
 
-    # Save config before running modules (so we can resume on failure)
+    # Save config before running modules (so we can resume on failure), then
+    # re-load it: load_config uses `set -a`, which guarantees every value —
+    # including interactive input — is exported to the module child processes.
     save_config
+    load_config
 
-    # Run modules 02-12
+    # Run modules 02-14
     local failed=0
     for mod in "${MODULES[@]:1}"; do  # Skip 01-preflight (already ran)
         if ! run_module "$mod"; then
@@ -249,15 +265,16 @@ main() {
             log_error "Then resume full install: sudo $0"
             break
         fi
-        # Save config after each module (captures generated values like POSTGRES_PASSWORD)
-        save_config
+        # Re-load config so values a module persisted (POSTGRES_PASSWORD from
+        # 06, secrets from 07) are exported to the next module.
+        load_config
     done
 
     if [[ $failed -eq 0 ]]; then
         # Run verification
         log_step "Verification"
         if [[ -f "$SCRIPT_DIR/verify/verify-install.sh" ]]; then
-            source "$SCRIPT_DIR/verify/verify-install.sh" || true
+            bash "$SCRIPT_DIR/verify/verify-install.sh" || true
         fi
 
         echo ""
