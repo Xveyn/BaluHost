@@ -200,6 +200,9 @@ case "${CFG[BACKEND_TEST_RUNNER]:-github}" in
     self-hosted) set_var BACKEND_TEST_RUNNER "$(labels_to_json "${CFG[BACKEND_TEST_RUNNER_LABELS]:-}")" ;;
     *) die "BACKEND_TEST_RUNNER must be 'github' or 'self-hosted'" ;;
 esac
+if [[ "${CFG[BACKEND_TEST_RUNNER]:-github}" != "self-hosted" && -n "${CFG[BACKEND_TEST_RUNNER_LABELS]:-}" ]]; then
+    echo "WARNING: BACKEND_TEST_RUNNER_LABELS is set but BACKEND_TEST_RUNNER is not 'self-hosted' — labels ignored" >&2
+fi
 
 bool_var ENABLE_PLAYWRIGHT_E2E true
 bool_var ENABLE_RAID_LOOPBACK true
