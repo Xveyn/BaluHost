@@ -8,7 +8,7 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
-import { Settings, Clock, Wifi, Server, HardDrive, Timer, TrendingUp, ChevronDown, Terminal, Router } from 'lucide-react';
+import { Settings, Clock, Wifi, Server, HardDrive, Timer, TrendingUp, ChevronDown, Terminal, Router, Eye } from 'lucide-react';
 import {
   getSleepConfig,
   getSleepStatus,
@@ -17,6 +17,8 @@ import {
   type SleepConfigResponse,
   type SleepCapabilities,
   type ScheduleMode,
+  type PresenceMode,
+  type PresenceStatus,
 } from '../../api/sleep';
 import {
   getFritzBoxConfig,
@@ -52,6 +54,10 @@ export function SleepConfigPanel() {
   const [pauseDiskIo, setPauseDiskIo] = useState(true);
   const [reducedTelemetry, setReducedTelemetry] = useState(30);
   const [diskSpindown, setDiskSpindown] = useState(true);
+  const [presenceEnabled, setPresenceEnabled] = useState(true);
+  const [presenceMode, setPresenceMode] = useState<PresenceMode>('active');
+  const [presenceTimeout, setPresenceTimeout] = useState(3);
+  const [presenceStatus, setPresenceStatus] = useState<PresenceStatus | null>(null);
 
   // Fritz!Box state
   const [fbConfig, setFbConfig] = useState<FritzBoxConfig | null>(null);
@@ -93,6 +99,7 @@ export function SleepConfigPanel() {
         const st = await getSleepStatus();
         setCoreUptimeMasterOn(st.core_uptime?.enabled ?? false);
         setAlwaysAwakeOn(st.always_awake?.enabled ?? false);
+        setPresenceStatus(st.presence ?? null);
       } catch {
         // ignore — status is best-effort here
       }
@@ -121,6 +128,9 @@ export function SleepConfigPanel() {
     setPauseDiskIo(c.pause_disk_io);
     setReducedTelemetry(c.reduced_telemetry_interval);
     setDiskSpindown(c.disk_spindown_enabled);
+    setPresenceEnabled(c.presence_enabled);
+    setPresenceMode(c.presence_mode);
+    setPresenceTimeout(c.presence_timeout_minutes);
   };
 
   const handleSave = async () => {
@@ -145,6 +155,9 @@ export function SleepConfigPanel() {
         pause_disk_io: pauseDiskIo,
         reduced_telemetry_interval: reducedTelemetry,
         disk_spindown_enabled: diskSpindown,
+        presence_enabled: presenceEnabled,
+        presence_mode: presenceMode,
+        presence_timeout_minutes: presenceTimeout,
       });
 
       // Save Fritz!Box config
@@ -250,6 +263,47 @@ export function SleepConfigPanel() {
         {escalationEnabled && (
           <div className="pl-1">
             <NumberInput label="Escalate after (min)" value={escalationMinutes} onChange={setEscalationMinutes} min={1} max={1440} />
+          </div>
+        )}
+      </div>
+
+      {/* Presence Detection (issue #214) */}
+      <div className="card border-slate-700/50 p-4 sm:p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <h4 className="text-sm font-medium text-white flex items-center gap-2">
+            <Eye className="h-4 w-4 text-emerald-400" />
+            {t('sleep.presence.title')}
+          </h4>
+          <Toggle checked={presenceEnabled} onChange={setPresenceEnabled} />
+        </div>
+        <p className="text-xs text-slate-400">{t('sleep.presence.description')}</p>
+
+        {presenceEnabled && (
+          <div className="space-y-3 pl-1">
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">{t('sleep.presence.modeLabel')}</label>
+              <select
+                value={presenceMode}
+                onChange={(e) => setPresenceMode(e.target.value as PresenceMode)}
+                className="w-full rounded bg-slate-900 border border-slate-600 px-3 py-2 text-sm text-white focus:border-teal-400 focus:outline-none"
+              >
+                <option value="active">{t('sleep.presence.modeActive')}</option>
+                <option value="session">{t('sleep.presence.modeSession')}</option>
+              </select>
+              <p className="mt-1 text-xs text-slate-500">{t('sleep.presence.modeHint')}</p>
+            </div>
+            <NumberInput
+              label={t('sleep.presence.timeoutLabel')}
+              value={presenceTimeout}
+              onChange={setPresenceTimeout}
+              min={1}
+              max={60}
+            />
+            {presenceStatus?.suppressing_suspend && (
+              <div className="rounded border border-emerald-500/20 bg-emerald-500/10 p-2 text-xs text-emerald-300">
+                {t('sleep.presence.suppressing', { count: presenceStatus.active_session_count })}
+              </div>
+            )}
           </div>
         )}
       </div>

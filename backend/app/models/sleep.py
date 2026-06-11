@@ -4,7 +4,7 @@ Database models for sleep mode.
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Integer, String, Float, Boolean, DateTime, Text
+from sqlalchemy import Integer, String, Float, Boolean, DateTime, Text, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
 
@@ -54,6 +54,11 @@ class SleepConfig(Base):
     always_awake_until: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+
+    # Presence-aware suspend (issue #214)
+    presence_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    presence_mode: Mapped[str] = mapped_column(String(20), default="active", nullable=False)  # "active" | "session"
+    presence_timeout_minutes: Mapped[int] = mapped_column(Integer, default=3, nullable=False)
 
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -107,3 +112,28 @@ class CoreUptimeWindow(Base):
 
     def __repr__(self) -> str:
         return f"<CoreUptimeWindow(id={self.id}, {self.start_time}-{self.end_time}, weekdays={self.weekdays})>"
+
+
+class PresenceSession(Base):
+    """A client (browser tab / mobile app) that recently sent a presence heartbeat.
+
+    Written by any Uvicorn worker on POST /api/system/sleep/presence; read by
+    the primary worker's sleep loops (same any-worker-writes / primary-reads
+    pattern as power_demands).
+    """
+    __tablename__ = "presence_sessions"
+
+    client_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    client_type: Mapped[str] = mapped_column(String(20), nullable=False, default="web")
+    last_heartbeat_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    def __repr__(self) -> str:
+        return f"<PresenceSession({self.client_id}, user={self.user_id}, last={self.last_heartbeat_at})>"

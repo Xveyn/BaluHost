@@ -19,6 +19,7 @@ import { getStatusBarState } from '../api/statusBar';
 import { isPi } from '../lib/features';
 import UserMenu from './UserMenu';
 import ImpersonationBanner from './ImpersonationBanner';
+import { usePresenceHeartbeat } from '../hooks/usePresenceHeartbeat';
 
 interface LayoutProps {
   children: ReactNode;
@@ -119,6 +120,7 @@ export default function Layout({ children }: LayoutProps) {
   const location = useLocation();
   const { t } = useTranslation('common');
   const { user, logout, isAdmin, isImpersonating } = useAuth();
+  usePresenceHeartbeat();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [pendingAction, setPendingAction] = useState<'shutdown' | 'restart' | null>(null);
   const [pendingMessage, setPendingMessage] = useState<string | null>(null);

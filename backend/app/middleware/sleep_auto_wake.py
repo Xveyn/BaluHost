@@ -20,6 +20,7 @@ _WAKE_WHITELIST_PREFIXES = (
     "/api/system/sleep/config",
     "/api/system/sleep/history",
     "/api/system/sleep/capabilities",
+    "/api/system/sleep/presence",
     "/api/power/status",
     "/api/system/info",
     "/api/monitoring/",
@@ -31,6 +32,11 @@ _WAKE_WHITELIST_PREFIXES = (
     "/redoc",
 )
 
+# The presence heartbeat must not count toward the HTTP-RPM idle metric —
+# otherwise an open tab would indirectly block soft sleep, which stays
+# allowed by design (issue #214: presence only blocks true suspend).
+_RPM_EXCLUDED_PATHS = ("/api/system/sleep/presence",)
+
 # Read-only methods that are less likely to need wake
 _SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 
@@ -39,15 +45,17 @@ class SleepAutoWakeMiddleware(BaseHTTPMiddleware):
     """Auto-wake from soft sleep on non-whitelisted API requests."""
 
     async def dispatch(self, request: Request, call_next) -> Response:
-        # Always count the request for idle detection
-        try:
-            from app.services.power.sleep import record_http_request
-            record_http_request()
-        except Exception:
-            pass
+        path = request.url.path
+
+        # Count the request for idle detection (except excluded paths)
+        if path not in _RPM_EXCLUDED_PATHS:
+            try:
+                from app.services.power.sleep import record_http_request
+                record_http_request()
+            except Exception:
+                pass
 
         # Check if we need to auto-wake
-        path = request.url.path
         method = request.method
 
         # Skip whitelisted paths

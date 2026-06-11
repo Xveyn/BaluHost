@@ -53,6 +53,24 @@ export interface AlwaysAwakeStatus {
   expires_in_seconds: number | null;
 }
 
+export type PresenceMode = 'active' | 'session';
+
+export interface PresenceStatus {
+  enabled: boolean;
+  mode: PresenceMode;
+  anyone_present: boolean;
+  active_session_count: number;
+  suppressing_suspend: boolean;
+}
+
+export interface PresenceHeartbeatResponse {
+  present: boolean;
+  enabled: boolean;
+  mode: PresenceMode;
+  heartbeat_interval_seconds: number;
+  timeout_minutes: number;
+}
+
 export type OsSleepSeverity = 'info' | 'warning' | 'error';
 
 export interface OsSleepIssue {
@@ -85,6 +103,7 @@ export interface SleepStatusResponse {
   escalation_enabled: boolean;
   core_uptime: CoreUptimeStatus;
   always_awake?: AlwaysAwakeStatus;
+  presence?: PresenceStatus;
 }
 
 export interface SleepConfigResponse {
@@ -108,6 +127,9 @@ export interface SleepConfigResponse {
   core_uptime_enabled: boolean;
   always_awake_enabled?: boolean;
   always_awake_until?: string | null;
+  presence_enabled: boolean;
+  presence_mode: PresenceMode;
+  presence_timeout_minutes: number;
 }
 
 export interface SleepConfigUpdate {
@@ -131,6 +153,9 @@ export interface SleepConfigUpdate {
   core_uptime_enabled?: boolean;
   always_awake_enabled?: boolean;
   always_awake_until?: string | null;
+  presence_enabled?: boolean;
+  presence_mode?: PresenceMode;
+  presence_timeout_minutes?: number;
 }
 
 export interface SleepCapabilities {
@@ -226,6 +251,17 @@ export async function sendWol(
   const response = await apiClient.post<{ success: boolean; message: string }>(
     '/api/system/sleep/wol',
     { mac_address, broadcast_address, method },
+  );
+  return response.data;
+}
+
+export async function sendPresenceHeartbeat(body: {
+  client_id: string;
+  client_type: 'web' | 'mobile' | 'desktop';
+}): Promise<PresenceHeartbeatResponse> {
+  const response = await apiClient.post<PresenceHeartbeatResponse>(
+    '/api/system/sleep/presence',
+    body,
   );
   return response.data;
 }

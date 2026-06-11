@@ -784,6 +784,16 @@
         "logind": "systemd-logind",
         "none": "Not available"
       }
+    },
+    "presence": {
+      "title": "Presence detection",
+      "description": "Prevents automatic true suspend while a user is actively using the web app. Soft sleep stays allowed.",
+      "modeLabel": "Mode",
+      "modeActive": "Active interaction - heartbeat only while the tab is visible",
+      "modeSession": "Open session - any open tab counts",
+      "modeHint": "\"Active interaction\" saves energy: a forgotten background tab does not keep the server awake.",
+      "timeoutLabel": "Timeout (minutes)",
+      "suppressing": "True suspend blocked: {{count}} active session(s)"
     }
   },
   "fanControl": {
