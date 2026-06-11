@@ -33,7 +33,7 @@ from app.services.update.github_releases import (
 from app.services.update.changelog_fallback import notes_since_last_stable_from_changelog
 from app.services.update.utils import (
     ProgressCallback,
-    parse_version,
+    version_sort_key,
     version_to_string,
     get_installed_version,
     _CONVENTIONAL_RE,
@@ -132,8 +132,8 @@ class ProdUpdateBackend(UpdateBackend):
         if latest is None:
             return False, None, []
 
-        latest_v = parse_version(latest.tag)
-        current_v = parse_version(current.version)
+        latest_v = version_sort_key(latest.tag)
+        current_v = version_sort_key(current.version)
         if latest_v <= current_v:
             return False, None, []
 

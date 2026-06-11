@@ -81,3 +81,43 @@ def test_dev_endpoints_and_fields_removed():
     # No start-dev route registered
     paths = [getattr(rt, "path", "") for rt in r.router.routes]
     assert not any(p.endswith("/start-dev") for p in paths)
+
+
+@pytest.mark.asyncio
+async def test_check_for_updates_offers_stable_over_running_prerelease(monkeypatch):
+    """#120 regression: box runs vX.Y.Z-pre.N, matching stable vX.Y.Z exists -> offer it."""
+    rel = [_gh("v1.36.1", False), _gh("v1.36.1-pre.19", True), _gh("v1.36.0", False)]
+    b = ProdUpdateBackend()
+    async def _ver(): return _FakeVersion("1.36.1-pre.19")
+    monkeypatch.setattr(b, "get_current_version", _ver)
+    async def fake_list(*a, **k): return rel
+    monkeypatch.setattr(b._gh, "list_releases", fake_list)
+    available, latest, changelog = await b.check_for_updates("stable")
+    assert available is True and latest.version == "1.36.1"
+    # the running pre-release must be excluded from the delta
+    assert [c.version for c in changelog] == ["1.36.1"]
+
+
+@pytest.mark.asyncio
+async def test_check_for_updates_numeric_counter_ordering_on_unstable(monkeypatch):
+    """#120: string compare ranked "pre.10" < "pre.2" and missed the update."""
+    rel = [_gh("v1.36.1-pre.10", True), _gh("v1.36.1-pre.2", True), _gh("v1.36.0", False)]
+    b = ProdUpdateBackend()
+    async def _ver(): return _FakeVersion("1.36.1-pre.2")
+    monkeypatch.setattr(b, "get_current_version", _ver)
+    async def fake_list(*a, **k): return rel
+    monkeypatch.setattr(b._gh, "list_releases", fake_list)
+    available, latest, changelog = await b.check_for_updates("unstable")
+    assert available is True and latest.version == "1.36.1-pre.10"
+
+
+@pytest.mark.asyncio
+async def test_check_for_updates_no_update_when_on_latest_stable(monkeypatch):
+    rel = [_gh("v1.36.1", False), _gh("v1.36.1-pre.19", True), _gh("v1.36.0", False)]
+    b = ProdUpdateBackend()
+    async def _ver(): return _FakeVersion("1.36.1")
+    monkeypatch.setattr(b, "get_current_version", _ver)
+    async def fake_list(*a, **k): return rel
+    monkeypatch.setattr(b._gh, "list_releases", fake_list)
+    available, latest, changelog = await b.check_for_updates("stable")
+    assert available is False
