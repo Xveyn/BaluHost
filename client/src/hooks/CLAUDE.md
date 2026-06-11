@@ -37,6 +37,7 @@ Custom React hooks encapsulating data fetching, polling, and UI logic. Each hook
 | `useNetworkStatus.ts` | Online/offline detection |
 | `useNotificationSocket.ts` | WebSocket connection for real-time notifications |
 | `useNextMaintenance.ts` | Next scheduled maintenance window |
+| `usePresenceHeartbeat.ts` | Presence heartbeat to `/api/system/sleep/presence` while tab visible (blocks auto true-suspend, #214); fire-and-forget, mounted once in Layout |
 
 ## Conventions
 
