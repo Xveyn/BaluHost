@@ -779,6 +779,16 @@
         "logind": "systemd-logind",
         "none": "Nicht verfügbar"
       }
+    },
+    "presence": {
+      "title": "Anwesenheitserkennung",
+      "description": "Verhindert automatischen True Suspend, solange ein Benutzer die Web-App aktiv nutzt. Soft Sleep bleibt erlaubt.",
+      "modeLabel": "Modus",
+      "modeActive": "Aktive Nutzung - Heartbeat nur bei sichtbarem Tab",
+      "modeSession": "Offene Sitzung - jeder offene Tab zahlt",
+      "modeHint": "\"Aktive Nutzung\" spart Energie: Ein vergessener Hintergrund-Tab halt den Server nicht wach.",
+      "timeoutLabel": "Timeout (Minuten)",
+      "suppressing": "True Suspend blockiert: {{count}} aktive Sitzung(en)"
     }
   },
   "fanControl": {
