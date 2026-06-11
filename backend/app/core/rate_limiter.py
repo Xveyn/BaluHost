@@ -144,6 +144,10 @@ RATE_LIMITS = {
 
     # Smart device admin operations
     "smart_device_import_history": "5/hour",  # admin-only Tapo backfill
+
+    # Presence heartbeat — 1 request / 45s per client, with headroom for
+    # visibility-change immediate beats and multiple tabs per user
+    "presence_heartbeat": "10/minute",
 }
 
 

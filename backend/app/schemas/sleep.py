@@ -51,6 +51,12 @@ class ScheduleMode(str, Enum):
     SUSPEND = "suspend"
 
 
+class PresenceMode(str, Enum):
+    """How clients signal presence (issue #214)."""
+    ACTIVE = "active"    # heartbeats only while tab/app is visible
+    SESSION = "session"  # heartbeats while tab/app is open, regardless of focus
+
+
 # ---------------------------------------------------------------------------
 # Activity Metrics
 # ---------------------------------------------------------------------------
@@ -84,6 +90,15 @@ class AlwaysAwakeStatus(BaseModel):
     expires_in_seconds: Optional[float] = Field(
         default=None, description="Seconds until expiry (for live UI countdown)"
     )
+
+
+class PresenceStatus(BaseModel):
+    """Snapshot of user-presence state (issue #214)."""
+    enabled: bool = Field(default=False, description="Presence feature toggle")
+    mode: PresenceMode = Field(default=PresenceMode.ACTIVE)
+    anyone_present: bool = Field(default=False, description="Any session with a fresh heartbeat")
+    active_session_count: int = Field(default=0)
+    suppressing_suspend: bool = Field(default=False, description="True when presence currently blocks true suspend")
 
 
 # ---------------------------------------------------------------------------
@@ -123,6 +138,7 @@ class SleepStatusResponse(BaseModel):
     escalation_enabled: bool = Field(default=False, description="Whether auto-escalation to suspend is enabled")
     core_uptime: CoreUptimeStatus = Field(default_factory=CoreUptimeStatus)
     always_awake: AlwaysAwakeStatus = Field(default_factory=AlwaysAwakeStatus)
+    presence: PresenceStatus = Field(default_factory=PresenceStatus)
 
 
 # ---------------------------------------------------------------------------
@@ -188,6 +204,10 @@ class SleepConfigResponse(BaseModel):
     always_awake_until: Optional[datetime] = Field(
         default=None, description="UTC expiry, None = permanent"
     )
+    # Presence-aware suspend (issue #214)
+    presence_enabled: bool = Field(default=True, description="Block auto-suspend while a user is present")
+    presence_mode: PresenceMode = Field(default=PresenceMode.ACTIVE)
+    presence_timeout_minutes: int = Field(default=3, description="Minutes without heartbeat until presence expires")
 
 
 class SleepConfigUpdate(BaseModel):
@@ -214,6 +234,9 @@ class SleepConfigUpdate(BaseModel):
     always_awake_until: Optional[datetime] = Field(
         default=None, description="UTC expiry for always-awake override; None = permanent"
     )
+    presence_enabled: Optional[bool] = None
+    presence_mode: Optional[PresenceMode] = None
+    presence_timeout_minutes: Optional[int] = Field(default=None, ge=1, le=60)
 
     @field_validator("always_awake_until")
     @classmethod
@@ -378,3 +401,25 @@ class OsAutoSuspendUpdate(BaseModel):
     enabled: bool = Field(..., description="False writes 'ignore' (or removes section in KDE)")
     timeout_minutes: int = Field(ge=1, le=1440)
     action: OsAutoSuspendAction = Field(..., description="Action to apply when idle threshold is reached")
+
+
+# ---------------------------------------------------------------------------
+# Presence heartbeat (issue #214)
+# ---------------------------------------------------------------------------
+
+class PresenceHeartbeatRequest(BaseModel):
+    """Heartbeat sent by web/mobile/desktop clients while present."""
+    client_id: str = Field(
+        ..., min_length=8, max_length=64, pattern=r"^[A-Za-z0-9_-]+$",
+        description="Client-generated stable ID per tab/device (e.g. UUID)",
+    )
+    client_type: Literal["web", "mobile", "desktop"] = Field(default="web")
+
+
+class PresenceHeartbeatResponse(BaseModel):
+    """Heartbeat ack; clients self-configure from mode + interval."""
+    present: bool = Field(default=True)
+    enabled: bool = Field(..., description="Presence feature toggle (admin config)")
+    mode: PresenceMode = Field(...)
+    heartbeat_interval_seconds: int = Field(default=45)
+    timeout_minutes: int = Field(...)
