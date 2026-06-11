@@ -13,7 +13,13 @@ ProgressCallback = Callable[[int, str], None]
 
 
 def parse_version(tag: str) -> tuple[int, int, int, str]:
-    """Parse semver tag (e.g., 'v1.5.0' or '1.5.0-beta') into comparable tuple."""
+    """Parse semver tag (e.g., 'v1.5.0' or '1.5.0-beta') into comparable tuple.
+
+    WARNING: the returned tuple is NOT ordering-safe across pre-releases —
+    tuple comparison ranks '' below 'pre.N', i.e. a stable BELOW its own
+    pre-releases (issue #120). Use version_sort_key() for ordering; this
+    shape is for round-trips (version_to_string) and equality checks.
+    """
     # Remove leading 'v' if present
     tag = tag.lstrip("v")
     # Handle pre-release suffixes
@@ -34,6 +40,24 @@ def parse_version(tag: str) -> tuple[int, int, int, str]:
     minor = _safe_int(parts[1]) if len(parts) > 1 else 0
     patch = _safe_int(parts[2]) if len(parts) > 2 else 0
     return (major, minor, patch, prerelease)
+
+
+def version_sort_key(version: str) -> tuple:
+    """SemVer-correct ordering key: stable > its own pre-releases, pre.10 > pre.2.
+
+    Finals sort as (major, minor, patch, 1, ()); pre-releases as
+    (major, minor, patch, 0, identifiers) where each identifier is
+    (0, int, "") if numeric else (1, 0, str) — numeric identifiers compare
+    numerically and rank below alphanumeric ones, per SemVer precedence.
+    """
+    major, minor, patch, prerelease = parse_version(version)
+    if not prerelease:
+        return (major, minor, patch, 1, ())
+    ids = tuple(
+        (0, int(p), "") if p.isdigit() else (1, 0, p)
+        for p in prerelease.split(".")
+    )
+    return (major, minor, patch, 0, ids)
 
 
 def version_to_string(version: tuple[int, int, int, str]) -> str:

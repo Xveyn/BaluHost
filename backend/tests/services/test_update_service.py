@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from app.services.update import (
     parse_version,
     version_to_string,
+    version_sort_key,
     DevUpdateBackend,
     UpdateService,
     get_update_backend,
@@ -62,15 +63,37 @@ class TestVersionParsing:
         assert result == (2, 0, 0, "")
 
     def test_version_comparison(self):
-        """Test that version tuples can be compared."""
-        v150 = parse_version("1.5.0")
-        v160 = parse_version("1.6.0")
-        v160beta = parse_version("1.6.0-beta")
+        """Major/minor/patch ordering via version_sort_key."""
+        assert version_sort_key("1.6.0") > version_sort_key("1.5.0")
 
-        assert v160 > v150
-        # Prerelease sorts after (greater) due to string comparison
-        # Empty string "" < "beta" would be True, so stable < beta
-        assert v160 < v160beta
+
+class TestVersionSortKey:
+    """SemVer-correct ordering (issue #120) — parse_version tuples are NOT ordering-safe."""
+
+    def test_stable_ranks_above_its_prerelease(self):
+        assert version_sort_key("1.33.1") > version_sort_key("1.33.1-pre.3")
+
+    def test_numeric_prerelease_counters_sort_numerically(self):
+        assert version_sort_key("1.33.1-pre.10") > version_sort_key("1.33.1-pre.2")
+
+    def test_alphanumeric_identifiers_compare_lexically(self):
+        # "pre" < "rc" lexically
+        assert version_sort_key("1.33.1-pre.2") < version_sort_key("1.33.1-rc.1")
+
+    def test_numeric_identifier_ranks_below_alphanumeric(self):
+        # SemVer: numeric identifiers always have lower precedence
+        assert version_sort_key("1.0.0-1") < version_sort_key("1.0.0-alpha")
+
+    def test_fewer_identifiers_rank_lower(self):
+        # SemVer: 1.0.0-alpha < 1.0.0-alpha.1
+        assert version_sort_key("1.0.0-alpha") < version_sort_key("1.0.0-alpha.1")
+
+    def test_equal_stables_and_v_prefix(self):
+        assert version_sort_key("v1.36.0") == version_sort_key("1.36.0")
+
+    def test_tolerates_non_numeric_header(self):
+        # parity with parse_version's CHANGELOG "[Unreleased]" tolerance
+        assert version_sort_key("Unreleased") == version_sort_key("0.0.0")
 
 
 class TestVersionToString:
