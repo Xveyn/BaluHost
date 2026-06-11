@@ -54,7 +54,7 @@ def version_sort_key(version: str) -> tuple:
     if not prerelease:
         return (major, minor, patch, 1, ())
     ids = tuple(
-        (0, int(p), "") if p.isdigit() else (1, 0, p)
+        (0, int(p), "") if p.isdecimal() else (1, 0, p)
         for p in prerelease.split(".")
     )
     return (major, minor, patch, 0, ids)

@@ -95,6 +95,16 @@ class TestVersionSortKey:
         # parity with parse_version's CHANGELOG "[Unreleased]" tolerance
         assert version_sort_key("Unreleased") == version_sort_key("0.0.0")
 
+    def test_exotic_digit_identifier_does_not_crash(self):
+        # "²".isdigit() is True but int("²") raises — isdecimal() routes it
+        # to the alphanumeric branch instead of crashing.
+        assert version_sort_key("1.0.0-pre.²") < version_sort_key("1.0.0")
+
+    def test_list_sort_end_to_end(self):
+        tags = ["v1.36.1-pre.2", "v1.36.1-pre.10", "v1.36.1", "v1.36.0", "v1.36.1-pre.9"]
+        ordered = sorted(tags, key=version_sort_key)
+        assert ordered == ["v1.36.0", "v1.36.1-pre.2", "v1.36.1-pre.9", "v1.36.1-pre.10", "v1.36.1"]
+
 
 class TestVersionToString:
     """Tests for version to string conversion."""
