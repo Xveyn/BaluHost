@@ -32,6 +32,7 @@ from app.schemas.sleep import (
     SleepState,
     SleepTrigger,
     ScheduleMode,
+    PresenceMode,
     ActivityMetrics,
     SleepStatusResponse,
     SleepConfigResponse,
@@ -1220,7 +1221,7 @@ class SleepManagerService:
         presence_status = PresenceStatus()
         if config is not None:
             presence_status.enabled = bool(config.presence_enabled)
-            presence_status.mode = config.presence_mode
+            presence_status.mode = PresenceMode(config.presence_mode or "active")
             if config.presence_enabled:
                 try:
                     from app.services.power import presence as presence_service
@@ -1280,7 +1281,7 @@ class SleepManagerService:
             # the presence columns carry None — treated as disabled, matching
             # _is_user_present (same precedent as always_awake_enabled above).
             presence_enabled=bool(config.presence_enabled),
-            presence_mode=config.presence_mode or "active",
+            presence_mode=PresenceMode(config.presence_mode or "active"),
             presence_timeout_minutes=config.presence_timeout_minutes or 3,
         )
 
