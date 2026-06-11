@@ -1226,7 +1226,7 @@ class SleepManagerService:
                 try:
                     from app.services.power import presence as presence_service
                     sessions = presence_service.get_present_sessions(
-                        int(config.presence_timeout_minutes)
+                        int(config.presence_timeout_minutes or 3)
                     )
                     presence_status.active_session_count = len(sessions)
                     presence_status.anyone_present = len(sessions) > 0
