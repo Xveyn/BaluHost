@@ -114,3 +114,20 @@ jobs:
           git tag -a "$TAG" -m "Pre-release $TAG"
           git push "https://x-access-token:${DEPLOY_PAT}@github.com/${GITHUB_REPOSITORY}.git" "$TAG"
           echo "Tag $TAG pushed -- create-release.yml will create the GitHub pre-release"
+
+      # The tag above is pushed from this workspace checkout, not from
+      # /opt/baluhost — without a fetch, the prod clone is permanently one tag
+      # behind itself and `git describe --tags --exact-match` fails, so the UI
+      # shows "Dev Build" + the stale pyproject version (#223). Fetch here on
+      # the same runner/user that ci-deploy.sh already uses. Non-fatal: the
+      # deploy is green and tagged at this point; a fetch failure only leaves
+      # today's cosmetic display state. Also runs on the tag step's skip paths,
+      # back-filling any previously missed tag on the next deploy.
+      - name: Sync tags to production checkout
+        if: success()
+        # The `||` fallback covers exit codes, not hangs: timeout-minutes caps
+        # a hung fetch, and continue-on-error keeps the already-green, tagged
+        # deploy run from being failed by that timeout.
+        timeout-minutes: 2
+        continue-on-error: true
+        run: git -C /opt/baluhost fetch origin --tags || echo "::warning::tag fetch into /opt/baluhost failed (display-only impact)"
