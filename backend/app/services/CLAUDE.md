@@ -79,6 +79,7 @@ Business logic layer. Routes delegate to services — services contain the actua
 - `manager.py` — PowerManager: demand-based CPU profile selection
 - `fan_control.py` — Temperature-based fan speed control with curves
 - `sleep.py` — Soft/hard sleep modes with idle detection
+- `presence.py` — user-presence tracker (heartbeats → presence_sessions table; blocks auto true-suspend, issue #214)
 - `energy.py` — Power consumption tracking and cost estimation
 - `cpu_protocol.py` / `cpu_dev_backend.py` / `cpu_linux_backend.py` — Platform abstraction
 - `presets.py` — Saved power configuration presets
