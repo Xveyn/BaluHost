@@ -125,4 +125,9 @@ jobs:
       # back-filling any previously missed tag on the next deploy.
       - name: Sync tags to production checkout
         if: success()
+        # The `||` fallback covers exit codes, not hangs: timeout-minutes caps
+        # a hung fetch, and continue-on-error keeps the already-green, tagged
+        # deploy run from being failed by that timeout.
+        timeout-minutes: 2
+        continue-on-error: true
         run: git -C /opt/baluhost fetch origin --tags || echo "::warning::tag fetch into /opt/baluhost failed (display-only impact)"
