@@ -9,7 +9,7 @@ power_demands). Each function opens its own short-lived session.
 import logging
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import delete, select
+from sqlalchemy import select
 
 from app.core.database import SessionLocal
 from app.models.sleep import PresenceSession, SleepConfig
@@ -80,11 +80,13 @@ def cleanup_expired() -> int:
     cutoff = datetime.now(timezone.utc) - _CLEANUP_MAX_AGE
     db = SessionLocal()
     try:
-        result = db.execute(
-            delete(PresenceSession).where(PresenceSession.last_heartbeat_at < cutoff)
+        deleted = (
+            db.query(PresenceSession)
+            .filter(PresenceSession.last_heartbeat_at < cutoff)
+            .delete(synchronize_session=False)
         )
         db.commit()
-        return int(result.rowcount or 0)
+        return int(deleted)
     finally:
         db.close()
 
