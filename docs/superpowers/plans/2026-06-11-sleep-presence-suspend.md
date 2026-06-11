@@ -33,7 +33,7 @@
 
 - [ ] **Step 1: Write the failing test**
 
-Create `backend/tests/services/power/test_presence_service.py`:
+Create `backend/tests/services/power/test_presence_service.py` (the `tests/services/power/` directory is new — the Write tool creates it; no `__init__.py` needed, the repo's test dirs use pytest rootdir discovery without packages):
 
 ```python
 """Tests for the presence tracker (issue #214)."""
@@ -1115,11 +1115,16 @@ Expected: FAIL — `AttributeError: 'SleepManagerService' object has no attribut
         energy saving (returns False) — a DB outage must not block
         suspend forever; the inhibitor re-converges on the next tick.
         """
+        # NOTE: getattr defaults + the falsy check make this safe for
+        # SleepConfig objects constructed without the presence columns
+        # (older tests build SleepConfig(...) directly; unset mapped
+        # attributes are None, and None is treated as disabled here).
         if not config or not getattr(config, "presence_enabled", False):
             return False
         try:
             from app.services.power import presence
-            return presence.is_anyone_present(int(config.presence_timeout_minutes))
+            timeout = getattr(config, "presence_timeout_minutes", 3) or 3
+            return presence.is_anyone_present(int(timeout))
         except Exception as e:
             logger.warning("Presence check failed (failing open toward suspend): %s", e)
             return False
@@ -1136,7 +1141,7 @@ Expected: FAIL — `AttributeError: 'SleepManagerService' object has no attribut
 
 **(c)** `_schedule_check_loop` (line 510): two changes.
 
-Presence housekeeping — directly after `config = self._load_config()` (line 519):
+Presence housekeeping — IMPORTANT: insert AFTER the always-awake cleanup block ends (the block `# Clean up expired always-awake override` spans lines 521-532 and ends with `config = self._load_config()  # reload after cleanup`), i.e. directly BEFORE the `master, windows = self._load_core_uptime()` line (~534). Do NOT insert directly after the first `config = self._load_config()` on line 519 — that would land inside the always-awake block:
 
 ```python
                 # Presence housekeeping: GC sessions stale for > 24h (issue #214)
