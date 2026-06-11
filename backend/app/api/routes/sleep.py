@@ -32,11 +32,14 @@ from app.schemas.sleep import (
     CoreUptimeWindowCreate,
     CoreUptimeWindowUpdate,
     CoreUptimeWindowResponse,
+    PresenceHeartbeatRequest,
+    PresenceHeartbeatResponse,
 )
 from app.models.sleep import CoreUptimeWindow as CoreUptimeWindowModel
 from app.services.power.sleep import get_sleep_manager
 from app.services.power import os_sleep_inspector
 from app.services.power import os_auto_suspend
+from app.services.power import presence as presence_service
 from app.schemas.sleep import OsSleepReportResponse, OsAutoSuspendResponse, OsAutoSuspendUpdate
 
 logger = logging.getLogger(__name__)
@@ -175,6 +178,34 @@ async def send_wol(
             db=db,
         )
     return {"success": True, "message": "WoL packet sent"}
+
+
+@router.post("/presence", response_model=PresenceHeartbeatResponse)
+@user_limiter.limit(get_limit("presence_heartbeat"))
+async def presence_heartbeat(
+    request: Request, response: Response,
+    body: PresenceHeartbeatRequest,
+    current_user: User = Depends(get_current_user),
+) -> PresenceHeartbeatResponse:
+    """Record a user-presence heartbeat (issue #214).
+
+    Any authenticated user. Excluded from auto-wake and from the HTTP-RPM
+    idle metric (see SleepAutoWakeMiddleware) so presence never blocks soft
+    sleep — it only blocks automatic true suspend.
+    """
+    presence_service.record_heartbeat(
+        user_id=current_user.id,
+        client_id=body.client_id,
+        client_type=body.client_type,
+    )
+    enabled, mode, timeout = presence_service.get_presence_settings()
+    return PresenceHeartbeatResponse(
+        present=True,
+        enabled=enabled,
+        mode=mode,
+        heartbeat_interval_seconds=presence_service.HEARTBEAT_INTERVAL_SECONDS,
+        timeout_minutes=timeout,
+    )
 
 
 @router.get("/config", response_model=SleepConfigResponse)

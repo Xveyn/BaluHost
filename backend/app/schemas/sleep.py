@@ -376,6 +376,38 @@ class CoreUptimeWindowResponse(CoreUptimeWindowBase):
 
 
 # ---------------------------------------------------------------------------
+# Presence Heartbeat (issue #214)
+# ---------------------------------------------------------------------------
+
+class PresenceHeartbeatRequest(BaseModel):
+    """Request body for POST /api/system/sleep/presence."""
+    client_id: str = Field(
+        ...,
+        min_length=8,
+        max_length=64,
+        pattern=r"^[A-Za-z0-9_\-]+$",
+        description="Stable per-tab/per-session identifier (alphanumeric, hyphens, underscores)",
+    )
+    client_type: Literal["web", "mobile", "desktop"] = Field(
+        ...,
+        description="Type of client sending the heartbeat",
+    )
+
+
+class PresenceHeartbeatResponse(BaseModel):
+    """Response for POST /api/system/sleep/presence."""
+    present: bool = Field(..., description="Always True — the heartbeat was recorded")
+    enabled: bool = Field(..., description="Whether presence-aware suspend is enabled")
+    mode: str = Field(..., description="Presence mode: 'active' or 'session'")
+    heartbeat_interval_seconds: int = Field(
+        ..., description="How often the client should send the next heartbeat"
+    )
+    timeout_minutes: int = Field(
+        ..., description="Minutes without a heartbeat until presence expires"
+    )
+
+
+# ---------------------------------------------------------------------------
 # OS Auto-Suspend (bidirectional)
 # ---------------------------------------------------------------------------
 
