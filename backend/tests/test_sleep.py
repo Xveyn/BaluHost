@@ -140,6 +140,9 @@ class TestSleepManagerService:
         config.disk_spindown_enabled = overrides.get("disk_spindown_enabled", True)
         config.always_awake_enabled = overrides.get("always_awake_enabled", False)
         config.always_awake_until = overrides.get("always_awake_until", None)
+        config.presence_enabled = overrides.get("presence_enabled", True)
+        config.presence_mode = overrides.get("presence_mode", "active")
+        config.presence_timeout_minutes = overrides.get("presence_timeout_minutes", 3)
         return config
 
     @pytest.mark.asyncio
