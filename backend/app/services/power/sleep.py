@@ -324,10 +324,12 @@ class SleepManagerService:
     def _reconcile_sleep_inhibitor(self, config, in_core: bool) -> None:
         """Converge the logind block-sleep inhibitor to the desired state.
 
-        The inhibitor is held while EITHER an active core-uptime window OR an
-        active Always-Awake override is in effect. Both conditions block
-        third-party suspend (logind idle, desktop daemons, manual systemctl
-        suspend) at the logind layer. Releasing/acquiring is idempotent.
+        The inhibitor is held while ANY of these is in effect: an active
+        core-uptime window, an active Always-Awake override, or an active
+        user presence (issue #214). All three block third-party suspend
+        (logind idle, desktop daemons, manual systemctl suspend) at the
+        logind layer. Soft sleep is unaffected — the block lock only
+        prevents kernel suspend. Releasing/acquiring is idempotent.
 
         Args:
             config: SleepConfig row (or None — treated as nothing active).
@@ -337,15 +339,18 @@ class SleepManagerService:
         """
         core_active = bool(in_core)
         aa_active = self._is_always_awake(config)
-        should_hold = core_active or aa_active
+        presence_active = self._is_user_present(config)
+        should_hold = core_active or aa_active or presence_active
 
         if should_hold and not self._core_uptime_inhibitor.is_held():
-            if core_active and aa_active:
-                reason = "core_uptime_and_always_awake_active"
-            elif aa_active:
-                reason = "always_awake_active"
-            else:
-                reason = "core_uptime_active"
+            parts = []
+            if core_active:
+                parts.append("core_uptime")
+            if aa_active:
+                parts.append("always_awake")
+            if presence_active:
+                parts.append("user_present")
+            reason = "_and_".join(parts) + "_active"
             self._core_uptime_inhibitor.acquire(reason)
         elif not should_hold and self._core_uptime_inhibitor.is_held():
             self._core_uptime_inhibitor.release()
@@ -449,6 +454,28 @@ class SleepManagerService:
             return False
         return True
 
+    def _is_user_present(self, config) -> bool:
+        """True if presence is enabled and any session has a fresh heartbeat.
+
+        Issue #214: presence is the third suspend suppressor next to
+        always-awake and core-uptime. On DB errors this fails toward
+        energy saving (returns False) — a DB outage must not block
+        suspend forever; the inhibitor re-converges on the next tick.
+        """
+        # NOTE: getattr defaults + the falsy check make this safe for
+        # SleepConfig objects constructed without the presence columns
+        # (older tests build SleepConfig(...) directly; unset mapped
+        # attributes are None, and None is treated as disabled here).
+        if not config or not getattr(config, "presence_enabled", False):
+            return False
+        try:
+            from app.services.power import presence
+            timeout = getattr(config, "presence_timeout_minutes", 3) or 3
+            return presence.is_anyone_present(int(timeout))
+        except Exception as e:
+            logger.warning("Presence check failed (failing open toward suspend): %s", e)
+            return False
+
     async def _idle_detection_loop(self) -> None:
         """Background loop that checks system idle status every 30 seconds."""
         check_interval = 30  # seconds
@@ -531,6 +558,13 @@ class SleepManagerService:
                         self._clear_always_awake("always_awake_expired")
                         config = self._load_config()  # reload after cleanup
 
+                # Presence housekeeping: GC sessions stale for > 24h (issue #214)
+                try:
+                    from app.services.power import presence as presence_service
+                    presence_service.cleanup_expired()
+                except Exception:
+                    pass
+
                 master, windows = self._load_core_uptime()
                 in_core, _matched = (
                     core_uptime_helpers.is_in_core_uptime(now, windows)
@@ -576,6 +610,11 @@ class SleepManagerService:
                             continue
                         mode = config.schedule_mode
                         if mode == "suspend":
+                            if self._is_user_present(config):
+                                logger.info(
+                                    "Schedule suspend trigger suppressed by user presence",
+                                )
+                                continue
                             wake_dt = self._next_occurrence(config.schedule_wake_time)
                             await self.enter_true_suspend(
                                 "scheduled_suspend",
@@ -621,6 +660,11 @@ class SleepManagerService:
                 if in_core:
                     logger.info("Auto-escalation skipped: currently in core uptime window")
                     return
+
+            # Skip escalation while a user is present (issue #214)
+            if self._is_user_present(config):
+                logger.info("Auto-escalation skipped: user presence active")
+                return
 
             logger.info("Auto-escalation: soft sleep -> true suspend after %d minutes",
                         config.escalation_after_minutes)
@@ -1002,6 +1046,15 @@ class SleepManagerService:
             )
             return False
 
+        # Presence guard (issue #214): never auto-suspend while a user is
+        # actively present in the web/mobile app. Manual suspend always wins.
+        if trigger != SleepTrigger.MANUAL and self._is_user_present(config_check):
+            logger.info(
+                "enter_true_suspend blocked: user presence active (trigger=%s, reason=%s)",
+                trigger.value, reason,
+            )
+            return False
+
         # Enter soft sleep first if awake
         if self._current_state == SleepState.AWAKE:
             ok = await self.enter_soft_sleep(reason, trigger)
@@ -1162,6 +1215,24 @@ class SleepManagerService:
                 delta = (until - datetime.now(timezone.utc)).total_seconds()
                 always_awake_status.expires_in_seconds = max(0.0, delta)
 
+        # Presence status (issue #214)
+        from app.schemas.sleep import PresenceStatus
+        presence_status = PresenceStatus()
+        if config is not None:
+            presence_status.enabled = bool(config.presence_enabled)
+            presence_status.mode = config.presence_mode
+            if config.presence_enabled:
+                try:
+                    from app.services.power import presence as presence_service
+                    sessions = presence_service.get_present_sessions(
+                        int(config.presence_timeout_minutes)
+                    )
+                    presence_status.active_session_count = len(sessions)
+                    presence_status.anyone_present = len(sessions) > 0
+                    presence_status.suppressing_suspend = presence_status.anyone_present
+                except Exception as e:
+                    logger.warning("Presence status read failed: %s", e)
+
         return SleepStatusResponse(
             current_state=self._current_state,
             state_since=self._state_since,
@@ -1175,6 +1246,7 @@ class SleepManagerService:
             escalation_enabled=config.auto_escalation_enabled if config else False,
             core_uptime=core_status,
             always_awake=always_awake_status,
+            presence=presence_status,
         )
 
     def get_config(self) -> SleepConfigResponse:
@@ -1204,6 +1276,12 @@ class SleepManagerService:
             core_uptime_enabled=config.core_uptime_enabled,
             always_awake_enabled=bool(config.always_awake_enabled),
             always_awake_until=config.always_awake_until,
+            # bool()/or-defaults: legacy SleepConfig objects constructed without
+            # the presence columns carry None — treated as disabled, matching
+            # _is_user_present (same precedent as always_awake_enabled above).
+            presence_enabled=bool(config.presence_enabled),
+            presence_mode=config.presence_mode or "active",
+            presence_timeout_minutes=config.presence_timeout_minutes or 3,
         )
 
     def update_config(self, update: SleepConfigUpdate) -> SleepConfigResponse:
