@@ -28,3 +28,32 @@ def test_resume_triggers_expiry_catchup():
 
     assert result is True
     assert mock_check.call_count == 1
+
+
+def test_startup_catchup_runs_when_firebase_available():
+    from app.core import lifespan
+
+    with patch(
+        "app.services.notifications.firebase.FirebaseService.is_available",
+        return_value=True,
+    ), patch(
+        "app.services.notifications.scheduler.NotificationScheduler.check_and_send_warnings",
+        return_value={"checked": 0, "sent": 0, "skipped": 0, "failed": 0, "errors": []},
+    ) as mock_check:
+        asyncio.run(lifespan._expiry_warning_catchup_on_startup())
+
+    assert mock_check.call_count == 1
+
+
+def test_startup_catchup_skipped_without_firebase():
+    from app.core import lifespan
+
+    with patch(
+        "app.services.notifications.firebase.FirebaseService.is_available",
+        return_value=False,
+    ), patch(
+        "app.services.notifications.scheduler.NotificationScheduler.check_and_send_warnings",
+    ) as mock_check:
+        asyncio.run(lifespan._expiry_warning_catchup_on_startup())
+
+    assert mock_check.call_count == 0

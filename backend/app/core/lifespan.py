@@ -340,6 +340,32 @@ async def _emit_lifecycle_shutdown(trigger: str = "signal") -> None:
         logger.warning("Lifecycle shutdown step failed (non-fatal): %s", exc)
 
 
+async def _expiry_warning_catchup_on_startup() -> None:
+    """One-shot device-expiration catch-up after (re)start.
+
+    Sends warnings whose window elapsed while the box was off/suspended, so
+    they go out promptly instead of waiting for the next scheduler tick (#229).
+    Best-effort; runs off the event loop so FCM I/O can't block startup.
+    """
+    try:
+        from app.services.notifications.firebase import FirebaseService
+        if not FirebaseService.is_available():
+            return
+        from app.services.notifications.scheduler import NotificationScheduler
+        from app.core.database import SessionLocal
+
+        def _run() -> None:
+            db = SessionLocal()
+            try:
+                NotificationScheduler.check_and_send_warnings(db)
+            finally:
+                db.close()
+
+        await asyncio.to_thread(_run)
+    except Exception as exc:
+        logger.warning("Startup expiration-warning catch-up failed: %s", exc)
+
+
 async def _startup(app: FastAPI) -> None:
     """Run all startup initialization steps."""
     global _discovery_service, _websocket_manager, _plugin_manager, IS_PRIMARY_WORKER, _smart_device_manager
@@ -511,6 +537,7 @@ async def _startup(app: FastAPI) -> None:
     if IS_PRIMARY_WORKER:
         asyncio.create_task(_write_service_heartbeats())
         asyncio.create_task(_pihole_health_loop())
+        asyncio.create_task(_expiry_warning_catchup_on_startup())
 
         try:
             from app.services.pihole.query_collector import get_dns_query_collector
