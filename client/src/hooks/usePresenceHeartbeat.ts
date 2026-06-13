@@ -1,5 +1,5 @@
 /**
- * Presence heartbeat (issue #214).
+ * Presence heartbeat (issue #214, idle-pause #222).
  *
  * Sends POST /api/system/sleep/presence on an interval so the backend knows
  * a user is actively present and will not auto-escalate to true suspend.
@@ -9,15 +9,29 @@
  *   background tab does not keep the server awake.
  * - 'session': beats while the tab is open, regardless of visibility.
  *
+ * Options:
+ * - `paused`  — when true, no beats are sent (e.g. the idle-logout warning is
+ *   showing: the user has been inactive ≥4 min, so the tab must stop signalling
+ *   presence). Changes often, so it is read through a ref and never tears down
+ *   the interval.
+ * - `enabled` — when false, the heartbeat is fully off (e.g. no user logged in).
+ *
  * Best-effort by design: all errors are swallowed; the hook must never
- * disturb the UI. Mount it once in the authenticated layout — unmounting
- * (logout) stops the heartbeat.
+ * disturb the UI. Mount it once at the authenticated app root (AppRoutes),
+ * gated on auth via `enabled` — unmounting/disabling stops the heartbeat.
  */
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { sendPresenceHeartbeat, type PresenceMode } from '../api/sleep';
 
 const DEFAULT_INTERVAL_MS = 45_000;
 const CLIENT_ID_KEY = 'baluhost_presence_client_id';
+
+interface UsePresenceHeartbeatOptions {
+  /** When true, skip sending heartbeats (idle-logout warning visible). */
+  paused?: boolean;
+  /** When false, the heartbeat is fully disabled (no user logged in). */
+  enabled?: boolean;
+}
 
 function getClientId(): string {
   let id = sessionStorage.getItem(CLIENT_ID_KEY);
@@ -28,14 +42,28 @@ function getClientId(): string {
   return id;
 }
 
-export function usePresenceHeartbeat(): void {
+export function usePresenceHeartbeat(options: UsePresenceHeartbeatOptions = {}): void {
+  const { paused = false, enabled = true } = options;
+
+  // `paused` flips on every idle warning; keep it in a ref so the main effect
+  // (which owns the interval) does not re-run and tear down/recreate the timer
+  // on every toggle. Sync the ref from a dedicated effect — writing it during
+  // render trips the react-hooks/refs lint rule.
+  const pausedRef = useRef(paused);
   useEffect(() => {
+    pausedRef.current = paused;
+  }, [paused]);
+
+  useEffect(() => {
+    if (!enabled) return;
+
     let timer: ReturnType<typeof setInterval> | null = null;
     let intervalMs = DEFAULT_INTERVAL_MS;
     let mode: PresenceMode = 'active';
     const clientId = getClientId();
 
     const beat = async () => {
+      if (pausedRef.current) return;
       if (mode === 'active' && document.visibilityState !== 'visible') return;
       try {
         const res = await sendPresenceHeartbeat({ client_id: clientId, client_type: 'web' });
@@ -67,5 +95,5 @@ export function usePresenceHeartbeat(): void {
       if (timer) clearInterval(timer);
       document.removeEventListener('visibilitychange', onVisibilityChange);
     };
-  }, []);
+  }, [enabled]);
 }
