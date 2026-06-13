@@ -7,6 +7,212 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.37.0] - 2026-06-13
+
+### Added
+
+- **(presence)** mount heartbeat in AppRoutes, pause while idle warning visible (#222)
+- **(presence)** pause heartbeat via paused/enabled options (#222)
+- **(client)** presence detection card on sleep page + i18n (#214)
+- **(client)** presence heartbeat hook mounted in Layout (#214)
+- **(client)** presence types + heartbeat API function (#214)
+- **(sleep)** presence guards for escalation/schedule/suspend + inhibitor + status (#214)
+- **(sleep)** exclude presence heartbeat from auto-wake + HTTP-RPM (#214)
+- **(sleep)** POST /api/system/sleep/presence heartbeat endpoint (#214)
+- **(sleep)** presence schemas + heartbeat rate-limit key (#214)
+- **(sleep)** presence tracker service (#214)
+- **(sleep)** presence_sessions model + sleep_config presence columns (#214)
+- **(deploy)** deploy-fork workflow for self-hosted fork instances (#207)
+- **(ci)** skip-guards for secret-dependent workflows in forks (#207)
+- **(ci)** fork toggles for tauri/tui builds (#207)
+- **(ci)** fork toggles for e2e + raid loopback, mdadm runner pinned (#207)
+- **(ci)** configurable backend-test runner for forks, upstream pinned to ci-sandbox (#207)
+- **(ci)** configure-ci.sh applies ci-config.conf as repo variables (#207)
+- **(ci)** add fork CI config template (#207)
+- **(deploy)** wire 14-optional-features into installer chain + prompts (#182)
+- **(deploy)** module 14-optional-features runs opted-in feature setups (#182)
+- **(deploy)** optional-feature catalog + dispatcher with offline test (#182)
+- **(deploy)** add ENABLE_* optional-feature flags to installer config (#182)
+- **(audit)** log SMB user toggle via audit logger (#195)
+- **(audit)** log NFS export mutations via audit logger (#195)
+- **(deploy)** whitelist install-power-sudoers.sh in deploy sudoers (#126)
+- **(deploy)** call install-power-sudoers.sh in SYNC_PERMISSIONS block (#126)
+- **(deploy)** install-power-sudoers.sh — idempotent baluhost-power provisioning (#126)
+- **(tui)** dpkg-deb packaging script for standalone binary
+- **(tui)** PyInstaller entry script for standalone binary
+- **(tui)** persist access token on login for CLI reuse
+- **(tui)** require admin role for RAID screen action + tests (from review)
+- **(tui)** Power screen app-restart/shutdown behind ConfirmDialog
+- **(tui)** api.system.delete_array() (local-channel RAID delete)
+- **(tui)** ConfirmDialog modal + confirm_matches type-to-confirm helper
+- **(tui)** api.users create/update/set_password/delete write ops
+- **(tui)** api.users.list_users() read-only wrapper
+- **(tui)** api.logging query_audit() + filter_logs() helper
+- **(tui)** api.system storage() + raid_status() wrappers
+- **(tui)** api.monitoring current cpu/memory/network wrappers
+- **(tui)** main builds BackendClient (--socket/--server); drop files TUI command
+- **(tui)** remove file-browser screen + dashboard nav (out of scope per spec)
+- **(tui)** app holds BackendClient; drop direct-DB admin seeding + file-browser nav
+- **(tui)** JWT-only LoginScreen over BackendClient (drop direct DB)
+- **(tui)** api.auth.me() to fetch current user
+- **(tui)** api.system channel-status + app restart/shutdown
+- **(tui)** api.auth.login() with typed 2FA/error handling
+- **(tui)** BackendClient httpx wrapper with JWT + verb passthrough
+- **(tui)** resolve_transport() for UDS/TCP selection
+- **(nfs)** add NFS tab to System Control page
+- **(nfs)** NFS management card + i18n (de/en)
+- **(nfs)** typed api/nfs client
+- **(nfs)** admin-only CRUD + status routes
+- **(nfs)** request/response schemas with path/clients validation
+- **(nfs)** export config service (validators, regenerate, apply, status)
+- **(nfs)** NfsExport model + migration
+- **(activity)** admin all-users feed + admin-only system-logs link
+- **(activity)** re-point useActivityFeed to /api/activity with action mapping
+- **(activity)** typed api/activity client for /api/activity/recent
+- **(activity)** scope=all admin view on /api/activity/recent
+- **(activity)** service all_users view + user attribution on ActivityItem
+- **(updates)** releases list links to GitHub (commit_short now nullable)
+- **(updates)** render release notes as markdown; drop dev-channel UI
+- **(updates)** mirror GitHub-releases contracts in the API client
+- **(updates)** DevUpdateBackend returns markdown release notes
+- **(updates)** ProdUpdateBackend reads release-notes/check/releases from GitHub
+- **(updates)** CHANGELOG.md offline fallback parser
+- **(updates)** GitHub Releases client + positional since-last-stable helpers
+- **(updates)** GitHub-releases settings + reshape release-notes schemas
+
+### Changed
+
+- **(tui)** delete context.py (no importers after CLI port)
+- **(tui)** main status/users over BackendClient; drop reset-password cmd + --mode
+- **(tui)** move reset-password to backend/scripts (out of TUI package)
+- **(tui)** port status CLI to api.* (drop get_context/app.*)
+- **(tui)** port users CLI to api.users (drop get_context/app.*)
+- **(tui)** RAID screen — direct local-channel delete + ConfirmDialog (drop get_context/token)
+- **(tui)** drop unused Static import in users screen (from review)
+- **(tui)** UserManagementScreen CRUD via api.users (drop direct DB)
+- **(tui)** drop unused Container import in dashboard (from review)
+- **(tui)** AuditLogViewer fetches via api.logging (drop direct DB)
+- **(tui)** Dashboard widgets fetch via BackendClient (drop direct DB/psutil)
+- **(tui)** drop dead test attrs + double token-set (from cutover review)
+- **(tui)** PowerActionsScreen uses app.client (drop get_context)
+- **(tui)** SmartScreen uses app.client (drop get_context)
+- **(tui)** ServiceHealthScreen uses app.client (drop get_context)
+- **(tui)** tidy api.system error msg + document channel-status auth ordering
+- **(tui)** cover 2FA token + transport-error paths in api.auth tests
+- **(tui)** address review (imports to top, clear_token/put/delete tests, annotation)
+- **(nfs)** dedupe card heading, move mount_target to path column, drop unused i18n keys
+- **(nfs)** drop redundant PK index; assert created_at in model test
+- **(activity)** null-guard file_size, doc success/hook module, add error-path test
+- **(activity)** Literal scope type + tidy route-scope tests
+- **(activity)** top-level User import + clarify all_users docstring
+- **(updates)** remove dev-channel update wiring from UpdatePage
+- **(updates)** remove dead development-branch update path
+
+### Fixed
+
+- **(presence)** sync paused ref in effect to satisfy react-hooks/refs (#222)
+- **(lifespan)** one-shot expiration-warning catch-up on startup (#229)
+- **(sleep)** run expiration-warning catch-up after resume from suspend (#229)
+- **(notifications)** collapse overdue-warning backlog to one message, skip post-expiry (#229)
+- **(notifications)** warner sends due/overdue warnings instead of dropping them (#229)
+- **(updates)** check_for_updates compares via version_sort_key (#120)
+- **(updates)** use isdecimal() in version_sort_key; add crash + list-sort tests (#120)
+- **(updates)** SemVer-correct version_sort_key; stable ranks above its pre-releases (#120)
+- **(ci)** cap tag-sync step with timeout + continue-on-error (#223)
+- **(ci)** sync pre-release tag into /opt/baluhost after deploy tagging (#223)
+- **(i18n)** Umlaut-Tippfehler in presence modeHint (#214)
+- **(sleep)** timeout fallback parity in get_status presence read (#214)
+- **(sleep)** coerce presence_mode through PresenceMode enum (Pylance) (#214)
+- **(sleep)** remove duplicate presence heartbeat schemas (#214)
+- **(sleep)** use ORM query delete for typed rowcount in cleanup_expired (#214)
+- **(install)** close save_config umask window, widen test guard (#212)
+- **(install)** verify-script errexit fix + config-write hardening (#212)
+- **(install)** modules 06/07 persist generated secrets via save_config (#212)
+- **(install)** run installer modules in child bash processes (#212)
+- **(test)** mdadm loopback fixture waits out async udev node removal (#207)
+- **(deploy)** deploy-fork runner fallback + env-pattern for install dir (#207)
+- **(ci)** explicit e2e toggle on live job, consistent guard placement (#207)
+- **(ci)** configure-ci.sh surfaces gh delete errors, scoped parts array (#207)
+- **(login)** make '2FA use backup code' an actual toggle and allow hex backup codes
+- **(ci)** reconcile rootless Podman state + self-test linger/podman info on ci-runner bootstrap (#127)
+- **(deploy)** use @@BALUHOST_USER@@ in NFS/Samba sudoers instead of hardcoded user (#196)
+- **(audit)** rollback before failure-audit + cover NFS update failure branches (#195)
+- **(backup)** includes_config writes a real secret-free snapshot, not an empty stub (#176)
+- **(sync)** scheduled syncs no longer report success while doing nothing (#175)
+- **(files)** remove dead check_active_uploads() stub (#177)
+- **(scripts)** reset_password checks empty before mismatch (from review)
+- **(tui)** dev BackendClient defaults to :8000 (actual start_dev port, not :3001)
+- **(nfs)** reject control chars/whitespace in export path (prevent exports injection)
+- **(logging)** scope file-access stats (by_user) to own user for non-admins
+- **(logging)** scope dev-mode mock file-access logs for non-admins too
+- **(logging)** scope file-access logs to own user for non-admins
+- **(updates)** harden public release-notes fallback (review follow-up)
+
+### Documentation
+
+- **(plan)** expiry-warner sleep catch-up implementation plan (#229)
+- implementation plans for updater version fixes (#223, #120)
+- design spec for updater version fixes (#223, #120)
+- register presence service in services CLAUDE.md
+- register usePresenceHeartbeat in hooks CLAUDE.md
+- **(plan)** review fixes - harden _is_user_present, clarify insertion points (#214)
+- **(plan)** presence-aware suspend implementation plan (#214)
+- **(spec)** presence-aware suspend design (#214)
+- **(plan)** installer bash-module execution fix plan (#212)
+- **(security)** list new fork-CI codeowner paths in Layer 1 (#207)
+- link fork CI/self-hosting guide from CONTRIBUTING + README (#207)
+- **(deploy)** self-hosting guide accuracy fixes from review (#207)
+- **(deploy)** bilingual self-hosting + fork CI guide (#207)
+- **(security)** document fork-config layer + mdadm runner pin (#207)
+- **(ci)** annotate fromJSON quoting + gate detection in ci-check (#207)
+- **(ci)** state install-dir default in config template (#207)
+- **(plans)** review fix — warn on ignored runner labels (#207)
+- **(plans)** implementation plan fork-friendly CI/CD (#207)
+- **(specs)** mdadm loopback tests pinned to GitHub-hosted runners (#207)
+- **(specs)** design fork-friendly CI/CD config + deploy-fork (#207)
+- align stale Hardware OS line with Debian-only restriction (#182)
+- link feature-dependency matrix + Debian-only note from README/DEPLOYMENT (#182)
+- **(deploy)** central feature dependency matrix + Debian-only note (#182)
+- **(plan)** apply review fixes — stdin guard, apt-update guard, full feature test coverage (#182)
+- **(plan)** optional feature modules + dependency docs implementation plan (#182)
+- **(spec)** optional feature modules + dependency docs design (#182)
+- **(ci)** implementation plan for loop-device mdadm integration CI (#185)
+- **(ci)** spec for loop-device mdadm integration CI (#185)
+- **(audit)** implementation plan for NFS/Samba audit logging (#195)
+- **(audit)** spec for NFS/Samba share-mutation audit logging (#195)
+- **(deploy)** implementation plan for PPD-sudoers provisioning (#126)
+- **(deploy)** spec for PPD-sudoers deploy provisioning (#126)
+- **(tui)** .deb packaging + CI plan (plan B of standalone-deb)
+- **(tui)** plan A review fixes (docstring examples + dedup git rm)
+- **(tui)** app.*-free cleanup plan (plan A of standalone-deb)
+- **(tui)** standalone TUI .deb artifact design spec
+- **(tui)** destructive-ops implementation plan (plan 5)
+- **(tui)** supply verbatim import old_string in users-crud plan (from review)
+- **(tui)** users-screen CRUD port implementation plan (plan 4)
+- **(tui)** drop unused DataTable import from dashboard port (from review)
+- **(tui)** read-only screen ports implementation plan (plan 3)
+- **(tui)** clarify power.py guard block in cutover plan (from review)
+- **(tui)** transport-cutover implementation plan (plan 2)
+- **(tui)** note channel-status auth ordering for plan 2 (from review)
+- **(tui)** foundation implementation plan (plan 1 of 3)
+- **(tui)** companion-rebuild design spec (UDS-only, admin/recovery focus)
+- **(nfs)** implementation plan for NFS network shares (#183)
+- **(nfs)** design for NFS network shares (#183)
+- **(deploy)** replace weak default ADMIN_PASSWORD in prod example (#180)
+- **(deploy)** align .env.production.example with systemd deployment (#180)
+- **(contributing)** align git workflow with main-only model (#179)
+- add Contributor Covenant Code of Conduct (#188)
+- **(readme)** fix broken documentation links (#178)
+- **(activity)** implementation plan for own-vs-all + leak fix
+- **(activity)** design for activity-feed own-vs-all + leak fix
+- **(todo)** sync roadmap status with current code state
+- **(updates)** frontend plan for update page via GitHub Releases (plan 2/2)
+- **(updates)** clarify _run_dev_update must stay in backend plan
+- **(updates)** backend plan for update page via GitHub Releases (plan 1/2)
+- **(updates)** spec for update page via GitHub Releases
+
+---
+
 ## [1.36.0] - 2026-06-06
 
 ### Added
