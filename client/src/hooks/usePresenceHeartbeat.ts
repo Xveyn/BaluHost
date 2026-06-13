@@ -45,10 +45,14 @@ function getClientId(): string {
 export function usePresenceHeartbeat(options: UsePresenceHeartbeatOptions = {}): void {
   const { paused = false, enabled = true } = options;
 
-  // `paused` flips on every idle warning; keep it in a ref so toggling it does
-  // not re-run the effect (which would tear down and recreate the interval).
+  // `paused` flips on every idle warning; keep it in a ref so the main effect
+  // (which owns the interval) does not re-run and tear down/recreate the timer
+  // on every toggle. Sync the ref from a dedicated effect — writing it during
+  // render trips the react-hooks/refs lint rule.
   const pausedRef = useRef(paused);
-  pausedRef.current = paused;
+  useEffect(() => {
+    pausedRef.current = paused;
+  }, [paused]);
 
   useEffect(() => {
     if (!enabled) return;
