@@ -37,6 +37,8 @@ def test_startup_catchup_runs_when_firebase_available():
         "app.services.notifications.firebase.FirebaseService.is_available",
         return_value=True,
     ), patch(
+        "app.core.database.SessionLocal",
+    ), patch(
         "app.services.notifications.scheduler.NotificationScheduler.check_and_send_warnings",
         return_value={"checked": 0, "sent": 0, "skipped": 0, "failed": 0, "errors": []},
     ) as mock_check:
