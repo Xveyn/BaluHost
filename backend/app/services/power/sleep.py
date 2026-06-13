@@ -1099,6 +1099,23 @@ class SleepManagerService:
 
             logger.info("System resumed from suspend")
             await self._exit_soft_sleep("resume_from_suspend")
+
+            # 5. Catch-up: send any device-expiration warnings whose window
+            #    elapsed while the system was suspended (#229). Runs off the
+            #    event loop so FCM I/O can't block; best-effort.
+            try:
+                from app.services.notifications.scheduler import NotificationScheduler
+
+                def _expiry_catchup() -> None:
+                    catch_db = SessionLocal()
+                    try:
+                        NotificationScheduler.check_and_send_warnings(catch_db)
+                    finally:
+                        catch_db.close()
+
+                await asyncio.to_thread(_expiry_catchup)
+            except Exception as exc:
+                logger.warning("Expiration warning catch-up after resume failed: %s", exc)
         else:
             logger.error("System suspend failed, remaining in soft sleep")
 
