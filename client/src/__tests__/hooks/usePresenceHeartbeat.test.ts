@@ -130,4 +130,47 @@ describe('usePresenceHeartbeat', () => {
     const ids = mockedSend.mock.calls.map((c) => c[0].client_id);
     expect(new Set(ids).size).toBe(1);
   });
+
+  it('skips heartbeats while paused (session mode, visible)', async () => {
+    mockedSend.mockResolvedValue({
+      present: true,
+      enabled: true,
+      mode: 'session',
+      heartbeat_interval_seconds: 45,
+      timeout_minutes: 3,
+    });
+    const { rerender } = renderHook(
+      ({ paused }) => usePresenceHeartbeat({ paused }),
+      { initialProps: { paused: false } },
+    );
+    await flushAsync(); // initial beat -> learns mode 'session'
+    expect(mockedSend).toHaveBeenCalledTimes(1);
+
+    rerender({ paused: true });
+    await act(async () => { vi.advanceTimersByTime(3 * 45_000); });
+    await flushAsync();
+    expect(mockedSend).toHaveBeenCalledTimes(1); // no new beats while paused
+  });
+
+  it('resumes heartbeats after un-pausing', async () => {
+    const { rerender } = renderHook(
+      ({ paused }) => usePresenceHeartbeat({ paused }),
+      { initialProps: { paused: true } },
+    );
+    await flushAsync();
+    expect(mockedSend).toHaveBeenCalledTimes(0); // paused from mount: even initial beat skipped
+
+    rerender({ paused: false });
+    await act(async () => { vi.advanceTimersByTime(45_000); });
+    await flushAsync();
+    expect(mockedSend).toHaveBeenCalledTimes(1);
+  });
+
+  it('sends nothing when disabled', async () => {
+    renderHook(() => usePresenceHeartbeat({ enabled: false }));
+    await flushAsync();
+    await act(async () => { vi.advanceTimersByTime(3 * 45_000); });
+    await flushAsync();
+    expect(mockedSend).toHaveBeenCalledTimes(0);
+  });
 });
