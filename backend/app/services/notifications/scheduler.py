@@ -62,7 +62,13 @@ class NotificationScheduler:
             logger.info(f"[NotificationScheduler] Found {len(devices)} devices to check")
             
             now = datetime.now(timezone.utc)
-            
+
+            # Most-urgent threshold first so a backlog (accumulated while the
+            # NAS was suspended) collapses to a single, accurate message.
+            ordered_thresholds = sorted(
+                cls.WARNING_THRESHOLDS.items(), key=lambda kv: kv[1]
+            )
+
             for device in devices:
                 try:
                     if device.expires_at is None:
@@ -71,43 +77,66 @@ class NotificationScheduler:
                     expires_at = device.expires_at
                     if expires_at.tzinfo is None:
                         expires_at = expires_at.replace(tzinfo=timezone.utc)
-                    # Check each warning threshold
-                    for warning_type, threshold in cls.WARNING_THRESHOLDS.items():
-                        warning_time = expires_at - threshold
-                        
-                        # Check if we should send this warning
-                        should_send, reason = cls._should_send_warning(
-                            db=db,
-                            device=device,
-                            warning_type=warning_type,
-                            warning_time=warning_time,
-                            now=now
+
+                    # Past expiry: lead-time warnings no longer apply. The
+                    # "expired / deauthorized" push is handled separately (#228).
+                    if now >= expires_at:
+                        stats["skipped"] += 1
+                        continue
+
+                    # Thresholds whose warning time has arrived, most urgent first.
+                    due = [
+                        (warning_type, expires_at - threshold)
+                        for warning_type, threshold in ordered_thresholds
+                        if now >= (expires_at - threshold)
+                    ]
+                    if not due:
+                        stats["skipped"] += 1
+                        continue
+
+                    # The single most-urgent due warning is the one the user
+                    # should see; everything less urgent gets suppressed.
+                    most_urgent_type, most_urgent_time = due[0]
+                    less_urgent = due[1:]
+
+                    should_send, reason = cls._should_send_warning(
+                        db=db,
+                        device=device,
+                        warning_type=most_urgent_type,
+                        warning_time=most_urgent_time,
+                        now=now,
+                    )
+
+                    if should_send:
+                        result = cls._send_warning(
+                            db=db, device=device, warning_type=most_urgent_type
                         )
-                        
-                        if should_send:
-                            # Send notification
-                            result = cls._send_warning(
-                                db=db,
-                                device=device,
-                                warning_type=warning_type
-                            )
-                            
-                            if result["success"]:
-                                stats["sent"] += 1
-                                logger.info(f"[NotificationScheduler] ✅ Sent {warning_type} warning to {device.device_name}")
-                            else:
-                                stats["failed"] += 1
-                                stats["errors"].append({
-                                    "device": device.device_name,
-                                    "warning": warning_type,
-                                    "error": result.get("error")
-                                })
-                                logger.info(f"[NotificationScheduler] ❌ Failed to send {warning_type} to {device.device_name}: {result.get('error')}")
+                        if result["success"]:
+                            stats["sent"] += 1
+                            logger.info(f"[NotificationScheduler] ✅ Sent {most_urgent_type} warning to {device.device_name}")
+                            for lt, _ in less_urgent:
+                                cls._record_superseded(db, device, lt)
+                            stats["skipped"] += len(less_urgent)
                         else:
-                            stats["skipped"] += 1
-                            if reason:
-                                logger.info(f"[NotificationScheduler] ⏭️ Skipped {warning_type} for {device.device_name}: {reason}")
-                
+                            stats["failed"] += 1
+                            stats["errors"].append({
+                                "device": device.device_name,
+                                "warning": most_urgent_type,
+                                "error": result.get("error"),
+                            })
+                            logger.info(f"[NotificationScheduler] ❌ Failed to send {most_urgent_type} to {device.device_name}: {result.get('error')}")
+                            # Don't supersede the less-urgent ones — the failed
+                            # warning retries on the next run.
+                    else:
+                        # Most-urgent due warning already handled (sent earlier /
+                        # superseded / max retries) → suppress the rest too.
+                        stats["skipped"] += 1
+                        if reason:
+                            logger.info(f"[NotificationScheduler] ⏭️ Skipped {most_urgent_type} for {device.device_name}: {reason}")
+                        for lt, _ in less_urgent:
+                            cls._record_superseded(db, device, lt)
+                        stats["skipped"] += len(less_urgent)
+
                 except Exception as e:
                     stats["failed"] += 1
                     stats["errors"].append({
@@ -223,7 +252,42 @@ class NotificationScheduler:
         db.commit()
         
         return result
-    
+
+    @classmethod
+    def _record_superseded(
+        cls,
+        db: Session,
+        device: MobileDevice,
+        warning_type: str
+    ) -> None:
+        """Mark a less-urgent warning as handled so it never fires later.
+
+        Used when a more urgent warning for the same expiry is the one the user
+        should see (e.g. a 7d + 3d + 1h backlog accumulated while the NAS was
+        suspended). Idempotent: if any row already exists for this
+        (device, warning_type, expiry) it leaves it untouched. Recorded with
+        success=True so _should_send_warning treats it as done.
+        """
+        existing = db.query(ExpirationNotification).filter(
+            ExpirationNotification.device_id == device.id,
+            ExpirationNotification.notification_type == warning_type,
+            ExpirationNotification.device_expires_at == device.expires_at,
+        ).first()
+        if existing:
+            return
+
+        notification = ExpirationNotification(
+            device_id=device.id,
+            notification_type=warning_type,
+            sent_at=datetime.now(timezone.utc),
+            success=True,
+            fcm_message_id=None,
+            error_message="superseded_by_more_urgent",
+            device_expires_at=device.expires_at,
+        )
+        db.add(notification)
+        db.commit()
+
     @classmethod
     def run_periodic_check(cls):
         """
