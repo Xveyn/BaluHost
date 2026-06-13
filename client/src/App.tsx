@@ -10,6 +10,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { buildApiUrl } from './lib/api';
 import { useIdleTimeout } from './hooks/useIdleTimeout';
 import { IdleWarningDialog } from './components/ui/IdleWarningDialog';
+import { usePresenceHeartbeat } from './hooks/usePresenceHeartbeat';
 import { FEATURES, isDesktop } from './lib/features';
 import logoMark from './assets/baluhost-logo.png';
 import './App.css';
@@ -149,6 +150,8 @@ function AppRoutes() {
     onLogout: logout,
     enabled: user !== null,
   });
+
+  usePresenceHeartbeat({ paused: warningVisible, enabled: user !== null });
 
   // Show loading screen while AuthProvider is verifying the stored token
   if (loading) return <LoadingScreen backendReady={true} backendCheckAttempts={0} />;
