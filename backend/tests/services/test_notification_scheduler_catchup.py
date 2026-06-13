@@ -138,6 +138,10 @@ class TestCheckAndSendWarnings:
 
         assert stats["sent"] == 0
         assert fake_send == []
+        rows = {r.notification_type: r for r in self._rows(db_session, device)}
+        assert rows["1_hour"].success is True
+        assert rows["3_days"].error_message == "superseded_by_more_urgent"
+        assert rows["7_days"].error_message == "superseded_by_more_urgent"
 
     def test_failed_send_does_not_supersede(self, db_session, admin_user, monkeypatch):
         def _send_fail(device_token, device_name, expires_at, warning_type, server_url):
