@@ -318,8 +318,14 @@ async def verify_mobile_device_token(
             detail="Device has been deactivated"
         )
     
-    # Check if device token has expired
-    if device.expires_at and device.expires_at < datetime.now(timezone.utc):
+    # Check if device token has expired.
+    # expires_at is stored in a naive DateTime column, so normalize it to UTC
+    # before comparing against an aware "now" (otherwise the comparison raises
+    # "can't compare offset-naive and offset-aware datetimes").
+    device_expires_at = device.expires_at
+    if device_expires_at is not None and device_expires_at.tzinfo is None:
+        device_expires_at = device_expires_at.replace(tzinfo=timezone.utc)
+    if device_expires_at and device_expires_at < datetime.now(timezone.utc):
         audit_logger = get_audit_logger_db()
         audit_logger.log_security_event(
             action="expired_device_token",
@@ -328,7 +334,23 @@ async def verify_mobile_device_token(
             error_message=f"Device {device.device_name} token expired at {device.expires_at}",
             db=db
         )
-        
+
+        # Notify the device it has been deauthorized so the app can log out
+        # cleanly — the app handles this push identically to a manual removal.
+        # Best-effort: never let a push failure block the 401. (#228)
+        if device.push_token:
+            try:
+                from app.services.notifications.firebase import FirebaseService
+                if FirebaseService.is_available():
+                    FirebaseService.send_device_removed_notification(
+                        device_token=device.push_token,
+                        device_name=device.device_name,
+                    )
+            except Exception as exc:
+                logger.warning(
+                    "Failed to send device-removed push on auto-expiry: %s", exc
+                )
+
         # Automatically deactivate expired device
         device.is_active = False
         db.commit()
