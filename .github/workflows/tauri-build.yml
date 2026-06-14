@@ -28,6 +28,17 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
+      # TEMP (fix/tauri-cargo-lock-conflict): generate + pin lockfile, then
+      # upload it. Reverted before the fix PR — only Cargo.lock is committed.
+      - name: Generate pinned lockfile
+        working-directory: client/src-tauri
+        run: |
+          set -euxo pipefail
+          cargo generate-lockfile
+          cargo update -p alloc-no-stdlib@3.0.0 --precise 2.0.4 || true
+          echo "=== alloc-no-stdlib in tree ==="
+          cargo tree -i alloc-no-stdlib || true
+
       - name: Cache Cargo
         uses: Swatinem/rust-cache@v2
         with:
@@ -53,6 +64,14 @@ jobs:
         run: npm run tauri:build -- --bundles deb,appimage
         env:
           VITE_TAURI: '1'
+
+      # TEMP (fix/tauri-cargo-lock-conflict): export the verified lockfile.
+      - name: Upload generated Cargo.lock
+        uses: actions/upload-artifact@v6
+        with:
+          name: cargo-lock
+          path: client/src-tauri/Cargo.lock
+          retention-days: 3
 
       - name: Upload artifacts (push to main)
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
