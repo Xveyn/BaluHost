@@ -91,6 +91,8 @@ client-safe string, never `str(e)`.
 import logging
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from fastapi.exception_handlers import http_exception_handler
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.core.exceptions import ServiceError
 
 logger = logging.getLogger(__name__)
@@ -106,12 +108,39 @@ async def _bare_exception_handler(request: Request, exc: Exception) -> JSONRespo
     return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
 
+async def _http_exception_handler(request: Request, exc: StarletteHTTPException):
+    # Defense-in-depth 5xx scrubber: a route that built `HTTPException(500,
+    # detail=str(e))` would otherwise leak the raw message. For any 5xx we log
+    # the original detail server-side and return a generic body. Sub-500 errors
+    # (4xx — often legitimately user-facing) fall through to FastAPI's default.
+    if exc.status_code >= 500:
+        logger.error(
+            "HTTP %s on %s %s (original detail scrubbed): %s",
+            exc.status_code, request.method, request.url.path, exc.detail,
+        )
+        return JSONResponse(status_code=exc.status_code, content={"detail": "Internal server error"})
+    return await http_exception_handler(request, exc)
+
+
 def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(ServiceError, _service_error_handler)
-    # Catch-all for genuinely unhandled exceptions. FastAPI's HTTPException is
-    # processed by the framework's own handler and never reaches here.
+    # 5xx scrubber for explicitly-built HTTPExceptions (overrides FastAPI's
+    # default HTTPException handler; delegates 4xx back to it).
+    app.add_exception_handler(StarletteHTTPException, _http_exception_handler)
+    # Catch-all for genuinely unhandled (non-HTTP) exceptions.
     app.add_exception_handler(Exception, _bare_exception_handler)
 ```
+
+**Why the scrubber AND the migration (defense-in-depth + cleanup).** The scrubber
+is the immediate net: it closes every 5xx leak the moment the foundation lands —
+including in route files not yet migrated — so the long migration doesn't leave
+leaks open meanwhile. It does **not** touch `ServiceError` responses (those use a
+separate handler, never raised as `HTTPException`), so curated 503/5xx
+`public_message`s survive. It also does **not** scrub 4xx, where `detail=str(e)`
+can still leak — those are fixed by the per-site migration. The migration then
+removes the dead `try/except` anti-pattern and converts user-actionable cases to
+`ServiceError`. Net effect: leaks closed centrally now, code cleaned thoroughly
+after.
 
 ### 3. `backend/app/main.py` — Wiring
 
@@ -147,8 +176,12 @@ For each `try: <body> except Exception as e: [log] raise HTTPException(500, …s
 ### 5. Tests
 
 - New `backend/tests/api/test_exception_handlers.py`: fault-injection routes assert
-  `ServiceError` → mapped status + `public_message`; a bare `RuntimeError("…secret…")`
-  → 500 with `{"detail": "Internal server error"}` and **no** leaked substring.
+  - `ServiceError` → mapped status + `public_message`;
+  - a bare `RuntimeError("…secret…")` → 500 with `{"detail": "Internal server error"}`
+    and **no** leaked substring;
+  - an explicit `HTTPException(500, detail="…secret…")` → scrubbed to generic 500
+    (proves the net), while `HTTPException(400, detail="bad filename")` passes through
+    unchanged (proves 4xx is untouched).
 - **Assertion-drift remediation:** existing error-path tests that assert on the old
   raw `detail` string must be updated to expect the generic 500 / curated message.
   The plan migrates **file by file** (route file → its tests → suite green) so drift
@@ -173,10 +206,26 @@ For each `try: <body> except Exception as e: [log] raise HTTPException(500, …s
   foundation (exceptions + handlers + tests) lands first and is independently
   correct, then each route file is migrated as its own commit.
 
-## Plan sequencing (preview, detailed in the plan)
+## Arbeitspakete
 
-1. `core/exceptions.py` + tests.
-2. `core/exception_handlers.py` + `main.py` wiring + `test_exception_handlers.py`.
-3. Migrate route files one per commit, descending by leak count (`fans.py` first),
-   updating each file's tests, suite green after each.
-4. Full suite + PR.
+The work splits into independently-shippable packages. **AP0 is the security
+deliverable** (foundation + 5xx net — closes the leak immediately); AP1+ are the
+thorough cleanup, each a small, reviewable unit.
+
+- **AP0 — Fundament + Netz** *(its own PR; high value, low risk)*
+  - `core/exceptions.py` (ServiceError hierarchy)
+  - `core/exception_handlers.py` (ServiceError handler + 5xx scrubber + bare catch-all)
+  - `main.py` wiring
+  - `tests/api/test_exception_handlers.py`
+  - After AP0, every 5xx leak is centrally neutralised even before migration.
+- **AP1..N — Route-Migration** *(batched by file, descending by leak count)*
+  - AP1: `fans.py` (22) · AP2: `cloud.py` (8) · AP3: `vpn.py` (6) ·
+    AP4: `plugins_marketplace.py` (6) · AP5: `benchmark.py` (4) · then the
+    remaining ~23 files (1–3 each), grouped into a few packages.
+  - Each package: drop leaky `try/except` (per the decision tree), convert
+    user-actionable cases to `ServiceError`, update that file's tests, suite green.
+  - Can ship as one PR per package or a few packages per PR — decided in the plan.
+- **AP-final — Full suite + PR(s).**
+
+Out-of-scope follow-up issue: `optical_drive` plugin (22) + `plugin_marketplace.py`
+service site (1).
