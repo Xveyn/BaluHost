@@ -72,7 +72,7 @@ export default function SyncPrototype() {
       setEditingDevice(null);
       setNewDeviceName('');
       loadDevices();
-    } catch (err) {
+    } catch {
       toast.error(t('common:toast.updateFailed'));
     }
   };
@@ -99,7 +99,7 @@ export default function SyncPrototype() {
       setShowDeleteConfirm(false);
       setDeviceToDelete(null);
       loadDevices();
-    } catch (err) {
+    } catch {
       toast.error(t('common:toast.deleteFailed'));
     }
   };

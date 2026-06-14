@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { renderHook, act, render, screen, fireEvent } from '@testing-library/react';
+import { renderHook, act, render, fireEvent } from '@testing-library/react';
 import { useConfirmDialog } from '../../hooks/useConfirmDialog';
 
 describe('useConfirmDialog', () => {

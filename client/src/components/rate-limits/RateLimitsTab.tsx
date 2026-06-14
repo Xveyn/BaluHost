@@ -210,7 +210,7 @@ export default function RateLimitsTab() {
       } else {
         toast.error(t('system:apiCenter.toasts.seedFailed'));
       }
-    } catch (error) {
+    } catch {
       toast.error(t('system:apiCenter.toasts.seedFailed'));
     }
   };
@@ -232,7 +232,7 @@ export default function RateLimitsTab() {
         toast.success(!config.enabled ? t('system:apiCenter.rateLimits.enabled') : t('system:apiCenter.rateLimits.disabled'));
         loadRateLimits();
       }
-    } catch (error) {
+    } catch {
       toast.error(t('system:apiCenter.toasts.updateFailed'));
     }
   };

@@ -60,7 +60,7 @@ export default function PluginsPage() {
     try {
       const details = await getPluginDetails(name);
       setSelectedPlugin(details);
-    } catch (err) {
+    } catch {
       setActionError(t('errors.loadDetailsFailed'));
     } finally {
       setDetailsLoading(false);
@@ -78,7 +78,7 @@ export default function PluginsPage() {
         if (selectedPlugin?.name === plugin.name) {
           await loadPluginDetails(plugin.name);
         }
-      } catch (err) {
+      } catch {
         setActionError(t('errors.disableFailed'));
       } finally {
         setActionLoading(false);
@@ -104,7 +104,7 @@ export default function PluginsPage() {
       });
       await refreshPlugins();
       await loadPluginDetails(selectedPlugin.name);
-    } catch (err) {
+    } catch {
       setActionError(t('errors.enableFailed'));
     } finally {
       setActionLoading(false);
@@ -123,7 +123,7 @@ export default function PluginsPage() {
       if (selectedPlugin?.name === name) {
         setSelectedPlugin(null);
       }
-    } catch (err) {
+    } catch {
       setActionError(t('errors.uninstallFailed'));
     } finally {
       setActionLoading(false);

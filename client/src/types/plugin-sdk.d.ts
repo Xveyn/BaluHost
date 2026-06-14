@@ -6,7 +6,7 @@
  */
 
 import type React from 'react';
-import type { LucideIcon, LucideProps } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 
 // UI Component Props
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
