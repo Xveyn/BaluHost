@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { formatAdminValue } from '../../lib/adminDbFormatters';
 
 // Mock i18n is already set up in setup.ts (language: 'de')

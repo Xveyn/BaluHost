@@ -170,7 +170,7 @@ export function SleepConfigPanel() {
           nas_mac_address: fbMac || undefined,
           enabled: fbEnabled,
         });
-      } catch (err) {
+      } catch {
         toast.error('Failed to save Fritz!Box config');
       }
 

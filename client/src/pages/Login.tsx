@@ -92,7 +92,7 @@ export default function Login() {
           setConnectionMode('local');
           login(loginResult.user, loginResult.access_token);
           return;
-        } catch (localErr: unknown) {
+        } catch {
           setConnectionMode('fallback');
           // Continue to fallback strategy
         }

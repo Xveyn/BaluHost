@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { storeToken, getToken, getStoredUsername, clearToken, isAuthenticated } from '../../lib/secureStore';
 
 // In jsdom, there's no Electron, so all calls use the sessionStorage fallback

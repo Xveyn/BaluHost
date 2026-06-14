@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { getApiErrorMessage } from '../../lib/errorHandling';
 
 // handleApiError calls toast.error internally — tested indirectly via getApiErrorMessage

@@ -113,7 +113,7 @@ export default function BenchmarkPanel() {
       setActiveBenchmarkId(benchmark.id);
       startPolling();
       toast.success('Benchmark started!');
-    } catch (err) {
+    } catch {
       // Error is already handled in the hook
     }
   }, [selectedDisk, selectedProfile, disks, start, startPolling]);
@@ -125,7 +125,7 @@ export default function BenchmarkPanel() {
     try {
       await cancel(activeBenchmarkId);
       toast.success('Cancellation requested');
-    } catch (err) {
+    } catch {
       toast.error('Failed to cancel benchmark');
     }
   }, [activeBenchmarkId, cancel]);

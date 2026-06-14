@@ -158,7 +158,7 @@ export default function AdminDatabase() {
       return
     }
     setOwnerLoadInfo({ status: 'loading' })
-    let mounted = true
+    const mounted = true
     try {
       const sizes = [2000, 1000, 500, 200, 100, 50]
       let successful = false

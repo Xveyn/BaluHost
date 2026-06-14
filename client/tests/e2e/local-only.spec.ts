@@ -67,7 +67,7 @@ async function mockRaidPageRoutes(context: BrowserContext, channel: 'local' | 'r
 
 async function injectToken(context: BrowserContext) {
   await context.addInitScript((t) => {
-    try { window.localStorage.setItem('token', t); } catch {}
+    try { window.localStorage.setItem('token', t); } catch { /* storage unavailable */ }
   }, FAKE_TOKEN);
 }
 

@@ -21,55 +21,35 @@ export function useServerProfiles() {
   }, []);
 
   const createProfile = useCallback(async (data: api.ServerProfileCreate) => {
-    try {
-      const newProfile = await api.createServerProfile(data);
-      setProfiles([newProfile, ...profiles]);
-      return newProfile;
-    } catch (err) {
-      throw err;
-    }
+    const newProfile = await api.createServerProfile(data);
+    setProfiles([newProfile, ...profiles]);
+    return newProfile;
   }, [profiles]);
 
   const updateProfile = useCallback(async (id: number, data: Partial<api.ServerProfileCreate>) => {
-    try {
-      const updated = await api.updateServerProfile(id, data);
-      setProfiles(profiles.map(p => p.id === id ? updated : p));
-      return updated;
-    } catch (err) {
-      throw err;
-    }
+    const updated = await api.updateServerProfile(id, data);
+    setProfiles(profiles.map(p => p.id === id ? updated : p));
+    return updated;
   }, [profiles]);
 
   const deleteProfile = useCallback(async (id: number) => {
-    try {
-      await api.deleteServerProfile(id);
-      setProfiles(profiles.filter(p => p.id !== id));
-    } catch (err) {
-      throw err;
-    }
+    await api.deleteServerProfile(id);
+    setProfiles(profiles.filter(p => p.id !== id));
   }, [profiles]);
 
   const testConnection = useCallback(async (id: number) => {
-    try {
-      return await api.testSSHConnection(id);
-    } catch (err) {
-      throw err;
-    }
+    return await api.testSSHConnection(id);
   }, []);
 
   const startServer = useCallback(async (id: number) => {
-    try {
-      const result = await api.startRemoteServer(id);
-      // Update last_used timestamp
-      const profile = profiles.find(p => p.id === id);
-      if (profile) {
-        profile.last_used = new Date().toISOString();
-        setProfiles([...profiles]);
-      }
-      return result;
-    } catch (err) {
-      throw err;
+    const result = await api.startRemoteServer(id);
+    // Update last_used timestamp
+    const profile = profiles.find(p => p.id === id);
+    if (profile) {
+      profile.last_used = new Date().toISOString();
+      setProfiles([...profiles]);
     }
+    return result;
   }, [profiles]);
 
   useEffect(() => {
@@ -109,40 +89,24 @@ export function useVPNProfiles() {
   }, []);
 
   const createProfile = useCallback(async (formData: FormData) => {
-    try {
-      const newProfile = await api.createVPNProfile(formData);
-      setProfiles([newProfile, ...profiles]);
-      return newProfile;
-    } catch (err) {
-      throw err;
-    }
+    const newProfile = await api.createVPNProfile(formData);
+    setProfiles([newProfile, ...profiles]);
+    return newProfile;
   }, [profiles]);
 
   const updateProfile = useCallback(async (id: number, formData: FormData) => {
-    try {
-      const updated = await api.updateVPNProfile(id, formData);
-      setProfiles(profiles.map(p => p.id === id ? updated : p));
-      return updated;
-    } catch (err) {
-      throw err;
-    }
+    const updated = await api.updateVPNProfile(id, formData);
+    setProfiles(profiles.map(p => p.id === id ? updated : p));
+    return updated;
   }, [profiles]);
 
   const deleteProfile = useCallback(async (id: number) => {
-    try {
-      await api.deleteVPNProfile(id);
-      setProfiles(profiles.filter(p => p.id !== id));
-    } catch (err) {
-      throw err;
-    }
+    await api.deleteVPNProfile(id);
+    setProfiles(profiles.filter(p => p.id !== id));
   }, [profiles]);
 
   const testConnection = useCallback(async (id: number) => {
-    try {
-      return await api.testVPNConnection(id);
-    } catch (err) {
-      throw err;
-    }
+    return await api.testVPNConnection(id);
   }, []);
 
   useEffect(() => {
