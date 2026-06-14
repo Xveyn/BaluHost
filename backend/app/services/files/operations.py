@@ -418,7 +418,13 @@ async def save_uploads(
             destination = target / file_relative_path
         else:
             filename = override_filename or upload.filename or "upload.bin"
-            destination = target / filename
+            # Security: collapse to the final path component so a client-supplied
+            # name like "../other-user/evil" cannot escape the (already jailed)
+            # target dir. Mirrors chunked_upload.py's sanitization.
+            safe_name = PurePosixPath(filename.replace("\x00", "")).name
+            if not safe_name or safe_name in (".", ".."):
+                safe_name = "upload.bin"
+            destination = target / safe_name
 
         await asyncio.to_thread(ensure_dir_with_permissions, destination.parent)
         try:

@@ -497,6 +497,30 @@ class TestSaveUploads:
         assert (storage_root / "test.txt").read_bytes() == b"file content"
 
     @pytest.mark.asyncio
+    async def test_save_upload_filename_traversal_is_contained(
+        self, storage_root, db_session, user_public
+    ):
+        """A client-supplied filename with ``..`` must not escape the target dir."""
+        upload = MagicMock(spec=UploadFile)
+        upload.filename = "../evil.txt"
+        upload.read = AsyncMock(return_value=b"pwned")
+        upload.close = AsyncMock()
+
+        saved = await file_ops.save_uploads(
+            relative_path="",
+            uploads=[upload],
+            user=user_public,
+            db=db_session,
+        )
+
+        # File is contained inside the storage root under its basename...
+        assert saved == ["evil.txt"]
+        assert (storage_root / "evil.txt").exists()
+        assert (storage_root / "evil.txt").read_bytes() == b"pwned"
+        # ...and did NOT escape to the parent directory.
+        assert not (storage_root.parent / "evil.txt").exists()
+
+    @pytest.mark.asyncio
     async def test_save_multiple_uploads(self, storage_root, db_session, user_public):
         """Test saving multiple uploaded files."""
         uploads = []
