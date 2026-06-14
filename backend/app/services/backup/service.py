@@ -403,7 +403,14 @@ class BackupService:
 
                 # Extract tar.gz
                 with tarfile.open(filepath, "r:gz") as tar:
-                    tar.extractall(temp_path)
+                    # Security: prevent tar-slip. The ``data`` filter rejects
+                    # members with absolute paths, ".." traversal, or unsafe
+                    # links, so a tampered archive cannot write outside the
+                    # temp dir. BaluHost backups only contain regular data
+                    # files under "backup/", so this is behaviour-preserving
+                    # for legitimate archives. (tarfile filters: py3.12+,
+                    # backported to 3.11.4+.)
+                    tar.extractall(temp_path, filter="data")
                 
                 backup_root = temp_path / "backup"
                 

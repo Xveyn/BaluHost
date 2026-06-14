@@ -255,6 +255,54 @@ def test_create_backup_handles_errors(backup_service: BackupService, temp_backup
             assert failed_backup.error_message == "Test error"
 
 
+def test_restore_backup_rejects_tar_slip(
+    backup_service: BackupService, temp_backup_dir: Path, db_session: Session
+):
+    """A tampered archive with a '..' member must not write outside the temp dir."""
+    import io
+    import tarfile
+
+    # Craft a malicious archive whose member escapes one level up — i.e. into
+    # backup_dir itself (the parent of the extraction temp dir).
+    malicious = temp_backup_dir / "malicious.tar.gz"
+    payload = b"escaped!"
+    with tarfile.open(malicious, "w:gz") as tar:
+        info = tarfile.TarInfo(name="../escape.txt")
+        info.size = len(payload)
+        tar.addfile(info, io.BytesIO(payload))
+
+    backup = Backup(
+        filename="malicious.tar.gz",
+        filepath=str(malicious),
+        size_bytes=malicious.stat().st_size,
+        backup_type="full",
+        status="completed",
+        creator_id=1,
+        includes_database=False,
+        includes_files=True,
+        includes_config=False,
+    )
+    db_session.add(backup)
+    db_session.commit()
+    db_session.refresh(backup)
+
+    # The 'data' filter rejects the traversal member, so extraction raises a
+    # tarfile error (surfaced by the route as a failed restore) instead of
+    # writing outside the extraction dir.
+    with patch.object(backup_service, "backup_dir", temp_backup_dir):
+        with pytest.raises(tarfile.TarError):
+            backup_service.restore_backup(
+                backup_id=backup.id,
+                user="test_user",
+                restore_database=False,
+                restore_files=False,
+                restore_config=False,
+            )
+
+    # The traversal target was never written outside the extraction dir.
+    assert not (temp_backup_dir / "escape.txt").exists()
+
+
 def test_download_backup(backup_service: BackupService, temp_backup_dir: Path, db_session: Session):
     """Test getting backup file path for download."""
     # Create backup file
