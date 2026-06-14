@@ -281,25 +281,21 @@ export class LocalApi {
 
     try {
       return await this.request('/system/shutdown', { method: 'POST' });
-    } catch (err) {
+    } catch {
       // Fallback for dev setup where backend runs on same origin (uvicorn on :8000)
       // or when the local HTTP proxy is not available. Attempt a same-origin call.
-      try {
-        const res = await fetch(buildApiUrl(`${API_PREFIX}/system/shutdown`), {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-          },
-        });
-        if (!res.ok) {
-          const errData = await res.json().catch(() => ({}));
-          throw new LocalApiError(errData.detail || `HTTP ${res.status}`, res.status);
-        }
-        return await res.json();
-      } catch (err2) {
-        throw err2;
+      const res = await fetch(buildApiUrl(`${API_PREFIX}/system/shutdown`), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new LocalApiError(errData.detail || `HTTP ${res.status}`, res.status);
       }
+      return await res.json();
     }
   }
 
@@ -315,23 +311,19 @@ export class LocalApi {
 
     try {
       return await this.request('/system/restart', { method: 'POST' });
-    } catch (err) {
-      try {
-        const res = await fetch(buildApiUrl(`${API_PREFIX}/system/restart`), {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-          },
-        });
-        if (!res.ok) {
-          const errData = await res.json().catch(() => ({}));
-          throw new LocalApiError(errData.detail || `HTTP ${res.status}`, res.status);
-        }
-        return await res.json();
-      } catch (err2) {
-        throw err2;
+    } catch {
+      const res = await fetch(buildApiUrl(`${API_PREFIX}/system/restart`), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new LocalApiError(errData.detail || `HTTP ${res.status}`, res.status);
       }
+      return await res.json();
     }
   }
 }
