@@ -16,9 +16,9 @@ test('schedulers: live backend run', async ({ browser, playwright }) => {
 
   const context = await browser.newContext({ ignoreHTTPSErrors: true });
   await context.addInitScript((t) => {
-    try { window.sessionStorage.setItem('baludesk-api-token', t); } catch (e) {}
-    try { window.sessionStorage.setItem('baludesk-username', 'admin'); } catch (e) {}
-    try { window.localStorage.setItem('token', t); } catch (e) {}
+    try { window.sessionStorage.setItem('baludesk-api-token', t); } catch { /* storage unavailable */ }
+    try { window.sessionStorage.setItem('baludesk-username', 'admin'); } catch { /* storage unavailable */ }
+    try { window.localStorage.setItem('token', t); } catch { /* storage unavailable */ }
   }, token);
 
   const page = await context.newPage();

@@ -49,9 +49,9 @@ interface Fixtures {
 /** Inject a JWT token into localStorage before any page JS runs. */
 async function injectToken(context: BrowserContext, token: string) {
   await context.addInitScript((t) => {
-    try { window.localStorage.setItem('token', t); } catch {}
-    try { window.sessionStorage.setItem('baludesk-api-token', t); } catch {}
-    try { window.sessionStorage.setItem('baludesk-username', 'admin'); } catch {}
+    try { window.localStorage.setItem('token', t); } catch { /* storage unavailable */ }
+    try { window.sessionStorage.setItem('baludesk-api-token', t); } catch { /* storage unavailable */ }
+    try { window.sessionStorage.setItem('baludesk-username', 'admin'); } catch { /* storage unavailable */ }
   }, token);
 }
 
