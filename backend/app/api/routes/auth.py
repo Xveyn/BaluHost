@@ -669,8 +669,10 @@ async def refresh_token(
     """
     Refresh access token using a refresh token (for mobile clients).
 
-    Mobile clients receive a long-lived refresh token (30 days) during registration.
-    This endpoint allows them to obtain new access tokens without re-authentication.
+    Mobile clients receive a refresh token during registration whose lifetime
+    matches the chosen device authorization validity (30-180 days, default 90).
+    This endpoint allows them to obtain new access tokens without re-authentication;
+    it does not rotate the refresh token, so once it expires the user re-registers.
 
     ✅ Security Fix #6: Now checks if refresh token has been revoked.
     """

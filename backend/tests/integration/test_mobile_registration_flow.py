@@ -91,6 +91,79 @@ def test_mobile_registration_flow():
     assert any(d.get('device_name') == 'Test Phone' for d in devices), f"Devices: {devices}"
 
 
+@pytest.mark.skipif(
+    "postgresql" in _database_url_from_env(),
+    reason="Test manages its own DB engine; cannot override a live PostgreSQL connection"
+)
+def test_refresh_token_ttl_matches_device_validity():
+    """Refresh-Token-TTL must equal the chosen device authorization validity (#227).
+
+    Previously the refresh token was hard-coded to 30 days while the device
+    authorization defaulted to 90, causing a silent logout on day 30. Both
+    clocks must now expire together.
+    """
+    import jwt as pyjwt
+
+    os.environ['SKIP_APP_INIT'] = '1'
+    os.environ['DATABASE_URL'] = 'sqlite:///:memory:'
+
+    from app.main import create_app
+    from app.core.database import init_db, SessionLocal
+    from app.services.users import create_user
+    from app.models.mobile import MobileRegistrationToken
+    from app.schemas.user import UserCreate
+
+    init_db()
+    from app.models import Base
+    from app.core.database import engine
+    Base.metadata.drop_all(bind=engine)
+    Base.metadata.create_all(bind=engine)
+
+    db = SessionLocal()
+    user = create_user(
+        UserCreate(username='ttl_user', email='ttl@example.com', password='TestPass123!'),
+        db=db,
+    )
+    token_value = 'reg_ttl_token_67890'
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
+    db.add(MobileRegistrationToken(
+        token=token_value, user_id=str(user.id), expires_at=expires_at, used=False,
+    ))
+    db.commit()
+    db.close()
+
+    app = create_app()
+    client = TestClient(app)
+
+    # Choose a validity distinct from both the old 30d hardcode and the 90d default.
+    validity_days = 45
+    payload = {
+        "token": token_value,
+        "device_info": {
+            "device_name": "TTL Phone",
+            "device_type": "android",
+            "device_model": "Pixel",
+            "os_version": "13",
+            "app_version": "1.0",
+        },
+        "token_validity_days": validity_days,
+    }
+
+    resp = client.post('/api/mobile/register', json=payload)
+    assert resp.status_code == 200, resp.text
+    refresh_token = resp.json()['refresh_token']
+
+    claims = pyjwt.decode(refresh_token, options={"verify_signature": False})
+    now = datetime.now(timezone.utc)
+    exp = datetime.fromtimestamp(claims['exp'], tz=timezone.utc)
+    ttl_days = (exp - now).total_seconds() / 86400
+
+    # Must track the chosen validity (45d), not the old 30d hardcode.
+    assert validity_days - 1 < ttl_days < validity_days + 1, (
+        f"Refresh token TTL {ttl_days:.1f}d should match device validity {validity_days}d"
+    )
+
+
 def test_token_generation_works_for_authenticated_user(client):
     """Test that any authenticated user can generate mobile tokens."""
     # Register a fresh user with a valid strong password
