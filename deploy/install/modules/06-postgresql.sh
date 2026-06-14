@@ -48,22 +48,29 @@ fi
 # --- Create PostgreSQL user ---
 if pg_user_exists "$POSTGRES_USER"; then
     log_info "PostgreSQL user '$POSTGRES_USER' already exists."
-    # Update password to ensure it matches config
-    sudo -u postgres psql -c "ALTER USER \"$POSTGRES_USER\" WITH PASSWORD '$POSTGRES_PASSWORD';" &>/dev/null
+    # Update password to ensure it matches config.
+    # psql variable binding (:'pw' / :"u") quotes value and identifier itself,
+    # so an operator-set password or username with special chars cannot break
+    # the statement or inject SQL (#219).
+    sudo -u postgres psql -v ON_ERROR_STOP=1 -v u="$POSTGRES_USER" -v pw="$POSTGRES_PASSWORD" \
+        -c "ALTER USER :\"u\" WITH PASSWORD :'pw';" &>/dev/null
     log_info "Updated password for PostgreSQL user '$POSTGRES_USER'."
 else
-    sudo -u postgres psql -c "CREATE USER \"$POSTGRES_USER\" WITH PASSWORD '$POSTGRES_PASSWORD';" &>/dev/null
+    sudo -u postgres psql -v ON_ERROR_STOP=1 -v u="$POSTGRES_USER" -v pw="$POSTGRES_PASSWORD" \
+        -c "CREATE USER :\"u\" WITH PASSWORD :'pw';" &>/dev/null
     log_info "Created PostgreSQL user '$POSTGRES_USER'."
 fi
 
 # --- Create database ---
 if pg_db_exists "$POSTGRES_DB"; then
     log_info "Database '$POSTGRES_DB' already exists."
-    # Ensure ownership is correct
-    sudo -u postgres psql -c "ALTER DATABASE \"$POSTGRES_DB\" OWNER TO \"$POSTGRES_USER\";" &>/dev/null
+    # Ensure ownership is correct (:"db" / :"u" = psql-quoted identifiers, #219)
+    sudo -u postgres psql -v ON_ERROR_STOP=1 -v db="$POSTGRES_DB" -v u="$POSTGRES_USER" \
+        -c "ALTER DATABASE :\"db\" OWNER TO :\"u\";" &>/dev/null
     log_info "Ensured database '$POSTGRES_DB' is owned by '$POSTGRES_USER'."
 else
-    sudo -u postgres psql -c "CREATE DATABASE \"$POSTGRES_DB\" OWNER \"$POSTGRES_USER\";" &>/dev/null
+    sudo -u postgres psql -v ON_ERROR_STOP=1 -v db="$POSTGRES_DB" -v u="$POSTGRES_USER" \
+        -c "CREATE DATABASE :\"db\" OWNER :\"u\";" &>/dev/null
     log_info "Created database '$POSTGRES_DB' owned by '$POSTGRES_USER'."
 fi
 
