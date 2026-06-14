@@ -75,6 +75,10 @@ jobs:
         working-directory: client
         run: npm ci
 
+      - name: Lint (ESLint)
+        working-directory: client
+        run: npx eslint .
+
       - name: Build
         working-directory: client
         run: npm run build
