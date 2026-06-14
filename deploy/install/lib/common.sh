@@ -155,5 +155,7 @@ pg_db_exists() {
 }
 
 pg_user_exists() {
-    sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='$1'" 2>/dev/null | grep -q 1
+    # :'u' = psql-quoted string literal; prevents a username with special
+    # characters from breaking the query or injecting SQL (#219).
+    sudo -u postgres psql -v u="$1" -tAc "SELECT 1 FROM pg_roles WHERE rolname = :'u'" 2>/dev/null | grep -q 1
 }
