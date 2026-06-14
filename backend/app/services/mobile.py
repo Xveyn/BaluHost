@@ -273,9 +273,14 @@ class MobileService:
             )
         
         # Generate auth tokens
+        # Refresh-token TTL is tied to the device authorization validity so both
+        # clocks expire together — otherwise the device would be silently logged
+        # out when the (previously hard-coded 30-day) refresh token expired while
+        # its authorization was still valid (#227). On expiry the user re-registers.
+        refresh_expires_at = device_expires_at
         access_token = auth_service.create_access_token(user=user)
         refresh_token_str, jti = security.create_refresh_token(
-            user=user, expires_delta=timedelta(days=30)
+            user=user, expires_delta=timedelta(days=token_validity_days)
         )
 
         # Store refresh token in database for revocation support
@@ -285,7 +290,7 @@ class MobileService:
             jti=jti,
             user_id=user.id,
             token=refresh_token_str,
-            expires_at=datetime.now(timezone.utc) + timedelta(days=30),
+            expires_at=refresh_expires_at,
             device_id=str(device.id),
         )
         

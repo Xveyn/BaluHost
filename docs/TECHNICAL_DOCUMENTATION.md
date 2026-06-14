@@ -450,7 +450,7 @@ POST /api/sync/force                          - Force sync
   - Device management and tracking
   - Multiple device support per user
   - Device naming and identification
-  - 30-day refresh tokens for long-lived sessions
+  - Refresh tokens matching the device authorization validity (30-180 days, default 90) for long-lived sessions
 
 - **Camera Backup**
   - Automatic photo/video backup
