@@ -715,7 +715,9 @@
       "suspendConfirmAnyway": "Suspend anyway",
       "today": "today at {{time}}",
       "tomorrow": "tomorrow at {{time}}",
-      "dateTime": "{{date}} {{time}}"
+      "dateTime": "{{date}} {{time}}",
+      "suspendOnExit": "Suspend when window ends",
+      "suspendOnExitDesc": "Suspends the server as soon as the core operating window ends (once the system is idle)."
     },
     "alwaysAwake": {
       "title": "Always Awake",

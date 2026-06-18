@@ -139,6 +139,9 @@ class SleepManagerService:
         self._original_fan_modes: dict[str, str] = {}
         self._is_running = False
         self._was_in_core_uptime: bool = False  # edge-detection state; written by _schedule_check_loop (Task 6)
+        # Armed when a core-uptime window ends and core_uptime_suspend_on_exit is on;
+        # fires a true suspend on the next idle/unattended tick. In-memory only.
+        self._core_uptime_exit_pending: bool = False
         self._idle_task: Optional[asyncio.Task] = None
         self._schedule_task: Optional[asyncio.Task] = None
         self._escalation_task: Optional[asyncio.Task] = None
@@ -583,6 +586,36 @@ class SleepManagerService:
                 # a master-toggle-off promptly releases, and Always-Awake also
                 # blocks third-party suspends.
                 self._reconcile_sleep_inhibitor(config, in_core=in_core)
+
+                # Suspend-on-exit: arm on the falling edge of an active window,
+                # fire a true suspend once the system is idle and unattended.
+                falling_edge = master and self._was_in_core_uptime and not in_core
+                if config and config.core_uptime_suspend_on_exit:
+                    if falling_edge:
+                        logger.info("Core uptime window ended — arming suspend-on-exit")
+                        self._core_uptime_exit_pending = True
+                    if in_core:
+                        # A window is active again — disarm.
+                        self._core_uptime_exit_pending = False
+                else:
+                    self._core_uptime_exit_pending = False
+
+                if (
+                    self._core_uptime_exit_pending
+                    and self._current_state == SleepState.AWAKE
+                    and not in_core
+                    and config is not None
+                    and not self._is_always_awake(config)
+                    and not self._is_user_present(config)
+                    and self._is_system_idle(config, self._get_activity_metrics())
+                ):
+                    logger.info(
+                        "Suspend-on-exit: system idle after core uptime — entering true suspend"
+                    )
+                    self._core_uptime_exit_pending = False
+                    await self.enter_true_suspend(
+                        "core_uptime_exit", SleepTrigger.CORE_UPTIME_EXIT, wake_at=None,
+                    )
 
                 # Track edge state regardless. When master is off we force False so
                 # that re-enabling the toggle while inside an active window registers
@@ -1292,6 +1325,7 @@ class SleepManagerService:
             reduced_telemetry_interval=config.reduced_telemetry_interval,
             disk_spindown_enabled=config.disk_spindown_enabled,
             core_uptime_enabled=config.core_uptime_enabled,
+            core_uptime_suspend_on_exit=bool(config.core_uptime_suspend_on_exit),
             always_awake_enabled=bool(config.always_awake_enabled),
             always_awake_until=config.always_awake_until,
             # bool()/or-defaults: legacy SleepConfig objects constructed without

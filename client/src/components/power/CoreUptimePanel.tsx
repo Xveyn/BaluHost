@@ -25,6 +25,7 @@ import { CoreUptimeWindowCard } from './CoreUptimeWindowCard';
 export function CoreUptimePanel() {
   const { t } = useTranslation('system');
   const [masterEnabled, setMasterEnabled] = useState(false);
+  const [suspendOnExit, setSuspendOnExit] = useState(false);
   const [windows, setWindows] = useState<CoreUptimeWindow[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -32,6 +33,7 @@ export function CoreUptimePanel() {
     try {
       const [cfg, ws] = await Promise.all([getSleepConfig(), listCoreUptimeWindows()]);
       setMasterEnabled(cfg.core_uptime_enabled);
+      setSuspendOnExit(cfg.core_uptime_suspend_on_exit);
       setWindows(ws);
     } catch {
       toast.error(t('sleep.coreUptime.loadFailed'));
@@ -51,6 +53,17 @@ export function CoreUptimePanel() {
       await updateSleepConfig({ core_uptime_enabled: next });
     } catch (err) {
       setMasterEnabled(!next);
+      toast.error(err instanceof Error ? err.message : t('sleep.coreUptime.saveFailed'));
+    }
+  };
+
+  const handleSuspendOnExitToggle = async () => {
+    const next = !suspendOnExit;
+    setSuspendOnExit(next); // optimistic
+    try {
+      await updateSleepConfig({ core_uptime_suspend_on_exit: next });
+    } catch (err) {
+      setSuspendOnExit(!next);
       toast.error(err instanceof Error ? err.message : t('sleep.coreUptime.saveFailed'));
     }
   };
@@ -154,6 +167,26 @@ export function CoreUptimePanel() {
             <Plus className="h-4 w-4" />
             {t('sleep.coreUptime.addWindow')}
           </button>
+          <div className="flex items-start justify-between gap-3 pt-2 border-t border-slate-700/50">
+            <div>
+              <p className="text-sm text-white">{t('sleep.coreUptime.suspendOnExit')}</p>
+              <p className="mt-0.5 text-xs text-slate-400">{t('sleep.coreUptime.suspendOnExitDesc')}</p>
+            </div>
+            <button
+              type="button"
+              onClick={handleSuspendOnExitToggle}
+              className={`relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors ${
+                suspendOnExit ? 'bg-emerald-500' : 'bg-slate-600'
+              }`}
+              aria-label={t('sleep.coreUptime.suspendOnExit')}
+            >
+              <span
+                className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform transition-transform ${
+                  suspendOnExit ? 'translate-x-5.5 ml-0.5' : 'translate-x-0.5'
+                } mt-0.5`}
+              />
+            </button>
+          </div>
           <p className="text-xs text-slate-500 mt-2">
             {t('sleep.coreUptime.blockedActions')}
           </p>

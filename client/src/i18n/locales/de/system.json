@@ -710,7 +710,9 @@
       "suspendConfirmAnyway": "Trotzdem suspenden",
       "today": "heute {{time}}",
       "tomorrow": "morgen {{time}}",
-      "dateTime": "{{date}} {{time}}"
+      "dateTime": "{{date}} {{time}}",
+      "suspendOnExit": "Beim Fenster-Ende suspenden",
+      "suspendOnExitDesc": "Suspendet den Server, sobald die Kernbetriebszeit endet (sobald das System idle ist)."
     },
     "alwaysAwake": {
       "title": "Immer wach",
