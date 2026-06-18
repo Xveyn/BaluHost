@@ -9,6 +9,7 @@ Verifies that:
 
 import jwt
 import pytest
+from fastapi import WebSocketDisconnect
 from app.core.config import settings
 from app.core.security import create_ws_token
 
@@ -78,3 +79,47 @@ class TestWsTokenEndpoint:
         # Decode to verify it's a valid WS token
         payload = jwt.decode(data["token"], settings.SECRET_KEY, algorithms=["HS256"])
         assert payload["type"] == "ws"
+
+
+class TestWsEndpointRejectsAccessToken:
+    """The /ws endpoint must only accept scoped ws tokens, never the broad
+    access token (which would leak into proxy logs via ?token=)."""
+
+    def test_ws_rejects_access_token(self, client, admin_headers):
+        """Connecting with a full access token must be refused (fail-closed)."""
+        access_token = admin_headers["Authorization"].split()[1]
+        with pytest.raises(WebSocketDisconnect):
+            with client.websocket_connect(
+                f"/api/notifications/ws?token={access_token}"
+            ) as ws:
+                ws.receive_text()
+
+    def test_ws_rejects_missing_token(self, client):
+        """Connecting without a token must be refused."""
+        with pytest.raises(WebSocketDisconnect):
+            with client.websocket_connect("/api/notifications/ws") as ws:
+                ws.receive_text()
+
+    def test_ws_rejects_expired_or_wrong_type_token(self, client):
+        """A token without type='ws' (e.g. a forged 'sse' token) is refused."""
+        import jwt as pyjwt
+        from datetime import datetime, timezone, timedelta
+
+        now = datetime.now(timezone.utc)
+        # A syntactically valid JWT but with the wrong type claim.
+        bad = pyjwt.encode(
+            {
+                "sub": "1",
+                "username": "admin",
+                "type": "sse",
+                "exp": now + timedelta(minutes=5),
+                "iat": now,
+            },
+            settings.SECRET_KEY,
+            algorithm="HS256",
+        )
+        with pytest.raises(WebSocketDisconnect):
+            with client.websocket_connect(
+                f"/api/notifications/ws?token={bad}"
+            ) as ws:
+                ws.receive_text()

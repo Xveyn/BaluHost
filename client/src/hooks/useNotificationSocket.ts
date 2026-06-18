@@ -74,13 +74,15 @@ export function useNotificationSocket(options: UseNotificationSocketOptions = {}
     }
 
     try {
-      // Fetch a short-lived, scoped WS token instead of passing the access token
+      // Always use a short-lived, scoped WS token — never the broad access
+      // token (which would leak into proxy logs via the ?token= query param).
+      // If the ws-token exchange fails, abort and let the reconnect logic retry
+      // rather than falling back to the access token.
       let wsToken: string;
       try {
         wsToken = await getWsToken();
       } catch {
-        // If ws-token endpoint is unavailable (e.g. older backend), fall back to access token
-        wsToken = tokenRef.current;
+        throw new Error('ws-token exchange failed');
       }
       const url = getWebSocketUrl(wsToken);
       const ws = new WebSocket(url);
@@ -186,6 +188,19 @@ export function useNotificationSocket(options: UseNotificationSocketOptions = {}
         connected: false,
         error: 'Connection failed',
       }));
+      // No WebSocket was created (e.g. the ws-token exchange failed), so no
+      // onclose handler will fire to drive reconnection. Schedule the retry
+      // here with the same bounded backoff.
+      if (
+        enabledRef.current &&
+        reconnectAttemptsRef.current < maxReconnectAttemptsRef.current
+      ) {
+        reconnectAttemptsRef.current++;
+        const delay = reconnectDelayRef.current * reconnectAttemptsRef.current;
+        reconnectTimeoutRef.current = setTimeout(() => {
+          connect();
+        }, delay);
+      }
     }
   }, []); // Stable identity — reads everything from refs
 
