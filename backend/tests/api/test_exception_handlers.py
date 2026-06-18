@@ -33,12 +33,12 @@ def test_public_message_override_is_used():
 
 
 import pytest
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
-from app.main import app
+from app.core.exception_handlers import register_exception_handlers
 
-# Fault-injection routes registered once on the shared app (test-only, no auth).
+# Fault-injection routes mounted on a dedicated test app (test-only, no auth).
 _fault_router = APIRouter()
 
 
@@ -67,22 +67,20 @@ def _raise_http_400():
     raise HTTPException(status_code=400, detail="bad filename ../x")
 
 
-app.include_router(_fault_router)
-
-
 @pytest.fixture
 def raw_client():
-    # raise_server_exceptions=False so the catch-all 500 response is returned
-    # to the test instead of being re-raised by TestClient.
-    # app.debug=False: in debug mode Starlette's ServerErrorMiddleware bypasses
-    # custom Exception handlers and returns a traceback response instead.  The
-    # production app always runs with debug=False; we test that configuration here.
-    # The middleware stack is built lazily on the first request, so setting this
-    # before TestClient is created takes effect correctly.
-    app.debug = False
-    client = TestClient(app, raise_server_exceptions=False)
-    yield client
-    app.debug = True  # restore for other tests that may rely on dev defaults
+    # Dedicated app instance so the test does not depend on (or mutate) the
+    # global app's middleware stack — which is built lazily on the first request
+    # and cached, making any `app.debug` toggle order-dependent under xdist.
+    # A fresh FastAPI() defaults to debug=False, the production configuration in
+    # which Starlette's ServerErrorMiddleware actually routes to our custom
+    # Exception handler (in debug mode it returns a traceback instead).
+    # raise_server_exceptions=False so the catch-all 500 response is returned to
+    # the test instead of being re-raised by TestClient.
+    test_app = FastAPI()
+    register_exception_handlers(test_app)
+    test_app.include_router(_fault_router)
+    return TestClient(test_app, raise_server_exceptions=False)
 
 
 def test_service_error_maps_status_and_public_message(raw_client):
