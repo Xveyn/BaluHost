@@ -530,7 +530,9 @@ async def notification_websocket(
     """WebSocket endpoint for real-time notification delivery.
 
     Requires a scoped WS token (from POST /ws-token) as query parameter.
-    Also accepts full access tokens for backwards compatibility (deprecated).
+    The full access token is intentionally NOT accepted here: passing it as a
+    query parameter would leak the broadly-scoped token into proxy/nginx access
+    logs. Clients must exchange their access token for a short-lived ws token.
     """
     import logging
     from app.services.websocket_manager import get_websocket_manager
@@ -554,19 +556,13 @@ async def notification_websocket(
     try:
         db = SessionLocal()
 
-        # First try to decode as a scoped WS token
+        # Only a scoped WS token (type="ws") is accepted. Full access tokens are
+        # rejected fail-closed so they can never be leaked via the ?token= query
+        # parameter into proxy logs.
         try:
             payload = decode_raw_token(token, token_type="ws")
         except pyjwt.InvalidTokenError:
-            # Fall back to access token for backwards compatibility
-            try:
-                payload = decode_raw_token(token, token_type="access")
-                logger.warning(
-                    "WebSocket: client used access token instead of scoped ws token "
-                    "(deprecated, use POST /api/notifications/ws-token)"
-                )
-            except pyjwt.InvalidTokenError:
-                raise auth_service.InvalidTokenError("Invalid WebSocket token")
+            raise auth_service.InvalidTokenError("Invalid WebSocket token")
 
         user_sub = payload.get("sub")
         if not user_sub:
