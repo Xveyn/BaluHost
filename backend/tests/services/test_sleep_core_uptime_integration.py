@@ -680,7 +680,6 @@ async def test_suspend_on_exit_waits_while_busy():
         return True
 
     patches = _patch_loop_env(svc, cfg, in_core=(False, None), idle=False)  # busy
-    import contextlib
     with contextlib.ExitStack() as stack:
         for p in patches:
             stack.enter_context(p)
@@ -751,7 +750,6 @@ async def test_suspend_on_exit_blocked_by_presence():
         return True
 
     patches = _patch_loop_env(svc, cfg, in_core=(False, None), idle=True, present=True)
-    import contextlib
     with contextlib.ExitStack() as stack:
         for p in patches:
             stack.enter_context(p)
@@ -816,7 +814,6 @@ async def test_suspend_on_exit_disarmed_by_new_window():
         return True
 
     patches = _patch_loop_env(svc, cfg, in_core=(True, _window_workdays_8_22()), idle=True)
-    import contextlib
     with contextlib.ExitStack() as stack:
         for p in patches:
             stack.enter_context(p)
