@@ -1292,6 +1292,7 @@ class SleepManagerService:
             reduced_telemetry_interval=config.reduced_telemetry_interval,
             disk_spindown_enabled=config.disk_spindown_enabled,
             core_uptime_enabled=config.core_uptime_enabled,
+            core_uptime_suspend_on_exit=bool(config.core_uptime_suspend_on_exit),
             always_awake_enabled=bool(config.always_awake_enabled),
             always_awake_until=config.always_awake_until,
             # bool()/or-defaults: legacy SleepConfig objects constructed without

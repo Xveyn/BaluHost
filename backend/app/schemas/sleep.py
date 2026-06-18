@@ -43,6 +43,7 @@ class SleepTrigger(str, Enum):
     WOL = "wol"
     RTC_WAKE = "rtc_wake"
     CORE_UPTIME_WAKE = "core_uptime_wake"
+    CORE_UPTIME_EXIT = "core_uptime_exit"
 
 
 class ScheduleMode(str, Enum):
@@ -199,6 +200,7 @@ class SleepConfigResponse(BaseModel):
     disk_spindown_enabled: bool = Field(default=True, description="Spin down data disks during sleep")
     # Core operating hours
     core_uptime_enabled: bool = Field(default=False, description="Master toggle for core operating hours")
+    core_uptime_suspend_on_exit: bool = Field(default=False, description="Suspend when a core-uptime window ends")
     # Always-awake override
     always_awake_enabled: bool = Field(default=False, description="Always-awake override active")
     always_awake_until: Optional[datetime] = Field(
@@ -230,6 +232,7 @@ class SleepConfigUpdate(BaseModel):
     reduced_telemetry_interval: Optional[float] = Field(default=None, ge=5.0, le=300.0)
     disk_spindown_enabled: Optional[bool] = None
     core_uptime_enabled: Optional[bool] = None
+    core_uptime_suspend_on_exit: Optional[bool] = None
     always_awake_enabled: Optional[bool] = None
     always_awake_until: Optional[datetime] = Field(
         default=None, description="UTC expiry for always-awake override; None = permanent"
