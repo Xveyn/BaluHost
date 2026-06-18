@@ -5,6 +5,7 @@
  */
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { safeExternalUrl } from '../lib/safeUrl';
 import { usePlugins } from '../contexts/PluginContext';
 import type {
   PluginDetail,
@@ -321,12 +322,12 @@ export default function PluginsPage() {
                     <dt className="text-slate-500">{t('details.category')}</dt>
                     <dd className="text-white capitalize">{selectedPlugin.category}</dd>
                   </div>
-                  {selectedPlugin.homepage && (
+                  {safeExternalUrl(selectedPlugin.homepage) && (
                     <div className="flex justify-between">
                       <dt className="text-slate-500">{t('details.homepage')}</dt>
                       <dd>
                         <a
-                          href={selectedPlugin.homepage}
+                          href={safeExternalUrl(selectedPlugin.homepage)!}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-blue-400 hover:underline flex items-center gap-1"

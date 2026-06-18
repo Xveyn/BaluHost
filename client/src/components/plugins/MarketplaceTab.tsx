@@ -8,6 +8,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
+import { safeExternalUrl } from '../../lib/safeUrl';
 import {
   AlertTriangle,
   Download,
@@ -253,11 +254,11 @@ export default function MarketplaceTab() {
                           <span>{formatBytes(latest.size_bytes)}</span>
                         </>
                       )}
-                      {plugin.homepage && (
+                      {safeExternalUrl(plugin.homepage) && (
                         <>
                           <span>•</span>
                           <a
-                            href={plugin.homepage}
+                            href={safeExternalUrl(plugin.homepage)!}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="text-blue-400 hover:underline inline-flex items-center gap-1"
