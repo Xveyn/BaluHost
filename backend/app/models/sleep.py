@@ -48,6 +48,8 @@ class SleepConfig(Base):
 
     # Core Operating Hours (Kernbetriebszeit)
     core_uptime_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Opt-in: suspend as soon as a core-uptime window ends (once the system is idle)
+    core_uptime_suspend_on_exit: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     # Always-awake override (manual override over all auto-sleep paths)
     always_awake_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
