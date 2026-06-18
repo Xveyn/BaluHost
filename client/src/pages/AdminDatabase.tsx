@@ -44,6 +44,13 @@ export default function AdminDatabase() {
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // Mount guard for async handlers that aren't tied to an effect teardown
+  // (e.g. the manual loadOwners button). Flipped to false on unmount.
+  const isMountedRef = useRef(true)
+  useEffect(() => {
+    return () => { isMountedRef.current = false }
+  }, [])
+
   // Row detail
   const [selectedRow, setSelectedRow] = useState<Record<string, unknown> | null>(null)
 
@@ -158,14 +165,13 @@ export default function AdminDatabase() {
       return
     }
     setOwnerLoadInfo({ status: 'loading' })
-    const mounted = true
     try {
       const sizes = [2000, 1000, 500, 200, 100, 50]
       let successful = false
       for (const sz of sizes) {
         try {
           const res = await fetchRows('users', 1, sz)
-          if (!mounted) return
+          if (!isMountedRef.current) return
           const map: Record<string,string> = {}
           for (const u of res.rows || []) {
             const id = u.id ?? u.ID ?? u.user_id ?? u.userId
@@ -177,6 +183,7 @@ export default function AdminDatabase() {
           successful = true
           break
         } catch (err: unknown) {
+          if (!isMountedRef.current) return
           const status = (err as { response?: { status?: number } })?.response?.status
           if (status && status !== 422) {
             setOwnerLoadInfo({ status: 'failed', error: `HTTP ${status}` })
@@ -185,8 +192,10 @@ export default function AdminDatabase() {
           setOwnerLoadInfo({ status: 'loading', page_size: sz })
         }
       }
+      if (!isMountedRef.current) return
       if (!successful) setOwnerLoadInfo({ status: 'failed', error: 'no successful response' })
     } catch (e: unknown) {
+      if (!isMountedRef.current) return
       setOwnerLoadInfo({ status: 'failed', error: String(e) })
     }
   }
