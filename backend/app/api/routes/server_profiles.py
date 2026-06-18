@@ -246,9 +246,14 @@ async def check_ssh_connection(
     response: Response,
     profile_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(deps.get_current_user),
+    current_user: User = Depends(deps.get_current_admin),
 ) -> SSHConnectionTest:
-    """Test SSH connectivity to server."""
+    """Test SSH connectivity to server.
+
+    Admin-only: this opens an outbound TCP/SSH connection to an arbitrary,
+    profile-supplied host:port. Allowing any authenticated user would turn the
+    server into an SSRF/port-scan oracle against the internal network (audit #4).
+    """
     profile = server_profile_service.get_user_profile(db, profile_id, current_user.id)
     if not profile:
         raise HTTPException(
@@ -292,9 +297,14 @@ async def start_remote_server(
     response: Response,
     profile_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(deps.get_current_user),
+    current_user: User = Depends(deps.get_current_admin),
 ) -> ServerStartResponse:
-    """Start remote BaluHost server."""
+    """Start remote BaluHost server.
+
+    Admin-only: this opens an outbound SSH connection to a profile-supplied
+    host:port and executes the stored power-on command there. Same SSRF /
+    arbitrary-egress surface as check-connectivity (audit #4).
+    """
     profile = server_profile_service.get_user_profile(db, profile_id, current_user.id)
     if not profile:
         raise HTTPException(

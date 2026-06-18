@@ -187,17 +187,17 @@ MIIEpAIBAAKCAQEA0Z+4rqGr1+...truncated...
         assert response.status_code == 404
     
     @patch("app.services.ssh_service.SSHService.test_connection")
-    def test_check_ssh_connection_success(self, mock_ssh, client_with_user, db_session, test_user):
-        """Test SSH connectivity check endpoint."""
+    def test_check_ssh_connection_success(self, mock_ssh, client, db_session, admin_user, admin_headers):
+        """Test SSH connectivity check endpoint (admin-only, audit #4)."""
         mock_ssh.return_value = (True, None)
-        
+
         ssh_key = """-----BEGIN RSA PRIVATE KEY-----
 MIIEpAIBAAKCAQEA0Z+4rqGr1+...truncated...
 -----END RSA PRIVATE KEY-----"""
-        
+
         encrypted_key = VPNEncryption.encrypt_ssh_private_key(ssh_key)
         profile = ServerProfile(
-            user_id=test_user.id,
+            user_id=admin_user.id,
             name="Test",
             ssh_host="10.0.0.1",
             ssh_port=22,
@@ -206,24 +206,51 @@ MIIEpAIBAAKCAQEA0Z+4rqGr1+...truncated...
         )
         db_session.add(profile)
         db_session.commit()
-        
-        response = client_with_user.post(f"/api/server-profiles/{profile.id}/check-connectivity")
-        
+
+        response = client.post(
+            f"/api/server-profiles/{profile.id}/check-connectivity", headers=admin_headers
+        )
+
         assert response.status_code == 200
         data = response.json()
         assert data["ssh_reachable"] is True
         assert data["error_message"] is None
-    
+
     @patch("app.services.ssh_service.SSHService.test_connection")
-    def test_check_ssh_connection_failure(self, mock_ssh, client_with_user, db_session, test_user):
-        """Test SSH connectivity check with failure."""
+    def test_check_ssh_connection_failure(self, mock_ssh, client, db_session, admin_user, admin_headers):
+        """Test SSH connectivity check with failure (admin-only, audit #4)."""
         mock_ssh.return_value = (False, "Connection refused")
-        
+
         ssh_key = """-----BEGIN RSA PRIVATE KEY-----
 MIIEpAIBAAKCAQEA0Z+4rqGr1+...truncated...
 -----END RSA PRIVATE KEY-----"""
-        
+
         encrypted_key = VPNEncryption.encrypt_ssh_private_key(ssh_key)
+        profile = ServerProfile(
+            user_id=admin_user.id,
+            name="Test",
+            ssh_host="10.0.0.1",
+            ssh_port=22,
+            ssh_username="user",
+            ssh_key_encrypted=encrypted_key,
+        )
+        db_session.add(profile)
+        db_session.commit()
+
+        response = client.post(
+            f"/api/server-profiles/{profile.id}/check-connectivity", headers=admin_headers
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["ssh_reachable"] is False
+        assert "Connection refused" in data["error_message"]
+
+    def test_check_connectivity_forbidden_for_regular_user(self, client_with_user, db_session, test_user):
+        """A non-admin must NOT be able to trigger an outbound SSH probe (audit #4)."""
+        encrypted_key = VPNEncryption.encrypt_ssh_private_key(
+            "-----BEGIN RSA PRIVATE KEY-----\nx\n-----END RSA PRIVATE KEY-----"
+        )
         profile = ServerProfile(
             user_id=test_user.id,
             name="Test",
@@ -234,24 +261,46 @@ MIIEpAIBAAKCAQEA0Z+4rqGr1+...truncated...
         )
         db_session.add(profile)
         db_session.commit()
-        
+
         response = client_with_user.post(f"/api/server-profiles/{profile.id}/check-connectivity")
-        
-        assert response.status_code == 200
-        data = response.json()
-        assert data["ssh_reachable"] is False
-        assert "Connection refused" in data["error_message"]
-    
+        assert response.status_code == 403
+
     @patch("app.services.ssh_service.SSHService.start_server")
-    def test_start_remote_server(self, mock_start, client_with_user, db_session, test_user):
-        """Test remote server startup endpoint."""
+    def test_start_remote_server(self, mock_start, client, db_session, admin_user, admin_headers):
+        """Test remote server startup endpoint (admin-only, audit #4)."""
         mock_start.return_value = (True, "Server startup initiated")
-        
+
         ssh_key = """-----BEGIN RSA PRIVATE KEY-----
 MIIEpAIBAAKCAQEA0Z+4rqGr1+...truncated...
 -----END RSA PRIVATE KEY-----"""
-        
+
         encrypted_key = VPNEncryption.encrypt_ssh_private_key(ssh_key)
+        profile = ServerProfile(
+            user_id=admin_user.id,
+            name="Test",
+            ssh_host="10.0.0.1",
+            ssh_port=22,
+            ssh_username="user",
+            ssh_key_encrypted=encrypted_key,
+            power_on_command="systemctl start baluhost-backend",
+        )
+        db_session.add(profile)
+        db_session.commit()
+
+        response = client.post(
+            f"/api/server-profiles/{profile.id}/start", headers=admin_headers
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["profile_id"] == profile.id
+        assert data["status"] == "starting"
+
+    def test_start_forbidden_for_regular_user(self, client_with_user, db_session, test_user):
+        """A non-admin must NOT be able to start a remote server over SSH (audit #4)."""
+        encrypted_key = VPNEncryption.encrypt_ssh_private_key(
+            "-----BEGIN RSA PRIVATE KEY-----\nx\n-----END RSA PRIVATE KEY-----"
+        )
         profile = ServerProfile(
             user_id=test_user.id,
             name="Test",
@@ -263,13 +312,9 @@ MIIEpAIBAAKCAQEA0Z+4rqGr1+...truncated...
         )
         db_session.add(profile)
         db_session.commit()
-        
+
         response = client_with_user.post(f"/api/server-profiles/{profile.id}/start")
-        
-        assert response.status_code == 200
-        data = response.json()
-        assert data["profile_id"] == profile.id
-        assert data["status"] == "starting"
+        assert response.status_code == 403
 
 
 class TestVPNProfileAPI:
