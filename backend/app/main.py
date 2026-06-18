@@ -99,6 +99,12 @@ def create_app() -> FastAPI:
 
     app.add_exception_handler(RequestValidationError, _validation_exception_handler)  # type: ignore[arg-type]
 
+    # Global exception handlers: ServiceError → safe mapped response; HTTPException
+    # 5xx scrubber; catch-all → generic 500. Keeps internal error strings out of
+    # API responses (audit GAP-10 / B3).
+    from app.core.exception_handlers import register_exception_handlers
+    register_exception_handlers(app)
+
     # Security headers: CSP, X-Frame-Options, X-Content-Type-Options, HSTS
     app.add_middleware(SecurityHeadersMiddleware)
 
