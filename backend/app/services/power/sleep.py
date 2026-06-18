@@ -139,6 +139,9 @@ class SleepManagerService:
         self._original_fan_modes: dict[str, str] = {}
         self._is_running = False
         self._was_in_core_uptime: bool = False  # edge-detection state; written by _schedule_check_loop (Task 6)
+        # Armed when a core-uptime window ends and core_uptime_suspend_on_exit is on;
+        # fires a true suspend on the next idle/unattended tick. In-memory only.
+        self._core_uptime_exit_pending: bool = False
         self._idle_task: Optional[asyncio.Task] = None
         self._schedule_task: Optional[asyncio.Task] = None
         self._escalation_task: Optional[asyncio.Task] = None
@@ -539,10 +542,6 @@ class SleepManagerService:
         """Check sleep schedule and core-uptime auto-wake every 60 seconds."""
         while self._is_running:
             try:
-                await asyncio.sleep(60)
-                if not self._is_running:
-                    break
-
                 now = datetime.now()
                 config = self._load_config()
 
@@ -584,6 +583,36 @@ class SleepManagerService:
                 # blocks third-party suspends.
                 self._reconcile_sleep_inhibitor(config, in_core=in_core)
 
+                # Suspend-on-exit: arm on the falling edge of an active window,
+                # fire a true suspend once the system is idle and unattended.
+                falling_edge = master and self._was_in_core_uptime and not in_core
+                if config and config.core_uptime_suspend_on_exit:
+                    if falling_edge:
+                        logger.info("Core uptime window ended — arming suspend-on-exit")
+                        self._core_uptime_exit_pending = True
+                    if in_core:
+                        # A window is active again — disarm.
+                        self._core_uptime_exit_pending = False
+                else:
+                    self._core_uptime_exit_pending = False
+
+                if (
+                    self._core_uptime_exit_pending
+                    and self._current_state == SleepState.AWAKE
+                    and not in_core
+                    and config is not None
+                    and not self._is_always_awake(config)
+                    and not self._is_user_present(config)
+                    and self._is_system_idle(config, self._get_activity_metrics())
+                ):
+                    logger.info(
+                        "Suspend-on-exit: system idle after core uptime — entering true suspend"
+                    )
+                    self._core_uptime_exit_pending = False
+                    await self.enter_true_suspend(
+                        "core_uptime_exit", SleepTrigger.CORE_UPTIME_EXIT, wake_at=None,
+                    )
+
                 # Track edge state regardless. When master is off we force False so
                 # that re-enabling the toggle while inside an active window registers
                 # as a fresh rising edge on the next tick and triggers auto-wake.
@@ -593,6 +622,9 @@ class SleepManagerService:
                     self._was_in_core_uptime = False
 
                 if not config or not config.schedule_enabled:
+                    await asyncio.sleep(60)
+                    if not self._is_running:
+                        break
                     continue
 
                 current_time = now.strftime("%H:%M")
@@ -603,30 +635,33 @@ class SleepManagerService:
                             logger.info(
                                 "Schedule sleep trigger suppressed by always-awake override",
                             )
-                            continue
-                        if in_core:
+                        elif in_core:
                             logger.info(
                                 "Schedule sleep trigger suppressed by active core uptime window",
                             )
-                            continue
-                        mode = config.schedule_mode
-                        if mode == "suspend":
-                            if self._is_user_present(config):
-                                logger.info(
-                                    "Schedule suspend trigger suppressed by user presence",
-                                )
-                                continue
-                            wake_dt = self._next_occurrence(config.schedule_wake_time)
-                            await self.enter_true_suspend(
-                                "scheduled_suspend",
-                                SleepTrigger.SCHEDULE,
-                                wake_at=wake_dt,
-                            )
                         else:
-                            await self.enter_soft_sleep("scheduled_sleep", SleepTrigger.SCHEDULE)
+                            mode = config.schedule_mode
+                            if mode == "suspend":
+                                if self._is_user_present(config):
+                                    logger.info(
+                                        "Schedule suspend trigger suppressed by user presence",
+                                    )
+                                else:
+                                    wake_dt = self._next_occurrence(config.schedule_wake_time)
+                                    await self.enter_true_suspend(
+                                        "scheduled_suspend",
+                                        SleepTrigger.SCHEDULE,
+                                        wake_at=wake_dt,
+                                    )
+                            else:
+                                await self.enter_soft_sleep("scheduled_sleep", SleepTrigger.SCHEDULE)
                 elif self._current_state == SleepState.SOFT_SLEEP:
                     if self._time_matches(current_time, config.schedule_wake_time):
                         await self.exit_soft_sleep("scheduled_wake")
+
+                await asyncio.sleep(60)
+                if not self._is_running:
+                    break
 
             except asyncio.CancelledError:
                 break
@@ -635,6 +670,9 @@ class SleepManagerService:
                 self._last_error = str(e)
                 self._last_error_at = datetime.now(timezone.utc)
                 logger.warning("Error in schedule check loop: %s", e)
+                await asyncio.sleep(60)
+                if not self._is_running:
+                    break
 
     async def _escalation_monitor(self) -> None:
         """Monitor soft sleep duration and escalate to suspend if configured."""

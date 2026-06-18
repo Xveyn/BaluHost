@@ -16,7 +16,8 @@ def _build_service():
     return SleepManagerService(DevSleepBackend())
 
 
-def _config(core_enabled: bool = True, auto_idle_enabled: bool = True, idle_timeout_minutes: int = 1):
+def _config(core_enabled: bool = True, auto_idle_enabled: bool = True, idle_timeout_minutes: int = 1,
+            suspend_on_exit: bool = False):
     cfg = SleepConfig(
         id=1,
         auto_idle_enabled=auto_idle_enabled,
@@ -37,6 +38,7 @@ def _config(core_enabled: bool = True, auto_idle_enabled: bool = True, idle_time
         reduced_telemetry_interval=30.0,
         disk_spindown_enabled=False,
         core_uptime_enabled=core_enabled,
+        core_uptime_suspend_on_exit=suspend_on_exit,
     )
     return cfg
 
@@ -611,3 +613,276 @@ async def test_baluhost_initiated_suspend_sets_flag_around_backend_call():
         assert svc.is_baluhost_suspend_in_progress() is False
 
     assert flag_during_backend == [True]
+
+
+# --------------------------------------------------------------------------
+# Suspend on core-uptime exit (2026-06-18)
+# --------------------------------------------------------------------------
+
+def _patch_loop_env(svc, cfg, *, in_core, idle, present=False, always_awake=False):
+    """Common patch set for driving _schedule_check_loop one or more ticks.
+
+    `in_core` may be a tuple (active, window) or a side_effect callable.
+    """
+    is_in_core = in_core if callable(in_core) else (lambda *a, **k: in_core)
+    return [
+        patch.object(svc, "_load_config", return_value=cfg),
+        patch.object(svc, "_load_core_uptime", return_value=(True, [_window_workdays_8_22()])),
+        patch("app.services.power.sleep.core_uptime_helpers.is_in_core_uptime", side_effect=is_in_core),
+        patch.object(svc, "_is_system_idle", return_value=idle),
+        patch.object(svc, "_is_user_present", return_value=present),
+        patch.object(svc, "_is_always_awake", return_value=always_awake),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_suspend_on_exit_arms_and_fires_when_idle():
+    svc = _build_service()
+    cfg = _config(core_enabled=True, suspend_on_exit=True)
+    suspend_calls = []
+
+    async def fake_suspend(reason, trigger=None, wake_at=None):
+        suspend_calls.append((reason, trigger, wake_at))
+        return True
+
+    patches = _patch_loop_env(svc, cfg, in_core=(False, None), idle=True)
+    import contextlib
+    with contextlib.ExitStack() as stack:
+        for p in patches:
+            stack.enter_context(p)
+        svc.enter_true_suspend = fake_suspend
+        svc._is_running = True
+        svc._current_state = SleepState.AWAKE
+        svc._was_in_core_uptime = True  # we were inside a window on the previous tick
+
+        async def stop_after_one(*_a, **_k):
+            svc._is_running = False
+
+        stack.enter_context(patch("app.services.power.sleep.asyncio.sleep", side_effect=stop_after_one))
+        await svc._schedule_check_loop()
+
+    assert len(suspend_calls) == 1
+    assert suspend_calls[0][0] == "core_uptime_exit"
+    assert suspend_calls[0][1] == SleepTrigger.CORE_UPTIME_EXIT
+    assert suspend_calls[0][2] is None  # wake_at=None -> clamped inside enter_true_suspend
+    assert svc._core_uptime_exit_pending is False
+
+
+@pytest.mark.asyncio
+async def test_suspend_on_exit_waits_while_busy():
+    svc = _build_service()
+    cfg = _config(core_enabled=True, suspend_on_exit=True)
+    suspend_calls = []
+
+    async def fake_suspend(*a, **k):
+        suspend_calls.append((a, k))
+        return True
+
+    patches = _patch_loop_env(svc, cfg, in_core=(False, None), idle=False)  # busy
+    import contextlib
+    with contextlib.ExitStack() as stack:
+        for p in patches:
+            stack.enter_context(p)
+        svc.enter_true_suspend = fake_suspend
+        svc._is_running = True
+        svc._current_state = SleepState.AWAKE
+        svc._was_in_core_uptime = True
+
+        async def stop_after_one(*_a, **_k):
+            svc._is_running = False
+
+        stack.enter_context(patch("app.services.power.sleep.asyncio.sleep", side_effect=stop_after_one))
+        await svc._schedule_check_loop()
+
+    assert suspend_calls == []                       # busy -> no suspend
+    assert svc._core_uptime_exit_pending is True     # armed, waiting
+
+
+@pytest.mark.asyncio
+async def test_suspend_on_exit_fires_on_next_idle_tick():
+    svc = _build_service()
+    cfg = _config(core_enabled=True, suspend_on_exit=True)
+    suspend_calls = []
+
+    async def fake_suspend(reason, trigger=None, wake_at=None):
+        suspend_calls.append(reason)
+        return True
+
+    idle_seq = iter([False, True])  # tick1 busy, tick2 idle
+
+    import contextlib
+    with contextlib.ExitStack() as stack:
+        stack.enter_context(patch.object(svc, "_load_config", return_value=cfg))
+        stack.enter_context(patch.object(svc, "_load_core_uptime", return_value=(True, [_window_workdays_8_22()])))
+        stack.enter_context(patch("app.services.power.sleep.core_uptime_helpers.is_in_core_uptime",
+                                  side_effect=lambda *a, **k: (False, None)))
+        stack.enter_context(patch.object(svc, "_is_system_idle", side_effect=lambda *a, **k: next(idle_seq)))
+        stack.enter_context(patch.object(svc, "_is_user_present", return_value=False))
+        stack.enter_context(patch.object(svc, "_is_always_awake", return_value=False))
+        svc.enter_true_suspend = fake_suspend
+        svc._is_running = True
+        svc._current_state = SleepState.AWAKE
+        svc._was_in_core_uptime = True
+
+        ticks = [0]
+
+        async def two_ticks(*_a, **_k):
+            ticks[0] += 1
+            if ticks[0] >= 2:
+                svc._is_running = False
+
+        stack.enter_context(patch("app.services.power.sleep.asyncio.sleep", side_effect=two_ticks))
+        await svc._schedule_check_loop()
+
+    assert suspend_calls == ["core_uptime_exit"]  # fired exactly once, on the idle tick
+
+
+@pytest.mark.asyncio
+async def test_suspend_on_exit_blocked_by_presence():
+    svc = _build_service()
+    cfg = _config(core_enabled=True, suspend_on_exit=True)
+    suspend_calls = []
+
+    async def fake_suspend(*a, **k):
+        suspend_calls.append(a)
+        return True
+
+    patches = _patch_loop_env(svc, cfg, in_core=(False, None), idle=True, present=True)
+    import contextlib
+    with contextlib.ExitStack() as stack:
+        for p in patches:
+            stack.enter_context(p)
+        svc.enter_true_suspend = fake_suspend
+        svc._is_running = True
+        svc._current_state = SleepState.AWAKE
+        svc._was_in_core_uptime = True
+
+        async def stop_after_one(*_a, **_k):
+            svc._is_running = False
+
+        stack.enter_context(patch("app.services.power.sleep.asyncio.sleep", side_effect=stop_after_one))
+        await svc._schedule_check_loop()
+
+    assert suspend_calls == []
+    assert svc._core_uptime_exit_pending is True  # stays armed; presence is a gate, not a disarm
+
+
+@pytest.mark.asyncio
+async def test_suspend_on_exit_blocked_by_always_awake():
+    svc = _build_service()
+    cfg = _config(core_enabled=True, suspend_on_exit=True)
+    suspend_calls = []
+
+    async def fake_suspend(*a, **k):
+        suspend_calls.append(a)
+        return True
+
+    patches = _patch_loop_env(svc, cfg, in_core=(False, None), idle=True, always_awake=True)
+    import contextlib
+    with contextlib.ExitStack() as stack:
+        for p in patches:
+            stack.enter_context(p)
+        svc.enter_true_suspend = fake_suspend
+        svc._is_running = True
+        svc._current_state = SleepState.AWAKE
+        svc._was_in_core_uptime = True
+
+        async def stop_after_one(*_a, **_k):
+            svc._is_running = False
+
+        stack.enter_context(patch("app.services.power.sleep.asyncio.sleep", side_effect=stop_after_one))
+        await svc._schedule_check_loop()
+
+    assert suspend_calls == []
+
+
+@pytest.mark.asyncio
+async def test_suspend_on_exit_disarmed_by_new_window():
+    svc = _build_service()
+    cfg = _config(core_enabled=True, suspend_on_exit=True)
+    suspend_calls = []
+
+    async def fake_suspend(*a, **k):
+        suspend_calls.append(a)
+        return True
+
+    patches = _patch_loop_env(svc, cfg, in_core=(True, _window_workdays_8_22()), idle=True)
+    import contextlib
+    with contextlib.ExitStack() as stack:
+        for p in patches:
+            stack.enter_context(p)
+        svc.enter_true_suspend = fake_suspend
+        svc._is_running = True
+        svc._current_state = SleepState.AWAKE
+        svc._was_in_core_uptime = True
+        svc._core_uptime_exit_pending = True  # pretend a prior tick armed it
+
+        async def stop_after_one(*_a, **_k):
+            svc._is_running = False
+
+        stack.enter_context(patch("app.services.power.sleep.asyncio.sleep", side_effect=stop_after_one))
+        await svc._schedule_check_loop()
+
+    assert suspend_calls == []
+    assert svc._core_uptime_exit_pending is False  # new active window disarms
+
+
+@pytest.mark.asyncio
+async def test_suspend_on_exit_flag_off_never_arms():
+    svc = _build_service()
+    cfg = _config(core_enabled=True, suspend_on_exit=False)  # feature off
+    suspend_calls = []
+
+    async def fake_suspend(*a, **k):
+        suspend_calls.append(a)
+        return True
+
+    patches = _patch_loop_env(svc, cfg, in_core=(False, None), idle=True)
+    import contextlib
+    with contextlib.ExitStack() as stack:
+        for p in patches:
+            stack.enter_context(p)
+        svc.enter_true_suspend = fake_suspend
+        svc._is_running = True
+        svc._current_state = SleepState.AWAKE
+        svc._was_in_core_uptime = True
+
+        async def stop_after_one(*_a, **_k):
+            svc._is_running = False
+
+        stack.enter_context(patch("app.services.power.sleep.asyncio.sleep", side_effect=stop_after_one))
+        await svc._schedule_check_loop()
+
+    assert suspend_calls == []
+    assert svc._core_uptime_exit_pending is False
+
+
+@pytest.mark.asyncio
+async def test_suspend_on_exit_works_without_schedule():
+    """Regression guard: must fire even though schedule_enabled is False
+    (insert position is BEFORE the `if not schedule_enabled: continue`)."""
+    svc = _build_service()
+    cfg = _config(core_enabled=True, suspend_on_exit=True)  # schedule_enabled defaults False
+    suspend_calls = []
+
+    async def fake_suspend(reason, trigger=None, wake_at=None):
+        suspend_calls.append(reason)
+        return True
+
+    patches = _patch_loop_env(svc, cfg, in_core=(False, None), idle=True)
+    import contextlib
+    with contextlib.ExitStack() as stack:
+        for p in patches:
+            stack.enter_context(p)
+        svc.enter_true_suspend = fake_suspend
+        svc._is_running = True
+        svc._current_state = SleepState.AWAKE
+        svc._was_in_core_uptime = True
+
+        async def stop_after_one(*_a, **_k):
+            svc._is_running = False
+
+        stack.enter_context(patch("app.services.power.sleep.asyncio.sleep", side_effect=stop_after_one))
+        await svc._schedule_check_loop()
+
+    assert suspend_calls == ["core_uptime_exit"]
