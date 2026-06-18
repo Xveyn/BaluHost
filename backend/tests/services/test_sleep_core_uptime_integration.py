@@ -1,4 +1,5 @@
 """Integration tests: SleepManagerService respects core uptime windows."""
+import contextlib
 from datetime import datetime
 from unittest.mock import patch, MagicMock, AsyncMock
 
@@ -74,9 +75,6 @@ def test_load_core_uptime_returns_enabled_windows():
     assert master is True
     assert len(windows) == 1
     assert windows[0].label == "Werktage"
-
-
-import asyncio
 
 
 @pytest.mark.asyncio
@@ -632,6 +630,7 @@ def _patch_loop_env(svc, cfg, *, in_core, idle, present=False, always_awake=Fals
         patch.object(svc, "_is_system_idle", return_value=idle),
         patch.object(svc, "_is_user_present", return_value=present),
         patch.object(svc, "_is_always_awake", return_value=always_awake),
+        patch.object(svc, "_reconcile_sleep_inhibitor"),
     ]
 
 
@@ -646,7 +645,6 @@ async def test_suspend_on_exit_arms_and_fires_when_idle():
         return True
 
     patches = _patch_loop_env(svc, cfg, in_core=(False, None), idle=True)
-    import contextlib
     with contextlib.ExitStack() as stack:
         for p in patches:
             stack.enter_context(p)
@@ -716,7 +714,6 @@ async def test_suspend_on_exit_fires_on_next_idle_tick():
 
     idle_seq = iter([False, True])  # tick1 busy, tick2 idle
 
-    import contextlib
     with contextlib.ExitStack() as stack:
         stack.enter_context(patch.object(svc, "_load_config", return_value=cfg))
         stack.enter_context(patch.object(svc, "_load_core_uptime", return_value=(True, [_window_workdays_8_22()])))
@@ -787,7 +784,6 @@ async def test_suspend_on_exit_blocked_by_always_awake():
         return True
 
     patches = _patch_loop_env(svc, cfg, in_core=(False, None), idle=True, always_awake=True)
-    import contextlib
     with contextlib.ExitStack() as stack:
         for p in patches:
             stack.enter_context(p)
@@ -806,6 +802,7 @@ async def test_suspend_on_exit_blocked_by_always_awake():
         await svc._schedule_check_loop()
 
     assert suspend_calls == []
+    assert svc._core_uptime_exit_pending is True  # always-awake is a gate, pending stays armed
 
 
 @pytest.mark.asyncio
@@ -853,7 +850,6 @@ async def test_suspend_on_exit_flag_off_never_arms():
         return True
 
     patches = _patch_loop_env(svc, cfg, in_core=(False, None), idle=True)
-    import contextlib
     with contextlib.ExitStack() as stack:
         for p in patches:
             stack.enter_context(p)
@@ -888,7 +884,6 @@ async def test_suspend_on_exit_works_without_schedule():
         return True
 
     patches = _patch_loop_env(svc, cfg, in_core=(False, None), idle=True)
-    import contextlib
     with contextlib.ExitStack() as stack:
         for p in patches:
             stack.enter_context(p)
