@@ -655,8 +655,11 @@ async def test_suspend_on_exit_arms_and_fires_when_idle():
         svc._current_state = SleepState.AWAKE
         svc._was_in_core_uptime = True  # we were inside a window on the previous tick
 
+        _sleep_calls = [0]
         async def stop_after_one(*_a, **_k):
-            svc._is_running = False
+            _sleep_calls[0] += 1
+            if _sleep_calls[0] >= 2:
+                svc._is_running = False
 
         stack.enter_context(patch("app.services.power.sleep.asyncio.sleep", side_effect=stop_after_one))
         await svc._schedule_check_loop()
@@ -688,8 +691,11 @@ async def test_suspend_on_exit_waits_while_busy():
         svc._current_state = SleepState.AWAKE
         svc._was_in_core_uptime = True
 
+        _sleep_calls = [0]
         async def stop_after_one(*_a, **_k):
-            svc._is_running = False
+            _sleep_calls[0] += 1
+            if _sleep_calls[0] >= 2:
+                svc._is_running = False
 
         stack.enter_context(patch("app.services.power.sleep.asyncio.sleep", side_effect=stop_after_one))
         await svc._schedule_check_loop()
@@ -728,7 +734,7 @@ async def test_suspend_on_exit_fires_on_next_idle_tick():
 
         async def two_ticks(*_a, **_k):
             ticks[0] += 1
-            if ticks[0] >= 2:
+            if ticks[0] >= 3:
                 svc._is_running = False
 
         stack.enter_context(patch("app.services.power.sleep.asyncio.sleep", side_effect=two_ticks))
@@ -757,8 +763,11 @@ async def test_suspend_on_exit_blocked_by_presence():
         svc._current_state = SleepState.AWAKE
         svc._was_in_core_uptime = True
 
+        _sleep_calls = [0]
         async def stop_after_one(*_a, **_k):
-            svc._is_running = False
+            _sleep_calls[0] += 1
+            if _sleep_calls[0] >= 2:
+                svc._is_running = False
 
         stack.enter_context(patch("app.services.power.sleep.asyncio.sleep", side_effect=stop_after_one))
         await svc._schedule_check_loop()
@@ -787,8 +796,11 @@ async def test_suspend_on_exit_blocked_by_always_awake():
         svc._current_state = SleepState.AWAKE
         svc._was_in_core_uptime = True
 
+        _sleep_calls = [0]
         async def stop_after_one(*_a, **_k):
-            svc._is_running = False
+            _sleep_calls[0] += 1
+            if _sleep_calls[0] >= 2:
+                svc._is_running = False
 
         stack.enter_context(patch("app.services.power.sleep.asyncio.sleep", side_effect=stop_after_one))
         await svc._schedule_check_loop()
@@ -817,8 +829,11 @@ async def test_suspend_on_exit_disarmed_by_new_window():
         svc._was_in_core_uptime = True
         svc._core_uptime_exit_pending = True  # pretend a prior tick armed it
 
+        _sleep_calls = [0]
         async def stop_after_one(*_a, **_k):
-            svc._is_running = False
+            _sleep_calls[0] += 1
+            if _sleep_calls[0] >= 2:
+                svc._is_running = False
 
         stack.enter_context(patch("app.services.power.sleep.asyncio.sleep", side_effect=stop_after_one))
         await svc._schedule_check_loop()
@@ -847,8 +862,11 @@ async def test_suspend_on_exit_flag_off_never_arms():
         svc._current_state = SleepState.AWAKE
         svc._was_in_core_uptime = True
 
+        _sleep_calls = [0]
         async def stop_after_one(*_a, **_k):
-            svc._is_running = False
+            _sleep_calls[0] += 1
+            if _sleep_calls[0] >= 2:
+                svc._is_running = False
 
         stack.enter_context(patch("app.services.power.sleep.asyncio.sleep", side_effect=stop_after_one))
         await svc._schedule_check_loop()
@@ -879,8 +897,11 @@ async def test_suspend_on_exit_works_without_schedule():
         svc._current_state = SleepState.AWAKE
         svc._was_in_core_uptime = True
 
+        _sleep_calls = [0]
         async def stop_after_one(*_a, **_k):
-            svc._is_running = False
+            _sleep_calls[0] += 1
+            if _sleep_calls[0] >= 2:
+                svc._is_running = False
 
         stack.enter_context(patch("app.services.power.sleep.asyncio.sleep", side_effect=stop_after_one))
         await svc._schedule_check_loop()

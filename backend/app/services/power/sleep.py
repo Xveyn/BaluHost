@@ -542,6 +542,10 @@ class SleepManagerService:
         """Check sleep schedule and core-uptime auto-wake every 60 seconds."""
         while self._is_running:
             try:
+                await asyncio.sleep(60)
+                if not self._is_running:
+                    break
+
                 now = datetime.now()
                 config = self._load_config()
 
@@ -622,9 +626,6 @@ class SleepManagerService:
                     self._was_in_core_uptime = False
 
                 if not config or not config.schedule_enabled:
-                    await asyncio.sleep(60)
-                    if not self._is_running:
-                        break
                     continue
 
                 current_time = now.strftime("%H:%M")
@@ -635,33 +636,30 @@ class SleepManagerService:
                             logger.info(
                                 "Schedule sleep trigger suppressed by always-awake override",
                             )
-                        elif in_core:
+                            continue
+                        if in_core:
                             logger.info(
                                 "Schedule sleep trigger suppressed by active core uptime window",
                             )
+                            continue
+                        mode = config.schedule_mode
+                        if mode == "suspend":
+                            if self._is_user_present(config):
+                                logger.info(
+                                    "Schedule suspend trigger suppressed by user presence",
+                                )
+                                continue
+                            wake_dt = self._next_occurrence(config.schedule_wake_time)
+                            await self.enter_true_suspend(
+                                "scheduled_suspend",
+                                SleepTrigger.SCHEDULE,
+                                wake_at=wake_dt,
+                            )
                         else:
-                            mode = config.schedule_mode
-                            if mode == "suspend":
-                                if self._is_user_present(config):
-                                    logger.info(
-                                        "Schedule suspend trigger suppressed by user presence",
-                                    )
-                                else:
-                                    wake_dt = self._next_occurrence(config.schedule_wake_time)
-                                    await self.enter_true_suspend(
-                                        "scheduled_suspend",
-                                        SleepTrigger.SCHEDULE,
-                                        wake_at=wake_dt,
-                                    )
-                            else:
-                                await self.enter_soft_sleep("scheduled_sleep", SleepTrigger.SCHEDULE)
+                            await self.enter_soft_sleep("scheduled_sleep", SleepTrigger.SCHEDULE)
                 elif self._current_state == SleepState.SOFT_SLEEP:
                     if self._time_matches(current_time, config.schedule_wake_time):
                         await self.exit_soft_sleep("scheduled_wake")
-
-                await asyncio.sleep(60)
-                if not self._is_running:
-                    break
 
             except asyncio.CancelledError:
                 break
@@ -670,9 +668,6 @@ class SleepManagerService:
                 self._last_error = str(e)
                 self._last_error_at = datetime.now(timezone.utc)
                 logger.warning("Error in schedule check loop: %s", e)
-                await asyncio.sleep(60)
-                if not self._is_running:
-                    break
 
     async def _escalation_monitor(self) -> None:
         """Monitor soft sleep duration and escalate to suspend if configured."""
