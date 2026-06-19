@@ -102,14 +102,16 @@ async def list_marketplace(
             service.invalidate_cache()
         return _serialize_index(service)
     except IndexFetchError as exc:
+        logger.warning("failed to fetch marketplace index: %s", exc)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"failed to fetch marketplace index: {exc}",
+            detail="failed to fetch marketplace index",
         ) from exc
     except IndexParseError as exc:
+        logger.warning("malformed marketplace index: %s", exc)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"malformed marketplace index: {exc}",
+            detail="malformed marketplace index",
         ) from exc
 
 
@@ -143,29 +145,34 @@ async def install_plugin(
         )
     except PluginNotFoundError as exc:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"plugin {plugin_name!r} not found in marketplace",
         ) from exc
     except ResolverConflictError as exc:
         raise _conflicts_to_http(exc) from exc
     except ChecksumError as exc:
+        logger.warning("marketplace checksum mismatch for %r: %s", plugin_name, exc)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"checksum mismatch: {exc}",
+            detail="checksum mismatch",
         ) from exc
     except (DownloadError, IndexFetchError) as exc:
+        logger.warning("marketplace download failed for %r: %s", plugin_name, exc)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"download failed: {exc}",
+            detail="download failed",
         ) from exc
     except (ArchiveError, ManifestMismatchError, IndexParseError) as exc:
+        logger.warning("invalid plugin artifact for %r: %s", plugin_name, exc)
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"invalid plugin artifact: {exc}",
+            detail="invalid plugin artifact",
         ) from exc
     except PipInstallError as exc:
+        logger.error("pip install failed for %r: %s", plugin_name, exc)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"pip install failed: {exc}",
+            detail="pip install failed",
         ) from exc
 
     logger.info(

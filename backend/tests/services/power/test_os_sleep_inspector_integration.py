@@ -29,6 +29,16 @@ def linux_fs(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(ins, "_SLEEP_DROPIN_DIRS", (systemd / "sleep.conf.d",))
     monkeypatch.setattr(ins, "_LID_SENSOR", tmp_path / "no-lid")
     monkeypatch.setattr(ins.sys, "platform", "linux")
+    # inspect_os_sleep() also probes the KDE/GNOME auto-suspend backend, which
+    # shells out via `pgrep` (subprocess.run). Since these tests patch the
+    # shared subprocess.run and assert on its call count, that probe would leak
+    # an extra, order-dependent call (its 30s detection cache is not reset
+    # between tests). Neutralise it so the count reflects only the systemctl
+    # query under test.
+    monkeypatch.setattr(
+        "app.services.power.os_auto_suspend.detect_active_backend",
+        lambda: None,
+    )
     return systemd
 
 
