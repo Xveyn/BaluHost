@@ -474,7 +474,7 @@ async def switch_power_backend(
         logger.error(f"Error checking Linux backend availability: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error checking backend availability: {str(e)}"
+            detail="Error checking backend availability"
         )
 
     if body.use_linux_backend and not linux_available:
@@ -490,7 +490,7 @@ async def switch_power_backend(
         logger.error(f"Error switching backend: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error switching backend: {str(e)}"
+            detail="Error switching backend"
         )
 
     if not success:

@@ -3,6 +3,7 @@
 Kept separate from monitoring.py because that file is already large.
 Registered under the same /api/monitoring prefix in routes/__init__.py.
 """
+import logging
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
@@ -19,6 +20,8 @@ from app.schemas.monitoring import (
     TimeRangeEnum,
 )
 from app.services.monitoring.orchestrator import get_monitoring_orchestrator
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/monitoring", tags=["system-monitoring"])
 
@@ -47,7 +50,8 @@ async def get_gpu_info(
     try:
         return orch.gpu_collector.backend.device_info()
     except Exception as exc:
-        raise HTTPException(status_code=503, detail=f"GPU info unavailable: {exc}")
+        logger.error("GPU device_info failed: %s", exc)
+        raise HTTPException(status_code=503, detail="GPU info unavailable")
 
 
 @router.get("/gpu/current", response_model=CurrentGpuResponse)
