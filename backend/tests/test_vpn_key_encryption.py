@@ -250,6 +250,25 @@ class TestVPNKeyEncryptionDisabled:
         result = VPNService._decrypt_key(raw_key)
         assert result == raw_key
 
+    def test_encrypt_key_raises_in_prod_without_key(self, monkeypatch):
+        """Production must hard-fail rather than silently store key material in plaintext."""
+        monkeypatch.setattr(
+            VPNService, "_encryption_available", staticmethod(lambda: False)
+        )
+        monkeypatch.setenv("NAS_MODE", "prod")
+        monkeypatch.delenv("SKIP_APP_INIT", raising=False)
+        monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+        with pytest.raises(RuntimeError, match="VPN_ENCRYPTION_KEY"):
+            VPNService._encrypt_key("rawkey")
+
+    def test_encrypt_key_falls_back_to_plaintext_in_dev(self, monkeypatch):
+        """In dev mode a missing key falls back to plaintext (local-dev convenience)."""
+        monkeypatch.setattr(
+            VPNService, "_encryption_available", staticmethod(lambda: False)
+        )
+        monkeypatch.setenv("NAS_MODE", "dev")
+        assert VPNService._encrypt_key("rawkey") == "rawkey"
+
 
 # ---------------------------------------------------------------------------
 # Tests — helper methods
