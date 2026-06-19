@@ -121,7 +121,7 @@ async def fetch_config_by_type(
             )
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=str(e),
+                detail="Failed to generate VPN configuration",
             )
 
         audit_logger.log_vpn_operation(
@@ -190,7 +190,7 @@ async def generate_vpn_config(
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
+            detail="Failed to generate VPN configuration"
         )
 
 
@@ -520,7 +520,7 @@ async def regenerate_client_config(
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e),
+            detail="Failed to regenerate VPN configuration",
         )
 
 
@@ -616,15 +616,10 @@ async def upload_fritzbox_config(
             public_endpoint=config_data.public_endpoint
         )
         return config
-    except ValueError as e:
+    except ValueError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid config format: {str(e)}"
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to upload config: {str(e)}"
+            detail="Invalid Fritz!Box config format"
         )
 
 
@@ -693,10 +688,10 @@ async def get_fritzbox_qr_code(
     try:
         config_base64 = VPNService.get_fritzbox_config_base64(db)
         return {"config_base64": config_base64}
-    except ValueError as e:
+    except ValueError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e)
+            detail="No active Fritz!Box VPN config available"
         )
     except Exception as e:
         logger.error("Failed to generate Fritz!Box QR data: %s", e)
