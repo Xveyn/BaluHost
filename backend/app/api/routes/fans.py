@@ -75,23 +75,18 @@ async def get_fan_status(
 
     Requires authentication.
     """
-    try:
-        status = await service.get_status()
+    status = await service.get_status()
 
-        # Convert to response model
-        fans = [FanInfo(**fan_data) for fan_data in status["fans"]]
+    # Convert to response model
+    fans = [FanInfo(**fan_data) for fan_data in status["fans"]]
 
-        return FanStatusResponse(
-            fans=fans,
-            is_dev_mode=status["is_dev_mode"],
-            is_using_linux_backend=status["is_using_linux_backend"],
-            permission_status=status["permission_status"],
-            backend_available=status["backend_available"],
-        )
-
-    except Exception as e:
-        logger.error(f"Failed to get fan status: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to get fan status: {str(e)}")
+    return FanStatusResponse(
+        fans=fans,
+        is_dev_mode=status["is_dev_mode"],
+        is_using_linux_backend=status["is_using_linux_backend"],
+        permission_status=status["permission_status"],
+        backend_available=status["backend_available"],
+    )
 
 
 @router.get("/list", response_model=list[FanInfo])
@@ -106,14 +101,9 @@ async def list_fans(
 
     Requires authentication.
     """
-    try:
-        status = await service.get_status()
-        fans = [FanInfo(**fan_data) for fan_data in status["fans"]]
-        return fans
-
-    except Exception as e:
-        logger.error(f"Failed to list fans: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to list fans: {str(e)}")
+    status = await service.get_status()
+    fans = [FanInfo(**fan_data) for fan_data in status["fans"]]
+    return fans
 
 
 @router.post("/mode", response_model=SetFanModeResponse)
@@ -129,31 +119,24 @@ async def set_fan_mode(
 
     Requires admin role.
     """
-    try:
-        # Don't allow setting emergency mode directly
-        if body.mode == FanMode.EMERGENCY:
-            raise HTTPException(
-                status_code=400,
-                detail="Cannot manually set emergency mode (triggered automatically)"
-            )
-
-        success = await service.set_fan_mode(body.fan_id, body.mode)
-
-        if not success:
-            raise HTTPException(status_code=404, detail=f"Fan {body.fan_id} not found")
-
-        return SetFanModeResponse(
-            success=True,
-            fan_id=body.fan_id,
-            mode=body.mode,
-            message=f"Fan mode set to {body.mode.value}",
+    # Don't allow setting emergency mode directly
+    if body.mode == FanMode.EMERGENCY:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot manually set emergency mode (triggered automatically)"
         )
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to set fan mode: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to set fan mode: {str(e)}")
+    success = await service.set_fan_mode(body.fan_id, body.mode)
+
+    if not success:
+        raise HTTPException(status_code=404, detail=f"Fan {body.fan_id} not found")
+
+    return SetFanModeResponse(
+        success=True,
+        fan_id=body.fan_id,
+        mode=body.mode,
+        message=f"Fan mode set to {body.mode.value}",
+    )
 
 
 @router.post("/pwm", response_model=SetFanPWMResponse)
@@ -170,28 +153,21 @@ async def set_fan_pwm(
     Only works when fan is in manual mode.
     Requires admin role.
     """
-    try:
-        success, rpm = await service.set_fan_pwm(body.fan_id, body.pwm_percent)
+    success, rpm = await service.set_fan_pwm(body.fan_id, body.pwm_percent)
 
-        if not success:
-            raise HTTPException(
-                status_code=400,
-                detail="Failed to set PWM (fan not in manual mode or not found)"
-            )
-
-        return SetFanPWMResponse(
-            success=True,
-            fan_id=body.fan_id,
-            pwm_percent=body.pwm_percent,
-            actual_rpm=rpm,
-            message=f"PWM set to {body.pwm_percent}%",
+    if not success:
+        raise HTTPException(
+            status_code=400,
+            detail="Failed to set PWM (fan not in manual mode or not found)"
         )
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to set fan PWM: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to set fan PWM: {str(e)}")
+    return SetFanPWMResponse(
+        success=True,
+        fan_id=body.fan_id,
+        pwm_percent=body.pwm_percent,
+        actual_rpm=rpm,
+        message=f"PWM set to {body.pwm_percent}%",
+    )
 
 
 @router.put("/curve", response_model=UpdateFanCurveResponse)
@@ -207,24 +183,17 @@ async def update_fan_curve(
 
     Requires admin role.
     """
-    try:
-        success = await service.update_fan_curve(body.fan_id, body.curve_points)
+    success = await service.update_fan_curve(body.fan_id, body.curve_points)
 
-        if not success:
-            raise HTTPException(status_code=404, detail=f"Fan {body.fan_id} not found")
+    if not success:
+        raise HTTPException(status_code=404, detail=f"Fan {body.fan_id} not found")
 
-        return UpdateFanCurveResponse(
-            success=True,
-            fan_id=body.fan_id,
-            curve_points=body.curve_points,
-            message=f"Curve updated with {len(body.curve_points)} points",
-        )
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to update fan curve: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to update fan curve: {str(e)}")
+    return UpdateFanCurveResponse(
+        success=True,
+        fan_id=body.fan_id,
+        curve_points=body.curve_points,
+        message=f"Curve updated with {len(body.curve_points)} points",
+    )
 
 
 @router.get("/history", response_model=FanHistoryResponse)
@@ -242,30 +211,25 @@ async def get_fan_history(
 
     Requires authentication.
     """
-    try:
-        samples, total_count = await service.get_history(fan_id, limit, offset)
+    samples, total_count = await service.get_history(fan_id, limit, offset)
 
-        sample_data = [
-            FanSampleData(
-                timestamp=sample.timestamp,
-                fan_id=sample.fan_id,
-                pwm_percent=sample.pwm_percent or 0,
-                rpm=sample.rpm,
-                temperature_celsius=sample.temperature_celsius,
-                mode=sample.mode,
-            )
-            for sample in samples
-        ]
-
-        return FanHistoryResponse(
-            samples=sample_data,
-            total_count=total_count,
-            fan_id=fan_id,
+    sample_data = [
+        FanSampleData(
+            timestamp=sample.timestamp,
+            fan_id=sample.fan_id,
+            pwm_percent=sample.pwm_percent or 0,
+            rpm=sample.rpm,
+            temperature_celsius=sample.temperature_celsius,
+            mode=sample.mode,
         )
+        for sample in samples
+    ]
 
-    except Exception as e:
-        logger.error(f"Failed to get fan history: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to get fan history: {str(e)}")
+    return FanHistoryResponse(
+        samples=sample_data,
+        total_count=total_count,
+        fan_id=fan_id,
+    )
 
 
 @router.post("/backend", response_model=SwitchBackendResponse)
@@ -281,31 +245,26 @@ async def switch_backend(
 
     Requires admin role.
     """
-    try:
-        success, is_using_linux = await service.switch_backend(body.use_linux_backend)
+    success, is_using_linux = await service.switch_backend(body.use_linux_backend)
 
-        message = ""
-        if success:
-            if is_using_linux:
-                message = "Switched to Linux hardware backend"
-            else:
-                message = "Switched to dev simulation backend"
+    message = ""
+    if success:
+        if is_using_linux:
+            message = "Switched to Linux hardware backend"
         else:
-            if body.use_linux_backend:
-                message = "Linux backend not available, staying on current backend"
-            else:
-                message = "Failed to switch backend"
+            message = "Switched to dev simulation backend"
+    else:
+        if body.use_linux_backend:
+            message = "Linux backend not available, staying on current backend"
+        else:
+            message = "Failed to switch backend"
 
-        return SwitchBackendResponse(
-            success=success,
-            is_using_linux_backend=is_using_linux,
-            backend_available=success,
-            message=message,
-        )
-
-    except Exception as e:
-        logger.error(f"Failed to switch backend: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to switch backend: {str(e)}")
+    return SwitchBackendResponse(
+        success=success,
+        is_using_linux_backend=is_using_linux,
+        backend_available=success,
+        message=message,
+    )
 
 
 @router.get("/permissions", response_model=PermissionStatusResponse)
@@ -320,42 +279,37 @@ async def get_permission_status(
 
     Returns information about whether the service has write access to fan controls.
     """
-    try:
-        status = await service.get_status()
+    status = await service.get_status()
 
-        has_write = status["permission_status"] == "ok"
-        perm_status = status["permission_status"]
+    has_write = status["permission_status"] == "ok"
+    perm_status = status["permission_status"]
 
-        message = ""
-        suggestions = []
+    message = ""
+    suggestions = []
 
-        if perm_status == "ok":
-            message = "Full fan control access available"
-        elif perm_status == "readonly":
-            message = "Read-only access (no write permissions to /sys/class/hwmon)"
-            suggestions = [
-                "Add user to cpufreq group: sudo usermod -aG cpufreq $USER",
-                "Or configure sudoers for tee access to hwmon files",
-                "Example sudoers entry: user ALL=(ALL) NOPASSWD: /usr/bin/tee /sys/class/hwmon/*/*",
-            ]
-        else:
-            message = "Fan control backend unavailable"
-            suggestions = [
-                "Ensure lm-sensors is installed: sudo apt install lm-sensors",
-                "Run sensors-detect: sudo sensors-detect",
-                "Check if PWM fans are detected: ls /sys/class/hwmon/*/pwm*",
-            ]
+    if perm_status == "ok":
+        message = "Full fan control access available"
+    elif perm_status == "readonly":
+        message = "Read-only access (no write permissions to /sys/class/hwmon)"
+        suggestions = [
+            "Add user to cpufreq group: sudo usermod -aG cpufreq $USER",
+            "Or configure sudoers for tee access to hwmon files",
+            "Example sudoers entry: user ALL=(ALL) NOPASSWD: /usr/bin/tee /sys/class/hwmon/*/*",
+        ]
+    else:
+        message = "Fan control backend unavailable"
+        suggestions = [
+            "Ensure lm-sensors is installed: sudo apt install lm-sensors",
+            "Run sensors-detect: sudo sensors-detect",
+            "Check if PWM fans are detected: ls /sys/class/hwmon/*/pwm*",
+        ]
 
-        return PermissionStatusResponse(
-            has_write_permission=has_write,
-            status=perm_status,
-            message=message,
-            suggestions=suggestions,
-        )
-
-    except Exception as e:
-        logger.error(f"Failed to check permissions: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to check permissions: {str(e)}")
+    return PermissionStatusResponse(
+        has_write_permission=has_write,
+        status=perm_status,
+        message=message,
+        suggestions=suggestions,
+    )
 
 
 @router.get("/sensors", response_model=TempSensorListResponse)
@@ -372,29 +326,25 @@ async def list_temp_sensors(
     custom labels and CPU sensor identification.
     Requires admin role.
     """
-    try:
-        # Refresh disk:* sources from the SMART summary SHM file before listing
-        # so newly-discovered disks show up without a service restart.
-        await service._refresh_disk_sources()
+    # Refresh disk:* sources from the SMART summary SHM file before listing
+    # so newly-discovered disks show up without a service restart.
+    await service._refresh_disk_sources()
 
-        sources = service._registry.all_sources()
-        items: List[TempSensorInfo] = []
-        for s in sources:
-            current = await service._registry.get_temp(s.id)
-            items.append(TempSensorInfo(
-                sensor_id=s.id,
-                device_name=s.device_name,
-                label=s.backend_label,
-                custom_label=service._registry._labels.get(s.id),
-                kind=s.kind,
-                gpu_vendor=getattr(s, "gpu_vendor", None) if s.kind == "gpu" else None,
-                is_cpu_sensor=s.is_cpu_sensor,
-                current_temp=current,
-            ))
-        return TempSensorListResponse(sensors=items, total_count=len(items))
-    except Exception as e:
-        logger.error(f"Failed to list temp sensors: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to list temp sensors: {str(e)}")
+    sources = service._registry.all_sources()
+    items: List[TempSensorInfo] = []
+    for s in sources:
+        current = await service._registry.get_temp(s.id)
+        items.append(TempSensorInfo(
+            sensor_id=s.id,
+            device_name=s.device_name,
+            label=s.backend_label,
+            custom_label=service._registry._labels.get(s.id),
+            kind=s.kind,
+            gpu_vendor=getattr(s, "gpu_vendor", None) if s.kind == "gpu" else None,
+            is_cpu_sensor=s.is_cpu_sensor,
+            current_temp=current,
+        ))
+    return TempSensorListResponse(sensors=items, total_count=len(items))
 
 
 MAX_COMPOSITES_PER_SYSTEM = 5
@@ -638,32 +588,25 @@ async def apply_preset(
 
     Requires admin role.
     """
-    try:
-        # Can't apply "custom" preset
-        if body.preset == CurvePreset.CUSTOM:
-            raise HTTPException(
-                status_code=400,
-                detail="Cannot apply 'custom' preset - use curve update instead"
-            )
-
-        success, curve_points = await service.apply_preset(body.fan_id, body.preset.value)
-
-        if not success:
-            raise HTTPException(status_code=404, detail=f"Fan {body.fan_id} not found")
-
-        return ApplyPresetResponse(
-            success=True,
-            fan_id=body.fan_id,
-            preset=body.preset.value,
-            curve_points=curve_points,
-            message=f"Applied {body.preset.value} preset",
+    # Can't apply "custom" preset
+    if body.preset == CurvePreset.CUSTOM:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot apply 'custom' preset - use curve update instead"
         )
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to apply preset: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to apply preset: {str(e)}")
+    success, curve_points = await service.apply_preset(body.fan_id, body.preset.value)
+
+    if not success:
+        raise HTTPException(status_code=404, detail=f"Fan {body.fan_id} not found")
+
+    return ApplyPresetResponse(
+        success=True,
+        fan_id=body.fan_id,
+        preset=body.preset.value,
+        curve_points=curve_points,
+        message=f"Applied {body.preset.value} preset",
+    )
 
 
 @router.patch("/config", response_model=UpdateFanConfigResponse)
@@ -679,47 +622,40 @@ async def update_fan_config(
 
     Requires admin role.
     """
-    try:
-        result = await service.update_fan_config(
-            fan_id=body.fan_id,
-            hysteresis_celsius=body.hysteresis_celsius,
-            min_pwm_percent=body.min_pwm_percent,
-            max_pwm_percent=body.max_pwm_percent,
-            emergency_temp_celsius=body.emergency_temp_celsius,
-            temp_sensor_id=body.temp_sensor_id,
-            curve_type=body.curve_type,
-            flat_pwm_percent=body.flat_pwm_percent,
-            target_temp_celsius=body.target_temp_celsius,
-            target_pwm_percent=body.target_pwm_percent,
-            mix_curve_a_id=body.mix_curve_a_id,
-            mix_curve_b_id=body.mix_curve_b_id,
-            mix_function=body.mix_function,
-            sync_fan_id=body.sync_fan_id,
-            start_pwm_percent=body.start_pwm_percent,
-            stop_below_temp_celsius=body.stop_below_temp_celsius,
-            response_time_seconds=body.response_time_seconds,
-            pwm_steps=body.pwm_steps,
-        )
+    result = await service.update_fan_config(
+        fan_id=body.fan_id,
+        hysteresis_celsius=body.hysteresis_celsius,
+        min_pwm_percent=body.min_pwm_percent,
+        max_pwm_percent=body.max_pwm_percent,
+        emergency_temp_celsius=body.emergency_temp_celsius,
+        temp_sensor_id=body.temp_sensor_id,
+        curve_type=body.curve_type,
+        flat_pwm_percent=body.flat_pwm_percent,
+        target_temp_celsius=body.target_temp_celsius,
+        target_pwm_percent=body.target_pwm_percent,
+        mix_curve_a_id=body.mix_curve_a_id,
+        mix_curve_b_id=body.mix_curve_b_id,
+        mix_function=body.mix_function,
+        sync_fan_id=body.sync_fan_id,
+        start_pwm_percent=body.start_pwm_percent,
+        stop_below_temp_celsius=body.stop_below_temp_celsius,
+        response_time_seconds=body.response_time_seconds,
+        pwm_steps=body.pwm_steps,
+    )
 
-        if result is None:
-            raise HTTPException(status_code=404, detail=f"Fan {body.fan_id} not found")
+    if result is None:
+        raise HTTPException(status_code=404, detail=f"Fan {body.fan_id} not found")
 
-        return UpdateFanConfigResponse(
-            success=True,
-            fan_id=result["fan_id"],
-            hysteresis_celsius=result["hysteresis_celsius"],
-            min_pwm_percent=result["min_pwm_percent"],
-            max_pwm_percent=result["max_pwm_percent"],
-            emergency_temp_celsius=result["emergency_temp_celsius"],
-            temp_sensor_id=result.get("temp_sensor_id"),
-            message="Configuration updated",
-        )
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to update fan config: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to update config: {str(e)}")
+    return UpdateFanConfigResponse(
+        success=True,
+        fan_id=result["fan_id"],
+        hysteresis_celsius=result["hysteresis_celsius"],
+        min_pwm_percent=result["min_pwm_percent"],
+        max_pwm_percent=result["max_pwm_percent"],
+        emergency_temp_celsius=result["emergency_temp_celsius"],
+        temp_sensor_id=result.get("temp_sensor_id"),
+        message="Configuration updated",
+    )
 
 
 # --- Profile Endpoints ---
@@ -737,25 +673,21 @@ async def list_profiles(
 
     Requires admin role.
     """
-    try:
-        import json as _json
-        profiles = await service.list_profiles()
-        items = []
-        for p in profiles:
-            curve_data = _json.loads(p.curve_json) if p.curve_json else []
-            items.append(FanCurveProfileSchema(
-                id=p.id,
-                name=p.name,
-                description=p.description,
-                curve_points=[FanCurvePoint(temp=pt["temp"], pwm=pt["pwm"]) for pt in curve_data],
-                is_system=p.is_system,
-                created_at=p.created_at,
-                updated_at=p.updated_at,
-            ))
-        return FanCurveProfileListResponse(profiles=items, total_count=len(items))
-    except Exception as e:
-        logger.error(f"Failed to list profiles: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to list profiles: {str(e)}")
+    import json as _json
+    profiles = await service.list_profiles()
+    items = []
+    for p in profiles:
+        curve_data = _json.loads(p.curve_json) if p.curve_json else []
+        items.append(FanCurveProfileSchema(
+            id=p.id,
+            name=p.name,
+            description=p.description,
+            curve_points=[FanCurvePoint(temp=pt["temp"], pwm=pt["pwm"]) for pt in curve_data],
+            is_system=p.is_system,
+            created_at=p.created_at,
+            updated_at=p.updated_at,
+        ))
+    return FanCurveProfileListResponse(profiles=items, total_count=len(items))
 
 
 @router.post("/profiles", response_model=FanCurveProfileSchema, status_code=201)
@@ -771,33 +703,27 @@ async def create_profile(
 
     Max 20 user profiles. Requires admin role.
     """
-    try:
-        import json as _json
-        profile = await service.create_profile(
-            name=body.name,
-            curve_points=body.curve_points,
-            description=body.description,
+    import json as _json
+    profile = await service.create_profile(
+        name=body.name,
+        curve_points=body.curve_points,
+        description=body.description,
+    )
+    if profile is None:
+        raise HTTPException(
+            status_code=422,
+            detail="Maximum of 20 user profiles reached or name already exists"
         )
-        if profile is None:
-            raise HTTPException(
-                status_code=422,
-                detail="Maximum of 20 user profiles reached or name already exists"
-            )
-        curve_data = _json.loads(profile.curve_json) if profile.curve_json else []
-        return FanCurveProfileSchema(
-            id=profile.id,
-            name=profile.name,
-            description=profile.description,
-            curve_points=[FanCurvePoint(temp=pt["temp"], pwm=pt["pwm"]) for pt in curve_data],
-            is_system=profile.is_system,
-            created_at=profile.created_at,
-            updated_at=profile.updated_at,
-        )
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to create profile: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to create profile: {str(e)}")
+    curve_data = _json.loads(profile.curve_json) if profile.curve_json else []
+    return FanCurveProfileSchema(
+        id=profile.id,
+        name=profile.name,
+        description=profile.description,
+        curve_points=[FanCurvePoint(temp=pt["temp"], pwm=pt["pwm"]) for pt in curve_data],
+        is_system=profile.is_system,
+        created_at=profile.created_at,
+        updated_at=profile.updated_at,
+    )
 
 
 @router.put("/profiles/{profile_id}", response_model=FanCurveProfileSchema)
@@ -815,27 +741,21 @@ async def update_profile(
     System profiles allow only curve_points and description changes.
     Requires admin role.
     """
-    try:
-        import json as _json
-        kwargs = body.model_dump(exclude_none=True)
-        profile = await service.update_profile(profile_id, **kwargs)
-        if profile is None:
-            raise HTTPException(status_code=404, detail=f"Profile {profile_id} not found or name conflict")
-        curve_data = _json.loads(profile.curve_json) if profile.curve_json else []
-        return FanCurveProfileSchema(
-            id=profile.id,
-            name=profile.name,
-            description=profile.description,
-            curve_points=[FanCurvePoint(temp=pt["temp"], pwm=pt["pwm"]) for pt in curve_data],
-            is_system=profile.is_system,
-            created_at=profile.created_at,
-            updated_at=profile.updated_at,
-        )
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to update profile: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to update profile: {str(e)}")
+    import json as _json
+    kwargs = body.model_dump(exclude_none=True)
+    profile = await service.update_profile(profile_id, **kwargs)
+    if profile is None:
+        raise HTTPException(status_code=404, detail=f"Profile {profile_id} not found or name conflict")
+    curve_data = _json.loads(profile.curve_json) if profile.curve_json else []
+    return FanCurveProfileSchema(
+        id=profile.id,
+        name=profile.name,
+        description=profile.description,
+        curve_points=[FanCurvePoint(temp=pt["temp"], pwm=pt["pwm"]) for pt in curve_data],
+        is_system=profile.is_system,
+        created_at=profile.created_at,
+        updated_at=profile.updated_at,
+    )
 
 
 @router.delete("/profiles/{profile_id}")
@@ -851,19 +771,13 @@ async def delete_profile(
 
     Cannot delete system profiles. Requires admin role.
     """
-    try:
-        success = await service.delete_profile(profile_id)
-        if not success:
-            raise HTTPException(
-                status_code=400,
-                detail="Profile not found or is a system profile"
-            )
-        return {"success": True, "message": f"Profile {profile_id} deleted"}
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to delete profile: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to delete profile: {str(e)}")
+    success = await service.delete_profile(profile_id)
+    if not success:
+        raise HTTPException(
+            status_code=400,
+            detail="Profile not found or is a system profile"
+        )
+    return {"success": True, "message": f"Profile {profile_id} deleted"}
 
 
 @router.post("/profiles/{profile_id}/apply", response_model=ApplyPresetResponse)
@@ -881,22 +795,16 @@ async def apply_profile_to_fan(
     Copies the profile's curve to the fan's active configuration.
     Requires admin role.
     """
-    try:
-        success, curve_points = await service.apply_profile_to_fan(body.fan_id, profile_id)
-        if not success:
-            raise HTTPException(status_code=404, detail="Profile or fan not found")
-        return ApplyPresetResponse(
-            success=True,
-            fan_id=body.fan_id,
-            preset=f"profile:{profile_id}",
-            curve_points=curve_points,
-            message="Profile applied",
-        )
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to apply profile: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to apply profile: {str(e)}")
+    success, curve_points = await service.apply_profile_to_fan(body.fan_id, profile_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Profile or fan not found")
+    return ApplyPresetResponse(
+        success=True,
+        fan_id=body.fan_id,
+        preset=f"profile:{profile_id}",
+        curve_points=curve_points,
+        message="Profile applied",
+    )
 
 
 # --- Schedule Endpoints ---
@@ -944,16 +852,12 @@ async def get_fan_schedule(
 
     Requires admin role.
     """
-    try:
-        entries = await service.get_schedule_entries(fan_id)
-        return FanScheduleListResponse(
-            entries=[_entry_to_schema(e) for e in entries],
-            fan_id=fan_id,
-            total_count=len(entries),
-        )
-    except Exception as e:
-        logger.error(f"Failed to get fan schedule: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to get fan schedule: {str(e)}")
+    entries = await service.get_schedule_entries(fan_id)
+    return FanScheduleListResponse(
+        entries=[_entry_to_schema(e) for e in entries],
+        fan_id=fan_id,
+        total_count=len(entries),
+    )
 
 
 @router.post("/{fan_id}/schedule", response_model=FanScheduleEntrySchema, status_code=201)
@@ -970,31 +874,24 @@ async def create_fan_schedule_entry(
 
     Max 8 entries per fan. Requires admin role.
     """
-    try:
-        entry = await service.create_schedule_entry(
-            fan_id=fan_id,
-            name=body.name,
-            start_time=body.start_time,
-            end_time=body.end_time,
-            curve_points=body.curve_points,
-            priority=body.priority,
-            is_enabled=body.is_enabled,
-            profile_id=body.profile_id,
+    entry = await service.create_schedule_entry(
+        fan_id=fan_id,
+        name=body.name,
+        start_time=body.start_time,
+        end_time=body.end_time,
+        curve_points=body.curve_points,
+        priority=body.priority,
+        is_enabled=body.is_enabled,
+        profile_id=body.profile_id,
+    )
+
+    if entry is None:
+        raise HTTPException(
+            status_code=422,
+            detail="Maximum of 8 schedule entries per fan reached"
         )
 
-        if entry is None:
-            raise HTTPException(
-                status_code=422,
-                detail="Maximum of 8 schedule entries per fan reached"
-            )
-
-        return _entry_to_schema(entry)
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to create schedule entry: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to create schedule entry: {str(e)}")
+    return _entry_to_schema(entry)
 
 
 @router.put("/{fan_id}/schedule/{entry_id}", response_model=FanScheduleEntrySchema)
@@ -1012,20 +909,13 @@ async def update_fan_schedule_entry(
 
     Requires admin role.
     """
-    try:
-        kwargs = body.model_dump(exclude_none=True)
-        entry = await service.update_schedule_entry(fan_id, entry_id, **kwargs)
+    kwargs = body.model_dump(exclude_none=True)
+    entry = await service.update_schedule_entry(fan_id, entry_id, **kwargs)
 
-        if entry is None:
-            raise HTTPException(status_code=404, detail=f"Schedule entry {entry_id} not found for fan {fan_id}")
+    if entry is None:
+        raise HTTPException(status_code=404, detail=f"Schedule entry {entry_id} not found for fan {fan_id}")
 
-        return _entry_to_schema(entry)
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to update schedule entry: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to update schedule entry: {str(e)}")
+    return _entry_to_schema(entry)
 
 
 @router.delete("/{fan_id}/schedule/{entry_id}")
@@ -1042,19 +932,12 @@ async def delete_fan_schedule_entry(
 
     Requires admin role.
     """
-    try:
-        success = await service.delete_schedule_entry(fan_id, entry_id)
+    success = await service.delete_schedule_entry(fan_id, entry_id)
 
-        if not success:
-            raise HTTPException(status_code=404, detail=f"Schedule entry {entry_id} not found for fan {fan_id}")
+    if not success:
+        raise HTTPException(status_code=404, detail=f"Schedule entry {entry_id} not found for fan {fan_id}")
 
-        return {"success": True, "message": f"Schedule entry {entry_id} deleted"}
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to delete schedule entry: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to delete schedule entry: {str(e)}")
+    return {"success": True, "message": f"Schedule entry {entry_id} deleted"}
 
 
 @router.get("/{fan_id}/schedule/active", response_model=ActiveScheduleInfo)
@@ -1070,18 +953,13 @@ async def get_active_schedule(
 
     Requires admin role.
     """
-    try:
-        active_entry, next_entry = await service.get_active_schedule_entry(fan_id)
+    active_entry, next_entry = await service.get_active_schedule_entry(fan_id)
 
-        return ActiveScheduleInfo(
-            active_entry=_entry_to_schema(active_entry) if active_entry else None,
-            next_entry=_entry_to_schema(next_entry) if next_entry else None,
-            is_using_default_curve=active_entry is None,
-        )
-
-    except Exception as e:
-        logger.error(f"Failed to get active schedule: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to get active schedule: {str(e)}")
+    return ActiveScheduleInfo(
+        active_entry=_entry_to_schema(active_entry) if active_entry else None,
+        next_entry=_entry_to_schema(next_entry) if next_entry else None,
+        is_using_default_curve=active_entry is None,
+    )
 
 
 # --- GPU Manual-Mode Endpoint ---
@@ -1128,16 +1006,13 @@ async def set_gpu_manual_mode(
 
     hwmon_dir = info["pwm_path"].parent
 
-    try:
-        if body.enable:
-            state = await enable_amd_manual(hwmon_dir=hwmon_dir, drm_root=None)
-            _gpu_manual_state[fan_id] = state
-        else:
-            state = _gpu_manual_state.pop(fan_id, None)
-            if state is None:
-                state = AmdManualState(previous_level="auto", previous_pwm_enable=2)
-            await disable_amd_manual(hwmon_dir=hwmon_dir, drm_root=None, state=state)
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"GPU manual mode toggle failed: {exc}")
+    if body.enable:
+        state = await enable_amd_manual(hwmon_dir=hwmon_dir, drm_root=None)
+        _gpu_manual_state[fan_id] = state
+    else:
+        state = _gpu_manual_state.pop(fan_id, None)
+        if state is None:
+            state = AmdManualState(previous_level="auto", previous_pwm_enable=2)
+        await disable_amd_manual(hwmon_dir=hwmon_dir, drm_root=None, state=state)
 
     return {"success": True, "fan_id": fan_id, "enabled": body.enable}
