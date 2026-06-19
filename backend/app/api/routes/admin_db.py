@@ -1,5 +1,6 @@
-from typing import List, Optional
 import json
+import logging
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy.orm import Session
@@ -16,6 +17,8 @@ from app.schemas.admin_db import (
 )
 from app.services.audit.admin_db import AdminDBService
 from app.core.rate_limiter import user_limiter, get_limit
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -83,7 +86,8 @@ def table_rows(
             if not isinstance(parsed_filters, dict):
                 raise ValueError("filters must be a JSON object")
         except (json.JSONDecodeError, ValueError) as exc:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid filters: {exc}")
+            logger.warning("Invalid filters value: %s", exc)
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid filters")
 
     try:
         result = AdminDBService.get_table_rows(

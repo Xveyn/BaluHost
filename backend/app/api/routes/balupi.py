@@ -123,9 +123,10 @@ async def update_balupi_config(
     try:
         env_config_service.update_vars("backend", updates)
     except ValueError as e:
+        logger.error("Failed to write BaluPi config: %s", e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to write config: {e}",
+            detail="Failed to write config",
         )
 
     # Update runtime settings (take effect immediately without restart)

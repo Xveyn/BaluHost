@@ -1,5 +1,6 @@
 """API routes for Ad Discovery feature."""
 
+import logging
 import re
 from typing import Optional
 
@@ -20,6 +21,8 @@ from app.schemas.ad_discovery import (
     AdDiscoveryStatusResponse, AdDiscoveryConfigResponse, AdDiscoveryConfigUpdate,
 )
 from app.services.audit import get_audit_logger_db
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/ad-discovery", tags=["ad-discovery"])
 
@@ -496,9 +499,10 @@ async def create_custom_list(
     try:
         lst = svc.create_list(db, name=body.name, description=body.description)
     except Exception as exc:
+        logger.warning("Could not create custom list: %s", exc)
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"Could not create list: {exc}",
+            detail="Could not create list",
         )
     get_audit_logger_db().log_event(
         event_type="AD_DISCOVERY", user=current_user.username,

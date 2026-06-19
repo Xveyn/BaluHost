@@ -1,4 +1,5 @@
 """SSD File Cache API Routes (per-array)."""
+import logging
 import shutil
 from pathlib import Path
 from typing import List
@@ -22,6 +23,8 @@ from app.schemas.ssd_file_cache import (
 from app.services.cache.ssd_file_cache import SSDFileCacheService
 from app.services.cache.eviction import EvictionManager
 from app.services.audit.logger_db import get_audit_logger_db
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -198,9 +201,10 @@ async def update_cache_config(
         try:
             Path(cache_path).mkdir(parents=True, exist_ok=True)
         except OSError as e:
+            logger.warning("Cache path not writable: %s", e)
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Cache path not writable: {e}",
+                detail="Cache path not writable",
             )
 
     service.update_config(update_values)

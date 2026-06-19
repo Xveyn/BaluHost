@@ -1,4 +1,6 @@
 """Backup API routes."""
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
@@ -19,6 +21,7 @@ from app.services.backup import get_backup_service
 from app.plugins.emit import emit_hook
 from app.core.rate_limiter import user_limiter, get_limit
 
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -76,9 +79,10 @@ async def create_backup(
             success=False,
             error=str(e),
         )
+        logger.error("Failed to create backup: %s", e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create backup: {str(e)}"
+            detail="Failed to create backup"
         )
 
 
@@ -218,13 +222,16 @@ async def restore_backup(
         # If the service raised a RestoreLockedError, return 423 Locked with helpful message
         from app.services.backup import RestoreLockedError
         if isinstance(e, RestoreLockedError):
+            # Deliberate user-facing 423: the service message is curated operational
+            # guidance ("stop the app before restoring the DB"), safe to surface.
             raise HTTPException(
                 status_code=423,
                 detail=str(e)
             )
+        logger.error("Failed to restore backup: %s", e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to restore backup: {str(e)}"
+            detail="Failed to restore backup"
         )
 
 
