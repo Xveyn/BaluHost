@@ -132,11 +132,6 @@ async def start_benchmark(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         )
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to start benchmark: {str(e)}",
-        )
 
 
 @router.post("/prepare", response_model=BenchmarkPrepareResponse)
@@ -232,11 +227,6 @@ async def start_confirmed_benchmark(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to start benchmark: {str(e)}",
         )
 
 
