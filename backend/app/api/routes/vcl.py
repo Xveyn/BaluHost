@@ -1,4 +1,5 @@
 """VCL (Version Control Light) API Routes."""
+import logging
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
@@ -21,6 +22,8 @@ from app.services.versioning.vcl import VCLService
 from app.services.audit.logger_db import get_audit_logger_db
 from app.models.vcl import VCLSettings, FileVersion
 from app.models.file_metadata import FileMetadata
+
+logger = logging.getLogger(__name__)
 
 
 def needs_cleanup(settings: VCLSettings) -> bool:
@@ -260,9 +263,10 @@ async def restore_file_version(
             error_message=str(e),
             db=db
         )
+        logger.error("Failed to restore file: %s", e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to restore file: {str(e)}"
+            detail="Failed to restore file"
         )
 
 
@@ -341,9 +345,10 @@ async def get_version_diff(
         content_old = vcl_service.get_version_content(version_old)
         content_new = vcl_service.get_version_content(version_new)
     except Exception as e:
+        logger.error("Failed to read version content: %s", e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to read version content: {str(e)}"
+            detail="Failed to read version content"
         )
 
     # Check if binary

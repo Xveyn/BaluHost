@@ -1,4 +1,5 @@
 """VCL (Version Control Light) API Routes — Admin Endpoints."""
+import logging
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
@@ -31,6 +32,8 @@ from app.services.audit.logger_db import get_audit_logger_db
 from app.models.vcl import VCLSettings, VCLStats, FileVersion, VersionBlob
 from app.models.user import User
 from app.api.routes.vcl import needs_cleanup
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -470,9 +473,10 @@ async def trigger_manual_cleanup(
             error_message=str(e),
             db=db
         )
+        logger.error("VCL cleanup failed: %s", e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Cleanup failed: {str(e)}"
+            detail="Cleanup failed"
         )
 
 

@@ -161,7 +161,7 @@ async def discover_devices(
         logger.error("Discovery failed for plugin '%s': %s", plugin_name, exc)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Discovery failed: {exc}",
+            detail="Discovery failed",
         )
 
     return {

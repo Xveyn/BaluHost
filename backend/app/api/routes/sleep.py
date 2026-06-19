@@ -248,7 +248,8 @@ async def update_sleep_config(
             )
         return result
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to update config: {e}")
+        logger.error("Failed to update sleep config: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to update config")
 
 
 @router.get("/history", response_model=SleepHistoryResponse)

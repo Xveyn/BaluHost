@@ -127,9 +127,10 @@ async def get_plugin_details(
         if plugin is None:
             plugin = plugin_manager.load_plugin(name)
     except PluginLoadError as e:
+        logger.warning("Plugin not found: %s", e)
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Plugin not found: {e}",
+            detail="Plugin not found",
         )
 
     meta = plugin.metadata
@@ -202,9 +203,10 @@ async def toggle_plugin(
         if plugin is None:
             plugin = plugin_manager.load_plugin(name)
     except PluginLoadError as e:
+        logger.warning("Plugin not found: %s", e)
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Plugin not found: {e}",
+            detail="Plugin not found",
         )
 
     meta = plugin.metadata
@@ -408,9 +410,10 @@ async def update_plugin_config(
     try:
         validated_config = plugin.validate_config(body.config)
     except ValueError as e:
+        logger.warning("Invalid plugin configuration for %s: %s", name, e)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid configuration: {e}",
+            detail="Invalid plugin configuration",
         )
 
     meta = plugin.metadata
