@@ -243,7 +243,7 @@ async def oauth_callback_redirect(
         )
     except Exception as e:
         logger.error("OAuth callback failed: %s", e)
-        return RedirectResponse(url=f"/cloud-import?oauth_error={quote(str(e))}")
+        return RedirectResponse(url=f"/cloud-import?oauth_error={quote('Authentication failed')}")
 
     return RedirectResponse(url="/cloud-import?oauth=success")
 
@@ -277,7 +277,7 @@ async def oauth_callback(
         )
     except Exception as e:
         logger.error("OAuth callback failed: %s", e)
-        raise HTTPException(status_code=400, detail=f"OAuth failed: {e}")
+        raise HTTPException(status_code=400, detail="OAuth authentication failed")
 
     return CloudConnectionResponse.model_validate(conn)
 
@@ -294,12 +294,9 @@ async def connect_icloud(
 ):
     """Connect an iCloud account with Apple ID credentials."""
     service = CloudService(db)
-    try:
-        conn, requires_2fa = service.connect_icloud(
-            current_user.id, body.apple_id, body.password
-        )
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    conn, requires_2fa = service.connect_icloud(
+        current_user.id, body.apple_id, body.password
+    )
 
     return {
         "connection": CloudConnectionResponse.model_validate(conn),
@@ -366,9 +363,6 @@ async def browse_files(
         files = await service.list_files(connection_id, current_user.id, path)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
-        logger.error("Failed to browse cloud files: %s", e)
-        raise HTTPException(status_code=500, detail=f"Failed to list files: {e}")
 
     return [
         CloudFileResponse(
