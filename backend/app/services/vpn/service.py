@@ -39,10 +39,24 @@ class VPNService:
 
     @staticmethod
     def _encrypt_key(plaintext: str) -> str:
-        """Encrypt *plaintext* if VPN_ENCRYPTION_KEY is available, else return as-is."""
+        """Encrypt *plaintext* if VPN_ENCRYPTION_KEY is available.
+
+        Production hard-fails on a missing key — BaluHost must never silently
+        persist VPN/SSH key material in plaintext (OWASP Sensitive Data
+        Exposure). In dev/test the key is optional and we fall back to
+        plaintext with a warning so local development works without it.
+        """
         if not VPNService._encryption_available():
+            import os
+            is_dev = os.getenv("NAS_MODE", "dev").lower() == "dev"
+            is_test = os.getenv("SKIP_APP_INIT") == "1" or os.getenv("PYTEST_CURRENT_TEST")
+            if not (is_dev or is_test):
+                raise RuntimeError(
+                    "VPN_ENCRYPTION_KEY is not configured — refusing to store VPN/SSH "
+                    "key material in plaintext. Set VPN_ENCRYPTION_KEY in the environment."
+                )
             logger.warning(
-                "VPN_ENCRYPTION_KEY not set — storing VPN key in plaintext. "
+                "VPN_ENCRYPTION_KEY not set — storing VPN key in plaintext (dev/test). "
                 "Set VPN_ENCRYPTION_KEY in .env for production."
             )
             return plaintext

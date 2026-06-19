@@ -9,7 +9,10 @@ from app.core import database
 from app.schemas.admin_db import AdminTableSchemaField, AdminTableRowsResponse
 
 
-REDACT_PATTERN = re.compile(r"password|secret|token|private_key|api_key", re.IGNORECASE)
+REDACT_PATTERN = re.compile(
+    r"password|secret|token|private_key|api_key|encrypted|preshared|certificate|credential",
+    re.IGNORECASE,
+)
 
 
 # Categorised table whitelist – flat _WHITELIST is derived automatically.
