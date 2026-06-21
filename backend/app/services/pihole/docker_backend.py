@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import logging
 import secrets
 from functools import partial
@@ -25,6 +26,27 @@ _PIHOLE_BLOCKED_STATUSES = frozenset({
     "EXTERNAL_BLOCKED_IP", "EXTERNAL_BLOCKED_NULL", "EXTERNAL_BLOCKED_NXRA",
     "GRAVITY_CNAME", "REGEX_DENY_CNAME", "EXACT_DENY_CNAME",
 })
+
+
+def _build_resolv_lines(upstream_dns: str) -> str:
+    """Build resolv.conf 'nameserver <ip>' lines from a ';'-separated DNS string.
+
+    Only entries that parse as a valid IP address are included. This prevents
+    a misconfigured or malicious upstream_dns value from injecting shell
+    metacharacters into the in-container `sh -c` that writes /etc/resolv.conf.
+    """
+    lines = []
+    for raw in upstream_dns.split(";"):
+        entry = raw.strip()
+        if not entry:
+            continue
+        try:
+            ipaddress.ip_address(entry)
+        except ValueError:
+            logger.warning("Ignoring non-IP upstream DNS entry for resolv.conf: %r", entry)
+            continue
+        lines.append(f"nameserver {entry}")
+    return "\n".join(lines)
 
 
 def _normalize_status(raw: str) -> str:
@@ -181,13 +203,15 @@ class ContainerManager:
 
         # Fix container DNS — Docker may override /etc/resolv.conf even in host mode
         try:
-            dns_entries = [ip.strip() for ip in upstream_dns.split(";") if ip.strip()]
-            resolv_lines = "\\n".join(f"nameserver {ip}" for ip in dns_entries)
-            await self._run_sync(
-                container.exec_run,
-                ["sh", "-c", f"printf '{resolv_lines}\\n' > /etc/resolv.conf"],
-            )
-            logger.info("Wrote /etc/resolv.conf into container: %s", dns_entries)
+            resolv_lines = _build_resolv_lines(upstream_dns)
+            if resolv_lines:
+                await self._run_sync(
+                    container.exec_run,
+                    ["sh", "-c", f"printf '{resolv_lines}\\n' > /etc/resolv.conf"],
+                )
+                logger.info("Wrote /etc/resolv.conf into container")
+            else:
+                logger.warning("No valid upstream DNS IPs — leaving container resolv.conf untouched")
         except Exception as exc:
             logger.warning("Could not fix container resolv.conf: %s", exc)
 

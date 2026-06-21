@@ -41,6 +41,10 @@ from app.services.update.utils import (
 
 logger = logging.getLogger(__name__)
 
+# Update targets are always resolved commit SHAs (7-40 hex). Reject anything
+# else before it reaches `git checkout` (blocks option-injection like --force).
+_COMMIT_RE = re.compile(r"^[0-9a-fA-F]{7,40}$")
+
 
 class ProdUpdateBackend(UpdateBackend):
     """Production backend using Git and systemctl."""
@@ -180,9 +184,16 @@ class ProdUpdateBackend(UpdateBackend):
 
         return success
 
+    @staticmethod
+    def _is_valid_commit(commit: str) -> bool:
+        return bool(commit) and bool(_COMMIT_RE.match(commit))
+
     async def apply_updates(
         self, target_commit: str, callback: Optional[ProgressCallback] = None
     ) -> tuple[bool, Optional[str]]:
+        if not self._is_valid_commit(target_commit):
+            return False, f"Invalid commit identifier: {target_commit!r}"
+
         if callback:
             callback(10, "Stashing local changes...")
 
@@ -214,6 +225,9 @@ class ProdUpdateBackend(UpdateBackend):
 
     async def rollback(self, commit: str) -> tuple[bool, Optional[str]]:
         """Rollback to a specific commit."""
+        if not self._is_valid_commit(commit):
+            return False, f"Invalid commit identifier: {commit!r}"
+
         logger.info(f"Rolling back to {commit}")
 
         success, _, err = self._run_git("checkout", commit)
@@ -239,6 +253,9 @@ class ProdUpdateBackend(UpdateBackend):
         The script runs as root via systemd-run and survives backend restarts.
         It writes progress to /var/lib/baluhost/update-status/<update_id>.json.
         """
+        if not self._is_valid_commit(to_commit) or not self._is_valid_commit(from_commit):
+            return False, "Invalid commit identifier for update"
+
         script_path = self.repo_path / "deploy" / "update" / "run-update.sh"
         if not script_path.exists():
             return False, f"Update script not found: {script_path}"
