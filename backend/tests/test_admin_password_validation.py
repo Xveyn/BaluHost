@@ -74,12 +74,20 @@ class TestAdminPasswordValidation:
 
     def test_dev_mode_accepts_default_password(self, monkeypatch):
         """Dev mode should accept the default 'DevMode2024' password without error."""
-        settings = self._build_settings(monkeypatch, NAS_MODE="dev", ADMIN_PASSWORD="DevMode2024")
+        # A real dev build runs ENVIRONMENT=development; pairing it with
+        # ENVIRONMENT=production is rejected by _block_dev_mode_in_production.
+        settings = self._build_settings(
+            monkeypatch, NAS_MODE="dev", ENVIRONMENT="development",
+            ADMIN_PASSWORD="DevMode2024",
+        )
         assert settings.admin_password == "DevMode2024"
 
     def test_dev_mode_accepts_short_password(self, monkeypatch):
         """Dev mode should accept any password, even short ones."""
-        settings = self._build_settings(monkeypatch, NAS_MODE="dev", ADMIN_PASSWORD="abc")
+        settings = self._build_settings(
+            monkeypatch, NAS_MODE="dev", ENVIRONMENT="development",
+            ADMIN_PASSWORD="abc",
+        )
         assert settings.admin_password == "abc"
 
     def test_validation_skipped_during_testing(self, monkeypatch):

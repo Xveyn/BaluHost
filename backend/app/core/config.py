@@ -307,6 +307,15 @@ class Settings(BaseSettings):
         return self
 
     @model_validator(mode="after")
+    def _block_dev_mode_in_production(self) -> "Settings":
+        if str(self.environment).lower() in ("production", "prod") and self.is_dev_mode:
+            raise ValueError(
+                "NAS_MODE=dev is not allowed when ENVIRONMENT=production — dev mode "
+                "relaxes rate limits and enables mock backends. Set NAS_MODE=prod."
+            )
+        return self
+
+    @model_validator(mode="after")
     def _validate_loopback_fallback_only_in_dev(self) -> "Settings":
         if self.local_loopback_fallback and not self.is_dev_mode:
             raise ValueError(

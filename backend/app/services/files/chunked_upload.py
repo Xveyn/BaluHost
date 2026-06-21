@@ -131,6 +131,14 @@ class ChunkedUploadManager:
                     f"Expected chunk {session.next_chunk_index}, got {chunk_index}"
                 )
 
+        # Overflow guard: outside the lock so abort_session can acquire it.
+        if session.received_bytes + len(data) > session.total_size:
+            await self.abort_session(upload_id)
+            raise ValueError(
+                "Upload exceeds declared total_size "
+                f"({session.total_size} bytes) for session {upload_id}"
+            )
+
         # Write + hash outside the lock in a thread — avoids blocking the event loop.
         def _write_and_hash() -> None:
             with open(session.temp_file_path, "ab") as f:
@@ -176,6 +184,15 @@ class ChunkedUploadManager:
         parts: list[bytes] = []
         async for part in stream:
             parts.append(part)
+
+        # Overflow guard: outside the lock so abort_session can acquire it.
+        incoming = sum(len(p) for p in parts)
+        if session.received_bytes + incoming > session.total_size:
+            await self.abort_session(upload_id)
+            raise ValueError(
+                "Upload exceeds declared total_size "
+                f"({session.total_size} bytes) for session {upload_id}"
+            )
 
         def _write_and_hash() -> int:
             written = 0

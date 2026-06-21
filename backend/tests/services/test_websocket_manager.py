@@ -172,3 +172,34 @@ class TestGetWebSocketManagerSingleton:
         a = get_websocket_manager()
         b = get_websocket_manager()
         assert a is b
+
+
+# ---------------------------------------------------------------------------
+# Task 2: per-user WebSocket connection cap (Posten 5 #2)
+# ---------------------------------------------------------------------------
+
+import pytest
+from app.services.websocket_manager import (
+    ConnectionLimitExceeded,
+    MAX_CONNECTIONS_PER_USER,
+)
+
+
+class _FakeWS:
+    async def send_json(self, _):  # pragma: no cover - not exercised here
+        pass
+
+
+@pytest.mark.asyncio
+async def test_connect_caps_connections_per_user():
+    mgr = WebSocketManager()
+    # Fill up to the cap for one user.
+    for _ in range(MAX_CONNECTIONS_PER_USER):
+        await mgr.connect(_FakeWS(), user_id=7)
+    # The next one is rejected.
+    with pytest.raises(ConnectionLimitExceeded):
+        await mgr.connect(_FakeWS(), user_id=7)
+    # A different user is unaffected.
+    await mgr.connect(_FakeWS(), user_id=8)
+    assert mgr.get_connection_count(7) == MAX_CONNECTIONS_PER_USER
+    assert mgr.get_connection_count(8) == 1
