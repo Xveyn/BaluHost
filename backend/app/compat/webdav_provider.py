@@ -63,15 +63,16 @@ class BaluHostDAVProvider(FilesystemProvider):
             role = environ.get("baluhost.user_role", "")
             username = environ.get("wsgidav.auth.user_name", "")
             if role != "admin" and username:
-                user_root = os.path.join(self._storage_root, username)
-                os.makedirs(user_root, exist_ok=True)
+                user_root = (Path(self._storage_root) / username).resolve()
+                user_root.mkdir(parents=True, exist_ok=True)
                 path_parts = path.strip("/").split("/") if path.strip("/") else []
-                file_path = os.path.join(user_root, *path_parts)
-                # Prevent path traversal
-                file_path = os.path.normpath(file_path)
-                if not file_path.startswith(user_root):
+                candidate = user_root.joinpath(*path_parts) if path_parts else user_root
+                # resolve() follows symlinks and collapses '..'; is_relative_to
+                # rejects both traversal and sibling-prefix escapes (bob vs bobby).
+                resolved = candidate.resolve()
+                if resolved != user_root and not resolved.is_relative_to(user_root):
                     raise ValueError("Path traversal detected")
-                return file_path
+                return str(resolved)
         return super()._loc_to_file_path(path, environ)
 
     def get_resource_inst(self, path: str, environ: dict) -> _DAVResource | None:  # type: ignore[override]
