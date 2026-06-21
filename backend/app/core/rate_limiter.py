@@ -72,7 +72,7 @@ RATE_LIMITS = {
     "auth_refresh": "10/minute",  # ✅ Security Fix #5
     
     # File operations - moderate limits
-    "file_upload": "50000/minute",
+    "file_upload": "300/minute",
     "file_download": "500/minute",
     "file_list": "200/minute",
     "file_delete": "30/minute",
