@@ -7,6 +7,8 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from app.schemas.validators import validate_lan_host
+
 
 # ---------------------------------------------------------------------------
 # Request schemas
@@ -25,6 +27,11 @@ class SmartDeviceCreate(BaseModel):
         description="Plugin-specific config (credentials etc.) — encrypted before storage",
     )
 
+    @field_validator("address", mode="before")
+    @classmethod
+    def _validate_address(cls, v: Optional[str]) -> Optional[str]:
+        return validate_lan_host(v)
+
 
 class SmartDeviceUpdate(BaseModel):
     """Schema for updating a smart device (partial updates supported)."""
@@ -36,6 +43,11 @@ class SmartDeviceUpdate(BaseModel):
         description="If provided, re-encrypted and stored",
     )
     is_active: Optional[bool] = Field(default=None)
+
+    @field_validator("address", mode="before")
+    @classmethod
+    def _validate_address(cls, v: Optional[str]) -> Optional[str]:
+        return validate_lan_host(v)
 
 
 class DeviceCommandRequest(BaseModel):
