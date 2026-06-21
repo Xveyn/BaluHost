@@ -42,6 +42,22 @@ else
     log_info "VPN_ENCRYPTION_KEY already set, reusing."
 fi
 
+if [[ -z "${CLOUD_ENCRYPTION_KEY:-}" ]]; then
+    CLOUD_ENCRYPTION_KEY=$(generate_fernet_key)
+    export CLOUD_ENCRYPTION_KEY
+    log_info "Generated CLOUD_ENCRYPTION_KEY."
+else
+    log_info "CLOUD_ENCRYPTION_KEY already set, reusing."
+fi
+
+if [[ -z "${TOTP_ENCRYPTION_KEY:-}" ]]; then
+    TOTP_ENCRYPTION_KEY=$(generate_fernet_key)
+    export TOTP_ENCRYPTION_KEY
+    log_info "Generated TOTP_ENCRYPTION_KEY."
+else
+    log_info "TOTP_ENCRYPTION_KEY already set, reusing."
+fi
+
 # This module runs in a child process of install.sh — generated secrets
 # reach the orchestrator and any resumed run only via the config file (#212).
 save_config
@@ -71,6 +87,8 @@ process_template "$TEMPLATE" "$ENV_FILE" \
     "SECRET_KEY=$SECRET_KEY" \
     "TOKEN_SECRET=$TOKEN_SECRET" \
     "VPN_ENCRYPTION_KEY=$VPN_ENCRYPTION_KEY" \
+    "CLOUD_ENCRYPTION_KEY=$CLOUD_ENCRYPTION_KEY" \
+    "TOTP_ENCRYPTION_KEY=$TOTP_ENCRYPTION_KEY" \
     "DATABASE_URL=$DATABASE_URL" \
     "ADMIN_USERNAME=$ADMIN_USERNAME" \
     "ADMIN_PASSWORD=$ADMIN_PASSWORD" \
