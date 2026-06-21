@@ -34,7 +34,9 @@ async def _get_admin_or_service_token(
     """
     # 1. Check X-Service-Token header
     service_token = request.headers.get("X-Service-Token")
-    if service_token and secrets.compare_digest(service_token, settings.scheduler_service_token):
+    if service_token and secrets.compare_digest(
+        service_token.encode("utf-8"), settings.scheduler_service_token.encode("utf-8")
+    ):
         return  # Service token valid
 
     # 2. Fall back to normal admin JWT auth

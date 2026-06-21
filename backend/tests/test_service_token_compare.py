@@ -34,3 +34,12 @@ def test_power_module_uses_secrets_compare():
     import inspect
     src = inspect.getsource(power._get_admin_or_service_token)
     assert "compare_digest" in src
+
+
+@pytest.mark.asyncio
+async def test_non_ascii_service_token_falls_through_to_401(monkeypatch):
+    monkeypatch.setattr(settings, "scheduler_service_token", "s3cr3t-token-value")
+    # A non-ASCII header must NOT raise TypeError (500); it should deny -> 401.
+    with pytest.raises(HTTPException) as exc:
+        await power._get_admin_or_service_token(_req("tök\xffen"), token=None)
+    assert exc.value.status_code == 401
