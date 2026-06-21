@@ -101,7 +101,7 @@ async def generate_registration_token(
         server_url = f"http://{local_ip}:8000"
     
     # Debug output
-    print(f"[Mobile Token] User: {current_user.username}, Server URL: {server_url}, Token validity: {token_validity_days} days")
+    logger.debug("Mobile token generated for user %s (server_url=%s, validity=%s days)", current_user.username, server_url, token_validity_days)
     
     return MobileService.generate_registration_token(
         db=db,
@@ -176,16 +176,16 @@ async def get_devices(
     # Admin sieht alle Geräte aller Nutzer
     if current_user.role == "admin":
         devices = MobileService.get_all_devices_with_users(db=db)
-        print(f"[GET DEVICES] Admin sees all {len(devices)} device(s)")
+        logger.debug("[GET DEVICES] Admin sees all %s device(s)", len(devices))
     else:
         devices = MobileService.get_user_devices(db=db, user_id=current_user.id)
-        print(f"[GET DEVICES] User {current_user.id} has {len(devices)} device(s)")
+        logger.debug("[GET DEVICES] User %s has %s device(s)", current_user.id, len(devices))
     
     for dev in devices:
         # Für Admin: dev ist dict, für User: dev ist MobileDevice-Objekt
         device_id = dev.get('id') if isinstance(dev, dict) else dev.id
         device_name = dev.get('device_name') if isinstance(dev, dict) else dev.device_name
-        print(f"  - {device_id}: {device_name}")
+        logger.debug("  - %s: %s", device_id, device_name)
     return devices
 
 
@@ -274,7 +274,7 @@ async def delete_device(
                 )
         except Exception as e:
             # Don't block deletion if notification fails
-            print(f"[Mobile] Failed to send removal notification: {e}")
+            logger.warning("Failed to send removal notification: %s", e)
 
     MobileService.remove_device(db, device)
     return None
@@ -327,7 +327,7 @@ async def register_push_token(
     if FirebaseService.is_available():
         token_valid = FirebaseService.verify_token(push_token)
     
-    print(f"[Mobile] Registered FCM token for {device.device_name}: {push_token[:20]}... (valid: {token_valid})")
+    logger.debug("Registered FCM token for device %s (valid=%s)", device.device_name, token_valid)
     
     return {
         "success": True,

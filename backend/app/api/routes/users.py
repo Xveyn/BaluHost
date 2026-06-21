@@ -14,6 +14,18 @@ from app.services.audit.logger_db import get_audit_logger_db
 
 router = APIRouter()
 
+_AVATAR_EXT_BY_TYPE = {
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+    "image/gif": ".gif",
+    "image/webp": ".webp",
+}
+
+
+def _avatar_ext(content_type: str) -> str:
+    """Return a safe file extension for a validated avatar content type."""
+    return _AVATAR_EXT_BY_TYPE[content_type]
+
 
 @router.get("/", response_model=UsersResponse)
 @user_limiter.limit(get_limit("user_operations"))
@@ -313,8 +325,9 @@ async def upload_avatar(
         except FileNotFoundError:
             pass
     
-    # Generate unique filename
-    file_ext = Path(avatar.filename or "avatar").suffix
+    # Generate unique filename — extension from the VALIDATED content type,
+    # never from the user-supplied filename (stored-XSS guard).
+    file_ext = _avatar_ext(avatar.content_type)
     unique_filename = f"{uuid.uuid4()}{file_ext}"
     file_path = avatars_dir / unique_filename
     
