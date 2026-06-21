@@ -383,12 +383,18 @@ class Settings(BaseSettings):
     @field_validator("totp_encryption_key")
     @classmethod
     def validate_totp_key(cls, v: str, info) -> str:
-        """Warn when TOTP encryption key is not set in production."""
+        """Validate the TOTP key format and warn when it's not set in production."""
         import os
+        if v:
+            from cryptography.fernet import Fernet
+            try:
+                Fernet(v.encode())
+            except Exception as exc:
+                raise ValueError("TOTP_ENCRYPTION_KEY is not a valid Fernet key") from exc
+            return v
         is_dev = os.getenv("NAS_MODE", "dev").lower() == "dev"
         is_test = os.getenv("SKIP_APP_INIT") == "1" or os.getenv("PYTEST_CURRENT_TEST")
-
-        if not (is_dev or is_test) and not v:
+        if not (is_dev or is_test):
             logging.warning(
                 "TOTP_ENCRYPTION_KEY not set — TOTP secrets will use VPN_ENCRYPTION_KEY as fallback. "
                 "Set a dedicated TOTP_ENCRYPTION_KEY for proper key isolation."

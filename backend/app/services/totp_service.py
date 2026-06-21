@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 
 import pyotp
 import qrcode
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, MultiFernet
 from sqlalchemy.orm import Session
 
 from app.models.user import User
@@ -26,23 +26,22 @@ BACKUP_CODE_LENGTH = 8
 ISSUER_NAME = "BaluHost"
 
 
-def _get_totp_fernet() -> Fernet:
-    """Get Fernet instance for TOTP encryption, using dedicated key."""
+def _get_totp_fernet() -> MultiFernet:
+    """Encrypt with TOTP_ENCRYPTION_KEY when set (else the VPN key); decrypt by trying the
+    dedicated key first, then the VPN key (dual-key fallback for secrets written under the
+    VPN-key fallback). The "not set in prod" warning lives in the config validator."""
     from app.core.config import settings
-    key = settings.totp_encryption_key
-    if not key:
-        if not settings.is_dev_mode:
-            logger.warning(
-                "TOTP_ENCRYPTION_KEY not set — falling back to VPN_ENCRYPTION_KEY. "
-                "Set a dedicated TOTP_ENCRYPTION_KEY in production for key isolation."
-            )
-        key = settings.vpn_encryption_key
-    if not key:
+    keys: list[Fernet] = []
+    if settings.totp_encryption_key:
+        keys.append(Fernet(settings.totp_encryption_key.encode()))
+    if settings.vpn_encryption_key:
+        keys.append(Fernet(settings.vpn_encryption_key.encode()))
+    if not keys:
         raise ValueError(
             "No encryption key configured for TOTP "
             "(set TOTP_ENCRYPTION_KEY or VPN_ENCRYPTION_KEY)"
         )
-    return Fernet(key.encode() if isinstance(key, str) else key)
+    return MultiFernet(keys)
 
 
 def _totp_encrypt(plaintext: str) -> str:
