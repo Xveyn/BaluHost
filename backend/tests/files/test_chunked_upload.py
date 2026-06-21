@@ -341,3 +341,48 @@ class TestShutdown:
         await manager.shutdown()
 
         assert len(manager._sessions) == 0
+
+
+# ============================================================================
+# Overflow Guard (DoS hardening — Posten 5 #3)
+# ============================================================================
+
+@pytest.mark.asyncio
+async def test_write_chunk_rejects_overflow_beyond_total_size(tmp_path, monkeypatch):
+    """A chunk that pushes received_bytes past the declared total_size is rejected
+    and the session is aborted (disk-fill DoS guard)."""
+    import app.services.files.chunked_upload as cu
+    monkeypatch.setattr(cu, "TMP_UPLOAD_DIR", tmp_path)
+
+    mgr = ChunkedUploadManager()
+    session = await mgr.create_session(
+        target_path="x", filename="f.bin", total_size=4,
+        user_id=1, username="u",
+    )
+    # First chunk fits exactly (4 bytes == total_size).
+    await mgr.write_chunk(session.upload_id, 0, b"AAAA")
+    # Second chunk overflows.
+    with pytest.raises(ValueError, match="exceeds declared total_size"):
+        await mgr.write_chunk(session.upload_id, 1, b"B")
+    # Session was aborted → temp file gone, session unknown.
+    assert mgr.get_session(session.upload_id) is None
+
+
+@pytest.mark.asyncio
+async def test_write_chunk_stream_rejects_overflow(tmp_path, monkeypatch):
+    """Streaming variant also rejects overflow before writing to disk."""
+    import app.services.files.chunked_upload as cu
+    monkeypatch.setattr(cu, "TMP_UPLOAD_DIR", tmp_path)
+
+    async def _stream(*fragments):
+        for fr in fragments:
+            yield fr
+
+    mgr = ChunkedUploadManager()
+    session = await mgr.create_session(
+        target_path="x", filename="f.bin", total_size=3,
+        user_id=1, username="u",
+    )
+    with pytest.raises(ValueError, match="exceeds declared total_size"):
+        await mgr.write_chunk_stream(session.upload_id, 0, _stream(b"AA", b"BB"))
+    assert mgr.get_session(session.upload_id) is None
