@@ -45,3 +45,23 @@ def test_launch_update_script_rejects_bad_commit(tmp_path):
     )
     assert ok is False
     assert err is not None and "commit" in err.lower()
+
+
+@pytest.mark.asyncio
+async def test_rollback_rejects_bad_commit(tmp_path, monkeypatch):
+    backend = ProdUpdateBackend(repo_path=tmp_path)
+    called = []
+    monkeypatch.setattr(backend, "_run_git", lambda *a, **k: called.append(a) or (True, "", ""))
+    ok, err = await backend.rollback("--hard")
+    assert ok is False
+    assert err is not None and "commit" in err.lower()
+    assert called == []  # git never invoked
+
+
+@pytest.mark.asyncio
+async def test_rollback_accepts_valid_sha(tmp_path, monkeypatch):
+    backend = ProdUpdateBackend(repo_path=tmp_path)
+    monkeypatch.setattr(backend, "_run_git", lambda *a, **k: (True, "", ""))
+    ok, err = await backend.rollback("b" * 40)
+    assert ok is True
+    assert err is None

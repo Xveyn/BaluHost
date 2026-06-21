@@ -225,6 +225,9 @@ class ProdUpdateBackend(UpdateBackend):
 
     async def rollback(self, commit: str) -> tuple[bool, Optional[str]]:
         """Rollback to a specific commit."""
+        if not self._is_valid_commit(commit):
+            return False, f"Invalid commit identifier: {commit!r}"
+
         logger.info(f"Rolling back to {commit}")
 
         success, _, err = self._run_git("checkout", commit)
