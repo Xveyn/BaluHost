@@ -156,7 +156,7 @@ async def get_current_user_optional(
     try:
         payload: TokenPayload = auth_service.decode_token(token)
         user = user_service.get_user(payload.sub, db=db)
-        if not user:
+        if not user or not user.is_active:
             return None
         return user_service.serialize_user(user)
     except auth_service.InvalidTokenError:
