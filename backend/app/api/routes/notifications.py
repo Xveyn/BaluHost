@@ -598,9 +598,15 @@ async def notification_websocket(
         logger.error(f"WebSocket: Failed to accept connection - {e}")
         return
 
-    # Register with WebSocket manager
+    # Register with WebSocket manager (enforce per-user connection cap)
+    from app.services.websocket_manager import ConnectionLimitExceeded
     manager = get_websocket_manager()
-    await manager.connect(websocket, user_id, is_admin=is_admin)
+    try:
+        await manager.connect(websocket, user_id, is_admin=is_admin)
+    except ConnectionLimitExceeded as e:
+        logger.warning(f"WebSocket: connection cap reached - {e}")
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
 
     try:
         # Send initial unread count with fresh db session

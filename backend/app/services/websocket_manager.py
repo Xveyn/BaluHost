@@ -12,6 +12,14 @@ from fastapi import WebSocket
 
 logger = logging.getLogger(__name__)
 
+# Max simultaneous WebSocket connections per user (DoS guard, Posten 5 #2).
+# Covers a desktop client + phone + a couple of browser tabs.
+MAX_CONNECTIONS_PER_USER = 5
+
+
+class ConnectionLimitExceeded(Exception):
+    """Raised when a user exceeds MAX_CONNECTIONS_PER_USER active connections."""
+
 
 @dataclass
 class Connection:
@@ -56,6 +64,10 @@ class WebSocketManager:
         )
 
         async with self._lock:
+            if len(self._user_connections.get(user_id, [])) >= MAX_CONNECTIONS_PER_USER:
+                raise ConnectionLimitExceeded(
+                    f"user {user_id} exceeded {MAX_CONNECTIONS_PER_USER} connections"
+                )
             if user_id not in self._user_connections:
                 self._user_connections[user_id] = []
             self._user_connections[user_id].append(connection)
