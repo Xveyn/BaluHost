@@ -1,10 +1,13 @@
 """Firebase Cloud Messaging service for push notifications."""
 
 import json
+import logging
 import os
 import tempfile
 from typing import Any, Optional, Dict
 from datetime import datetime, timezone
+
+logger = logging.getLogger(__name__)
 
 try:
     import firebase_admin
@@ -15,7 +18,7 @@ except ImportError:
     credentials: Any = None
     messaging: Any = None
     FIREBASE_AVAILABLE = False
-    print("[Firebase] Warning: firebase-admin not installed. Push notifications disabled.")
+    logger.warning("firebase-admin not installed. Push notifications disabled.")
 
 from app.core.config import get_settings
 
@@ -40,7 +43,7 @@ class FirebaseService:
             bool: True if initialized successfully, False otherwise
         """
         if not FIREBASE_AVAILABLE:
-            print("[Firebase] Skipping initialization: firebase-admin not installed")
+            logger.warning("Skipping initialization: firebase-admin not installed")
             return False
         
         if cls._initialized:
@@ -56,26 +59,26 @@ class FirebaseService:
                 # Parse JSON from environment variable
                 cred_dict = json.loads(credentials_json)
                 cred = credentials.Certificate(cred_dict)
-                print("[Firebase] Loaded credentials from environment variable")
+                logger.info("Loaded credentials from environment variable")
             else:
                 # Try to load from file
                 cred_path = os.path.join(os.getcwd(), "firebase-credentials.json")
                 if not os.path.exists(cred_path):
-                    print(f"[Firebase] Credentials file not found: {cred_path}")
-                    print("[Firebase] Set FIREBASE_CREDENTIALS_JSON env var or create firebase-credentials.json")
+                    logger.warning("Credentials file not found: %s", cred_path)
+                    logger.warning("Set FIREBASE_CREDENTIALS_JSON env var or create firebase-credentials.json")
                     return False
-                
+
                 cred = credentials.Certificate(cred_path)
-                print(f"[Firebase] Loaded credentials from: {cred_path}")
+                logger.info("Loaded credentials from: %s", cred_path)
             
             # Initialize Firebase Admin SDK
             cls._app = firebase_admin.initialize_app(cred)
             cls._initialized = True
-            print("[Firebase] ✅ Initialized successfully")
+            logger.info("Initialized successfully")
             return True
-            
+
         except Exception as e:
-            print(f"[Firebase] ❌ Initialization failed: {e}")
+            logger.error("Initialization failed: %s", e)
             return False
     
     @classmethod
@@ -258,23 +261,23 @@ class FirebaseService:
             
             # Send message
             response = messaging.send(message)
-            
-            print(f"[Firebase] ✅ Notification sent: {response}")
+
+            logger.info("Notification sent: %s", response)
             return {
                 "success": True,
                 "message_id": response,
                 "error": None
             }
-            
+
         except messaging.UnregisteredError:
-            print("[Firebase] ⚠️ Device token no longer valid (unregistered)")
+            logger.warning("Device token no longer valid (unregistered)")
             return {
                 "success": False,
                 "message_id": None,
                 "error": "Device token unregistered"
             }
         except Exception as e:
-            print(f"[Firebase] ❌ Failed to send notification: {e}")
+            logger.error("Failed to send notification: %s", e)
             return {
                 "success": False,
                 "message_id": None,
@@ -328,16 +331,16 @@ class FirebaseService:
             )
             
             response = messaging.send(message)
-            
-            print(f"[Firebase] ✅ Device removed notification sent: {response}")
+
+            logger.info("Device removed notification sent: %s", response)
             return {
                 "success": True,
                 "message_id": response,
                 "error": None
             }
-            
+
         except Exception as e:
-            print(f"[Firebase] ❌ Failed to send device removed notification: {e}")
+            logger.error("Failed to send device removed notification: %s", e)
             return {
                 "success": False,
                 "message_id": None,
@@ -371,7 +374,7 @@ class FirebaseService:
         except messaging.UnregisteredError:
             return False
         except Exception as e:
-            print(f"[Firebase] Token verification failed: {e}")
+            logger.warning("Token verification failed: %s", e)
             return False
 
     @classmethod
@@ -380,9 +383,9 @@ class FirebaseService:
         if FIREBASE_AVAILABLE and cls._app is not None:
             try:
                 firebase_admin.delete_app(cls._app)
-                print("[Firebase] App deleted for re-initialization")
+                logger.info("App deleted for re-initialization")
             except Exception as e:
-                print(f"[Firebase] Warning during app deletion: {e}")
+                logger.warning("Warning during app deletion: %s", e)
         cls._app = None
         cls._initialized = False
 
@@ -472,7 +475,7 @@ class FirebaseService:
                 pass
             raise
 
-        print(f"[Firebase] Credentials saved for project: {project_id}")
+        logger.info("Credentials saved for project: %s", project_id)
 
         # Re-initialize with new credentials
         cls.reset()
@@ -496,7 +499,7 @@ class FirebaseService:
 
         if os.path.exists(CREDENTIALS_FILE):
             os.unlink(CREDENTIALS_FILE)
-            print("[Firebase] Credentials file deleted")
+            logger.info("Credentials file deleted")
             return True
 
         return False
