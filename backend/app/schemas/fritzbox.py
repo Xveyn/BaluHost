@@ -3,7 +3,7 @@ from typing import Optional
 
 from pydantic import BaseModel, Field, field_validator
 
-from app.schemas.validators import validate_mac_address
+from app.schemas.validators import validate_lan_host, validate_mac_address
 
 
 class FritzBoxConfigResponse(BaseModel):
@@ -29,6 +29,11 @@ class FritzBoxConfigUpdate(BaseModel):
     @classmethod
     def _validate_mac(cls, v: Optional[str]) -> Optional[str]:
         return validate_mac_address(v)
+
+    @field_validator("host", mode="before")
+    @classmethod
+    def _validate_host(cls, v: Optional[str]) -> Optional[str]:
+        return validate_lan_host(v)
 
 
 class FritzBoxTestResponse(BaseModel):

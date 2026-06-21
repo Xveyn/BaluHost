@@ -2,7 +2,9 @@
 
 from datetime import datetime
 from typing import Any, Optional, Union
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from app.schemas.validators import validate_lan_url
 
 
 # ── Status & Summary ──────────────────────────────────────────────────
@@ -248,6 +250,11 @@ class PiholeConfigUpdateRequest(BaseModel):
     dns_bogus_priv: Optional[bool] = Field(None, description="Never forward reverse lookups for private IP ranges")
     dns_domain_name: Optional[str] = Field(None, max_length=100, description="Local domain name")
     dns_expand_hosts: Optional[bool] = Field(None, description="Expand hostnames by adding domain name")
+
+    @field_validator("pihole_url", "remote_pihole_url", mode="before")
+    @classmethod
+    def _validate_url(cls, v: Optional[str]) -> Optional[str]:
+        return validate_lan_url(v)
 
 # ── Failover ─────────────────────────────────────────────────────────
 
