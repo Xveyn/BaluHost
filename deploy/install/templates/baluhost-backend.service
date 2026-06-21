@@ -15,13 +15,19 @@ EnvironmentFile=@@INSTALL_DIR@@/.env.production
 # Clean up stale primary worker lock before start
 ExecStartPre=/usr/bin/rm -f /tmp/baluhost-primary.lock
 
-# Virtual environment activation and uvicorn start
+# Virtual environment activation and uvicorn start.
+# --proxy-headers + --forwarded-allow-ips=127.0.0.1: trust X-Forwarded-For ONLY
+# from the local nginx upstream, so request.client.host is the real client IP
+# (per-client rate limiting + accurate audit IPs). The trust pin to 127.0.0.1
+# prevents X-Forwarded-For spoofing, incl. direct connections to :8000.
 ExecStart=@@VENV_BIN@@/uvicorn app.main:app \
     --host 0.0.0.0 \
     --port 8000 \
     --workers 4 \
     --log-level info \
-    --no-access-log
+    --no-access-log \
+    --proxy-headers \
+    --forwarded-allow-ips=127.0.0.1
 
 # Restart policy
 Restart=always
