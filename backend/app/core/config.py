@@ -102,6 +102,9 @@ class Settings(BaseSettings):
     vpn_public_port: int = 0  # External port for NAS WireGuard (0 = use internal VPN port 51820)
     vpn_server_public_key: str = ""  # Override server public key (use when wg0 interface is not available)
 
+    # Cloud encryption
+    cloud_encryption_key: str = ""  # Dedicated Fernet key for cloud OAuth creds. Falls back to a SECRET_KEY-derived key if not set.
+
     # TOTP Configuration
     totp_encryption_key: str = ""  # Dedicated key for TOTP secrets. Falls back to VPN_ENCRYPTION_KEY if not set.
     
@@ -380,15 +383,42 @@ class Settings(BaseSettings):
     @field_validator("totp_encryption_key")
     @classmethod
     def validate_totp_key(cls, v: str, info) -> str:
-        """Warn when TOTP encryption key is not set in production."""
+        """Validate the TOTP key format and warn when it's not set in production."""
         import os
+        if v:
+            from cryptography.fernet import Fernet
+            try:
+                Fernet(v.encode())
+            except Exception as exc:
+                raise ValueError("TOTP_ENCRYPTION_KEY is not a valid Fernet key") from exc
+            return v
         is_dev = os.getenv("NAS_MODE", "dev").lower() == "dev"
         is_test = os.getenv("SKIP_APP_INIT") == "1" or os.getenv("PYTEST_CURRENT_TEST")
-
-        if not (is_dev or is_test) and not v:
+        if not (is_dev or is_test):
             logging.warning(
                 "TOTP_ENCRYPTION_KEY not set — TOTP secrets will use VPN_ENCRYPTION_KEY as fallback. "
                 "Set a dedicated TOTP_ENCRYPTION_KEY for proper key isolation."
+            )
+        return v
+
+    @field_validator("cloud_encryption_key")
+    @classmethod
+    def validate_cloud_key(cls, v: str, info) -> str:
+        """Validate the cloud key format and warn when it's not set in production."""
+        import os
+        if v:
+            from cryptography.fernet import Fernet
+            try:
+                Fernet(v.encode())
+            except Exception as exc:
+                raise ValueError("CLOUD_ENCRYPTION_KEY is not a valid Fernet key") from exc
+            return v
+        is_dev = os.getenv("NAS_MODE", "dev").lower() == "dev"
+        is_test = os.getenv("SKIP_APP_INIT") == "1" or os.getenv("PYTEST_CURRENT_TEST")
+        if not (is_dev or is_test):
+            logging.warning(
+                "CLOUD_ENCRYPTION_KEY not set — cloud OAuth creds use a SECRET_KEY-derived key. "
+                "Set a dedicated CLOUD_ENCRYPTION_KEY so JWT-key rotation doesn't break them."
             )
         return v
 
