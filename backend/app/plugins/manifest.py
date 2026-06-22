@@ -54,6 +54,9 @@ class PluginManifest(BaseModel):
     plugin_dependencies: List[str] = Field(default_factory=list)
     python_requirements: List[str] = Field(default_factory=list)
 
+    api_scopes: List[str] = Field(default_factory=list)
+    min_runtime_abi: Optional[int] = None
+
     entrypoint: str = "__init__.py"
     ui: Optional[PluginManifestUI] = None
 
