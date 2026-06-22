@@ -27,4 +27,10 @@ describe('isCallAllowed', () => {
     expect(isCallAllowed({ ...base, method: 'get', url: '/api/plugins/weather/../../users' })).toBe(false);
     expect(isCallAllowed({ ...base, method: 'get', url: 'https://evil.test/api/plugins/weather/x' })).toBe(false);
   });
+  it('denies own-prefix typosquatting (weatherEvil)', () => {
+    expect(isCallAllowed({ ...base, method: 'get', url: '/api/plugins/weatherEvil/secret', grantedScopes: [] })).toBe(false);
+  });
+  it('denies %2e%2e-encoded traversal', () => {
+    expect(isCallAllowed({ ...base, method: 'get', url: '/api/plugins/weather/%2e%2e/users', grantedScopes: [] })).toBe(false);
+  });
 });

@@ -25,7 +25,7 @@ export function isCallAllowed(opts: {
   // Normalise and reject traversal.
   const path = new URL(opts.url, 'http://x').pathname;
   if (path !== opts.url.split('?')[0]) return false; // query allowed, traversal/host not
-  if (path.includes('/../') || path.includes('..')) return false;
+  if (path.includes('..')) return false;
 
   // Own routes: /api/plugins/{thisPlugin}/...
   const ownPrefix = `/api/plugins/${pluginName}/`;

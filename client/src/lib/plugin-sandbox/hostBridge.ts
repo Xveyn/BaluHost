@@ -66,7 +66,7 @@ export class PluginBridge {
     if (channel === 'navigate') {
       const path = String(args[0] ?? '');
       const prefix = `/plugins/${this.opts.pluginName}`;
-      if (!path.startsWith(prefix)) throw { code: 'navigate_denied', message: 'Out-of-plugin navigation blocked' };
+      if (path !== prefix && !path.startsWith(prefix + '/')) throw { code: 'navigate_denied', message: 'Out-of-plugin navigation blocked' };
       this.opts.onNavigate?.(path);
       return null;
     }

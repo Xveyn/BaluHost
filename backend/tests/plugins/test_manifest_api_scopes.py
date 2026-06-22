@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 import pytest
-from app.plugins.manifest import load_manifest, PluginManifest
+from app.plugins.manifest import load_manifest
 
 
 def _write(tmp_path: Path, extra: dict) -> Path:

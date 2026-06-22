@@ -108,6 +108,42 @@ describe('PluginBridge', () => {
     b.dispose();
   });
 
+  it('navigate: denies a typosquatting path (/plugins/weatherEvil/x) and does not call onNavigate', async () => {
+    const { iframe, contentWindow, posted } = makeIframe();
+    const onNavigate = vi.fn();
+    const b = new PluginBridge({ iframe, pluginName: 'weather', grantedScopes: [], user, onNavigate });
+    b.start();
+    fireFromFrame(contentWindow, { kind: 'rpc', id: 'nav1', channel: 'navigate', method: '', args: ['/plugins/weatherEvil/x'] });
+    await vi.waitFor(() => {
+      const res = posted.find((m: any) => m.kind === 'rpc-result' && m.id === 'nav1');
+      expect(res).toBeTruthy();
+    });
+    const res = posted.find((m: any) => m.kind === 'rpc-result' && m.id === 'nav1') as any;
+    expect(res.ok).toBe(false);
+    expect(res.error.code).toBe('navigate_denied');
+    expect(onNavigate).not.toHaveBeenCalled();
+    b.dispose();
+  });
+
+  it('navigate: allows /plugins/weather (exact prefix) and /plugins/weather/sub', async () => {
+    for (const path of ['/plugins/weather', '/plugins/weather/sub']) {
+      const { iframe, contentWindow, posted } = makeIframe();
+      const onNavigate = vi.fn();
+      const b = new PluginBridge({ iframe, pluginName: 'weather', grantedScopes: [], user, onNavigate });
+      b.start();
+      const id = `nav-${path}`;
+      fireFromFrame(contentWindow, { kind: 'rpc', id, channel: 'navigate', method: '', args: [path] });
+      await vi.waitFor(() => {
+        const res = posted.find((m: any) => m.kind === 'rpc-result' && m.id === id);
+        expect(res).toBeTruthy();
+      });
+      const res = posted.find((m: any) => m.kind === 'rpc-result' && m.id === id) as any;
+      expect(res.ok).toBe(true);
+      expect(onNavigate).toHaveBeenCalledWith(path);
+      b.dispose();
+    }
+  });
+
   it('routes resize events to onResize', () => {
     const { iframe, contentWindow } = makeIframe();
     const onResize = vi.fn();
