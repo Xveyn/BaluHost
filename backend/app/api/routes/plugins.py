@@ -459,6 +459,43 @@ async def serve_plugin_asset(
             detail="Plugin not found or not enabled",
         )
 
+    # Sandbox bootstrap document — generated, not read from disk.
+    if file_path == "host.html":
+        # Resolve the plugin's UI bundle name from its manifest (fall back to bundle.js).
+        # The manifest stores the bundle path relative to the plugin dir (e.g. "ui/bundle.js"),
+        # but the /ui/{file_path} route already includes the "ui/" prefix, so we strip it.
+        bundle_path = "bundle.js"
+        try:
+            from app.plugins.manifest import load_manifest
+            manifest = load_manifest(plugin_manager.plugins_dir / name)
+            if manifest.ui and manifest.ui.bundle:
+                raw_bundle = manifest.ui.bundle
+                # Strip leading "ui/" so the URL resolves correctly via this route
+                if raw_bundle.startswith("ui/"):
+                    raw_bundle = raw_bundle[len("ui/"):]
+                bundle_path = raw_bundle
+        except Exception:
+            pass
+        html = (
+            '<!doctype html><html><head><meta charset="utf-8">'
+            f'<meta name="plugin-bundle" content="/api/plugins/{name}/ui/{bundle_path}">'
+            '</head><body><div id="plugin-root"></div>'
+            '<script src="/plugin-runtime.js"></script></body></html>'
+        )
+        return Response(
+            content=html,
+            media_type="text/html",
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Cache-Control": "no-store",
+                # Make the bootstrap framable by our own SPA. The global
+                # SecurityHeadersMiddleware would set DENY; the middleware
+                # carve-out in security_headers.py preserves these for the sandbox path.
+                "X-Frame-Options": "SAMEORIGIN",
+                "Content-Security-Policy": "frame-ancestors 'self'",
+            },
+        )
+
     # Construct file path
     plugin_path = plugin_manager.plugins_dir / name / "ui" / file_path
 
@@ -497,6 +534,7 @@ async def serve_plugin_asset(
         media_type=content_type,
         headers={
             "Cache-Control": "public, max-age=3600",
+            "Access-Control-Allow-Origin": "*",
         },
     )
 
