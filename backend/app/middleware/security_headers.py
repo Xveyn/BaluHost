@@ -39,7 +39,12 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             f"style-src {style_src}; "
             "img-src 'self' data: https:; "
             "font-src 'self' data:; "
-            "connect-src 'self' https:; "
+            # connect-src restricted to same-origin: fetch/XHR/WebSocket/SSE all hit
+            # the local backend (relative /api, same-host ws/wss). Dropping the blanket
+            # `https:` closes a CSP-level exfiltration channel (e.g. a malicious plugin
+            # POSTing localStorage tokens to an attacker host). Verified no SPA code
+            # connects to a foreign origin in the production web build.
+            "connect-src 'self'; "
             "base-uri 'self'; "
             "form-action 'self'"
         )
