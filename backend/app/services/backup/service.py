@@ -50,18 +50,15 @@ def _validate_backup_dir(backup_path: str) -> Path:
     Returns the resolved, validated destination ``Path``.
     Raises ``ValueError`` if the path is outside every allowed root.
     """
-    allowed_roots = [
-        Path(settings.nas_backup_path).resolve(),
-        Path(settings.nas_storage_path).resolve(),
-    ]
-    resolved = Path(backup_path).resolve()
-    # Direct per-root `is_relative_to` guard (matches the CodeQL-recognised
-    # containment-barrier form used in compat/webdav_provider.py) — resolve()
-    # collapses symlinks/`..`, is_relative_to rejects traversal and sibling
-    # prefixes (e.g. /storage-evil vs /storage).
-    for root in allowed_roots:
-        if resolved.is_relative_to(root):
-            return resolved
+    # realpath collapses symlinks and `..`; the `startswith(root + os.sep)` guard
+    # is the canonical path-injection containment barrier (CodeQL-recognised). The
+    # trailing separator stops a sibling-prefix escape (e.g. /storage-evil vs
+    # /storage); the `== root` arm allows the root directory itself.
+    resolved = os.path.realpath(backup_path)
+    for root in (settings.nas_backup_path, settings.nas_storage_path):
+        root_real = os.path.realpath(root)
+        if resolved == root_real or resolved.startswith(root_real + os.sep):
+            return Path(resolved)
     raise ValueError(
         "backup_path must be within the configured storage or backup directory"
     )
