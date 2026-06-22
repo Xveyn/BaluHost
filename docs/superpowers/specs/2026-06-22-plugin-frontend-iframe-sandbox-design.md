@@ -189,7 +189,7 @@ Deliberately excluded in v1: write Core scopes, wildcard scopes, plugin-to-plugi
 
 ## Backend Changes (small)
 
-- New route `GET /api/plugins/{name}/ui/host.html` (sandbox bootstrap) + permissive CORS on the `ui/` asset routes.
+- New route `GET /api/plugins/{name}/ui/host.html` (sandbox bootstrap) + permissive CORS on the `ui/` asset routes. The bootstrap must be **framable by our own SPA**: it sets `X-Frame-Options: SAMEORIGIN` + CSP `frame-ancestors 'self'`, and `SecurityHeadersMiddleware` gets a carve-out for that path (the global `X-Frame-Options: DENY` would otherwise blank the iframe).
 - Route serving the versioned `plugin-runtime.js`.
 - `plugin.json` schema + `PluginManifest` model gain `api_scopes` / `min_runtime_abi`; `InstalledPlugin` gains granted scopes (Alembic migration, chained onto the real `alembic heads` — see `project_alembic_migration_head_pitfall`).
 - Scope catalog as a Core constant; `scope_denied` audit logging.

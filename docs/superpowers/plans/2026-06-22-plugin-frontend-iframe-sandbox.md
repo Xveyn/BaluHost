@@ -39,7 +39,8 @@
 - `client/package.json` — add `build:runtime` script.
 
 **New/Modified (backend):**
-- `backend/app/api/routes/plugins.py` — add `GET /{name}/ui/host.html`, add the runtime asset route, add permissive CORS to the `ui/` asset response.
+- `backend/app/api/routes/plugins.py` — add `GET /{name}/ui/host.html` (framable bootstrap), add permissive CORS to the `ui/` asset response.
+- `backend/app/middleware/security_headers.py` — carve-out so the `host.html` bootstrap keeps `X-Frame-Options: SAMEORIGIN` + CSP `frame-ancestors 'self'` (the global `DENY` would blank the iframe).
 - `backend/app/plugins/manifest.py` — add `api_scopes` + `min_runtime_abi` to `PluginManifest`.
 - `backend/app/models/plugin.py` — add `granted_api_scopes` column to `InstalledPlugin`.
 - `backend/alembic/versions/<rev>_installed_plugins_granted_api_scopes.py` — migration.
@@ -320,7 +321,11 @@ function makeIframe() {
 }
 
 function fireFromFrame(contentWindow: Window, data: unknown) {
-  window.dispatchEvent(new MessageEvent('message', { source: contentWindow, data }));
+  // jsdom's MessageEvent constructor won't accept a plain object as `source`,
+  // so set it explicitly after construction for the reference-equality check.
+  const ev = new MessageEvent('message', { data });
+  Object.defineProperty(ev, 'source', { value: contentWindow });
+  window.dispatchEvent(ev);
 }
 
 describe('PluginBridge', () => {
@@ -652,12 +657,13 @@ window.parent.postMessage({ kind: 'event', name: 'ready', payload: null }, '*');
 // client/vite.runtime.config.ts
 import { defineConfig } from 'vite';
 
-// Builds the in-iframe runtime as a single IIFE asset, output into the main
-// client dist so the backend can serve it at a stable path.
+// Builds the in-iframe runtime as a single IIFE asset into `public/`, so Vite
+// serves it at `/plugin-runtime.js` in BOTH dev (public is served at root) and
+// prod (public is copied into dist). host.html references it absolutely.
 export default defineConfig({
   build: {
     emptyOutDir: false,
-    outDir: 'dist',
+    outDir: 'public',
     lib: {
       entry: 'src/plugin-runtime/index.ts',
       name: 'BaluHostPluginRuntime',
@@ -669,10 +675,18 @@ export default defineConfig({
 });
 ```
 
-In `client/package.json` scripts, add:
+In `client/package.json` scripts, add `build:runtime` and run it before the main build:
 ```json
-"build:runtime": "vite build --config vite.runtime.config.ts"
+"build:runtime": "vite build --config vite.runtime.config.ts",
+"prebuild": "npm run build:runtime"
 ```
+
+Add the generated artifact to `client/.gitignore` (it's a build output, not source):
+```
+public/plugin-runtime.js
+```
+
+For dev: `npm run build:runtime` once after pulling (document this in the migration guide); the file is then served at `/plugin-runtime.js` by the Vite dev server.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -682,7 +696,7 @@ Expected: PASS (3 tests).
 - [ ] **Step 5: Verify the runtime builds**
 
 Run: `cd client && npm run build:runtime`
-Expected: emits `client/dist/plugin-runtime.js`, no errors.
+Expected: emits `client/public/plugin-runtime.js`, no errors. Add `public/plugin-runtime.js` to `client/.gitignore`.
 
 - [ ] **Step 6: Commit**
 
@@ -693,10 +707,11 @@ git commit -m "feat(plugin-sandbox): in-iframe runtime SDK + separate vite runti
 
 ---
 
-### Task 5: Backend — serve `host.html`, runtime asset, permissive CORS
+### Task 5: Backend — serve framable `host.html`, permissive CORS, middleware carve-out
 
 **Files:**
 - Modify: `backend/app/api/routes/plugins.py` (the `serve_plugin_asset` route region, ~438–500)
+- Modify: `backend/app/middleware/security_headers.py` (carve-out so the bootstrap stays framable)
 - Test: `backend/tests/api/test_plugin_sandbox_assets.py`
 
 **Interfaces:**
@@ -733,6 +748,16 @@ def test_host_html_bootstrap_served(client):
         assert "plugin-runtime.js" in body
         assert 'name="plugin-bundle"' in body
         assert resp.headers.get("content-type", "").startswith("text/html")
+
+
+def test_host_html_is_framable_same_origin(client):
+    """The sandbox bootstrap MUST be framable by our own app — the global
+    X-Frame-Options: DENY would otherwise blank the iframe."""
+    resp = client.get("/api/plugins/storage_analytics/ui/host.html")
+    if resp.status_code == 200:
+        assert resp.headers.get("x-frame-options", "DENY").upper() != "DENY"
+        # CSP frame-ancestors must allow same-origin framing.
+        assert "frame-ancestors" in resp.headers.get("content-security-policy", "")
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -747,7 +772,15 @@ In `serve_plugin_asset`, before the generic file handling, special-case `host.ht
 ```python
     # Sandbox bootstrap document — generated, not read from disk.
     if file_path == "host.html":
-        bundle_path = "bundle.js"  # convention; manifest UI bundle name
+        # Resolve the plugin's UI bundle name from its manifest (fall back to bundle.js).
+        bundle_path = "bundle.js"
+        try:
+            from app.plugins.manifest import load_manifest
+            manifest = load_manifest(plugin_manager.plugins_dir / name)
+            if manifest.ui and manifest.ui.bundle:
+                bundle_path = manifest.ui.bundle
+        except Exception:
+            pass
         html = (
             "<!doctype html><html><head><meta charset='utf-8'>"
             f"<meta name='plugin-bundle' content='/api/plugins/{name}/ui/{bundle_path}'>"
@@ -757,7 +790,15 @@ In `serve_plugin_asset`, before the generic file handling, special-case `host.ht
         return Response(
             content=html,
             media_type="text/html",
-            headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "no-store"},
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Cache-Control": "no-store",
+                # Make the bootstrap framable by our own SPA. The global
+                # SecurityHeadersMiddleware would set DENY; the middleware
+                # carve-out (Step 4) preserves these for the sandbox path.
+                "X-Frame-Options": "SAMEORIGIN",
+                "Content-Security-Policy": "frame-ancestors 'self'",
+            },
         )
 ```
 
@@ -776,20 +817,36 @@ Then change the final `FileResponse(...)` headers dict to include CORS:
 
 (Ensure `Response` is imported: `from fastapi import Response` — it already is in this module.)
 
-- [ ] **Step 4: Run test to verify it passes**
+- [ ] **Step 4: Carve out the sandbox bootstrap in SecurityHeadersMiddleware**
+
+The middleware runs after the route and unconditionally sets `X-Frame-Options: DENY`, which would clobber the framable header and blank the iframe. Modify `backend/app/middleware/security_headers.py` so the sandbox bootstrap keeps its own framing headers.
+
+In `SecurityHeadersMiddleware.dispatch`, right after `response = await call_next(request)`, add:
+
+```python
+        # The plugin sandbox bootstrap must be framable by our own SPA; it sets
+        # its own X-Frame-Options/CSP frame-ancestors. Skip the global DENY/CSP
+        # for that single path so the iframe can render.
+        if request.url.path.endswith("/ui/host.html") and request.url.path.startswith("/api/plugins/"):
+            return response
+```
+
+This returns before the global header block overwrites the route's headers. (All other plugin asset paths still get the standard headers.)
+
+- [ ] **Step 5: Run test to verify it passes**
 
 Run: `cd backend && python -m pytest tests/api/test_plugin_sandbox_assets.py -v`
-Expected: PASS (2 tests; assertions are conditional on the plugin being enabled in the test env).
+Expected: PASS (3 tests; assertions are conditional on the plugin being enabled in the test env).
 
-- [ ] **Step 5: Serve the runtime asset**
+- [ ] **Step 7: Confirm runtime asset serving**
 
-The static frontend (`client/dist`) is served by nginx/Vite; `plugin-runtime.js` lands in `dist/` from `build:runtime`, so `/plugin-runtime.js` resolves via the existing static mount. Confirm the deploy build runs `build:runtime` — add it to the client build pipeline in a later infra task (tracked in Phase 5). For dev, Vite serves `src/plugin-runtime/index.ts`; add a dev-only alias note in the migration guide.
+`plugin-runtime.js` is emitted into `client/public/` by `build:runtime` (Task 4), so the `prebuild` hook makes `npm run build` copy it into `dist/` and `/plugin-runtime.js` resolves via the existing static mount in prod, and via the Vite dev server in dev. No backend route needed for the runtime itself. Verify `/plugin-runtime.js` is reachable in a dev session after `npm run build:runtime`.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
-git add backend/app/api/routes/plugins.py backend/tests/api/test_plugin_sandbox_assets.py
-git commit -m "feat(plugin-sandbox): serve host.html bootstrap + permissive CORS on ui assets"
+git add backend/app/api/routes/plugins.py backend/app/middleware/security_headers.py backend/tests/api/test_plugin_sandbox_assets.py
+git commit -m "feat(plugin-sandbox): serve framable host.html bootstrap + CORS, middleware carve-out"
 ```
 
 ---
