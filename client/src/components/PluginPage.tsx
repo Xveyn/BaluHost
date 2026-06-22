@@ -59,8 +59,7 @@ export default function PluginPage() {
       <PluginSandboxHost
         pluginName={pluginName!}
         user={user}
-        grantedScopes={[]}
-        // TODO(Phase 2): wire granted_api_scopes from pluginInfo once the field exists on PluginUIInfo
+        grantedScopes={pluginInfo?.granted_api_scopes ?? []}
       />
     </div>
   );

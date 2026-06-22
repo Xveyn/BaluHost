@@ -43,6 +43,7 @@ export interface PluginUIInfo {
   styles_path?: string;
   dashboard_widgets: string[];
   translations?: PluginTranslations;
+  granted_api_scopes: string[];
 }
 
 export interface PluginUIManifest {

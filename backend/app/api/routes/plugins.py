@@ -100,15 +100,22 @@ async def list_permissions(
 @user_limiter.limit(get_limit("admin_operations"))
 async def get_ui_manifest(
     request: Request, response: Response,
+    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     plugin_manager: PluginManager = Depends(get_plugin_manager),
 ) -> PluginUIManifestResponse:
     """Get UI manifest for frontend integration.
 
     Returns navigation items and bundle paths for all enabled plugins.
+    Includes granted_api_scopes from the DB record for each plugin so
+    the frontend plugin sandbox can enforce API scope restrictions.
     """
     manifest = plugin_manager.get_ui_manifest()
-    return PluginUIManifestResponse(**manifest)
+    result = PluginUIManifestResponse(**manifest)
+    for item in result.plugins:
+        record = plugin_service.get_installed_plugin(db, item.name)
+        item.granted_api_scopes = (record.granted_api_scopes or []) if record else []
+    return result
 
 
 @router.get("/{name}", response_model=PluginDetailResponse)
