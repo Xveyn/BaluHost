@@ -26,6 +26,9 @@ class InstalledPlugin(Base):
     granted_permissions: Mapped[Optional[List[str]]] = mapped_column(
         JSON, nullable=True, default=list
     )
+    granted_api_scopes: Mapped[Optional[List[str]]] = mapped_column(
+        JSON, nullable=True, default=list
+    )
     config: Mapped[Optional[Dict[str, Any]]] = mapped_column(
         JSON, nullable=True, default=dict
     )
