@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "test": "vitest",
+    "build:runtime": "vite build --config vite.runtime.config.ts",
+    "prebuild": "npm run build:runtime",
     "build": "tsc -b && vite build",
     "build:pi": "tsc -b && vite build --mode pi",
     "build:prod": "vite build",
