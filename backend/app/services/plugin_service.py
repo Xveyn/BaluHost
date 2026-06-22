@@ -39,8 +39,14 @@ def enable_plugin(
     permissions: list[str],
     default_config: dict,
     installed_by: str,
+    api_scopes: list[str] | None = None,
 ) -> InstalledPlugin:
     """Enable a plugin — create or update the DB record.
+
+    Args:
+        api_scopes: Declared Core API scopes from the plugin's manifest.
+                    Stored in ``granted_api_scopes``. Defaults to ``None``
+                    which is treated as an empty list (backwards-compatible).
 
     Returns the updated InstalledPlugin record (already committed).
     """
@@ -53,6 +59,7 @@ def enable_plugin(
             display_name=display_name,
             is_enabled=True,
             granted_permissions=permissions,
+            granted_api_scopes=api_scopes or [],
             config=default_config,
             installed_by=installed_by,
             enabled_at=datetime.now(timezone.utc),
@@ -61,6 +68,7 @@ def enable_plugin(
     else:
         record.is_enabled = True
         record.granted_permissions = permissions
+        record.granted_api_scopes = api_scopes or []
         record.enabled_at = datetime.now(timezone.utc)
         record.disabled_at = None
 

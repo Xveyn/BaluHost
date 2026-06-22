@@ -232,6 +232,13 @@ async def toggle_plugin(
                 detail=f"Missing required permissions: {list(missing)}",
             )
 
+        from app.plugins.manifest import load_manifest, ManifestError
+        try:
+            _manifest = load_manifest(plugin_manager.plugins_dir / name)
+            api_scopes = list(_manifest.api_scopes)
+        except (ManifestError, Exception):
+            api_scopes = []  # bundled/legacy plugins without a manifest declare no Core scopes
+
         plugin_service.enable_plugin(
             db,
             name=name,
@@ -240,6 +247,7 @@ async def toggle_plugin(
             permissions=permissions_to_grant,
             default_config=plugin.get_default_config(),
             installed_by=current_user.username,
+            api_scopes=api_scopes,
         )
 
         # Enable in plugin manager
