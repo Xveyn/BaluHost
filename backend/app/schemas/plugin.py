@@ -192,5 +192,5 @@ class DashboardPanelResponse(BaseModel):
 class ScopeDeniedReport(BaseModel):
     """Request body for reporting a plugin scope denial."""
 
-    method: str
-    url: str
+    method: str = Field(max_length=16)
+    url: str = Field(max_length=2048)
