@@ -71,6 +71,13 @@ async def create_backup(
         )
 
         return BackupResponse.from_db(backup)
+    except ValueError as e:
+        # Curated validation error (e.g. backup_path outside the allowed storage
+        # roots) — the message is safe operational guidance, surface it as 400.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
     except Exception as e:
         # Emit hook for failed backup
         emit_hook(
