@@ -16,9 +16,17 @@ export default function PluginSandboxHost({ pluginName, user, grantedScopes }: P
   const navigate = useNavigate();
   const [height, setHeight] = useState(480);
 
+  // Derive stable primitive keys so the bridge is only recreated when the
+  // plugin, user identity, or scope-list CONTENTS change — not on every
+  // parent re-render that passes a new `[]` literal or a new user object ref.
+  const scopesKey = grantedScopes.join(',');
+  const userId = user.id;
+
   useEffect(() => {
     const iframe = iframeRef.current;
     if (!iframe) return;
+    // Read the CURRENT grantedScopes/user arrays/objects at effect-run time
+    // (not the derived keys) so the bridge receives the real values.
     const bridge = new PluginBridge({
       iframe,
       pluginName,
@@ -29,7 +37,8 @@ export default function PluginSandboxHost({ pluginName, user, grantedScopes }: P
     });
     bridge.start();
     return () => bridge.dispose();
-  }, [pluginName, grantedScopes, user, navigate]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pluginName, scopesKey, userId, navigate]);
 
   return (
     <iframe
