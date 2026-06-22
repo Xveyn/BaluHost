@@ -77,6 +77,8 @@ export class PluginBridge {
     const url = String(args[0] ?? '');
     const body = args[1];
     if (!isCallAllowed({ pluginName: this.opts.pluginName, method, url, grantedScopes: this.opts.grantedScopes })) {
+      console.warn('[plugin:' + this.opts.pluginName + '] scope_denied', method, url);
+      apiClient.post('/api/plugins/' + this.opts.pluginName + '/_audit/scope-denied', { method, url }).catch(() => {});
       throw { code: 'scope_denied', message: `Plugin not permitted to call ${method.toUpperCase()} ${url}` };
     }
     const res = await apiClient.request({ url, method, data: body });

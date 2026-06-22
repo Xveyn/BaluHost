@@ -187,3 +187,10 @@ class DashboardPanelResponse(BaseModel):
     accent: str
     data: Optional[Dict[str, Any]] = None
     translations: Optional[Dict[str, Dict[str, str]]] = None
+
+
+class ScopeDeniedReport(BaseModel):
+    """Request body for reporting a plugin scope denial."""
+
+    method: str
+    url: str

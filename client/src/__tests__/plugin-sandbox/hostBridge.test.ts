@@ -3,7 +3,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { PluginBridge } from '../../lib/plugin-sandbox/hostBridge';
 
 vi.mock('../../lib/api', () => ({
-  apiClient: { request: vi.fn(async () => ({ data: { ok: true } })) },
+  apiClient: {
+    request: vi.fn(async () => ({ data: { ok: true } })),
+    post: vi.fn(() => Promise.resolve({ data: {} })),
+  },
 }));
 import { apiClient } from '../../lib/api';
 
@@ -67,6 +70,30 @@ describe('PluginBridge', () => {
     expect(res.ok).toBe(false);
     expect(res.error.code).toBe('scope_denied');
     expect(apiClient.request).not.toHaveBeenCalled();
+    b.dispose();
+  });
+
+  it('fires audit POST and still rejects scope_denied without calling apiClient.request', async () => {
+    const { iframe, contentWindow, posted } = makeIframe();
+    const b = new PluginBridge({ iframe, pluginName: 'weather', grantedScopes: [], user });
+    b.start();
+    fireFromFrame(contentWindow, { kind: 'rpc', id: 'r5', channel: 'api', method: 'get', args: ['/api/users'] });
+    await vi.waitFor(() => {
+      const res = posted.find((m: any) => m.kind === 'rpc-result' && m.id === 'r5');
+      expect(res).toBeTruthy();
+    });
+    const res = posted.find((m: any) => m.kind === 'rpc-result' && m.id === 'r5') as any;
+    // Bridge still rejects with scope_denied
+    expect(res.ok).toBe(false);
+    expect(res.error.code).toBe('scope_denied');
+    // apiClient.request must NOT have been called (call was denied before proxying)
+    expect(apiClient.request).not.toHaveBeenCalled();
+    // apiClient.post MUST have been called with the audit path and {method, url}
+    expect(apiClient.post).toHaveBeenCalledOnce();
+    expect(apiClient.post).toHaveBeenCalledWith(
+      '/api/plugins/weather/_audit/scope-denied',
+      { method: 'get', url: '/api/users' },
+    );
     b.dispose();
   });
 

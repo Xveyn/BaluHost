@@ -27,7 +27,7 @@ CACHE_TTL_SECONDS = 5.0
 # Path suffixes for management routes that should NOT be gated.
 # These are the admin endpoints defined in api/routes/plugins.py.
 _MANAGEMENT_SUFFIXES = ("/toggle", "/config")
-_MANAGEMENT_PREFIXES = ("/ui/",)
+_MANAGEMENT_PREFIXES = ("/ui/", "/_audit/")
 
 
 def _is_management_route(sub_path: str) -> bool:

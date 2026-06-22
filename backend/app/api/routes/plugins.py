@@ -12,6 +12,7 @@ from app.middleware.plugin_gate import invalidate_plugin_cache
 from app.plugins.manager import PluginManager, PluginLoadError
 from app.plugins.permissions import PermissionManager
 from app.services import plugin_service
+from app.services.audit.logger_db import get_audit_logger_db
 from app.schemas.plugin import (
     DashboardPanelToggleRequest,
     PermissionInfo,
@@ -25,6 +26,7 @@ from app.schemas.plugin import (
     PluginToggleRequest,
     PluginToggleResponse,
     PluginUIManifestResponse,
+    ScopeDeniedReport,
 )
 
 
@@ -337,7 +339,6 @@ async def toggle_dashboard_panel(
     plugin_service.set_dashboard_panel_enabled(db, name, body.enabled)
 
     # Audit log
-    from app.services.audit.logger_db import get_audit_logger_db
     audit = get_audit_logger_db()
     audit.log_event(
         event_type="PLUGIN",
@@ -359,6 +360,35 @@ async def toggle_dashboard_panel(
         "dashboard_panel_enabled": body.enabled,
         "message": f"Dashboard panel {'enabled' if body.enabled else 'disabled'}",
     }
+
+
+@router.post("/{name}/_audit/scope-denied", status_code=200)
+@user_limiter.limit(get_limit("admin_operations"))
+async def report_scope_denied(
+    request: Request,
+    response: Response,
+    name: str,
+    body: ScopeDeniedReport,
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Record a plugin scope-denial event in the audit log.
+
+    Called by the host bridge (fire-and-forget) when a plugin attempts an API
+    call that its granted_api_scopes do not permit.  Any authenticated user may
+    post (the bridge runs in the user's session).  The event is written with
+    success=False so it surfaces as a security event in the admin audit log.
+    """
+    audit = get_audit_logger_db()
+    audit.log_event(
+        event_type="PLUGIN",
+        user=current_user.username,
+        action="scope_denied",
+        resource=name,
+        success=False,
+        details={"method": body.method, "url": body.url},
+        ip_address=request.client.host if request.client else None,
+    )
+    return {"recorded": True}
 
 
 @router.get("/{name}/config", response_model=PluginConfigResponse)
