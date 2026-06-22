@@ -36,6 +36,34 @@ _CONFIG_REDACT_RE = re.compile(
 _REDACTED_PLACEHOLDER = "***REDACTED***"
 
 
+def _validate_backup_dir(backup_path: str) -> Path:
+    """Resolve an admin-supplied backup destination, rejecting any path that escapes
+    the allowed storage roots.
+
+    Admins may legitimately target a custom directory — e.g. a different array or
+    external drive mounted under the NAS storage tree, or the configured backup
+    directory. They must NOT be able to make the backend (running as the shared
+    ``baluhost`` service user) ``mkdir -p`` and write an archive at an arbitrary
+    filesystem location like ``/etc`` or another LAN user's home. Symlinks are
+    resolved before the check so a symlinked subdir cannot be used to escape.
+
+    Returns the resolved, validated destination ``Path``.
+    Raises ``ValueError`` if the path is outside every allowed root.
+    """
+    # realpath collapses symlinks and `..`; the `startswith(root + os.sep)` guard
+    # is the canonical path-injection containment barrier (CodeQL-recognised). The
+    # trailing separator stops a sibling-prefix escape (e.g. /storage-evil vs
+    # /storage); the `== root` arm allows the root directory itself.
+    resolved = os.path.realpath(backup_path)
+    for root in (settings.nas_backup_path, settings.nas_storage_path):
+        root_real = os.path.realpath(root)
+        if resolved == root_real or resolved.startswith(root_real + os.sep):
+            return Path(resolved)
+    raise ValueError(
+        "backup_path must be within the configured storage or backup directory"
+    )
+
+
 class BackupService:
     """Service for managing system backups."""
     
@@ -65,8 +93,10 @@ class BackupService:
         """
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"backup_{timestamp}.tar.gz"
-        # Use optional path from request or the service's backup_dir
-        backup_dir = Path(backup_data.backup_path) if backup_data.backup_path else self.backup_dir
+        # Use optional path from request or the service's backup_dir. A custom
+        # destination is validated against the allowed storage roots so an admin
+        # cannot make the backend write archives to arbitrary filesystem paths.
+        backup_dir = _validate_backup_dir(backup_data.backup_path) if backup_data.backup_path else self.backup_dir
         backup_dir.mkdir(parents=True, exist_ok=True)
         filepath = backup_dir / filename
         

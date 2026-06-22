@@ -407,3 +407,58 @@ class TestConfigBackup:
         ref_dirs = list(temp_backup_dir.glob("restored-config-*"))
         assert len(ref_dirs) == 1
         assert (ref_dirs[0] / "settings.snapshot.json").exists()
+
+
+class TestValidateBackupDir:
+    """A custom backup_path must stay within the allowed storage roots so an admin
+    cannot make the backend write archives to arbitrary filesystem locations."""
+
+    @pytest.fixture
+    def roots(self, tmp_path, monkeypatch):
+        from app.services.backup import service as backup_module
+
+        storage = tmp_path / "storage"
+        backups = tmp_path / "backups"
+        storage.mkdir()
+        backups.mkdir()
+        monkeypatch.setattr(backup_module.settings, "nas_storage_path", str(storage))
+        monkeypatch.setattr(backup_module.settings, "nas_backup_path", str(backups))
+        return storage, backups
+
+    def test_accepts_path_within_backup_root(self, roots):
+        from app.services.backup.service import _validate_backup_dir
+
+        storage, backups = roots
+        target = backups / "weekly"
+        result = _validate_backup_dir(str(target))
+        assert result == target.resolve()
+
+    def test_accepts_path_within_storage_root(self, roots):
+        from app.services.backup.service import _validate_backup_dir
+
+        storage, backups = roots
+        target = storage / "array2" / "backups"
+        result = _validate_backup_dir(str(target))
+        assert result == target.resolve()
+
+    def test_accepts_root_itself(self, roots):
+        from app.services.backup.service import _validate_backup_dir
+
+        storage, backups = roots
+        assert _validate_backup_dir(str(backups)) == backups.resolve()
+
+    def test_rejects_arbitrary_absolute_path(self, roots):
+        from app.services.backup.service import _validate_backup_dir
+
+        with pytest.raises(ValueError):
+            _validate_backup_dir(str(Path(os.sep) / "etc" / "baluhost-evil"))
+
+    def test_rejects_traversal_escape(self, roots):
+        from app.services.backup.service import _validate_backup_dir
+
+        storage, backups = roots
+        # Escape the allowed root via '..' — resolve() collapses it, so the check
+        # sees the real (outside) destination and rejects it.
+        escape = backups / ".." / ".." / "outside"
+        with pytest.raises(ValueError):
+            _validate_backup_dir(str(escape))

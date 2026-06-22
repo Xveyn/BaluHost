@@ -34,6 +34,16 @@ class TestSecurityHeaders:
         assert "default-src 'self'" in csp
         assert "script-src" in csp
 
+    def test_connect_src_restricted_to_self(self, client):
+        """connect-src must be same-origin only — no blanket `https:` exfil channel."""
+        response = client.get("/api/health")
+
+        headers = {k.lower(): v for k, v in response.headers.items()}
+        csp = headers["content-security-policy"]
+        assert "connect-src 'self'" in csp
+        # The blanket `https:` source (any external HTTPS host) must be gone.
+        assert "connect-src 'self' https:" not in csp
+
     def test_x_content_type_options_header_set(self, client):
         """Verify X-Content-Type-Options: nosniff header."""
         response = client.get("/api/health")
