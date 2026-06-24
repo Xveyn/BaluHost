@@ -42,5 +42,12 @@ export function createSandboxSdk(post: (msg: unknown) => void, opts: { timeoutMs
   };
   const navigate = (path: string) => call('navigate', 'go', [path]);
 
-  return { api, toast, navigate, _receive };
+  const storage = {
+    get: (key: string) => call('storage', 'get', [key]),
+    set: (key: string, value: unknown) => call('storage', 'set', [key, value]),
+    del: (key: string) => call('storage', 'del', [key]),
+    keys: () => call('storage', 'keys', []),
+  };
+
+  return { api, toast, navigate, storage, _receive };
 }
