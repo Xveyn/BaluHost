@@ -264,7 +264,7 @@ export default function StorageAnalytics() {
   const token = localStorage.getItem('token');        // does not work in sandbox
 
   useEffect(() => {
-    fetch('/api/files/storage', {                     // unauthenticated in sandbox
+    fetch('/api/plugins/storage_analytics/stats', {   // unauthenticated in sandbox
       headers: { Authorization: `Bearer ${token}` },
     }).then(r => r.json()).then(setData);
   }, []);
@@ -284,7 +284,7 @@ export default function StorageAnalytics() {
   const [data, setData] = useState(null);
 
   useEffect(() => {
-    BaluHost.api.get('/api/files/storage')   // proxied, scoped, authenticated
+    BaluHost.api.get('/api/plugins/storage_analytics/stats')   // proxied, authenticated, own-route
       .then(setData)
       .catch(() => BaluHost.toast.error('Failed to load storage data'));
   }, []);
@@ -297,10 +297,11 @@ export default function StorageAnalytics() {
 `plugin.json` changes:
 
 ```diff
--  "api_scopes": [],
-+  "api_scopes": ["read:storage"],
-   "min_runtime_abi": 1
++  "api_scopes": [],
++  "min_runtime_abi": 1
 ```
+
+`storage_analytics` only calls its **own** routes (`/api/plugins/storage_analytics/*`), which are always allowed, so `api_scopes` stays `[]`. A plugin that needs a **Core** route — e.g. `GET /api/files/storage` — must instead declare the matching catalog scope, `"api_scopes": ["read:storage"]`, and have it admin-granted at install.
 
 **Key changes summary:**
 
@@ -308,8 +309,8 @@ export default function StorageAnalytics() {
 |---|---|
 | `import React from 'react'` | `const { React, hooks } = window.BaluHost` |
 | `localStorage.getItem('token')` | Removed — no token needed |
-| `fetch('/api/files/storage', { headers: ... })` | `BaluHost.api.get('/api/files/storage')` |
-| No scope declaration | `"api_scopes": ["read:storage"]` |
+| `fetch('/api/plugins/storage_analytics/stats', { headers: ... })` | `BaluHost.api.get('/api/plugins/storage_analytics/stats')` |
+| No scope declaration | `"api_scopes": []` (own-routes need no scope) |
 | localStorage for persistence | `BaluHost.storage.set/get` |
 
 ---
