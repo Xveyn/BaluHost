@@ -42,6 +42,8 @@ export default function PluginSandboxHost({ pluginName, user, grantedScopes, the
     });
     bridge.start();
     return () => bridge.dispose();
+    // `theme` intentionally omitted here — Task 4 wires live theme updates via a
+    // separate effect + bridge.setTheme(); this file currently passes a default theme.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pluginName, scopesKey, userId, navigate]);
 

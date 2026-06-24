@@ -58,7 +58,7 @@ export class PluginBridge {
       if (data.name === 'ready') {
         const runtimeAbi = (data.payload as { runtime_abi?: unknown })?.runtime_abi;
         const abi = typeof runtimeAbi === 'number' ? runtimeAbi : 1;
-        if (this.opts.minRuntimeAbi && abi < this.opts.minRuntimeAbi) {
+        if (this.opts.minRuntimeAbi !== undefined && abi < this.opts.minRuntimeAbi) {
           this.opts.onError?.('abi_mismatch');
           return;
         }
