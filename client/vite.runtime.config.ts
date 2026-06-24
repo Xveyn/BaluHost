@@ -13,6 +13,12 @@ export default defineConfig({
       formats: ['iife'],
       fileName: () => 'plugin-runtime.js',
     },
-    rollupOptions: { output: { entryFileNames: 'plugin-runtime.js' } },
+    rollupOptions: {
+      output: {
+        entryFileNames: 'plugin-runtime.js',
+        assetFileNames: (info) =>
+          info.name && info.name.endsWith('.css') ? 'plugin-runtime.css' : '[name][extname]',
+      },
+    },
   },
 });

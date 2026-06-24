@@ -529,6 +529,7 @@ async def serve_plugin_asset(
         safe_bundle_path = html.escape(bundle_path, quote=True)
         html_doc = (
             '<!doctype html><html><head><meta charset="utf-8">'
+            '<link rel="stylesheet" href="/plugin-runtime.css">'
             f'<meta name="plugin-bundle" content="/api/plugins/{safe_name}/ui/{safe_bundle_path}">'
             '</head><body><div id="plugin-root"></div>'
             '<script src="/plugin-runtime.js"></script></body></html>'
