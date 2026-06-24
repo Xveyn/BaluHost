@@ -50,7 +50,11 @@ class FritzBoxVPNService:
                     key, value = line.split('=', 1)
                     key = key.strip().lower()  # Case-insensitive key matching
                     value = value.strip()
-                    debug_lines.append(f"Line {line_num}: [Interface] {key} = {value[:20]}..." if len(value) > 20 else f"Line {line_num}: [Interface] {key} = {value}")
+                    _SECRET_KEYS = {"privatekey", "presharedkey"}
+                    if key in _SECRET_KEYS:
+                        debug_lines.append(f"Line {line_num}: [Interface] {key} = <redacted>")
+                    else:
+                        debug_lines.append(f"Line {line_num}: [Interface] {key} = {value[:20]}..." if len(value) > 20 else f"Line {line_num}: [Interface] {key} = {value}")
 
                     if key == 'privatekey':
                         config['private_key'] = value
@@ -67,7 +71,11 @@ class FritzBoxVPNService:
                     key, value = line.split('=', 1)
                     key = key.strip().lower()  # Case-insensitive key matching
                     value = value.strip()
-                    debug_lines.append(f"Line {line_num}: [Peer] {key} = {value}")
+                    _PEER_SECRET_KEYS = {"presharedkey"}
+                    if key in _PEER_SECRET_KEYS:
+                        debug_lines.append(f"Line {line_num}: [Peer] {key} = <redacted>")
+                    else:
+                        debug_lines.append(f"Line {line_num}: [Peer] {key} = {value}")
 
                     if key == 'publickey':
                         config['peer_public_key'] = value
