@@ -10,6 +10,7 @@ from app.api.deps import get_current_admin, get_current_user, get_db, require_lo
 from app.core.rate_limiter import user_limiter, get_limit
 from app.models.user import User
 from app.middleware.plugin_gate import invalidate_plugin_cache
+from app.plugins.manifest import load_manifest
 from app.plugins.manager import PluginManager, PluginLoadError
 from app.plugins.permissions import PermissionManager
 from app.services import plugin_service
@@ -117,7 +118,6 @@ async def get_ui_manifest(
     """
     manifest = plugin_manager.get_ui_manifest()
     result = PluginUIManifestResponse(**manifest)
-    from app.plugins.manifest import load_manifest
     for item in result.plugins:
         record = plugin_service.get_installed_plugin(db, item.name)
         item.granted_api_scopes = (record.granted_api_scopes or []) if record else []
@@ -243,7 +243,6 @@ async def toggle_plugin(
                 detail=f"Missing required permissions: {list(missing)}",
             )
 
-        from app.plugins.manifest import load_manifest
         try:
             _manifest = load_manifest(plugin_manager.plugins_dir / name)
             api_scopes = list(_manifest.api_scopes)
@@ -573,7 +572,6 @@ async def serve_plugin_asset(
         # but the /ui/{file_path} route already includes the "ui/" prefix, so we strip it.
         bundle_path = "bundle.js"
         try:
-            from app.plugins.manifest import load_manifest
             manifest = load_manifest(plugin_manager.plugins_dir / name)
             if manifest.ui and manifest.ui.bundle:
                 raw_bundle = manifest.ui.bundle
