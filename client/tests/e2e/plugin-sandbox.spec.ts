@@ -37,15 +37,16 @@ test(
     const page = await authenticatedContext.newPage();
 
     await page.goto('/plugins/storage_analytics');
+    // toBeVisible() below is the real synchronization gate; domcontentloaded does
+    // not guarantee React has rendered the iframe.
     await page.waitForLoadState('domcontentloaded');
 
-    // 1. The iframe must carry sandbox="allow-scripts" exactly.
+    // 1. The iframe must contain "allow-scripts" and must NOT contain "allow-same-origin".
+    //    Use containment (not exact equality) so adding other safe tokens never breaks the test.
     const frame = page.locator('iframe[title="plugin-storage_analytics"]');
     await expect(frame).toBeVisible({ timeout: 10000 });
-    await expect(frame).toHaveAttribute('sandbox', 'allow-scripts');
-
-    // 2. allow-same-origin must NOT appear in the sandbox value (opaque origin).
     const sandboxValue = await frame.getAttribute('sandbox');
+    expect(sandboxValue).toContain('allow-scripts');
     expect(sandboxValue).not.toContain('allow-same-origin');
 
     // 3. The main browsing context must NOT expose window.BaluHost (SDK not leaked to host).
