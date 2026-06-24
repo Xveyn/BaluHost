@@ -98,7 +98,7 @@ describe('PluginBridge', () => {
   });
 
   it('ignores messages whose source is not the iframe window', async () => {
-    const { iframe, contentWindow, posted } = makeIframe();
+    const { iframe, posted } = makeIframe();
     const b = new PluginBridge({ iframe, pluginName: 'weather', grantedScopes: [], user });
     b.start();
     const other = { postMessage: () => {} } as unknown as Window;

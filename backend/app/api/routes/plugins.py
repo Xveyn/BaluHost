@@ -1,4 +1,5 @@
 """API routes for plugin management."""
+import html
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -521,14 +522,19 @@ async def serve_plugin_asset(
                 bundle_path = raw_bundle
         except Exception:
             pass
-        html = (
+        # Escape values flowing into the HTML attribute. `name` is a user-supplied
+        # path parameter and `bundle_path` derives from the plugin manifest; both are
+        # quoted into content="..." so escape them to neutralise attribute breakout / XSS.
+        safe_name = html.escape(name, quote=True)
+        safe_bundle_path = html.escape(bundle_path, quote=True)
+        html_doc = (
             '<!doctype html><html><head><meta charset="utf-8">'
-            f'<meta name="plugin-bundle" content="/api/plugins/{name}/ui/{bundle_path}">'
+            f'<meta name="plugin-bundle" content="/api/plugins/{safe_name}/ui/{safe_bundle_path}">'
             '</head><body><div id="plugin-root"></div>'
             '<script src="/plugin-runtime.js"></script></body></html>'
         )
         return Response(
-            content=html,
+            content=html_doc,
             media_type="text/html",
             headers={
                 "Access-Control-Allow-Origin": "*",
