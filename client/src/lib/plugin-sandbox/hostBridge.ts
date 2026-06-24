@@ -90,6 +90,7 @@ export class PluginBridge {
 
   private async dispatch(channel: string, method: string, args: unknown[]): Promise<unknown> {
     if (channel === 'api') return this.apiCall(method, args);
+    if (channel === 'storage') return this.storageCall(method, args);
     if (channel === 'navigate') {
       const path = String(args[0] ?? '');
       const prefix = `/plugins/${this.opts.pluginName}`;
@@ -98,6 +99,35 @@ export class PluginBridge {
       return null;
     }
     throw { code: 'unknown_channel', message: `Unknown channel ${channel}` };
+  }
+
+  private async storageCall(method: string, args: unknown[]): Promise<unknown> {
+    const base = `/api/plugins/${this.opts.pluginName}/_storage`;
+    const key = encodeURIComponent(String(args[0] ?? ''));
+    try {
+      if (method === 'get') {
+        const res = await apiClient.get(`${base}/${key}`);
+        return (res.data as { value?: unknown })?.value;
+      }
+      if (method === 'set') {
+        await apiClient.put(`${base}/${key}`, { value: args[1] });
+        return { ok: true };
+      }
+      if (method === 'del') {
+        await apiClient.delete(`${base}/${key}`);
+        return null;
+      }
+      if (method === 'keys') {
+        const res = await apiClient.get(base);
+        return (res.data as { keys?: unknown })?.keys ?? [];
+      }
+      throw { code: 'unknown_method', message: `Unknown storage method ${method}` };
+    } catch (err) {
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      if (method === 'get' && status === 404) return undefined;
+      if (status === 413) throw { code: 'storage_quota', message: 'Plugin storage quota exceeded' };
+      throw err;
+    }
   }
 
   private async apiCall(method: string, args: unknown[]): Promise<unknown> {
