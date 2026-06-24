@@ -66,7 +66,7 @@
 - `client/src/__tests__/plugin-sandbox/abiGate.test.ts`
 - `backend/tests/plugins/test_plugin_storage_service.py`
 - `backend/tests/api/test_plugin_storage_routes.py`
-- `client/e2e/plugin-sandbox.spec.ts` (Phase 5)
+- `client/tests/e2e/plugin-sandbox.spec.ts` (Phase 5; real e2e dir is `client/tests/e2e/`)
 
 **New docs (Phase 5):**
 - `docs/plugins/PLUGIN_AUTHOR_MIGRATION.md`, `docs/plugins/RUNTIME_ABI.md`
@@ -422,8 +422,10 @@ Replace `client/src/plugin-runtime/index.ts` with:
 ```ts
 // Boots inside the sandbox iframe: wires postMessage, exposes the full
 // window.BaluHost (React + ui + icons + utils + proxied api/toast/storage/
-// navigate), applies theme tokens, then loads the plugin bundle.
+// navigate), applies theme tokens, then MOUNTS the plugin component.
 import './runtime.css';
+import React from 'react';
+import ReactDOM from 'react-dom/client';
 import { createSandboxSdk } from './sdk';
 import { buildSurface } from './surface';
 
@@ -443,30 +445,48 @@ window.addEventListener('message', (ev) => {
   if (data && data.kind === 'rpc-result') sdk._receive(data);
   if (data && data.kind === 'push' && data.name === 'theme-changed') applyTheme(data.payload);
   if (data && data.kind === 'push' && data.name === 'init') {
-    applyTheme((data.payload as { theme?: unknown }).theme);
+    const payload = data.payload as { user: unknown; theme?: unknown };
+    applyTheme(payload.theme);
     (window as unknown as { BaluHost: unknown }).BaluHost = {
       ...buildSurface(),
       api: sdk.api,
       toast: sdk.toast,
       storage: sdk.storage,
       navigate: sdk.navigate,
-      user: (data.payload as { user: unknown }).user,
+      user: payload.user,
     };
-    void loadPluginBundle();
+    void mountPlugin(payload.user);
   }
 });
 
-async function loadPluginBundle(): Promise<void> {
+async function mountPlugin(user: unknown): Promise<void> {
+  // Bundle path is injected via <meta name="plugin-bundle"> in host.html.
   const meta = document.querySelector('meta[name="plugin-bundle"]') as HTMLMetaElement | null;
-  if (!meta) return;
-  await import(/* @vite-ignore */ meta.content);
+  const rootEl = document.getElementById('plugin-root');
+  if (!meta || !rootEl) return;
+  const mod = await import(/* @vite-ignore */ meta.content);
+  const Component = (mod.default ?? (mod as { Plugin?: unknown }).Plugin) as
+    | React.ComponentType<{ user: unknown }>
+    | undefined;
+  if (typeof Component !== 'function') return;
+  ReactDOM.createRoot(rootEl).render(React.createElement(Component, { user }));
+
+  // Report content height so the host can size the iframe (no inner scrollbar).
+  const report = () =>
+    window.parent.postMessage(
+      { kind: 'event', name: 'resize', payload: { height: rootEl.scrollHeight } }, '*',
+    );
+  report();
+  new ResizeObserver(report).observe(rootEl);
 }
 
 // Announce readiness (with our ABI) so the host responds with `init`.
 window.parent.postMessage({ kind: 'event', name: 'ready', payload: { runtime_abi: RUNTIME_ABI } }, '*');
 ```
 
-(`sdk.storage` and `runtime.css` are created in Tasks 8 and 3; this step will not typecheck until those land — that's fine, the commit happens after Task 3 wires the CSS. To keep this task self-contained and green, temporarily import a stub: add `storage: (sdk as { storage?: unknown }).storage,` is NOT needed — instead, land Task 3 and Task 8 before building. For the unit test in this task, only `surface.ts` is exercised.)
+> **Critical (was a latent gap):** the prior Phase 1–2 runtime only `import()`-ed the bundle and discarded it — nothing rendered. Both bundled plugins expose their component as the module `default` export (verified: `optical_drive` → `OpticalDrivePage`, `storage_analytics` → `StorageAnalytics`) and do **not** self-mount, so the runtime MUST mount it. That's why `mountPlugin` reads `mod.default` and calls `ReactDOM.createRoot(...).render(...)` with the iframe's own React/ReactDOM (the same instance the bundle gets via `BaluHost.React`, so hooks work).
+>
+> **Build ordering:** `index.ts` references `sdk.storage` (Task 8) and `./runtime.css` (Task 3), so `npm run build` is only asserted green in Task 8 Step 5. Commits before then stay test-green because the unit tests in Tasks 1–7 don't import `index.ts` (only `surface.test.ts` does, and it imports `surface.ts` directly).
 
 - [ ] **Step 5: Run the surface test**
 
@@ -605,29 +625,32 @@ git commit -m "feat(plugin-sandbox): compile plugin-runtime.css + link from host
 
 - [ ] **Step 1: Write/extend the failing test**
 
-Add to `client/src/__tests__/plugin-sandbox/PluginSandboxHost.test.tsx`:
+Add to `client/src/__tests__/plugin-sandbox/PluginSandboxHost.test.tsx`. **Match the existing harness in this file exactly:** it wraps `<PluginSandboxHost>` in `<MemoryRouter>` (from `react-router-dom`, for `useNavigate`) AND `vi.mock(...)`s the `hostBridge` module (so `PluginBridge` is a stub). Because the bridge is module-mocked, this test can only assert that the component still renders the iframe with a `ThemeProvider` in the tree — not real `setTheme` behavior (that is covered by `themeHandshake.test.ts` in Task 1). `useTheme` returns a safe default when no provider is present (verified in `ThemeContext.tsx`), so the existing provider-less tests stay green; this new test adds the provider:
 
 ```tsx
+import { MemoryRouter } from 'react-router-dom';
 import { ThemeProvider } from '../../contexts/ThemeContext';
 
-it('still renders the opaque-origin iframe with a ThemeProvider present', () => {
+it('renders the opaque-origin iframe with a ThemeProvider in the tree', () => {
   const user = { id: 1, username: 'admin', role: 'admin' };
   const { container } = render(
-    <ThemeProvider>
-      <PluginSandboxHost pluginName="weather" user={user} grantedScopes={[]} />
-    </ThemeProvider>
+    <MemoryRouter>
+      <ThemeProvider>
+        <PluginSandboxHost pluginName="weather" user={user} grantedScopes={[]} />
+      </ThemeProvider>
+    </MemoryRouter>
   );
   const iframe = container.querySelector('iframe')!;
   expect(iframe.getAttribute('sandbox')).toBe('allow-scripts');
 });
 ```
 
-(The existing two tests render without a provider — keep them; `useTheme` has a built-in fallback when no provider is present, so they stay green.)
+(If the existing tests import `render` and wrap differently, mirror their exact imports/wrappers — do not introduce a second style.)
 
 - [ ] **Step 2: Run it to verify current state**
 
 Run: `cd client && npx vitest run src/__tests__/plugin-sandbox/PluginSandboxHost.test.tsx`
-Expected: the new test FAILS to compile/run until `react-router` `useNavigate` is satisfied — it already is via the existing tests' setup; if the existing tests wrap in a router, wrap the new one the same way. Match the existing test's render harness exactly.
+Expected: PASS once the wrappers match (the component already renders an iframe; the new assertion just adds a `ThemeProvider`). If it errors on `useNavigate`, the `MemoryRouter` wrapper is missing.
 
 - [ ] **Step 3: Update `PluginSandboxHost.tsx`**
 
@@ -717,7 +740,7 @@ In `client/src/components/PluginPage.tsx`, update the render to forward the ABI 
       />
 ```
 
-(`min_runtime_abi` is added to the plugin-info type/route in Task 9b below; until then TypeScript may flag it — land Task 9b's frontend type change in the same commit, or use `(pluginInfo as { min_runtime_abi?: number })?.min_runtime_abi`.)
+(`min_runtime_abi` is added to the `PluginUIInfo` type in Task 9a; if you land Task 4 before Task 9a, temporarily use `(pluginInfo as { min_runtime_abi?: number })?.min_runtime_abi` and drop the cast once Task 9a lands. `pluginInfo` is a `PluginUIInfo` from `usePlugins().enabledPlugins` — verified.)
 
 - [ ] **Step 5: Run the sandbox suite + typecheck**
 
@@ -809,7 +832,7 @@ Add the import and `__all__` entry alongside the other plugin model:
 ```python
 from app.models.plugin_storage import PluginStorage  # noqa: F401
 ```
-(and add `"PluginStorage"` to `__all__` if that list is maintained explicitly.)
+`backend/app/models/__init__.py` maintains an explicit per-model import line AND an explicit `__all__` list (verified) — BOTH edits are required: add the import line above, and add `"PluginStorage"` to `__all__`.
 
 - [ ] **Step 5: Run the round-trip test**
 
@@ -996,27 +1019,21 @@ class PluginStorageSetRequest(BaseModel):
 
 ```python
 # backend/tests/api/test_plugin_storage_routes.py
-import pytest
-from fastapi.testclient import TestClient
+# Uses the central `client` (TestClient) and `user_headers` fixtures from
+# backend/tests/conftest.py — do NOT define a local client fixture.
 
 
-@pytest.fixture
-def client():
-    from app.main import app
-    return TestClient(app)
-
-
-def test_storage_put_get_delete_roundtrip(client, user_auth_headers):
+def test_storage_put_get_delete_roundtrip(client, user_headers):
     base = "/api/plugins/storage_analytics/_storage"
-    put = client.put(f"{base}/units", headers=user_auth_headers, json={"value": {"t": "C"}})
+    put = client.put(f"{base}/units", headers=user_headers, json={"value": {"t": "C"}})
     assert put.status_code in (200, 204)
-    got = client.get(f"{base}/units", headers=user_auth_headers)
+    got = client.get(f"{base}/units", headers=user_headers)
     assert got.status_code == 200 and got.json()["value"] == {"t": "C"}
-    keys = client.get(base, headers=user_auth_headers)
+    keys = client.get(base, headers=user_headers)
     assert "units" in keys.json()["keys"]
-    dele = client.delete(f"{base}/units", headers=user_auth_headers)
+    dele = client.delete(f"{base}/units", headers=user_headers)
     assert dele.status_code == 204
-    missing = client.get(f"{base}/units", headers=user_auth_headers)
+    missing = client.get(f"{base}/units", headers=user_headers)
     assert missing.status_code == 404
 
 
@@ -1025,7 +1042,7 @@ def test_storage_requires_auth(client):
     assert resp.status_code in (401, 403)
 ```
 
-(Use the project's existing authenticated-user fixture; match its real name — replace `user_auth_headers` with whatever `backend/tests/conftest.py` provides. If only an admin fixture exists, use it.)
+(`client` and `user_headers` are provided centrally by `backend/tests/conftest.py` — verified. `user_headers` is a non-admin `user`-role session, which is exactly what we want to prove per-user scoping works for ordinary users.)
 
 - [ ] **Step 7: Run it to verify it fails**
 
@@ -1370,14 +1387,14 @@ git commit -m "feat(plugin-sandbox): runtime storage proxy; wire into window.Bal
 Extend `backend/tests/api/test_plugin_ui_manifest_scopes.py` (the existing file that checks `granted_api_scopes`):
 
 ```python
-def test_ui_manifest_includes_min_runtime_abi(client, admin_auth_headers):
-    resp = client.get("/api/plugins/ui/manifest", headers=admin_auth_headers)
+def test_ui_manifest_includes_min_runtime_abi(client, admin_headers):
+    resp = client.get("/api/plugins/ui/manifest", headers=admin_headers)
     assert resp.status_code == 200
     for entry in resp.json().get("plugins", []):
         assert "min_runtime_abi" in entry
 ```
 
-(Match the real manifest path + admin fixture used by the existing tests in this file.)
+(`client` + `admin_headers` are the fixtures the existing tests in this file already use — verified. The manifest route is `GET /api/plugins/ui/manifest` → `get_ui_manifest`.)
 
 - [ ] **Step 2: Run it to verify it fails**
 
@@ -1386,19 +1403,24 @@ Expected: FAIL — key absent.
 
 - [ ] **Step 3: Add `min_runtime_abi` to the UI-manifest info model + route**
 
-In `backend/app/schemas/plugin.py`, add to the UI-info model that already carries `granted_api_scopes` (e.g. `PluginUIInfo`):
+In `backend/app/schemas/plugin.py`, add to `PluginUIInfo` (the model that already carries `granted_api_scopes`; `Optional` is already imported):
 
 ```python
     min_runtime_abi: Optional[int] = None
 ```
 
-In `backend/app/api/routes/plugins.py`, where that model is built for the UI manifest, populate it from the loaded manifest (mirroring how `granted_api_scopes` is filled):
+**Important — the manifest route does NOT load per-plugin manifests.** `get_ui_manifest` (`plugins.py:102-121`) builds its items from `plugin_manager.get_ui_manifest()` and fills `granted_api_scopes` from the DB record (`plugin_service.get_installed_plugin(db, item.name)`), not from the manifest. So `min_runtime_abi` cannot be filled "the same way." In the existing `for item in result.plugins:` loop, load the manifest per item and set the field (mirror the host.html branch's local import of `load_manifest`):
 
 ```python
-        min_runtime_abi=getattr(manifest, "min_runtime_abi", None),
+        from app.plugins.manifest import load_manifest
+        try:
+            manifest = load_manifest(plugin_manager.plugins_dir / item.name)
+            item.min_runtime_abi = getattr(manifest, "min_runtime_abi", None)
+        except Exception:
+            item.min_runtime_abi = None
 ```
 
-(Use the same `manifest` object already loaded in that route; if the route doesn't load the manifest, load it via `load_manifest(plugin_manager.plugins_dir / name)` in a `try/except` like the host.html branch.)
+(Place this inside the same loop that already sets `item.granted_api_scopes`. Import `load_manifest` once at the top of the loop/function if you prefer.)
 
 - [ ] **Step 4: Mirror the field in the frontend type**
 
@@ -1434,14 +1456,14 @@ const { React, api, ui, utils } = window.BaluHost;
 const { useState, useEffect } = React;
 ```
 
-Then replace every raw `fetch('/api/...')` / `fetchPlugin(...)` call in the file with the awaited `api.get(...)` / `api.post(...)` equivalent (same URLs, but via `BaluHost.api`, which carries the token through the bridge). Keep the component's JSX/logic otherwise unchanged, and keep its default export shape (the bundle must still expose the component the runtime renders — match how `optical_drive/ui/bundle.js` exposes its `PLUGIN`/default).
+The file's current `fetchPluginApi(endpoint)` helper does a raw `fetch` with `localStorage.getItem('token')` against `/api/plugins/storage_analytics${endpoint}` for endpoints `/stats`, `/users`, `/file-types`, `/scan`. Delete that helper and replace each call site with the awaited `api.get('/api/plugins/storage_analytics/stats')` (etc.) — `BaluHost.api` carries the token through the bridge. All four are own-routes (`/api/plugins/storage_analytics/...`), so no scope is needed. Keep the component's JSX/logic otherwise unchanged, and keep `export default StorageAnalytics` (the runtime's `mountPlugin` renders `mod.default`).
 
 - [ ] **Step 7: Declare scopes + ABI in `storage_analytics/plugin.json`**
 
-Add the two fields (storage analytics reads storage info → grant `read:storage`):
+Add the two fields. All of this plugin's calls are own-routes, so `api_scopes` is empty (granting `read:storage` would be unnecessary scope — it only covers `/api/files/storage` + `/api/system/storage`, which this plugin never calls):
 
 ```json
-  "api_scopes": ["read:storage"],
+  "api_scopes": [],
   "min_runtime_abi": 1,
 ```
 
@@ -1573,39 +1595,56 @@ git commit -m "feat(plugin-sandbox): remove main-context pluginSDK/pluginLoader 
 ### Task 12: Playwright sandbox E2E
 
 **Files:**
-- Create: `client/e2e/plugin-sandbox.spec.ts`
-- Inspect: the existing Playwright config (`playwright-e2e.yml` / `client/playwright.config.*`) to match harness conventions (base URL, auth setup).
+- Create: `client/tests/e2e/plugin-sandbox.spec.ts` (the REAL e2e dir is `client/tests/e2e/`, per `client/playwright.config.ts` `testDir`).
+- Inspect: `client/tests/e2e/fixtures/auth.fixture.ts` (exports `test`/`expect` + the `authenticatedPage` fixture; injects a fake token into localStorage and **mocks every API route client-side** — there is NO backend in the default `mock-e2e` job). `MOCK_PLUGINS_MANIFEST` there is `{ plugins: [] }`.
 
 **Interfaces:**
-- Produces: an e2e asserting the sandbox renders + isolates.
+- Produces: a mocked-harness e2e asserting the sandbox renders + isolates. The host.html iframe content does not load real backend assets in the mock job — but the `sandbox` attribute checks and the main-context `window.BaluHost` check hold regardless of iframe content.
 
-- [ ] **Step 1: Write the spec**
+- [ ] **Step 1: Write the spec (mock harness)**
 
 ```ts
-// client/e2e/plugin-sandbox.spec.ts
-import { test, expect } from '@playwright/test';
+// client/tests/e2e/plugin-sandbox.spec.ts
+import { test, expect } from './fixtures/auth.fixture';
 
-// Assumes the existing e2e auth/setup fixtures log in as admin and that
-// `storage_analytics` is enabled in the test environment. Adjust the login
-// and enable steps to match the repo's existing e2e helpers.
-test('plugin renders inside an opaque-origin sandbox iframe and host exposes no SDK', async ({ page }) => {
+test('plugin renders in an opaque-origin sandbox iframe and host exposes no SDK', async ({ authenticatedPage: page }) => {
+  // Inject storage_analytics into the plugin UI manifest the SPA reads, so
+  // PluginPage finds it and mounts PluginSandboxHost. Register BEFORE navigation
+  // so this handler takes precedence over the fixture's empty-manifest mock.
+  await page.route('**/api/plugins/ui/manifest', async (route) => {
+    await route.fulfill({
+      json: {
+        plugins: [
+          {
+            name: 'storage_analytics',
+            display_name: 'Storage Analytics',
+            granted_api_scopes: [],
+            min_runtime_abi: 1,
+            // include whatever other PluginUIInfo fields the SPA requires;
+            // mirror the shape the fixture already uses for other mocks.
+          },
+        ],
+      },
+    });
+  });
+
   await page.goto('/plugins/storage_analytics');
 
   const frame = page.locator('iframe[title="plugin-storage_analytics"]');
   await expect(frame).toHaveAttribute('sandbox', 'allow-scripts');
-  const sandbox = await frame.getAttribute('sandbox');
-  expect(sandbox).not.toContain('allow-same-origin');
+  expect(await frame.getAttribute('sandbox')).not.toContain('allow-same-origin');
 
-  // The main browsing context must NOT expose the tokened SDK.
-  const hasSdk = await page.evaluate(() => 'BaluHost' in window);
-  expect(hasSdk).toBe(false);
+  // The main browsing context must NOT expose the tokened SDK (audit gap closed).
+  expect(await page.evaluate(() => 'BaluHost' in window)).toBe(false);
 });
 ```
 
-- [ ] **Step 2: Run it locally if the e2e harness is available**
+(Open `auth.fixture.ts` first and match the exact `PluginUIInfo` shape its other mocks use — the SPA's `PluginContext` may require fields like `nav_items`/`enabled`. If `authenticatedPage` is destructured differently in existing specs, copy their signature.)
 
-Run: `cd client && npx playwright test e2e/plugin-sandbox.spec.ts` (or the repo's e2e command).
-Expected: PASS, or document that it runs in CI (`playwright-e2e.yml`) if local browsers aren't provisioned.
+- [ ] **Step 2: Run it via the mock harness**
+
+Run: `cd client && npx playwright test tests/e2e/plugin-sandbox.spec.ts`
+Expected: PASS. This is the default `mock-e2e` job (`.github/workflows/playwright-e2e.yml`, `ubuntu-latest`, runs `npx playwright test` with `npm run dev` as the webServer — no backend). If local browsers aren't provisioned, note it runs in that CI job. Do NOT name it `*.live.spec.ts` (those are `testIgnore`d by default and only run in the gated `live-e2e` job).
 
 - [ ] **Step 3: Commit**
 
