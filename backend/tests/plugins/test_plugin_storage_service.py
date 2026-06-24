@@ -1,6 +1,11 @@
-# Note: the SQLite test DB does not enforce foreign keys, so bare user_id values (1, 2) need no seeded users row.
 """Tests for the PluginStorage model (round-trip persistence)."""
+
+# Note: the SQLite test DB does not enforce foreign keys, so bare user_id values (1, 2) need no seeded users row.
+
+import pytest
+
 from app.models.plugin_storage import PluginStorage
+from app.services import plugin_storage_service as svc
 
 
 def test_plugin_storage_roundtrip(db_session):
@@ -10,10 +15,6 @@ def test_plugin_storage_roundtrip(db_session):
     db_session.refresh(row)
     assert row.value == {"temp": "C"}
     assert row.plugin_name == "weather"
-
-
-import pytest
-from app.services import plugin_storage_service as svc
 
 
 def test_set_get_delete(db_session):

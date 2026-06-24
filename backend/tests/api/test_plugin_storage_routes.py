@@ -19,3 +19,13 @@ def test_storage_put_get_delete_roundtrip(client, user_headers):
 def test_storage_requires_auth(client):
     resp = client.get("/api/plugins/storage_analytics/_storage/units")
     assert resp.status_code in (401, 403)
+
+
+def test_storage_put_over_quota_returns_413(client, user_headers):
+    big = "x" * (64 * 1024 + 10)
+    resp = client.put(
+        "/api/plugins/storage_analytics/_storage/big",
+        headers=user_headers,
+        json={"value": big},
+    )
+    assert resp.status_code == 413
