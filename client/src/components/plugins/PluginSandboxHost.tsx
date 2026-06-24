@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PluginBridge } from '../../lib/plugin-sandbox/hostBridge';
+import type { ThemePayload } from '../../lib/plugin-sandbox/protocol';
 
 interface User { id: number; username: string; role: string }
 
@@ -9,9 +10,12 @@ interface Props {
   pluginName: string;
   user: User;
   grantedScopes: string[];
+  theme?: ThemePayload;
 }
 
-export default function PluginSandboxHost({ pluginName, user, grantedScopes }: Props) {
+const DEFAULT_THEME: ThemePayload = { name: 'dark', tokens: {} };
+
+export default function PluginSandboxHost({ pluginName, user, grantedScopes, theme = DEFAULT_THEME }: Props) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const navigate = useNavigate();
   const [height, setHeight] = useState(480);
@@ -32,6 +36,7 @@ export default function PluginSandboxHost({ pluginName, user, grantedScopes }: P
       pluginName,
       grantedScopes,
       user,
+      theme,
       onResize: (h) => setHeight(Math.max(120, Math.ceil(h))),
       onNavigate: (path) => navigate(path),
     });

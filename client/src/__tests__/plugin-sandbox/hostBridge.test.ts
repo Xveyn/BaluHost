@@ -27,11 +27,12 @@ function fireFromFrame(contentWindow: Window, data: unknown) {
 
 describe('PluginBridge', () => {
   const user = { id: 1, username: 'admin', role: 'admin' };
+  const theme = { name: 'dark', tokens: {} };
   beforeEach(() => vi.clearAllMocks());
 
   it('sends init after the frame reports ready', () => {
     const { iframe, contentWindow, posted } = makeIframe();
-    const b = new PluginBridge({ iframe, pluginName: 'weather', grantedScopes: [], user });
+    const b = new PluginBridge({ iframe, pluginName: 'weather', grantedScopes: [], user, theme });
     b.start();
     fireFromFrame(contentWindow, { kind: 'event', name: 'ready', payload: null });
     const init = posted.find((m: any) => m.kind === 'push' && m.name === 'init') as any;
@@ -43,7 +44,7 @@ describe('PluginBridge', () => {
 
   it('performs an allowed own-route api call and replies with the body', async () => {
     const { iframe, contentWindow, posted } = makeIframe();
-    const b = new PluginBridge({ iframe, pluginName: 'weather', grantedScopes: [], user });
+    const b = new PluginBridge({ iframe, pluginName: 'weather', grantedScopes: [], user, theme });
     b.start();
     fireFromFrame(contentWindow, { kind: 'rpc', id: 'r1', channel: 'api', method: 'get', args: ['/api/plugins/weather/forecast'] });
     await vi.waitFor(() => {
@@ -59,7 +60,7 @@ describe('PluginBridge', () => {
 
   it('rejects a denied core-route api call without calling apiClient', async () => {
     const { iframe, contentWindow, posted } = makeIframe();
-    const b = new PluginBridge({ iframe, pluginName: 'weather', grantedScopes: [], user });
+    const b = new PluginBridge({ iframe, pluginName: 'weather', grantedScopes: [], user, theme });
     b.start();
     fireFromFrame(contentWindow, { kind: 'rpc', id: 'r2', channel: 'api', method: 'get', args: ['/api/users'] });
     await vi.waitFor(() => {
@@ -75,7 +76,7 @@ describe('PluginBridge', () => {
 
   it('fires audit POST and still rejects scope_denied without calling apiClient.request', async () => {
     const { iframe, contentWindow, posted } = makeIframe();
-    const b = new PluginBridge({ iframe, pluginName: 'weather', grantedScopes: [], user });
+    const b = new PluginBridge({ iframe, pluginName: 'weather', grantedScopes: [], user, theme });
     b.start();
     fireFromFrame(contentWindow, { kind: 'rpc', id: 'r5', channel: 'api', method: 'get', args: ['/api/users'] });
     await vi.waitFor(() => {
@@ -99,7 +100,7 @@ describe('PluginBridge', () => {
 
   it('ignores messages whose source is not the iframe window', async () => {
     const { iframe, posted } = makeIframe();
-    const b = new PluginBridge({ iframe, pluginName: 'weather', grantedScopes: [], user });
+    const b = new PluginBridge({ iframe, pluginName: 'weather', grantedScopes: [], user, theme });
     b.start();
     const other = { postMessage: () => {} } as unknown as Window;
     fireFromFrame(other, { kind: 'rpc', id: 'r3', channel: 'api', method: 'get', args: ['/api/plugins/weather/x'] });
@@ -111,7 +112,7 @@ describe('PluginBridge', () => {
   it('navigate: denies a typosquatting path (/plugins/weatherEvil/x) and does not call onNavigate', async () => {
     const { iframe, contentWindow, posted } = makeIframe();
     const onNavigate = vi.fn();
-    const b = new PluginBridge({ iframe, pluginName: 'weather', grantedScopes: [], user, onNavigate });
+    const b = new PluginBridge({ iframe, pluginName: 'weather', grantedScopes: [], user, theme, onNavigate });
     b.start();
     fireFromFrame(contentWindow, { kind: 'rpc', id: 'nav1', channel: 'navigate', method: '', args: ['/plugins/weatherEvil/x'] });
     await vi.waitFor(() => {
@@ -129,7 +130,7 @@ describe('PluginBridge', () => {
     for (const path of ['/plugins/weather', '/plugins/weather/sub']) {
       const { iframe, contentWindow, posted } = makeIframe();
       const onNavigate = vi.fn();
-      const b = new PluginBridge({ iframe, pluginName: 'weather', grantedScopes: [], user, onNavigate });
+      const b = new PluginBridge({ iframe, pluginName: 'weather', grantedScopes: [], user, theme, onNavigate });
       b.start();
       const id = `nav-${path}`;
       fireFromFrame(contentWindow, { kind: 'rpc', id, channel: 'navigate', method: '', args: [path] });
@@ -147,7 +148,7 @@ describe('PluginBridge', () => {
   it('routes resize events to onResize', () => {
     const { iframe, contentWindow } = makeIframe();
     const onResize = vi.fn();
-    const b = new PluginBridge({ iframe, pluginName: 'weather', grantedScopes: [], user, onResize });
+    const b = new PluginBridge({ iframe, pluginName: 'weather', grantedScopes: [], user, theme, onResize });
     b.start();
     fireFromFrame(contentWindow, { kind: 'event', name: 'resize', payload: { height: 420 } });
     expect(onResize).toHaveBeenCalledWith(420);
