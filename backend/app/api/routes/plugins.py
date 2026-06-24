@@ -117,9 +117,15 @@ async def get_ui_manifest(
     """
     manifest = plugin_manager.get_ui_manifest()
     result = PluginUIManifestResponse(**manifest)
+    from app.plugins.manifest import load_manifest
     for item in result.plugins:
         record = plugin_service.get_installed_plugin(db, item.name)
         item.granted_api_scopes = (record.granted_api_scopes or []) if record else []
+        try:
+            _manifest = load_manifest(plugin_manager.plugins_dir / item.name)
+            item.min_runtime_abi = getattr(_manifest, "min_runtime_abi", None)
+        except Exception:
+            item.min_runtime_abi = None
     return result
 
 

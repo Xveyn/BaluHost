@@ -5,24 +5,9 @@
  * In production, this would be built with Vite/webpack from React/TypeScript sources.
  */
 
-// Since this is loaded dynamically, we use the global React from the parent app
-const React = window.React;
+// Storage Analytics — sandbox runtime (window.BaluHost externals)
+const { React, api, ui, utils } = window.BaluHost;
 const { useState, useEffect } = React;
-
-// API helper
-async function fetchPluginApi(endpoint) {
-  const token = localStorage.getItem('token');
-  const response = await fetch(`/api/plugins/storage_analytics${endpoint}`, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-  });
-  if (!response.ok) {
-    throw new Error(`API error: ${response.status}`);
-  }
-  return response.json();
-}
 
 // Format bytes to human readable
 function formatBytes(bytes) {
@@ -50,9 +35,9 @@ function StorageAnalytics({ user }) {
     try {
       setLoading(true);
       const [statsRes, usersRes, typesRes] = await Promise.all([
-        fetchPluginApi('/stats'),
-        fetchPluginApi('/users'),
-        fetchPluginApi('/file-types'),
+        api.get('/api/plugins/storage_analytics/stats'),
+        api.get('/api/plugins/storage_analytics/users'),
+        api.get('/api/plugins/storage_analytics/file-types'),
       ]);
       setStats(statsRes.stats);
       setUserUsage(usersRes.users);
@@ -68,7 +53,7 @@ function StorageAnalytics({ user }) {
   async function triggerScan() {
     try {
       setScanning(true);
-      await fetchPluginApi('/scan');
+      await api.get('/api/plugins/storage_analytics/scan');
       await loadData();
     } catch (err) {
       setError(err.message);
@@ -185,7 +170,7 @@ function StorageOverviewWidget({ user }) {
   const [stats, setStats] = useState(null);
 
   useEffect(() => {
-    fetchPluginApi('/stats')
+    api.get('/api/plugins/storage_analytics/stats')
       .then(res => setStats(res.stats))
       .catch(console.error);
   }, []);

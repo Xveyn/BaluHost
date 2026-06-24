@@ -26,6 +26,7 @@ class PluginUIInfo(BaseModel):
     dashboard_widgets: List[str] = []
     translations: Optional[Dict[str, Dict[str, str]]] = None
     granted_api_scopes: List[str] = []
+    min_runtime_abi: Optional[int] = None
 
 
 class PluginUIManifestResponse(BaseModel):

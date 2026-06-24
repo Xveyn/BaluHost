@@ -132,3 +132,32 @@ def test_ui_manifest_items_have_empty_scopes_when_no_db_record(client, admin_hea
         assert entry["granted_api_scopes"] == [], (
             f"Expected empty list when no DB record, got: {entry['granted_api_scopes']!r}"
         )
+
+
+def test_ui_manifest_includes_min_runtime_abi(client, admin_headers):
+    """Every plugin entry in the ui/manifest response must carry a min_runtime_abi key."""
+    fake_manifest = _make_fake_manifest()
+    fake_record = _make_fake_db_record([])
+
+    with patch(
+        "app.plugins.manager.PluginManager.get_ui_manifest",
+        return_value=fake_manifest,
+    ), patch(
+        "app.services.plugin_service.get_installed_plugin",
+        return_value=fake_record,
+    ):
+        resp = client.get("/api/plugins/ui/manifest", headers=admin_headers)
+
+    assert resp.status_code == 200, (
+        f"Expected 200 from GET /api/plugins/ui/manifest; got {resp.status_code}. "
+        f"Body: {resp.text[:500]}"
+    )
+
+    data = resp.json()
+    plugins = data.get("plugins", [])
+    assert len(plugins) >= 1, "Expected at least one plugin in manifest response"
+
+    for entry in plugins:
+        assert "min_runtime_abi" in entry, (
+            f"Plugin entry missing 'min_runtime_abi' key: {entry}"
+        )
