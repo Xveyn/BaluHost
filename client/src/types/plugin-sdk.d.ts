@@ -2,7 +2,7 @@
  * TypeScript definitions for BaluHost Plugin SDK
  *
  * These types are available to plugin developers for type-checking their plugins.
- * The SDK is exposed on window.BaluHost after the main app initializes.
+ * The SDK is exposed inside sandbox iframes by the plugin-runtime.
  */
 
 import type React from 'react';
@@ -220,28 +220,6 @@ export interface PluginRegistration {
 
 export interface BaluHostPlugins {
   [pluginName: string]: PluginRegistration;
-}
-
-// Global window extension
-declare global {
-  interface Window {
-    /**
-     * BaluHost Plugin SDK
-     * Provides React, UI components, icons, toast, API, and utilities for plugins
-     */
-    BaluHost: BaluHostSDK;
-
-    /**
-     * Registry for plugin components
-     * Plugins register their routes and widgets here
-     */
-    BaluHostPlugins: BaluHostPlugins;
-
-    /**
-     * React is also available directly on window for backwards compatibility
-     */
-    React: typeof React;
-  }
 }
 
 export {};

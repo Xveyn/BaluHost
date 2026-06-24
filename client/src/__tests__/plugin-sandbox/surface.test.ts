@@ -6,7 +6,7 @@ describe('buildSurface', () => {
     const s = buildSurface();
     expect(typeof s.React.createElement).toBe('function');
     expect(typeof s.hooks.useState).toBe('function');
-    // full primitive set (matches the old initPluginSDK surface)
+    // full primitive set (same surface the plugin-runtime exposes to plugins)
     for (const k of ['Button','Card','CardHeader','CardContent','CardFooter','Badge','Modal',
       'Input','Textarea','Select','ProgressBar','Spinner','LoadingOverlay','EmptyState',
       'Tabs','TabPanel','ByteSizeInput']) {

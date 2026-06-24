@@ -1,7 +1,6 @@
 // client/src/plugin-runtime/surface.ts
 // The non-proxy half of window.BaluHost, bundled INTO the runtime and run
-// inside the sandbox iframe. Mirrors the old main-context pluginSDK surface
-// (minus the tokened api/toast, which are postMessage proxies in index.ts).
+// inside the sandbox iframe (minus the tokened api/toast, which are postMessage proxies in index.ts).
 import React, {
   useState, useEffect, useCallback, useMemo, useRef,
   useContext, createContext, memo, forwardRef,

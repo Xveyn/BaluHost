@@ -21,8 +21,6 @@ Shared utility functions and core infrastructure. No React components — pure T
 | `notificationGrouping.ts` | Notification grouping logic |
 | `adminDbFormatters.ts` | Admin database value formatters |
 | `openapi-transform.ts` | OpenAPI schema transformation for API docs page |
-| `pluginLoader.ts` | Dynamic plugin JS bundle loader |
-| `pluginSDK.ts` | Plugin SDK exposed to plugin bundles |
 | `pluginI18n.ts` | Plugin translation resolution helper |
 | `mockSyncApi.ts` | Mock sync API for development |
 
