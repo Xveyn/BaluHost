@@ -194,3 +194,9 @@ class ScopeDeniedReport(BaseModel):
 
     method: str = Field(max_length=16)
     url: str = Field(max_length=2048)
+
+
+class PluginStorageSetRequest(BaseModel):
+    """Request body for setting a plugin storage key-value entry."""
+
+    value: Any

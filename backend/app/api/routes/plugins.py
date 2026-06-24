@@ -13,6 +13,7 @@ from app.middleware.plugin_gate import invalidate_plugin_cache
 from app.plugins.manager import PluginManager, PluginLoadError
 from app.plugins.permissions import PermissionManager
 from app.services import plugin_service
+from app.services import plugin_storage_service
 from app.services.audit.logger_db import get_audit_logger_db
 from app.schemas.plugin import (
     DashboardPanelToggleRequest,
@@ -24,6 +25,7 @@ from app.schemas.plugin import (
     PluginInfo,
     PluginListResponse,
     PluginNavItemSchema,
+    PluginStorageSetRequest,
     PluginToggleRequest,
     PluginToggleResponse,
     PluginUIManifestResponse,
@@ -390,6 +392,59 @@ async def report_scope_denied(
         ip_address=request.client.host if request.client else None,
     )
     return {"recorded": True}
+
+
+@router.get("/{name}/_storage")
+@user_limiter.limit(get_limit("admin_operations"))
+async def storage_list_keys(
+    request: Request, response: Response, name: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """List this user's storage keys for the plugin."""
+    return {"keys": plugin_storage_service.list_keys(db, name, current_user.id)}
+
+
+@router.get("/{name}/_storage/{key}")
+@user_limiter.limit(get_limit("admin_operations"))
+async def storage_get(
+    request: Request, response: Response, name: str, key: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Get a single storage value by key for this user and plugin."""
+    found, value = plugin_storage_service.get_value(db, name, current_user.id, key)
+    if not found:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Key not found")
+    return {"value": value}
+
+
+@router.put("/{name}/_storage/{key}")
+@user_limiter.limit(get_limit("admin_operations"))
+async def storage_set(
+    request: Request, response: Response, name: str, key: str,
+    body: PluginStorageSetRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Set a storage key-value entry for this user and plugin."""
+    try:
+        plugin_storage_service.set_value(db, name, current_user.id, key, body.value)
+    except plugin_storage_service.StorageQuotaError as exc:
+        raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail=str(exc))
+    return {"ok": True}
+
+
+@router.delete("/{name}/_storage/{key}", status_code=status.HTTP_204_NO_CONTENT)
+@user_limiter.limit(get_limit("admin_operations"))
+async def storage_delete(
+    request: Request, response: Response, name: str, key: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Response:
+    """Delete a storage entry for this user and plugin. Returns 204 whether or not the key existed."""
+    plugin_storage_service.delete_value(db, name, current_user.id, key)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/{name}/config", response_model=PluginConfigResponse)
