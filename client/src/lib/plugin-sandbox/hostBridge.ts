@@ -17,7 +17,10 @@ export interface PluginBridgeOpts {
 
 export class PluginBridge {
   private listener = (ev: MessageEvent) => this.handleMessage(ev);
-  constructor(private opts: PluginBridgeOpts) {}
+  private opts: PluginBridgeOpts;
+  constructor(opts: PluginBridgeOpts) {
+    this.opts = opts;
+  }
 
   start(): void {
     window.addEventListener('message', this.listener);
