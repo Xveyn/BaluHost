@@ -25,6 +25,7 @@ class PluginUIInfo(BaseModel):
     styles_path: Optional[str] = None
     dashboard_widgets: List[str] = []
     translations: Optional[Dict[str, Dict[str, str]]] = None
+    granted_api_scopes: List[str] = []
 
 
 class PluginUIManifestResponse(BaseModel):
@@ -186,3 +187,10 @@ class DashboardPanelResponse(BaseModel):
     accent: str
     data: Optional[Dict[str, Any]] = None
     translations: Optional[Dict[str, Dict[str, str]]] = None
+
+
+class ScopeDeniedReport(BaseModel):
+    """Request body for reporting a plugin scope denial."""
+
+    method: str = Field(max_length=16)
+    url: str = Field(max_length=2048)

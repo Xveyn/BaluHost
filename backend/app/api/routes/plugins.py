@@ -1,4 +1,5 @@
 """API routes for plugin management."""
+import html
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -12,6 +13,7 @@ from app.middleware.plugin_gate import invalidate_plugin_cache
 from app.plugins.manager import PluginManager, PluginLoadError
 from app.plugins.permissions import PermissionManager
 from app.services import plugin_service
+from app.services.audit.logger_db import get_audit_logger_db
 from app.schemas.plugin import (
     DashboardPanelToggleRequest,
     PermissionInfo,
@@ -25,6 +27,7 @@ from app.schemas.plugin import (
     PluginToggleRequest,
     PluginToggleResponse,
     PluginUIManifestResponse,
+    ScopeDeniedReport,
 )
 
 
@@ -100,15 +103,22 @@ async def list_permissions(
 @user_limiter.limit(get_limit("admin_operations"))
 async def get_ui_manifest(
     request: Request, response: Response,
+    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     plugin_manager: PluginManager = Depends(get_plugin_manager),
 ) -> PluginUIManifestResponse:
     """Get UI manifest for frontend integration.
 
     Returns navigation items and bundle paths for all enabled plugins.
+    Includes granted_api_scopes from the DB record for each plugin so
+    the frontend plugin sandbox can enforce API scope restrictions.
     """
     manifest = plugin_manager.get_ui_manifest()
-    return PluginUIManifestResponse(**manifest)
+    result = PluginUIManifestResponse(**manifest)
+    for item in result.plugins:
+        record = plugin_service.get_installed_plugin(db, item.name)
+        item.granted_api_scopes = (record.granted_api_scopes or []) if record else []
+    return result
 
 
 @router.get("/{name}", response_model=PluginDetailResponse)
@@ -225,6 +235,13 @@ async def toggle_plugin(
                 detail=f"Missing required permissions: {list(missing)}",
             )
 
+        from app.plugins.manifest import load_manifest
+        try:
+            _manifest = load_manifest(plugin_manager.plugins_dir / name)
+            api_scopes = list(_manifest.api_scopes)
+        except Exception:
+            api_scopes = []  # bundled/legacy plugins without a manifest declare no Core scopes
+
         plugin_service.enable_plugin(
             db,
             name=name,
@@ -233,6 +250,7 @@ async def toggle_plugin(
             permissions=permissions_to_grant,
             default_config=plugin.get_default_config(),
             installed_by=current_user.username,
+            api_scopes=api_scopes,
         )
 
         # Enable in plugin manager
@@ -322,7 +340,6 @@ async def toggle_dashboard_panel(
     plugin_service.set_dashboard_panel_enabled(db, name, body.enabled)
 
     # Audit log
-    from app.services.audit.logger_db import get_audit_logger_db
     audit = get_audit_logger_db()
     audit.log_event(
         event_type="PLUGIN",
@@ -344,6 +361,35 @@ async def toggle_dashboard_panel(
         "dashboard_panel_enabled": body.enabled,
         "message": f"Dashboard panel {'enabled' if body.enabled else 'disabled'}",
     }
+
+
+@router.post("/{name}/_audit/scope-denied", status_code=200)
+@user_limiter.limit(get_limit("admin_operations"))
+async def report_scope_denied(
+    request: Request,
+    response: Response,
+    name: str,
+    body: ScopeDeniedReport,
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Record a plugin scope-denial event in the audit log.
+
+    Called by the host bridge (fire-and-forget) when a plugin attempts an API
+    call that its granted_api_scopes do not permit.  Any authenticated user may
+    post (the bridge runs in the user's session).  The event is written with
+    success=False so it surfaces as a security event in the admin audit log.
+    """
+    audit = get_audit_logger_db()
+    audit.log_event(
+        event_type="PLUGIN",
+        user=current_user.username,
+        action="scope_denied",
+        resource=name,
+        success=False,
+        details={"method": body.method, "url": body.url},
+        ip_address=request.client.host if request.client else None,
+    )
+    return {"recorded": True}
 
 
 @router.get("/{name}/config", response_model=PluginConfigResponse)
@@ -459,6 +505,48 @@ async def serve_plugin_asset(
             detail="Plugin not found or not enabled",
         )
 
+    # Sandbox bootstrap document — generated, not read from disk.
+    if file_path == "host.html":
+        # Resolve the plugin's UI bundle name from its manifest (fall back to bundle.js).
+        # The manifest stores the bundle path relative to the plugin dir (e.g. "ui/bundle.js"),
+        # but the /ui/{file_path} route already includes the "ui/" prefix, so we strip it.
+        bundle_path = "bundle.js"
+        try:
+            from app.plugins.manifest import load_manifest
+            manifest = load_manifest(plugin_manager.plugins_dir / name)
+            if manifest.ui and manifest.ui.bundle:
+                raw_bundle = manifest.ui.bundle
+                # Strip leading "ui/" so the URL resolves correctly via this route
+                if raw_bundle.startswith("ui/"):
+                    raw_bundle = raw_bundle[len("ui/"):]
+                bundle_path = raw_bundle
+        except Exception:
+            pass
+        # Escape values flowing into the HTML attribute. `name` is a user-supplied
+        # path parameter and `bundle_path` derives from the plugin manifest; both are
+        # quoted into content="..." so escape them to neutralise attribute breakout / XSS.
+        safe_name = html.escape(name, quote=True)
+        safe_bundle_path = html.escape(bundle_path, quote=True)
+        html_doc = (
+            '<!doctype html><html><head><meta charset="utf-8">'
+            f'<meta name="plugin-bundle" content="/api/plugins/{safe_name}/ui/{safe_bundle_path}">'
+            '</head><body><div id="plugin-root"></div>'
+            '<script src="/plugin-runtime.js"></script></body></html>'
+        )
+        return Response(
+            content=html_doc,
+            media_type="text/html",
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Cache-Control": "no-store",
+                # Make the bootstrap framable by our own SPA. The global
+                # SecurityHeadersMiddleware would set DENY; the middleware
+                # carve-out in security_headers.py preserves these for the sandbox path.
+                "X-Frame-Options": "SAMEORIGIN",
+                "Content-Security-Policy": "frame-ancestors 'self'",
+            },
+        )
+
     # Construct file path
     plugin_path = plugin_manager.plugins_dir / name / "ui" / file_path
 
@@ -497,6 +585,7 @@ async def serve_plugin_asset(
         media_type=content_type,
         headers={
             "Cache-Control": "public, max-age=3600",
+            "Access-Control-Allow-Origin": "*",
         },
     )
 

@@ -22,6 +22,17 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> Response:
         response = await call_next(request)
 
+        # The plugin sandbox bootstrap must be framable by our own SPA; it sets
+        # its own X-Frame-Options/CSP frame-ancestors. Skip the global DENY/CSP
+        # for that single path so the iframe can render.
+        # Note: this early-return also drops the global script-src / object-src /
+        # base-uri directives for host.html. That is intentional — the bootstrap
+        # loads only the hardcoded /plugin-runtime.js script tag (no inline scripts,
+        # no eval), so the permissive absence of those directives carries no
+        # meaningful XSS risk for this document.
+        if request.url.path.endswith("/ui/host.html") and request.url.path.startswith("/api/plugins/"):
+            return response
+
         # Content Security Policy - Prevents inline scripts and external script injection
         # In dev mode, allow 'unsafe-inline' and 'unsafe-eval' for Vite HMR.
         # In production, only 'self' is permitted for script-src to prevent XSS.
