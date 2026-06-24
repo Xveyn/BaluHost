@@ -2,6 +2,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import { ThemeProvider } from '../../contexts/ThemeContext';
 import PluginSandboxHost from '../../components/plugins/PluginSandboxHost';
 
 // PluginBridge listens on window.addEventListener('message') — mock it so
@@ -9,12 +10,13 @@ import PluginSandboxHost from '../../components/plugins/PluginSandboxHost';
 // The mock tracks how many times the constructor has been called so regression
 // tests can assert "constructed once" across multiple renders.
 let bridgeConstructorCallCount = 0;
-let lastBridgeInstance: { start: ReturnType<typeof vi.fn>; dispose: ReturnType<typeof vi.fn> } | null = null;
+let lastBridgeInstance: { start: ReturnType<typeof vi.fn>; dispose: ReturnType<typeof vi.fn>; setTheme: ReturnType<typeof vi.fn> } | null = null;
 
 vi.mock('../../lib/plugin-sandbox/hostBridge', () => {
   class PluginBridge {
     start = vi.fn();
     dispose = vi.fn();
+    setTheme = vi.fn();
     constructor() {
       bridgeConstructorCallCount++;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -78,5 +80,17 @@ describe('PluginSandboxHost', () => {
     expect(bridgeConstructorCallCount).toBe(1);
     // dispose() must NOT have been called between the two renders.
     expect(bridgeAfterMount!.dispose).not.toHaveBeenCalled();
+  });
+
+  it('renders the opaque-origin iframe with a ThemeProvider in the tree', () => {
+    const { container } = render(
+      <MemoryRouter>
+        <ThemeProvider>
+          <PluginSandboxHost pluginName="weather" user={user} grantedScopes={[]} />
+        </ThemeProvider>
+      </MemoryRouter>
+    );
+    const iframe = container.querySelector('iframe')!;
+    expect(iframe.getAttribute('sandbox')).toBe('allow-scripts');
   });
 });

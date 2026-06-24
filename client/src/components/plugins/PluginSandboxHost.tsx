@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PluginBridge } from '../../lib/plugin-sandbox/hostBridge';
-import type { ThemePayload } from '../../lib/plugin-sandbox/protocol';
+import { useTheme, themes } from '../../contexts/ThemeContext';
 
 interface User { id: number; username: string; role: string }
 
@@ -10,15 +10,16 @@ interface Props {
   pluginName: string;
   user: User;
   grantedScopes: string[];
-  theme?: ThemePayload;
+  minRuntimeAbi?: number;
 }
 
-const DEFAULT_THEME: ThemePayload = { name: 'dark', tokens: {} };
-
-export default function PluginSandboxHost({ pluginName, user, grantedScopes, theme = DEFAULT_THEME }: Props) {
+export default function PluginSandboxHost({ pluginName, user, grantedScopes, minRuntimeAbi }: Props) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const bridgeRef = useRef<PluginBridge | null>(null);
   const navigate = useNavigate();
+  const { theme } = useTheme();
   const [height, setHeight] = useState(480);
+  const [error, setError] = useState<string | null>(null);
 
   // Derive stable primitive keys so the bridge is only recreated when the
   // plugin, user identity, or scope-list CONTENTS change — not on every
@@ -29,23 +30,38 @@ export default function PluginSandboxHost({ pluginName, user, grantedScopes, the
   useEffect(() => {
     const iframe = iframeRef.current;
     if (!iframe) return;
-    // Read the CURRENT grantedScopes/user arrays/objects at effect-run time
-    // (not the derived keys) so the bridge receives the real values.
+    setError(null);
     const bridge = new PluginBridge({
       iframe,
       pluginName,
       grantedScopes,
       user,
-      theme,
+      minRuntimeAbi,
+      theme: { name: theme, tokens: themes[theme].colors },
       onResize: (h) => setHeight(Math.max(120, Math.ceil(h))),
       onNavigate: (path) => navigate(path),
+      onError: (code) => setError(code),
     });
     bridge.start();
-    return () => bridge.dispose();
-    // `theme` intentionally omitted here — Task 4 wires live theme updates via a
-    // separate effect + bridge.setTheme(); this file currently passes a default theme.
+    bridgeRef.current = bridge;
+    return () => { bridge.dispose(); bridgeRef.current = null; };
+    // `theme` intentionally omitted — live theme changes are pushed via the
+    // separate effect below using bridge.setTheme() without recreating the bridge.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pluginName, scopesKey, userId, navigate]);
+  }, [pluginName, scopesKey, userId, minRuntimeAbi, navigate]);
+
+  // Push theme changes WITHOUT recreating the bridge (which would reload the iframe).
+  useEffect(() => {
+    bridgeRef.current?.setTheme({ name: theme, tokens: themes[theme].colors });
+  }, [theme]);
+
+  if (error === 'abi_mismatch') {
+    return (
+      <div className="p-6 rounded-lg border border-amber-500/40 bg-amber-500/10 text-amber-200 text-sm">
+        This plugin needs a newer BaluHost runtime.
+      </div>
+    );
+  }
 
   return (
     <iframe
