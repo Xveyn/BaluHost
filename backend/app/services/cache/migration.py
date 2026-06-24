@@ -492,7 +492,8 @@ class MigrationService:
                 test_file.write_text("test")
                 test_file.unlink()
             except OSError as e:
-                raise ValueError(f"Destination path not writable: {e}")
+                logger.warning("cache migration _validate_paths: destination not writable: %s", e)
+                raise ValueError("Destination path not writable")
 
     def _check_disk_space(self, source: str, dest: str) -> None:
         """Verify destination has enough space for source blobs."""

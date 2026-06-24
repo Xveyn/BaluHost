@@ -225,6 +225,8 @@ async def restore_backup(
             restored_at=datetime.now()
         )
         
+    except HTTPException:
+        raise
     except Exception as e:
         # If the service raised a RestoreLockedError, return 423 Locked with helpful message
         from app.services.backup import RestoreLockedError

@@ -119,3 +119,6 @@ backups/
 backend/data/
 scripts/fix_umlauts.py
 .aider*
+
+# Superpowers subagent-driven-development scratch (briefs, reports, diffs)
+.superpowers/
