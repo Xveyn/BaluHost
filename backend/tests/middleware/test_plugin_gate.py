@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 from app.middleware.plugin_gate import (
     CACHE_TTL_SECONDS,
     PluginGateMiddleware,
+    _is_management_route,
     _plugin_cache,
     invalidate_plugin_cache,
 )
@@ -317,3 +318,28 @@ def test_no_required_permissions_passes(mock_fetch, mock_get_instance):
     client = TestClient(_make_app())
     resp = client.get("/api/plugins/my_plugin/data")
     assert resp.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Test: _storage carve-out is exact-namespace-bounded (regression for #Fix1)
+# ---------------------------------------------------------------------------
+
+
+def test_storage_list_route_is_management():
+    """``/_storage`` (exact, the list route) must be a management route."""
+    assert _is_management_route("/_storage") is True
+
+
+def test_storage_key_subpath_is_management():
+    """``/_storage/{key}`` (slash-bounded sub-path) must be a management route."""
+    assert _is_management_route("/_storage/units") is True
+
+
+def test_storage_backdoor_is_not_management():
+    """``/_storage_backdoor`` must NOT be classified as a management route."""
+    assert _is_management_route("/_storage_backdoor") is False
+
+
+def test_storagex_is_not_management():
+    """``/_storagex`` must NOT be classified as a management route."""
+    assert _is_management_route("/_storagex") is False

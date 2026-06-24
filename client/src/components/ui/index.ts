@@ -1,5 +1,5 @@
 // UI Component Library for BaluHost
-// These components are also exposed via window.BaluHost.ui for plugin use
+// These components are also exposed via the plugin-runtime surface inside sandbox iframes
 
 export { Button } from './Button';
 export type { ButtonProps } from './Button';

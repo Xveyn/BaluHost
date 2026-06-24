@@ -13,5 +13,7 @@
   "plugin_dependencies": [],
   "python_requirements": [],
   "entrypoint": "__init__.py",
-  "ui": {"bundle": "ui/bundle.js", "styles": null}
+  "ui": {"bundle": "ui/bundle.js", "styles": null},
+  "api_scopes": [],
+  "min_runtime_abi": 1
 }

@@ -44,6 +44,7 @@ export interface PluginUIInfo {
   dashboard_widgets: string[];
   translations?: PluginTranslations;
   granted_api_scopes: string[];
+  min_runtime_abi?: number;
 }
 
 export interface PluginUIManifest {

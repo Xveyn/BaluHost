@@ -1,0 +1,7 @@
+/* client/src/plugin-runtime/runtime.css
+   Compiled standalone into client/public/plugin-runtime.css and loaded by the
+   sandbox host.html. Carries the Tailwind utilities the bundled ui/ primitives
+   use; theme CSS variables are injected at runtime via the init handshake. */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;

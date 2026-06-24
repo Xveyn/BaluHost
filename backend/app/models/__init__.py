@@ -50,6 +50,7 @@ from app.models.scheduler_state import SchedulerState
 from app.models.webdav_state import WebdavState
 from app.models.power_preset import PowerPreset
 from app.models.plugin import InstalledPlugin
+from app.models.plugin_storage import PluginStorage  # noqa: F401
 from app.models.smart_device import SmartDevice, SmartDeviceSample
 from app.models.benchmark import (
     DiskBenchmark,
@@ -158,6 +159,7 @@ __all__ = [
     "WebdavState",
     "PowerPreset",
     "InstalledPlugin",
+    "PluginStorage",
     "SmartDevice",
     "SmartDeviceSample",
     "DiskBenchmark",

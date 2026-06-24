@@ -12,6 +12,7 @@ dist
 dist-ssr
 *.local
 public/plugin-runtime.js
+public/plugin-runtime.css
 /scripts/fix_umlauts.py
 
 # Editor directories and files

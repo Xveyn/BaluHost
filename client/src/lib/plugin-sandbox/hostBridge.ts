@@ -1,6 +1,6 @@
 // client/src/lib/plugin-sandbox/hostBridge.ts
 import { apiClient } from '../api';
-import { isRpcRequest, isIframeEvent, type RpcResult, type HostPush } from './protocol';
+import { isRpcRequest, isIframeEvent, type RpcResult, type HostPush, type ThemePayload } from './protocol';
 import { isCallAllowed } from './scopeCatalog';
 
 interface User { id: number; username: string; role: string }
@@ -10,23 +10,39 @@ export interface PluginBridgeOpts {
   pluginName: string;
   grantedScopes: string[];
   user: User;
+  theme: ThemePayload;
+  minRuntimeAbi?: number;
   onResize?: (height: number) => void;
   onNavigate?: (path: string) => void;
+  onError?: (code: string) => void;
   timeoutMs?: number;
 }
 
 export class PluginBridge {
   private listener = (ev: MessageEvent) => this.handleMessage(ev);
   private opts: PluginBridgeOpts;
+  private theme: ThemePayload;
+  private started = false;
   constructor(opts: PluginBridgeOpts) {
     this.opts = opts;
+    this.theme = opts.theme;
   }
 
   start(): void {
+    this.started = true;
     window.addEventListener('message', this.listener);
   }
   dispose(): void {
+    this.started = false;
     window.removeEventListener('message', this.listener);
+  }
+
+  /** Update the active theme; if the frame is live, push it so the plugin restyles. */
+  setTheme(theme: ThemePayload): void {
+    this.theme = theme;
+    if (this.started) {
+      this.post({ kind: 'push', name: 'theme-changed', payload: theme });
+    }
   }
 
   private post(msg: RpcResult | HostPush): void {
@@ -40,13 +56,21 @@ export class PluginBridge {
 
     if (isIframeEvent(data)) {
       if (data.name === 'ready') {
+        const runtimeAbi = (data.payload as { runtime_abi?: unknown })?.runtime_abi;
+        const abi = typeof runtimeAbi === 'number' ? runtimeAbi : 1;
+        if (this.opts.minRuntimeAbi !== undefined && abi < this.opts.minRuntimeAbi) {
+          this.opts.onError?.('abi_mismatch');
+          return;
+        }
         this.post({
           kind: 'push', name: 'init',
-          payload: { user: this.opts.user, pluginName: this.opts.pluginName },
+          payload: { user: this.opts.user, pluginName: this.opts.pluginName, theme: this.theme },
         });
       } else if (data.name === 'resize') {
         const h = (data.payload as { height?: unknown })?.height;
         if (typeof h === 'number') this.opts.onResize?.(h);
+      } else if (data.name === 'error') {
+        this.opts.onError?.('plugin_error');
       }
       return;
     }
@@ -66,6 +90,7 @@ export class PluginBridge {
 
   private async dispatch(channel: string, method: string, args: unknown[]): Promise<unknown> {
     if (channel === 'api') return this.apiCall(method, args);
+    if (channel === 'storage') return this.storageCall(method, args);
     if (channel === 'navigate') {
       const path = String(args[0] ?? '');
       const prefix = `/plugins/${this.opts.pluginName}`;
@@ -74,6 +99,35 @@ export class PluginBridge {
       return null;
     }
     throw { code: 'unknown_channel', message: `Unknown channel ${channel}` };
+  }
+
+  private async storageCall(method: string, args: unknown[]): Promise<unknown> {
+    const base = `/api/plugins/${this.opts.pluginName}/_storage`;
+    const key = encodeURIComponent(String(args[0] ?? ''));
+    try {
+      if (method === 'get') {
+        const res = await apiClient.get(`${base}/${key}`);
+        return (res.data as { value?: unknown })?.value;
+      }
+      if (method === 'set') {
+        await apiClient.put(`${base}/${key}`, { value: args[1] });
+        return { ok: true };
+      }
+      if (method === 'del') {
+        await apiClient.delete(`${base}/${key}`);
+        return null;
+      }
+      if (method === 'keys') {
+        const res = await apiClient.get(base);
+        return (res.data as { keys?: unknown })?.keys ?? [];
+      }
+      throw { code: 'unknown_method', message: `Unknown storage method ${method}` };
+    } catch (err) {
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      if (method === 'get' && status === 404) return undefined;
+      if (status === 413) throw { code: 'storage_quota', message: 'Plugin storage quota exceeded' };
+      throw err;
+    }
   }
 
   private async apiCall(method: string, args: unknown[]): Promise<unknown> {

@@ -10,9 +10,11 @@ from app.api.deps import get_current_admin, get_current_user, get_db, require_lo
 from app.core.rate_limiter import user_limiter, get_limit
 from app.models.user import User
 from app.middleware.plugin_gate import invalidate_plugin_cache
+from app.plugins.manifest import load_manifest
 from app.plugins.manager import PluginManager, PluginLoadError
 from app.plugins.permissions import PermissionManager
 from app.services import plugin_service
+from app.services import plugin_storage_service
 from app.services.audit.logger_db import get_audit_logger_db
 from app.schemas.plugin import (
     DashboardPanelToggleRequest,
@@ -24,6 +26,7 @@ from app.schemas.plugin import (
     PluginInfo,
     PluginListResponse,
     PluginNavItemSchema,
+    PluginStorageSetRequest,
     PluginToggleRequest,
     PluginToggleResponse,
     PluginUIManifestResponse,
@@ -118,6 +121,11 @@ async def get_ui_manifest(
     for item in result.plugins:
         record = plugin_service.get_installed_plugin(db, item.name)
         item.granted_api_scopes = (record.granted_api_scopes or []) if record else []
+        try:
+            _manifest = load_manifest(plugin_manager.plugins_dir / item.name)
+            item.min_runtime_abi = getattr(_manifest, "min_runtime_abi", None)
+        except Exception:
+            item.min_runtime_abi = None
     return result
 
 
@@ -235,7 +243,6 @@ async def toggle_plugin(
                 detail=f"Missing required permissions: {list(missing)}",
             )
 
-        from app.plugins.manifest import load_manifest
         try:
             _manifest = load_manifest(plugin_manager.plugins_dir / name)
             api_scopes = list(_manifest.api_scopes)
@@ -392,6 +399,59 @@ async def report_scope_denied(
     return {"recorded": True}
 
 
+@router.get("/{name}/_storage")
+@user_limiter.limit(get_limit("admin_operations"))
+async def storage_list_keys(
+    request: Request, response: Response, name: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """List this user's storage keys for the plugin."""
+    return {"keys": plugin_storage_service.list_keys(db, name, current_user.id)}
+
+
+@router.get("/{name}/_storage/{key}")
+@user_limiter.limit(get_limit("admin_operations"))
+async def storage_get(
+    request: Request, response: Response, name: str, key: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Get a single storage value by key for this user and plugin."""
+    found, value = plugin_storage_service.get_value(db, name, current_user.id, key)
+    if not found:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Key not found")
+    return {"value": value}
+
+
+@router.put("/{name}/_storage/{key}")
+@user_limiter.limit(get_limit("admin_operations"))
+async def storage_set(
+    request: Request, response: Response, name: str, key: str,
+    body: PluginStorageSetRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Set a storage key-value entry for this user and plugin."""
+    try:
+        plugin_storage_service.set_value(db, name, current_user.id, key, body.value)
+    except plugin_storage_service.StorageQuotaError as exc:
+        raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail=str(exc))
+    return {"ok": True}
+
+
+@router.delete("/{name}/_storage/{key}", status_code=status.HTTP_204_NO_CONTENT)
+@user_limiter.limit(get_limit("admin_operations"))
+async def storage_delete(
+    request: Request, response: Response, name: str, key: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Response:
+    """Delete a storage entry for this user and plugin. Returns 204 whether or not the key existed."""
+    plugin_storage_service.delete_value(db, name, current_user.id, key)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.get("/{name}/config", response_model=PluginConfigResponse)
 @user_limiter.limit(get_limit("admin_operations"))
 async def get_plugin_config(
@@ -512,7 +572,6 @@ async def serve_plugin_asset(
         # but the /ui/{file_path} route already includes the "ui/" prefix, so we strip it.
         bundle_path = "bundle.js"
         try:
-            from app.plugins.manifest import load_manifest
             manifest = load_manifest(plugin_manager.plugins_dir / name)
             if manifest.ui and manifest.ui.bundle:
                 raw_bundle = manifest.ui.bundle
@@ -529,6 +588,7 @@ async def serve_plugin_asset(
         safe_bundle_path = html.escape(bundle_path, quote=True)
         html_doc = (
             '<!doctype html><html><head><meta charset="utf-8">'
+            '<link rel="stylesheet" href="/plugin-runtime.css">'
             f'<meta name="plugin-bundle" content="/api/plugins/{safe_name}/ui/{safe_bundle_path}">'
             '</head><body><div id="plugin-root"></div>'
             '<script src="/plugin-runtime.js"></script></body></html>'

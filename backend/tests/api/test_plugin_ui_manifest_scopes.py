@@ -132,3 +132,78 @@ def test_ui_manifest_items_have_empty_scopes_when_no_db_record(client, admin_hea
         assert entry["granted_api_scopes"] == [], (
             f"Expected empty list when no DB record, got: {entry['granted_api_scopes']!r}"
         )
+
+
+def test_ui_manifest_includes_min_runtime_abi(client, admin_headers):
+    """Every plugin entry in the ui/manifest response must carry a min_runtime_abi key.
+
+    Key-presence check: load_manifest raises (no plugin.json on disk), so
+    min_runtime_abi falls back to None — the key must still be present.
+    """
+    fake_manifest = _make_fake_manifest()
+    fake_record = _make_fake_db_record([])
+
+    with patch(
+        "app.plugins.manager.PluginManager.get_ui_manifest",
+        return_value=fake_manifest,
+    ), patch(
+        "app.services.plugin_service.get_installed_plugin",
+        return_value=fake_record,
+    ):
+        resp = client.get("/api/plugins/ui/manifest", headers=admin_headers)
+
+    assert resp.status_code == 200, (
+        f"Expected 200 from GET /api/plugins/ui/manifest; got {resp.status_code}. "
+        f"Body: {resp.text[:500]}"
+    )
+
+    data = resp.json()
+    plugins = data.get("plugins", [])
+    assert len(plugins) >= 1, "Expected at least one plugin in manifest response"
+
+    for entry in plugins:
+        assert "min_runtime_abi" in entry, (
+            f"Plugin entry missing 'min_runtime_abi' key: {entry}"
+        )
+
+
+def test_ui_manifest_min_runtime_abi_happy_path(client, admin_headers):
+    """When load_manifest succeeds and returns min_runtime_abi=1, the manifest
+    item must carry that exact value (not None).
+
+    Patches load_manifest at the route-module level (hoisted top-level import).
+    """
+    fake_manifest = _make_fake_manifest()
+    fake_record = _make_fake_db_record([])
+
+    fake_plugin_manifest = MagicMock()
+    fake_plugin_manifest.min_runtime_abi = 1
+
+    with patch(
+        "app.plugins.manager.PluginManager.get_ui_manifest",
+        return_value=fake_manifest,
+    ), patch(
+        "app.services.plugin_service.get_installed_plugin",
+        return_value=fake_record,
+    ), patch(
+        "app.api.routes.plugins.load_manifest",
+        return_value=fake_plugin_manifest,
+    ):
+        resp = client.get("/api/plugins/ui/manifest", headers=admin_headers)
+
+    assert resp.status_code == 200, (
+        f"Expected 200 from GET /api/plugins/ui/manifest; got {resp.status_code}. "
+        f"Body: {resp.text[:500]}"
+    )
+
+    data = resp.json()
+    plugins = data.get("plugins", [])
+    assert len(plugins) >= 1, "Expected at least one plugin in manifest response"
+
+    first_plugin = plugins[0]
+    assert "min_runtime_abi" in first_plugin, (
+        f"Plugin entry missing 'min_runtime_abi' key: {first_plugin}"
+    )
+    assert first_plugin["min_runtime_abi"] == 1, (
+        f"Expected min_runtime_abi=1 from patched manifest, got: {first_plugin['min_runtime_abi']!r}"
+    )

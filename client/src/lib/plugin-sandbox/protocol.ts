@@ -32,6 +32,11 @@ export interface HostPush {
   payload: unknown;
 }
 
+export interface ThemePayload {
+  name: string;
+  tokens: Record<string, string>;
+}
+
 function isObj(m: unknown): m is Record<string, unknown> {
   return typeof m === 'object' && m !== null;
 }

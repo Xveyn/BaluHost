@@ -60,6 +60,7 @@ export default function PluginPage() {
         pluginName={pluginName!}
         user={user}
         grantedScopes={pluginInfo?.granted_api_scopes ?? []}
+        minRuntimeAbi={pluginInfo?.min_runtime_abi}
       />
     </div>
   );

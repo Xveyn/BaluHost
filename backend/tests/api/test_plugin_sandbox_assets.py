@@ -121,3 +121,14 @@ def test_host_html_is_framable_same_origin(client):
         f"host.html CSP must contain 'frame-ancestors' to allow same-origin framing. "
         f"Got CSP: {csp!r}"
     )
+
+
+# ---------------------------------------------------------------------------
+# 4. host.html links plugin-runtime.css
+# ---------------------------------------------------------------------------
+
+def test_host_html_links_runtime_css(client):
+    resp = client.get("/api/plugins/storage_analytics/ui/host.html")
+    if resp.status_code == 200:
+        assert '/plugin-runtime.css' in resp.text
+        assert 'rel="stylesheet"' in resp.text
