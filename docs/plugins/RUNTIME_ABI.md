@@ -97,7 +97,7 @@ If you do not set `min_runtime_abi`, it defaults to `1` and the plugin will load
 
 | ABI | Introduced | Notes |
 |---|---|---|
-| `1` | BaluHost 1.37.0 | Initial sandbox runtime. Full surface: React 18, hooks, ui (15 primitives), icons (Lucide), utils (5 functions), api (5 methods), toast, navigate, storage (4 methods), user. |
+| `1` | BaluHost 1.37.0 | Initial sandbox runtime. Full surface: React 18, hooks, ui (17 primitives), icons (Lucide), utils (5 functions), api (5 methods), toast, navigate, storage (4 methods), user. |
 
 ---
 
