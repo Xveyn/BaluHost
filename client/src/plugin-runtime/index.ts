@@ -19,6 +19,7 @@ function applyTheme(theme: unknown): void {
 }
 
 window.addEventListener('message', (ev) => {
+  if (ev.source !== window.parent) return;
   const data = ev.data;
   if (data && data.kind === 'rpc-result') sdk._receive(data);
   if (data && data.kind === 'push' && data.name === 'theme-changed') applyTheme(data.payload);
