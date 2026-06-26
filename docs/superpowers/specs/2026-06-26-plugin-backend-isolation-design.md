@@ -182,6 +182,36 @@ gefährlichen Raw-Permissions sind nicht installierbar.
 
 ---
 
+### Frontend — Plugin-Dokumentations-Seite (muss mitziehen)
+
+Die Plugin-Page hat einen **Documentation-Tab** (`client/src/components/plugins/PluginDocumentation.tsx`,
+Strings im `plugins`-i18n-Namespace, de + en), der das **aktuelle In-Process-Modell**
+erklärt: rohe Permissions (`file:write`, `system:execute`, `db:write`, `user:write` als
+„dangerous"), Lifecycle (discovery → registration → permission check → activation),
+Plugin-Struktur (`__init__.py`/`routes.py`), Permissions-Katalog (file/system/network/
+database/user/device/events) und die Event-Hooks-Referenz (`on_file_uploaded` … via
+`event:subscribe`).
+
+Mit Track B wird das für **externe** Plugins größtenteils unzutreffend. Die Doku ist
+Teil des Track-B-Deliverables und muss das neue Modell abbilden:
+
+- **Zwei Trust-Stufen sichtbar machen:** *bundled* (First-Party, trusted, voller
+  In-Process-Zugriff — das bestehende Permissions/Hooks-Modell gilt hier weiter) vs.
+  *external/Marketplace* (sandboxed Subprozess, default-deny).
+- **Für external:** das rohe Permission-/Hooks-Modell ersetzen durch das
+  **Scope-Modell** (KV-Storage, eigene Routen, kuratierte `core.*`-Scopes); klarstellen,
+  dass `file:write`/`system:execute`/`db:*` und Event-Hooks für external **nicht
+  gewährbar** bzw. v1 nicht verfügbar sind, und welche Isolations-Garantien gelten
+  (kein Netz, kein Host-FS/DB, Token bleibt im Host).
+- **Konsistenz:** Die Doku darf erst auf das neue Modell umgeschrieben werden, *wenn*
+  die Isolation real existiert (sie beschreibt tatsächliches Verhalten) — daher als
+  späte Plan-Aufgabe, gemeinsam mit dem Backend, nicht vorab.
+
+Betroffen: `PluginDocumentation.tsx` + die `plugins`-Locale-Dateien
+(`client/src/i18n/locales/de/plugins.json`, `client/src/i18n/locales/en/plugins.json`)
+und ggf. der Enable-/Permission-Modal-Text in `PluginsPage.tsx`/`MarketplaceTab.tsx`,
+sofern er rohe Permissions zeigt.
+
 ## Trust-Boundary (Invarianten)
 
 - **Einziger Trust-Boundary = der Host.** Der Plugin-Prozess ist vollständig untrusted.
