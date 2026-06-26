@@ -77,7 +77,14 @@ class RpcChannel:
                     break
                 if msg is None:
                     break  # clean EOF
-                if msg.type in RESPONSE_TYPES:
+                # Route the message: responses resolve pending calls, requests dispatch
+                # to handlers. Bidirectional types (like LIFECYCLE) work as responses
+                # only if there's a matching pending call.
+                if msg.type in RESPONSE_TYPES and msg.id in self._pending:
+                    self._resolve(msg)
+                elif msg.type == MsgType.LIFECYCLE and msg.id in self._pending:
+                    # LIFECYCLE can be both request and response; if there's a pending
+                    # call, treat it as a response.
                     self._resolve(msg)
                 elif msg.type in REQUEST_TYPES:
                     task = asyncio.create_task(self._dispatch(msg))
@@ -124,6 +131,15 @@ class RpcChannel:
             if not fut.done():
                 fut.set_exception(exc)
         self._pending.clear()
+
+    async def wait_closed(self) -> None:
+        """Block until the read loop ends (peer closed the connection or a
+        frame error tore it down). Returns immediately if never started."""
+        if self._read_task is not None:
+            try:
+                await self._read_task
+            except (asyncio.CancelledError, Exception):
+                pass
 
     async def close(self) -> None:
         """Cancel the read loop + in-flight dispatch tasks, close the writer,
