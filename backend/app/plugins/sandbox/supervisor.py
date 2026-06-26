@@ -172,7 +172,12 @@ class SandboxSupervisor:
         listener = WorkerListener(self._plugin_dir)
         address = await listener.start()
         try:
-            argv = [sys.executable, "-m", WORKER_MODULE, "--connect", address]
+            argv = [
+                sys.executable, "-m", WORKER_MODULE,
+                "--connect", address,
+                "--plugin-dir", str(self._plugin_dir),
+                "--plugin-name", self.plugin_name,
+            ]
             self._process = await self._spawn_hook(argv, str(self._plugin_dir))
             try:
                 reader, writer = await listener.accept(timeout=self._handshake_timeout)

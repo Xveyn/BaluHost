@@ -2,6 +2,7 @@
 import asyncio
 import os
 import sys
+import textwrap
 from pathlib import Path
 
 import pytest
@@ -14,20 +15,74 @@ from app.plugins.sandbox.supervisor import (
 )
 
 
+# ---------------------------------------------------------------------------
+# Fixture plugin helpers
+# ---------------------------------------------------------------------------
+
+def _write_echo_plugin(plugin_dir: Path) -> None:
+    """Write a minimal plugin into plugin_dir that echoes method/path/context.
+
+    This replaces the Phase-2b worker echo so tests that use the DEFAULT spawn
+    (real worker.py, which now loads a plugin) can still assert on the response
+    content without relying on the removed echo handler.
+    """
+    code = textwrap.dedent("""\
+        def register(host):
+            @host.route("GET", "ping")
+            async def echo_ping(request):
+                return {
+                    "status": 200,
+                    "body": {
+                        "method": request["method"],
+                        "path": request["path"],
+                        "context": request["user"],
+                    },
+                }
+
+            @host.route("GET", "again")
+            async def echo_again(request):
+                return {
+                    "status": 200,
+                    "body": {
+                        "method": request["method"],
+                        "path": request["path"],
+                    },
+                }
+    """)
+    (plugin_dir / "__init__.py").write_text(code, encoding="utf-8")
+
+
+def _write_trivial_plugin(plugin_dir: Path) -> None:
+    """Write a no-route plugin that satisfies the worker's plugin-load requirement."""
+    (plugin_dir / "__init__.py").write_text(
+        "def register(host):\n    pass\n", encoding="utf-8"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Supervisor lifecycle tests
+# ---------------------------------------------------------------------------
+
 async def test_start_health_dispatch_stop(tmp_path):
+    # Phase 3: the worker loads the plugin from tmp_path; we need a valid one.
+    _write_echo_plugin(tmp_path)
     sup = SandboxSupervisor("echo_plugin", tmp_path)
     await sup.start()
     try:
         assert await sup.health() is True
-        resp = await sup.dispatch("GET", "ping", b"", {"user_id": 5, "username": "alice", "role": "user"})
+        resp = await sup.dispatch(
+            "GET", "ping", b"", {"user_id": 5, "username": "alice", "role": "user"}
+        )
+        # Response comes from the plugin's registered route (SDK dispatch).
         assert resp["status"] == 200
-        assert resp["echo"]["method"] == "GET"
-        assert resp["echo"]["context"] == {"user_id": 5, "username": "alice", "role": "user"}
+        assert resp["body"]["method"] == "GET"
+        assert resp["body"]["context"] == {"user_id": 5, "username": "alice", "role": "user"}
     finally:
         await sup.stop()
 
 
 async def test_stop_is_idempotent(tmp_path):
+    _write_trivial_plugin(tmp_path)
     sup = SandboxSupervisor("echo_plugin", tmp_path)
     await sup.start()
     await sup.stop()
@@ -72,6 +127,7 @@ def test_register_restart_budget_unit(tmp_path):
 
 
 async def test_auto_restart_after_unexpected_exit(tmp_path):
+    _write_echo_plugin(tmp_path)
     sup = SandboxSupervisor("echo_plugin", tmp_path)
     await sup.start()
     try:
@@ -86,16 +142,17 @@ async def test_auto_restart_after_unexpected_exit(tmp_path):
                 await asyncio.sleep(0.1)
             return False
         assert await _healthy_again() is True
-        # And it serves requests again.
+        # And it serves requests again via the SDK-dispatched route.
         resp = await sup.dispatch("GET", "again", b"", {"user_id": 1, "username": "testuser", "role": "user"})
-        assert resp["echo"]["path"] == "again"
+        assert resp["body"]["path"] == "again"
     finally:
         await sup.stop()
 
 
 async def test_auto_disable_when_restart_fails(tmp_path):
-    # First spawn succeeds (real worker); subsequent spawns produce a process
-    # that exits immediately, so the restart's handshake fails -> auto-disable.
+    # First spawn succeeds (real worker + real plugin); subsequent spawns produce
+    # a process that exits immediately, so the restart's handshake fails -> auto-disable.
+    _write_trivial_plugin(tmp_path)
     state = {"calls": 0}
 
     async def flaky_spawn(argv, cwd):
@@ -131,6 +188,7 @@ async def test_auto_disable_on_non_supervisor_error_restart(tmp_path):
     # must still auto-disable the supervisor and leave stop() safe to call.
     # Before the fix this exception escaped _supervise(), wedging the supervisor
     # (_running=True, _disabled=False, _channel=None) and poisoning stop().
+    _write_trivial_plugin(tmp_path)
     state = {"calls": 0}
 
     async def spawn_then_os_error(argv, cwd):
@@ -236,7 +294,9 @@ def _make_supervisor_with_scripted_worker(
     backend_dir = str(Path(__file__).resolve().parent.parent.parent.parent)
 
     async def _spawn(argv: list, cwd: str) -> asyncio.subprocess.Process:
-        connect_addr = argv[-1]  # argv: [..., "--connect", <addr>]
+        # Locate the connect address by position after "--connect" (not argv[-1],
+        # because Phase 3 appends --plugin-dir / --plugin-name after the address).
+        connect_addr = argv[argv.index("--connect") + 1]
         env = os.environ.copy()
         existing_pp = env.get("PYTHONPATH", "")
         env["PYTHONPATH"] = (
