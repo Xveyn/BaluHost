@@ -20,13 +20,13 @@ def build_worker_handler() -> RequestHandler:
         if msg.type == MsgType.LIFECYCLE:
             action = msg.body.get("action")
             if action == "health":
-                return Message(id=msg.id, type=MsgType.LIFECYCLE, body={"status": "ok"})
+                return Message(id=msg.id, type=MsgType.LIFECYCLE_RESULT, body={"status": "ok"})
             if action == "shutdown":
                 return Message(
-                    id=msg.id, type=MsgType.LIFECYCLE, body={"status": "stopping"}
+                    id=msg.id, type=MsgType.LIFECYCLE_RESULT, body={"status": "stopping"}
                 )
             return Message(
-                id=msg.id, type=MsgType.LIFECYCLE, body={"status": "unknown_action"}
+                id=msg.id, type=MsgType.LIFECYCLE_RESULT, body={"status": "unknown_action"}
             )
         if msg.type == MsgType.HTTP_REQUEST:
             # Phase-2 echo: prove the request contract round-trips intact.

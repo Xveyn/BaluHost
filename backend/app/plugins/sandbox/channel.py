@@ -77,14 +77,7 @@ class RpcChannel:
                     break
                 if msg is None:
                     break  # clean EOF
-                # Route the message: responses resolve pending calls, requests dispatch
-                # to handlers. Bidirectional types (like LIFECYCLE) work as responses
-                # only if there's a matching pending call.
-                if msg.type in RESPONSE_TYPES and msg.id in self._pending:
-                    self._resolve(msg)
-                elif msg.type == MsgType.LIFECYCLE and msg.id in self._pending:
-                    # LIFECYCLE can be both request and response; if there's a pending
-                    # call, treat it as a response.
+                if msg.type in RESPONSE_TYPES:
                     self._resolve(msg)
                 elif msg.type in REQUEST_TYPES:
                     task = asyncio.create_task(self._dispatch(msg))

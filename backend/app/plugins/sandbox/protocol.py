@@ -26,13 +26,14 @@ class MsgType:
     CAP_CALL = "cap_call"
     CAP_RESULT = "cap_result"
     LIFECYCLE = "lifecycle"
+    LIFECYCLE_RESULT = "lifecycle_result"
     ERROR = "error"
 
 
 # A side routes inbound frames by category: request types go to the request
 # handler, response types resolve a pending outbound call.
 REQUEST_TYPES = frozenset({MsgType.HTTP_REQUEST, MsgType.CAP_CALL, MsgType.LIFECYCLE})
-RESPONSE_TYPES = frozenset({MsgType.HTTP_RESPONSE, MsgType.CAP_RESULT, MsgType.ERROR})
+RESPONSE_TYPES = frozenset({MsgType.HTTP_RESPONSE, MsgType.CAP_RESULT, MsgType.LIFECYCLE_RESULT, MsgType.ERROR})
 
 
 class FrameError(Exception):

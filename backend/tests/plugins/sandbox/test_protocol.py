@@ -52,6 +52,8 @@ def test_request_response_type_partition():
     assert REQUEST_TYPES.isdisjoint(RESPONSE_TYPES)
     assert MsgType.HTTP_REQUEST in REQUEST_TYPES
     assert MsgType.HTTP_RESPONSE in RESPONSE_TYPES
+    assert MsgType.LIFECYCLE in REQUEST_TYPES
+    assert MsgType.LIFECYCLE_RESULT in RESPONSE_TYPES
 
 
 def test_decode_payload_rejects_invalid_msgpack():

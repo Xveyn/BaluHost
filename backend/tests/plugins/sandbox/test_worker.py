@@ -25,7 +25,7 @@ async def test_worker_answers_health(tmp_path):
     host, worker_task, listener = await _host_and_worker(tmp_path)
     try:
         resp = await host.call(MsgType.LIFECYCLE, {"action": "health"}, timeout=5)
-        assert resp.type == MsgType.LIFECYCLE
+        assert resp.type == MsgType.LIFECYCLE_RESULT
         assert resp.body == {"status": "ok"}
     finally:
         await host.close()
