@@ -1,10 +1,15 @@
 """Real-subprocess tests for SandboxSupervisor."""
 import asyncio
+import sys
 
 import pytest
 
 from app.plugins.sandbox.protocol import MsgType
-from app.plugins.sandbox.supervisor import SandboxSupervisor, SupervisorError
+from app.plugins.sandbox.supervisor import (
+    SandboxSupervisor,
+    SupervisorError,
+    _default_spawn as _default_spawn_passthrough,
+)
 
 
 async def test_start_health_dispatch_stop(tmp_path):
@@ -54,3 +59,66 @@ async def test_spawn_hook_failure_propagates_cleanly(tmp_path):
     # Supervisor never came up: not running, channel-less, health False.
     assert await sup.health() is False
     assert sup.disabled is False
+
+
+def test_register_restart_budget_unit(tmp_path):
+    # Unit-test the budget counter directly (no subprocess): max_restarts=2
+    # allows 2 restarts, the 3rd registration trips the budget.
+    sup = SandboxSupervisor("p", tmp_path, max_restarts=2)
+    assert sup._register_restart() is True   # 1
+    assert sup._register_restart() is True   # 2
+    assert sup._register_restart() is False  # 3 -> over budget
+
+
+async def test_auto_restart_after_unexpected_exit(tmp_path):
+    sup = SandboxSupervisor("echo_plugin", tmp_path)
+    await sup.start()
+    try:
+        assert await sup.health() is True
+        # Kill the worker out from under the supervisor.
+        sup._process.kill()
+        # The supervise loop should detect the exit and respawn a healthy worker.
+        async def _healthy_again() -> bool:
+            for _ in range(50):
+                if not sup.disabled and await sup.health():
+                    return True
+                await asyncio.sleep(0.1)
+            return False
+        assert await _healthy_again() is True
+        # And it serves requests again.
+        resp = await sup.dispatch("GET", "again", b"", {})
+        assert resp.body["echo"]["path"] == "again"
+    finally:
+        await sup.stop()
+
+
+async def test_auto_disable_when_restart_fails(tmp_path):
+    # First spawn succeeds (real worker); subsequent spawns produce a process
+    # that exits immediately, so the restart's handshake fails -> auto-disable.
+    state = {"calls": 0}
+
+    async def flaky_spawn(argv, cwd):
+        state["calls"] += 1
+        if state["calls"] == 1:
+            return await _default_spawn_passthrough(argv, cwd)
+        return await asyncio.create_subprocess_exec(
+            sys.executable, "-c", "raise SystemExit(1)"
+        )
+
+    sup = SandboxSupervisor(
+        "flaky_plugin", tmp_path, spawn_hook=flaky_spawn, handshake_timeout=2.0
+    )
+    await sup.start()
+    try:
+        sup._process.kill()  # force the unexpected exit -> restart attempt (fails)
+        async def _disabled() -> bool:
+            for _ in range(50):
+                if sup.disabled:
+                    return True
+                await asyncio.sleep(0.1)
+            return False
+        assert await _disabled() is True
+        with pytest.raises(SupervisorError):
+            await sup.dispatch("GET", "x", b"", {})
+    finally:
+        await sup.stop()
