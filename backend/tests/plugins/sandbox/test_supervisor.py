@@ -1,6 +1,9 @@
 """Real-subprocess tests for SandboxSupervisor."""
 import asyncio
+import os
 import sys
+import textwrap
+from pathlib import Path
 
 import pytest
 
@@ -12,21 +15,74 @@ from app.plugins.sandbox.supervisor import (
 )
 
 
+# ---------------------------------------------------------------------------
+# Fixture plugin helpers
+# ---------------------------------------------------------------------------
+
+def _write_echo_plugin(plugin_dir: Path) -> None:
+    """Write a minimal plugin into plugin_dir that echoes method/path/context.
+
+    This replaces the Phase-2b worker echo so tests that use the DEFAULT spawn
+    (real worker.py, which now loads a plugin) can still assert on the response
+    content without relying on the removed echo handler.
+    """
+    code = textwrap.dedent("""\
+        def register(host):
+            @host.route("GET", "ping")
+            async def echo_ping(request):
+                return {
+                    "status": 200,
+                    "body": {
+                        "method": request["method"],
+                        "path": request["path"],
+                        "context": request["user"],
+                    },
+                }
+
+            @host.route("GET", "again")
+            async def echo_again(request):
+                return {
+                    "status": 200,
+                    "body": {
+                        "method": request["method"],
+                        "path": request["path"],
+                    },
+                }
+    """)
+    (plugin_dir / "__init__.py").write_text(code, encoding="utf-8")
+
+
+def _write_trivial_plugin(plugin_dir: Path) -> None:
+    """Write a no-route plugin that satisfies the worker's plugin-load requirement."""
+    (plugin_dir / "__init__.py").write_text(
+        "def register(host):\n    pass\n", encoding="utf-8"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Supervisor lifecycle tests
+# ---------------------------------------------------------------------------
+
 async def test_start_health_dispatch_stop(tmp_path):
+    # Phase 3: the worker loads the plugin from tmp_path; we need a valid one.
+    _write_echo_plugin(tmp_path)
     sup = SandboxSupervisor("echo_plugin", tmp_path)
     await sup.start()
     try:
         assert await sup.health() is True
-        resp = await sup.dispatch("GET", "ping", b"", {"user_id": 5})
-        assert resp.type == MsgType.HTTP_RESPONSE
-        assert resp.body["status"] == 200
-        assert resp.body["echo"]["method"] == "GET"
-        assert resp.body["echo"]["context"] == {"user_id": 5}
+        resp = await sup.dispatch(
+            "GET", "ping", b"", {"user_id": 5, "username": "alice", "role": "user"}
+        )
+        # Response comes from the plugin's registered route (SDK dispatch).
+        assert resp["status"] == 200
+        assert resp["body"]["method"] == "GET"
+        assert resp["body"]["context"] == {"user_id": 5, "username": "alice", "role": "user"}
     finally:
         await sup.stop()
 
 
 async def test_stop_is_idempotent(tmp_path):
+    _write_trivial_plugin(tmp_path)
     sup = SandboxSupervisor("echo_plugin", tmp_path)
     await sup.start()
     await sup.stop()
@@ -71,6 +127,7 @@ def test_register_restart_budget_unit(tmp_path):
 
 
 async def test_auto_restart_after_unexpected_exit(tmp_path):
+    _write_echo_plugin(tmp_path)
     sup = SandboxSupervisor("echo_plugin", tmp_path)
     await sup.start()
     try:
@@ -85,16 +142,17 @@ async def test_auto_restart_after_unexpected_exit(tmp_path):
                 await asyncio.sleep(0.1)
             return False
         assert await _healthy_again() is True
-        # And it serves requests again.
-        resp = await sup.dispatch("GET", "again", b"", {})
-        assert resp.body["echo"]["path"] == "again"
+        # And it serves requests again via the SDK-dispatched route.
+        resp = await sup.dispatch("GET", "again", b"", {"user_id": 1, "username": "testuser", "role": "user"})
+        assert resp["body"]["path"] == "again"
     finally:
         await sup.stop()
 
 
 async def test_auto_disable_when_restart_fails(tmp_path):
-    # First spawn succeeds (real worker); subsequent spawns produce a process
-    # that exits immediately, so the restart's handshake fails -> auto-disable.
+    # First spawn succeeds (real worker + real plugin); subsequent spawns produce
+    # a process that exits immediately, so the restart's handshake fails -> auto-disable.
+    _write_trivial_plugin(tmp_path)
     state = {"calls": 0}
 
     async def flaky_spawn(argv, cwd):
@@ -119,7 +177,7 @@ async def test_auto_disable_when_restart_fails(tmp_path):
             return False
         assert await _disabled() is True
         with pytest.raises(SupervisorError):
-            await sup.dispatch("GET", "x", b"", {})
+            await sup.dispatch("GET", "x", b"", {"user_id": 1, "username": "testuser", "role": "user"})
     finally:
         await sup.stop()
 
@@ -130,6 +188,7 @@ async def test_auto_disable_on_non_supervisor_error_restart(tmp_path):
     # must still auto-disable the supervisor and leave stop() safe to call.
     # Before the fix this exception escaped _supervise(), wedging the supervisor
     # (_running=True, _disabled=False, _channel=None) and poisoning stop().
+    _write_trivial_plugin(tmp_path)
     state = {"calls": 0}
 
     async def spawn_then_os_error(argv, cwd):
@@ -159,3 +218,143 @@ async def test_auto_disable_on_non_supervisor_error_restart(tmp_path):
         )
     finally:
         await sup.stop()  # must NOT raise even though supervise task ended abnormally
+
+
+# ---------------------------------------------------------------------------
+# Scripted-worker helpers for cap_call round-trip test
+# ---------------------------------------------------------------------------
+
+# Minimal worker script: handles lifecycle health + an http_request that fires
+# two cap_calls (storage.set then storage.get) and returns the fetched value.
+_SCRIPTED_WORKER = """\
+import asyncio
+import sys
+import argparse
+from app.plugins.sandbox.channel import RpcChannel
+from app.plugins.sandbox.protocol import Message, MsgType
+from app.plugins.sandbox.transport import connect_to_host
+
+_ch = None
+
+
+async def _handler(msg):
+    if msg.type == MsgType.LIFECYCLE:
+        action = msg.body.get("action")
+        if action == "health":
+            return Message(id=msg.id, type=MsgType.LIFECYCLE_RESULT, body={"status": "ok"})
+        return Message(id=msg.id, type=MsgType.LIFECYCLE_RESULT, body={"status": "stopping"})
+    if msg.type == MsgType.HTTP_REQUEST:
+        request_id = msg.body.get("request_id")
+        await _ch.call(
+            MsgType.CAP_CALL,
+            {"capability": "storage.set", "request_id": request_id, "args": {"key": "k", "value": "v"}},
+        )
+        got = await _ch.call(
+            MsgType.CAP_CALL,
+            {"capability": "storage.get", "request_id": request_id, "args": {"key": "k"}},
+        )
+        return Message(
+            id=msg.id,
+            type=MsgType.HTTP_RESPONSE,
+            body={"status": 200, "headers": {}, "body": {"stored": got.body.get("result")}},
+        )
+    return Message(id=msg.id, type=MsgType.ERROR, body={"error": "unsupported"})
+
+
+async def run(address):
+    global _ch
+    reader, writer = await connect_to_host(address)
+    _ch = RpcChannel(reader, writer, request_handler=_handler)
+    _ch.start()
+    try:
+        await _ch.wait_closed()
+    finally:
+        await _ch.close()
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--connect", required=True)
+    args = parser.parse_args()
+    asyncio.run(run(args.connect))
+"""
+
+
+def _make_supervisor_with_scripted_worker(
+    tmp_path: Path,
+    router,
+) -> SandboxSupervisor:
+    """Write the scripted worker to tmp_path and return a supervisor using it."""
+    script_path = tmp_path / "scripted_worker.py"
+    script_path.write_text(_SCRIPTED_WORKER, encoding="utf-8")
+
+    # The backend/ directory must be on sys.path in the worker subprocess.
+    # Path(__file__) is  …/backend/tests/plugins/sandbox/test_supervisor.py
+    # so four parents up gives …/backend/.
+    backend_dir = str(Path(__file__).resolve().parent.parent.parent.parent)
+
+    async def _spawn(argv: list, cwd: str) -> asyncio.subprocess.Process:
+        # Locate the connect address by position after "--connect" (not argv[-1],
+        # because Phase 3 appends --plugin-dir / --plugin-name after the address).
+        connect_addr = argv[argv.index("--connect") + 1]
+        env = os.environ.copy()
+        existing_pp = env.get("PYTHONPATH", "")
+        env["PYTHONPATH"] = (
+            backend_dir + os.pathsep + existing_pp if existing_pp else backend_dir
+        )
+        return await asyncio.create_subprocess_exec(
+            sys.executable, str(script_path), "--connect", connect_addr, env=env
+        )
+
+    return SandboxSupervisor(
+        "demo",
+        tmp_path,
+        spawn_hook=_spawn,
+        capability_router=router,
+    )
+
+
+async def test_cap_call_roundtrips_with_host_resolved_context(tmp_path):
+    """Worker issues a storage.set+get cap_call while serving a request;
+    the host resolves user_id from its in-flight map, not from the worker."""
+    from app.plugins.sandbox.capabilities import CapabilityContext, CapabilityRouter  # noqa: F401
+
+    writes: dict = {}
+
+    class _Store:
+        def set_value(self, db, plugin_name, user_id, key, value):
+            writes[(plugin_name, user_id, key)] = value
+
+        def get_value(self, db, plugin_name, user_id, key):
+            k = (plugin_name, user_id, key)
+            return (k in writes, writes.get(k))
+
+        def list_keys(self, db, plugin_name, user_id):
+            return []
+
+        def delete_value(self, db, plugin_name, user_id, key):
+            return False
+
+    import app.plugins.sandbox.capabilities as caps
+
+    caps_orig = caps.plugin_storage_service
+    caps.plugin_storage_service = _Store()
+    try:
+        router = CapabilityRouter(
+            plugin_name="demo",
+            granted_scopes=frozenset({"storage"}),
+            session_factory=lambda: object(),
+        )
+        supervisor = _make_supervisor_with_scripted_worker(tmp_path, router)
+        await supervisor.start()
+        try:
+            resp = await supervisor.dispatch(
+                "GET", "/ping", b"", {"user_id": 42, "username": "bob", "role": "user"}
+            )
+            assert resp["status"] == 200
+            assert resp["body"]["stored"] == "v"
+            assert writes[("demo", 42, "k")] == "v"
+        finally:
+            await supervisor.stop()
+    finally:
+        caps.plugin_storage_service = caps_orig

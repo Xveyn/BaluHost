@@ -9,11 +9,13 @@ echo/health handler) is Phase 3.
 """
 import asyncio
 import logging
+import secrets
 import sys
 import time
 from pathlib import Path
 from typing import Awaitable, Callable, List, Optional
 
+from app.plugins.sandbox.capabilities import CapabilityContext, CapabilityRouter
 from app.plugins.sandbox.channel import RpcChannel
 from app.plugins.sandbox.protocol import Message, MsgType
 from app.plugins.sandbox.transport import WorkerListener
@@ -49,6 +51,7 @@ class SandboxSupervisor:
         graceful_timeout: float = 5.0,
         max_restarts: int = 3,
         restart_window: float = 60.0,
+        capability_router: Optional[CapabilityRouter] = None,
     ) -> None:
         self.plugin_name = plugin_name
         self._plugin_dir = Path(plugin_dir)
@@ -57,6 +60,7 @@ class SandboxSupervisor:
         self._graceful_timeout = graceful_timeout
         self._max_restarts = max_restarts
         self._restart_window = restart_window
+        self._capability_router = capability_router
 
         self._process: Optional[asyncio.subprocess.Process] = None
         self._channel: Optional[RpcChannel] = None
@@ -65,6 +69,7 @@ class SandboxSupervisor:
         self._running = False
         self._stopping = False
         self._disabled = False
+        self._inflight: dict[str, CapabilityContext] = {}
 
     @property
     def disabled(self) -> bool:
@@ -79,17 +84,38 @@ class SandboxSupervisor:
 
     async def dispatch(
         self, method: str, path: str, body: bytes, context: dict
-    ) -> Message:
-        """Proxy one HTTP request into the worker and return its response."""
+    ) -> dict:
+        """Proxy one HTTP request into the worker and return its response body."""
         if self._disabled:
             raise SupervisorError(f"plugin {self.plugin_name} is disabled")
         channel = self._channel
         if channel is None:
             raise SupervisorError(f"plugin {self.plugin_name} is not running")
-        return await channel.call(
-            MsgType.HTTP_REQUEST,
-            {"method": method, "path": path, "body": body, "context": context},
+        request_id = secrets.token_hex(16)
+        self._inflight[request_id] = CapabilityContext(
+            user_id=context["user_id"],
+            username=context["username"],
+            role=context["role"],
         )
+        worker_context = {
+            "user_id": context["user_id"],
+            "username": context["username"],
+            "role": context["role"],
+        }
+        try:
+            resp = await channel.call(
+                MsgType.HTTP_REQUEST,
+                {
+                    "request_id": request_id,
+                    "method": method,
+                    "path": path,
+                    "body": body,
+                    "context": worker_context,
+                },
+            )
+        finally:
+            self._inflight.pop(request_id, None)
+        return resp.body
 
     async def health(self) -> bool:
         """Return True iff the worker answers a health ping."""
@@ -121,11 +147,41 @@ class SandboxSupervisor:
 
     # --- internals -------------------------------------------------------
 
+    async def _handle_worker_request(self, msg: Message) -> Message:
+        """Route inbound requests from the worker to the appropriate handler."""
+        if msg.type == MsgType.CAP_CALL:
+            return await self._handle_cap_call(msg)
+        return Message(id=msg.id, type=MsgType.ERROR, body={"error": "unsupported"})
+
+    async def _handle_cap_call(self, msg: Message) -> Message:
+        """Dispatch a cap_call using the host-resolved context from _inflight.
+
+        The user_id is always taken from self._inflight (host-resolved when the
+        http_request was dispatched) — never from anything the worker sends.
+        Unknown or stale request_id returns {"error": "no_context"} so a plugin
+        can never address a foreign user's data.
+        """
+        if self._capability_router is None:
+            return Message(id=msg.id, type=MsgType.CAP_RESULT, body={"error": "unavailable"})
+        request_id = msg.body.get("request_id")
+        context = self._inflight.get(request_id) if isinstance(request_id, str) else None
+        if context is None:
+            return Message(id=msg.id, type=MsgType.CAP_RESULT, body={"error": "no_context"})
+        result = await self._capability_router.dispatch(
+            msg.body.get("capability", ""), msg.body.get("args") or {}, context
+        )
+        return Message(id=msg.id, type=MsgType.CAP_RESULT, body=result)
+
     async def _spawn_and_connect(self) -> None:
         listener = WorkerListener(self._plugin_dir)
         address = await listener.start()
         try:
-            argv = [sys.executable, "-m", WORKER_MODULE, "--connect", address]
+            argv = [
+                sys.executable, "-m", WORKER_MODULE,
+                "--connect", address,
+                "--plugin-dir", str(self._plugin_dir),
+                "--plugin-name", self.plugin_name,
+            ]
             self._process = await self._spawn_hook(argv, str(self._plugin_dir))
             try:
                 reader, writer = await listener.accept(timeout=self._handshake_timeout)
@@ -137,7 +193,7 @@ class SandboxSupervisor:
         finally:
             await listener.close()
 
-        self._channel = RpcChannel(reader, writer)
+        self._channel = RpcChannel(reader, writer, request_handler=self._handle_worker_request)
         self._channel.start()
 
         try:
