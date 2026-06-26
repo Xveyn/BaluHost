@@ -126,14 +126,21 @@ class RpcChannel:
         self._pending.clear()
 
     async def close(self) -> None:
-        """Cancel the read loop, close the writer, fail pending calls."""
+        """Cancel the read loop + in-flight dispatch tasks, close the writer,
+        fail pending calls."""
         self._closed = True
         if self._read_task is not None:
             self._read_task.cancel()
             try:
                 await self._read_task
-            except asyncio.CancelledError:
+            except (asyncio.CancelledError, Exception):
                 pass
+        # Cancel any in-flight request-dispatch tasks (e.g. a slow handler) so
+        # they don't linger past event-loop teardown.
+        for task in list(self._dispatch_tasks):
+            task.cancel()
+        if self._dispatch_tasks:
+            await asyncio.gather(*self._dispatch_tasks, return_exceptions=True)
         try:
             self._writer.close()
             await self._writer.wait_closed()
