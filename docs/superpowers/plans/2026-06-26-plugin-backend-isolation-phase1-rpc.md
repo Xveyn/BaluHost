@@ -304,7 +304,6 @@ Create `backend/tests/plugins/sandbox/test_channel.py`:
 ```python
 """Tests for the duplex RpcChannel (happy path)."""
 import asyncio
-import socket
 
 import pytest
 
@@ -313,9 +312,23 @@ from app.plugins.sandbox.protocol import Message, MsgType
 
 
 async def _connect(handler_a=None, handler_b=None):
-    a_sock, b_sock = socket.socketpair()
-    a_reader, a_writer = await asyncio.open_connection(sock=a_sock)
-    b_reader, b_writer = await asyncio.open_connection(sock=b_sock)
+    # Loopback-TCP-Paar statt socket.socketpair()+open_connection(sock=…):
+    # portabel über Linux UND Windows (ProactorEventLoop akzeptiert ein
+    # vorab-connectetes `sock=` nicht zuverlässig); kein Subprozess nötig.
+    accepted: dict[str, tuple] = {}
+    ready = asyncio.Event()
+
+    async def _on_client(reader, writer):
+        accepted["pair"] = (reader, writer)
+        ready.set()
+
+    server = await asyncio.start_server(_on_client, "127.0.0.1", 0)
+    host, port = server.sockets[0].getsockname()[:2]
+    a_reader, a_writer = await asyncio.open_connection(host, port)
+    await ready.wait()
+    b_reader, b_writer = accepted["pair"]
+    server.close()
+
     ch_a = RpcChannel(a_reader, a_writer, request_handler=handler_a)
     ch_b = RpcChannel(b_reader, b_writer, request_handler=handler_b)
     ch_a.start()
@@ -532,7 +545,7 @@ Begründung: Reentranz, Malformed-Drop und Pending-Fail sind bereits in der `Rpc
 
 - [ ] **Step 1: Failing tests schreiben**
 
-An `backend/tests/plugins/sandbox/test_channel.py` anhängen (`import struct` oben im File ergänzen; `pytest` ist seit Task 2 bereits importiert):
+An `backend/tests/plugins/sandbox/test_channel.py` anhängen (`import socket` und `import struct` oben im File ergänzen; `pytest` ist seit Task 2 bereits importiert):
 
 ```python
 async def test_reentrant_cap_call_during_request():
@@ -560,20 +573,33 @@ async def test_reentrant_cap_call_during_request():
 
 
 async def test_malformed_frame_drops_connection():
-    a_sock, b_sock = socket.socketpair()
-    a_reader, a_writer = await asyncio.open_connection(sock=a_sock)
-    ch_a = RpcChannel(a_reader, a_writer)
-    ch_a.start()
+    # Ein roher Loopback-Client schickt ein bogus Oversize-Längenpräfix; der
+    # RpcChannel auf der Server-Seite muss FrameError auslösen und abbauen
+    # (statt 4 GiB zu allokieren). Loopback-TCP wie im _connect-Helper.
+    accepted: dict[str, tuple] = {}
+    ready = asyncio.Event()
+
+    async def _on_client(reader, writer):
+        accepted["pair"] = (reader, writer)
+        ready.set()
+
+    server = await asyncio.start_server(_on_client, "127.0.0.1", 0)
+    host, port = server.sockets[0].getsockname()[:2]
+    raw = socket.create_connection((host, port))
+    await ready.wait()
+    s_reader, s_writer = accepted["pair"]
+    server.close()
+
+    ch = RpcChannel(s_reader, s_writer)
+    ch.start()
     try:
-        # An oversize length prefix from the raw peer must trip FrameError and
-        # tear the channel down (rather than allocate 4 GiB).
-        b_sock.sendall(struct.pack(">I", 0xFFFFFFFF))
+        raw.sendall(struct.pack(">I", 0xFFFFFFFF))
         await asyncio.sleep(0.1)
         with pytest.raises(ConnectionError):
-            await ch_a.call(MsgType.HTTP_REQUEST, {}, timeout=2)
+            await ch.call(MsgType.HTTP_REQUEST, {}, timeout=2)
     finally:
-        await ch_a.close()
-        b_sock.close()
+        await ch.close()
+        raw.close()
 
 
 async def test_close_fails_inflight_call():
