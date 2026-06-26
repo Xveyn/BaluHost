@@ -116,6 +116,38 @@ async def test_malformed_frame_drops_connection():
         raw.close()
 
 
+async def test_garbage_msgpack_body_drops_connection():
+    # A raw loopback client sends a VALID small length prefix + invalid msgpack
+    # body (0xc1).  The RpcChannel read loop must decode_payload → FrameError →
+    # drop the connection cleanly (no escaped exception); a pending call then
+    # raises ConnectionError.
+    accepted: dict[str, tuple] = {}
+    ready = asyncio.Event()
+
+    async def _on_client(reader, writer):
+        accepted["pair"] = (reader, writer)
+        ready.set()
+
+    server = await asyncio.start_server(_on_client, "127.0.0.1", 0)
+    host, port = server.sockets[0].getsockname()[:2]
+    raw = socket.create_connection((host, port))
+    await ready.wait()
+    s_reader, s_writer = accepted["pair"]
+    server.close()
+
+    ch = RpcChannel(s_reader, s_writer)
+    ch.start()
+    try:
+        # Valid 4-byte length prefix (1 byte payload) + 1 invalid msgpack byte.
+        raw.sendall(struct.pack(">I", 1) + b"\xc1")
+        await asyncio.sleep(0.1)
+        with pytest.raises(ConnectionError):
+            await ch.call(MsgType.HTTP_REQUEST, {}, timeout=2)
+    finally:
+        await ch.close()
+        raw.close()
+
+
 async def test_close_fails_inflight_call():
     async def never(msg: Message) -> Message:
         await asyncio.sleep(100)

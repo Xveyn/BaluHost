@@ -52,3 +52,24 @@ def test_request_response_type_partition():
     assert REQUEST_TYPES.isdisjoint(RESPONSE_TYPES)
     assert MsgType.HTTP_REQUEST in REQUEST_TYPES
     assert MsgType.HTTP_RESPONSE in RESPONSE_TYPES
+
+
+def test_decode_payload_rejects_invalid_msgpack():
+    with pytest.raises(FrameError):
+        decode_payload(b"\xc1")  # 0xc1 is an unused/invalid msgpack byte
+
+
+def test_decode_payload_rejects_non_numeric_id():
+    with pytest.raises(FrameError):
+        decode_payload(msgpack.packb({"id": "abc", "type": "x", "body": {}}, use_bin_type=True))
+
+
+def test_decode_payload_rejects_falsy_non_dict_body():
+    with pytest.raises(FrameError):
+        decode_payload(msgpack.packb({"id": 1, "type": "x", "body": 0}, use_bin_type=True))
+
+
+async def test_read_frame_wraps_garbage_body_as_frameerror():
+    reader = _reader(_LENGTH_PREFIX.pack(1) + b"\xc1")
+    with pytest.raises(FrameError):
+        await read_frame(reader)

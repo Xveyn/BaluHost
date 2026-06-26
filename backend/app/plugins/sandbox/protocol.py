@@ -60,14 +60,27 @@ def encode_frame(msg: Message) -> bytes:
 
 
 def decode_payload(payload: bytes) -> Message:
-    """Decode a msgpack payload (without length prefix) into a Message."""
-    obj = msgpack.unpackb(payload, raw=False)
+    """Decode a msgpack payload (without length prefix) into a Message.
+
+    Any corruption — bad msgpack, wrong envelope shape, or non-coercible
+    fields — is normalized to FrameError so the read loop can drop the
+    connection cleanly instead of crashing on an untrusted peer's garbage.
+    """
+    try:
+        obj = msgpack.unpackb(payload, raw=False)
+    except Exception as exc:  # msgpack FormatError/StackError/ExtraData/etc.
+        raise FrameError("invalid msgpack payload") from exc
     if not isinstance(obj, dict) or "id" not in obj or "type" not in obj:
         raise FrameError("malformed envelope")
-    body = obj.get("body") or {}
-    if not isinstance(body, dict):
+    body = obj.get("body")
+    if body is None:
+        body = {}
+    elif not isinstance(body, dict):
         raise FrameError("envelope body must be a map")
-    return Message(id=int(obj["id"]), type=str(obj["type"]), body=body)
+    try:
+        return Message(id=int(obj["id"]), type=str(obj["type"]), body=body)
+    except (TypeError, ValueError) as exc:
+        raise FrameError("invalid envelope fields") from exc
 
 
 async def read_frame(reader: asyncio.StreamReader) -> Optional[Message]:
