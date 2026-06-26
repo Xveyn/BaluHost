@@ -70,10 +70,13 @@ class WorkerListener:
     async def close(self) -> None:
         if self._server is not None:
             self._server.close()
-            try:
-                await self._server.wait_closed()
-            except Exception:
-                pass
+            # Do NOT await server.wait_closed() here.  In Python 3.12.1+ that
+            # call correctly blocks until every *accepted* connection is dropped,
+            # which means it would deadlock when called from _spawn_and_connect:
+            # the accepted connection is still open (it's now owned by an
+            # RpcChannel) while the finally-close runs.  Our contract is only
+            # "stop accepting new connections" — the caller owns the lifetime of
+            # any already-accepted streams.
             self._server = None
 
 
