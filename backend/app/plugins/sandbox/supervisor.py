@@ -174,7 +174,8 @@ class SandboxSupervisor:
                 return
             try:
                 await self._spawn_and_connect()
-            except SupervisorError:
+            except Exception:
+                logger.exception("plugin %s restart failed", self.plugin_name)
                 self._disable("restart failed")
                 return
 

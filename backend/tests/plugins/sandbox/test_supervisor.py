@@ -122,3 +122,40 @@ async def test_auto_disable_when_restart_fails(tmp_path):
             await sup.dispatch("GET", "x", b"", {})
     finally:
         await sup.stop()
+
+
+async def test_auto_disable_on_non_supervisor_error_restart(tmp_path):
+    # Regression test: a NON-SupervisorError raised inside _spawn_and_connect
+    # during a restart (e.g. OSError from listener.start() or the spawn hook)
+    # must still auto-disable the supervisor and leave stop() safe to call.
+    # Before the fix this exception escaped _supervise(), wedging the supervisor
+    # (_running=True, _disabled=False, _channel=None) and poisoning stop().
+    state = {"calls": 0}
+
+    async def spawn_then_os_error(argv, cwd):
+        state["calls"] += 1
+        if state["calls"] == 1:
+            return await _default_spawn_passthrough(argv, cwd)
+        # Second call simulates EMFILE / ENOMEM from the OS — not SupervisorError
+        raise OSError("EMFILE: too many open files")
+
+    sup = SandboxSupervisor(
+        "os_error_plugin", tmp_path, spawn_hook=spawn_then_os_error
+    )
+    await sup.start()
+    try:
+        assert await sup.health() is True
+        sup._process.kill()  # force unexpected exit -> restart raises OSError
+
+        async def _disabled() -> bool:
+            for _ in range(50):
+                if sup.disabled:
+                    return True
+                await asyncio.sleep(0.1)
+            return False
+
+        assert await _disabled() is True, (
+            "supervisor must auto-disable when OSError escapes _spawn_and_connect"
+        )
+    finally:
+        await sup.stop()  # must NOT raise even though supervise task ended abnormally
