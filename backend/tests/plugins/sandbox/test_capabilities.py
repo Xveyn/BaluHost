@@ -99,3 +99,46 @@ async def test_storage_quota_error_is_scrubbed(monkeypatch):
 async def test_storage_set_rejects_non_string_key(monkeypatch):
     r = _router(monkeypatch, scopes={"storage"})
     assert await r.dispatch("storage.set", {"key": 5, "value": 1}, CTX) == {"error": "invalid_args"}
+
+
+async def test_system_metrics_returns_reader_snapshot(monkeypatch):
+    r = _router(monkeypatch, scopes={"core.system_metrics"})
+    r._metrics_reader = lambda: {"cpu_usage": 12.5, "memory": {"used": 1, "total": 4, "percent": 25.0}}
+    out = await r.dispatch("core.system_metrics", {}, CTX)
+    assert out == {"result": {"cpu_usage": 12.5, "memory": {"used": 1, "total": 4, "percent": 25.0}}}
+
+
+async def test_system_metrics_unavailable_without_reader(monkeypatch):
+    r = _router(monkeypatch, scopes={"core.system_metrics"})  # no metrics_reader injected
+    assert await r.dispatch("core.system_metrics", {}, CTX) == {"error": "unavailable"}
+
+
+async def test_notify_calls_notifier_with_context_user(monkeypatch):
+    sent = []
+    async def notifier(ctx, payload):
+        sent.append((ctx, payload))
+    r = _router(monkeypatch, scopes={"core.notify"})
+    r._notifier = notifier
+    out = await r.dispatch("core.notify", {"title": "Hi", "message": "Body", "type": "warning"}, CTX)
+    assert out == {"result": None}
+    ctx, payload = sent[0]
+    assert ctx.user_id == 7  # host context, not plugin-supplied
+    assert payload == {"title": "Hi", "message": "Body", "type": "warning"}
+
+
+async def test_notify_defaults_type_info_and_rejects_bad_type(monkeypatch):
+    sent = []
+    async def notifier(ctx, payload):
+        sent.append(payload)
+    r = _router(monkeypatch, scopes={"core.notify"})
+    r._notifier = notifier
+    await r.dispatch("core.notify", {"title": "T", "message": "M"}, CTX)
+    assert sent[0]["type"] == "info"
+    assert await r.dispatch("core.notify", {"title": "T", "message": "M", "type": "critical"}, CTX) == {"error": "invalid_args"}
+
+
+async def test_notify_rejects_missing_or_oversized_fields(monkeypatch):
+    r = _router(monkeypatch, scopes={"core.notify"})
+    r._notifier = lambda ctx, payload: None  # not awaited; rejected before call
+    assert await r.dispatch("core.notify", {"message": "M"}, CTX) == {"error": "invalid_args"}
+    assert await r.dispatch("core.notify", {"title": "x" * 201, "message": "M"}, CTX) == {"error": "invalid_args"}

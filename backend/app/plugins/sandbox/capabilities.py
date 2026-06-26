@@ -127,10 +127,25 @@ class CapabilityRouter:
     # --- core.* (filled in Task 2) --------------------------------------
 
     async def _system_metrics(self) -> dict:
-        raise CapabilityError("unknown_capability")
+        if self._metrics_reader is None:
+            raise CapabilityError("unavailable")
+        return await asyncio.to_thread(self._metrics_reader)
 
     async def _notify(self, args: dict, context: CapabilityContext) -> None:
-        raise CapabilityError("unknown_capability")
+        if self._notifier is None:
+            raise CapabilityError("unavailable")
+        title = args.get("title")
+        message = args.get("message")
+        ntype = args.get("type", "info")
+        if (
+            not isinstance(title, str)
+            or not isinstance(message, str)
+            or not (1 <= len(title) <= 200)
+            or not (1 <= len(message) <= 2000)
+            or ntype not in ("info", "warning")
+        ):
+            raise CapabilityError("invalid_args")
+        await self._notifier(context, {"title": title, "message": message, "type": ntype})
 
     # --- audit ----------------------------------------------------------
 
