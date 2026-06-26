@@ -64,6 +64,10 @@ async def test_storage_set_get_roundtrip_bound_to_context_user(monkeypatch):
     assert await r.dispatch("storage.get", {"key": "k"}, CTX) == {"result": {"n": 1}}
     # bound to user 7, not whatever the plugin might pass:
     assert ("demo", 7, "k") in store.data
+    # plugin attempts to inject a different user_id in args — must be ignored
+    await r.dispatch("storage.set", {"key": "k", "user_id": 999, "value": 1}, CTX)
+    assert ("demo", 999, "k") not in store.data
+    assert ("demo", 7, "k") in store.data
 
 
 async def test_storage_get_missing_returns_null(monkeypatch):
