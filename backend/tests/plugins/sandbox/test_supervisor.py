@@ -42,3 +42,15 @@ async def test_handshake_timeout_raises_and_kills(tmp_path):
         await sup.start()
     # No lingering process / clean state:
     assert await sup.health() is False
+
+
+async def test_spawn_hook_failure_propagates_cleanly(tmp_path):
+    async def failing_spawn(argv, cwd):
+        raise RuntimeError("spawn boom")
+
+    sup = SandboxSupervisor("boom_plugin", tmp_path, spawn_hook=failing_spawn)
+    with pytest.raises(RuntimeError, match="spawn boom"):
+        await sup.start()
+    # Supervisor never came up: not running, channel-less, health False.
+    assert await sup.health() is False
+    assert sup.disabled is False

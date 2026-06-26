@@ -124,15 +124,16 @@ class SandboxSupervisor:
     async def _spawn_and_connect(self) -> None:
         listener = WorkerListener(self._plugin_dir)
         address = await listener.start()
-        argv = [sys.executable, "-m", WORKER_MODULE, "--connect", address]
-        self._process = await self._spawn_hook(argv, str(self._plugin_dir))
         try:
-            reader, writer = await listener.accept(timeout=self._handshake_timeout)
-        except asyncio.TimeoutError as exc:
-            await self._hard_kill()
-            raise SupervisorError(
-                f"worker {self.plugin_name} did not connect back in time"
-            ) from exc
+            argv = [sys.executable, "-m", WORKER_MODULE, "--connect", address]
+            self._process = await self._spawn_hook(argv, str(self._plugin_dir))
+            try:
+                reader, writer = await listener.accept(timeout=self._handshake_timeout)
+            except asyncio.TimeoutError as exc:
+                await self._hard_kill()
+                raise SupervisorError(
+                    f"worker {self.plugin_name} did not connect back in time"
+                ) from exc
         finally:
             await listener.close()
 
