@@ -94,9 +94,9 @@ class SandboxSupervisor:
             raise SupervisorError(f"plugin {self.plugin_name} is not running")
         request_id = next(self._request_ids)
         self._inflight[request_id] = CapabilityContext(
-            user_id=context.get("user_id", 0),
-            username=context.get("username", ""),
-            role=context.get("role", "user"),
+            user_id=context["user_id"],
+            username=context["username"],
+            role=context["role"],
         )
         try:
             resp = await channel.call(

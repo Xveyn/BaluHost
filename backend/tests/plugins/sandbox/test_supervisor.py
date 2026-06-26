@@ -19,10 +19,10 @@ async def test_start_health_dispatch_stop(tmp_path):
     await sup.start()
     try:
         assert await sup.health() is True
-        resp = await sup.dispatch("GET", "ping", b"", {"user_id": 5})
+        resp = await sup.dispatch("GET", "ping", b"", {"user_id": 5, "username": "alice", "role": "user"})
         assert resp["status"] == 200
         assert resp["echo"]["method"] == "GET"
-        assert resp["echo"]["context"] == {"user_id": 5}
+        assert resp["echo"]["context"] == {"user_id": 5, "username": "alice", "role": "user"}
     finally:
         await sup.stop()
 
@@ -87,7 +87,7 @@ async def test_auto_restart_after_unexpected_exit(tmp_path):
             return False
         assert await _healthy_again() is True
         # And it serves requests again.
-        resp = await sup.dispatch("GET", "again", b"", {})
+        resp = await sup.dispatch("GET", "again", b"", {"user_id": 1, "username": "testuser", "role": "user"})
         assert resp["echo"]["path"] == "again"
     finally:
         await sup.stop()
@@ -120,7 +120,7 @@ async def test_auto_disable_when_restart_fails(tmp_path):
             return False
         assert await _disabled() is True
         with pytest.raises(SupervisorError):
-            await sup.dispatch("GET", "x", b"", {})
+            await sup.dispatch("GET", "x", b"", {"user_id": 1, "username": "testuser", "role": "user"})
     finally:
         await sup.stop()
 
