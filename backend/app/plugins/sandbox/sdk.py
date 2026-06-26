@@ -11,7 +11,7 @@ from typing import Any, Awaitable, Callable
 
 from app.plugins.sandbox.protocol import MsgType
 
-_current_request_id: contextvars.ContextVar[int] = contextvars.ContextVar("plugin_request_id")
+_current_request_id: contextvars.ContextVar[str] = contextvars.ContextVar("plugin_request_id")
 
 RouteHandler = Callable[[dict], Awaitable[Any]]
 

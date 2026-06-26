@@ -8,8 +8,8 @@ class. Real plugin loading + capability dispatch (replacing the worker's
 echo/health handler) is Phase 3.
 """
 import asyncio
-import itertools
 import logging
+import secrets
 import sys
 import time
 from pathlib import Path
@@ -69,8 +69,7 @@ class SandboxSupervisor:
         self._running = False
         self._stopping = False
         self._disabled = False
-        self._inflight: dict[int, CapabilityContext] = {}
-        self._request_ids = itertools.count(1)
+        self._inflight: dict[str, CapabilityContext] = {}
 
     @property
     def disabled(self) -> bool:
@@ -92,12 +91,17 @@ class SandboxSupervisor:
         channel = self._channel
         if channel is None:
             raise SupervisorError(f"plugin {self.plugin_name} is not running")
-        request_id = next(self._request_ids)
+        request_id = secrets.token_hex(16)
         self._inflight[request_id] = CapabilityContext(
             user_id=context["user_id"],
             username=context["username"],
             role=context["role"],
         )
+        worker_context = {
+            "user_id": context["user_id"],
+            "username": context["username"],
+            "role": context["role"],
+        }
         try:
             resp = await channel.call(
                 MsgType.HTTP_REQUEST,
@@ -106,7 +110,7 @@ class SandboxSupervisor:
                     "method": method,
                     "path": path,
                     "body": body,
-                    "context": context,
+                    "context": worker_context,
                 },
             )
         finally:
@@ -160,7 +164,7 @@ class SandboxSupervisor:
         if self._capability_router is None:
             return Message(id=msg.id, type=MsgType.CAP_RESULT, body={"error": "unavailable"})
         request_id = msg.body.get("request_id")
-        context = self._inflight.get(request_id) if isinstance(request_id, int) else None
+        context = self._inflight.get(request_id) if isinstance(request_id, str) else None
         if context is None:
             return Message(id=msg.id, type=MsgType.CAP_RESULT, body={"error": "no_context"})
         result = await self._capability_router.dispatch(
