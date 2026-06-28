@@ -209,5 +209,24 @@
     "event:subscribe": "Subscribe to system events",
     "event:emit": "Emit custom events",
     "device:control": "Control smart home devices (on/off, brightness, etc.)"
+  },
+  "scopeTiers": {
+    "frontend": "Frontend (UI data)",
+    "backend": "Backend (capabilities)"
+  },
+  "picker": {
+    "title": "Grant capability scopes — {{name}}",
+    "desc": "This external plugin runs sandboxed. Choose which capability scopes to grant. Requested scopes are pre-selected; you can grant fewer.",
+    "dangerous": "Dangerous",
+    "noScopes": "This plugin requests no capability scopes.",
+    "grant": "Grant & Enable"
+  },
+  "scopeDescriptions": {
+    "read:system-info": { "label": "System Info", "description": "Read system metrics and hardware information" },
+    "read:storage": { "label": "Storage Info", "description": "Read storage usage and disk information" },
+    "read:power": { "label": "Power Info", "description": "Read power and energy data" },
+    "storage": { "label": "Plugin Storage", "description": "Read and write the plugin's own key-value storage" },
+    "core.system_metrics": { "label": "System Metrics", "description": "Query core system metrics through the capability bridge" },
+    "core.notify": { "label": "Notifications", "description": "Send notifications through the core" }
   }
 }
