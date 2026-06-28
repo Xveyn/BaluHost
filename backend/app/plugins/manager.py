@@ -323,6 +323,20 @@ class PluginManager:
             scan_dir = plugin_path.parent
             source = discovered.source
 
+        # External plugins that ship a manifest are marketplace plugins — they
+        # run in a sandboxed subprocess and must NEVER be exec'd in the host.
+        # (Manifest-less "external" dirs, e.g. test tmp_paths, keep the legacy
+        # in-process path — same predicate the enable_plugin external branch uses.)
+        if (
+            discovered is not None
+            and discovered.source == "external"
+            and discovered.manifest is not None
+        ):
+            raise PluginLoadError(
+                f"External plugin '{name}' must not be loaded in-process; "
+                "it runs in a sandboxed subprocess."
+            )
+
         init_file = plugin_path / "__init__.py"
         if not init_file.exists():
             raise PluginLoadError(f"Plugin __init__.py not found: {init_file}")

@@ -27,7 +27,8 @@ def manager(tmp_path, monkeypatch):
     # Pretend an external plugin "weather" was discovered with a parsed manifest.
     plugin_dir = tmp_path / "weather"
     plugin_dir.mkdir()
-    (plugin_dir / "__init__.py").write_text("raise RuntimeError('must never exec in host')\n")
+    # Benign module — guard (not plugin code) must be what raises PluginLoadError.
+    (plugin_dir / "__init__.py").write_text("# valid module, must never be exec'd in host\n")
 
     class _M:
         api_scopes = ["storage", "core.notify"]

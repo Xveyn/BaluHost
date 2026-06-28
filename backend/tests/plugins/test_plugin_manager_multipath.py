@@ -197,7 +197,9 @@ class TestExternalNamespace:
     ):
         ext = tmp_path / "ext"
         ext.mkdir()
-        _write_plugin(ext, "marketplace_demo")
+        # external+manifest now routes to the sandbox; use a manifest-less
+        # external to cover the in-process namespace mechanism.
+        _write_plugin(ext, "marketplace_demo", with_manifest=False)
 
         mgr = PluginManager(plugins_dirs=[ext])
         plugin = mgr.load_plugin("marketplace_demo")
@@ -231,7 +233,9 @@ class TestSitePackagesIsolation:
     def test_site_packages_prepended_to_sys_path_on_load(self, tmp_path: Path):
         ext = tmp_path / "ext"
         ext.mkdir()
-        plugin_dir = _write_plugin(ext, "with_deps")
+        # external+manifest now routes to the sandbox; use a manifest-less
+        # external to cover the in-process site-packages mechanism.
+        plugin_dir = _write_plugin(ext, "with_deps", with_manifest=False)
         site_pkg = plugin_dir / "site-packages"
         site_pkg.mkdir()
 
@@ -244,7 +248,9 @@ class TestSitePackagesIsolation:
     def test_no_site_packages_means_no_sys_path_change(self, tmp_path: Path):
         ext = tmp_path / "ext"
         ext.mkdir()
-        _write_plugin(ext, "no_deps")
+        # external+manifest now routes to the sandbox; use a manifest-less
+        # external to cover the in-process site-packages mechanism.
+        _write_plugin(ext, "no_deps", with_manifest=False)
         before = list(sys.path)
 
         mgr = PluginManager(plugins_dirs=[ext])
