@@ -78,7 +78,12 @@ src/
 │   ├── vcl/               # VCL components
 │   └── webdav/            # WebDAV components
 ├── contexts/              # React contexts
-│   └── ThemeContext.tsx   # Theme management
+│   ├── AuthContext.tsx        # Authentication state
+│   ├── NotificationContext.tsx  # Notification management
+│   ├── PluginContext.tsx      # Plugin system state
+│   ├── ThemeContext.tsx       # Theme management
+│   ├── UploadContext.tsx      # File upload state
+│   └── VersionContext.tsx     # Version checking
 ├── hooks/                 # Custom React hooks (25 hooks)
 │   ├── useActivityFeed.ts     # Activity feed hook
 │   ├── useAdminDb.ts          # Admin DB hook
@@ -108,10 +113,9 @@ src/
 ├── i18n/                  # Internationalization
 ├── lib/                   # Utility libraries
 │   └── api.ts             # Base API client
-├── pages/                 # Page components (31 pages)
+├── pages/                 # Page components (33 pages)
 │   ├── AdminDatabase.tsx      # Database admin tools
 │   ├── AdminHealth.tsx        # System health dashboard
-│   ├── ApiCenterPage.tsx      # API documentation center
 │   ├── BackupPage.tsx         # Backup management
 │   ├── CloudImportPage.tsx    # Cloud import
 │   ├── Dashboard.tsx          # Main dashboard
@@ -132,13 +136,16 @@ src/
 │   ├── RemoteServersPage.tsx  # Remote servers
 │   ├── SchedulerDashboard.tsx # Scheduled tasks
 │   ├── SettingsPage.tsx       # User settings
+│   ├── SetupWizard.tsx        # First-run setup wizard
 │   ├── SharesPage.tsx         # File shares
 │   ├── SleepMode.tsx          # Sleep mode management
+│   ├── SmartDevicesPage.tsx   # Smart device management
 │   ├── SyncPrototype.tsx      # Sync management
 │   ├── SystemControlPage.tsx  # System control
 │   ├── SystemMonitor.tsx      # System monitoring
 │   ├── UpdatePage.tsx         # System updates
 │   ├── UserManagement.tsx     # User management (Admin)
+│   ├── UserManualPage.tsx     # In-app user manual / help
 │   └── VpnPage.tsx            # VPN management
 ├── App.tsx                # Main app component
 └── main.tsx               # Entry point
@@ -225,6 +232,7 @@ src/
 - Plugin management interface
 - Enable/disable plugins
 - Plugin configuration
+- Scope-picker dialog at enable time for external (sandboxed) plugins — shows requested capability scopes and requires admin confirmation before activation
 
 ### Network Services
 - VPN management (WireGuard)
@@ -466,7 +474,7 @@ server {
     }
     
     location /api {
-        proxy_pass http://localhost:3001;
+        proxy_pass http://localhost:8000;
     }
 }
 ```

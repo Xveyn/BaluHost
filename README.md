@@ -98,10 +98,11 @@ The same machine doubles as a KDE Plasma desktop and — thanks to the Radeon GP
 ### Plugins & Extensibility
 - Plugin marketplace — browse, install, update & remove plugins from a UI tab
 - Plugins distributed from a separate Git repo, installed in one click
-- Isolated per-plugin Python dependencies (no pollution of the core environment)
-- Frontend SDK (`window.BaluHost`) for plugin dashboard panels & UI bundles
-- Inter-plugin event bus and lifecycle hooks
+- **Two trust tiers:**
+  - **Bundled (in-process, trusted):** isolated per-plugin Python dependencies; full `window.BaluHost` Frontend SDK; inter-plugin event bus and lifecycle hooks
+  - **External / marketplace (sandboxed):** subprocess isolated as a low-privilege OS user inside a dedicated network namespace; default-deny capability scopes over UDS-RPC; admin scope-picker at enable time; marketplace `index.json` verified against a fail-closed ed25519 signature before installation
 - SmartDevice framework for hardware-device plugins (e.g. Tapo smart plugs)
+- See `backend/app/plugins/README.md` for full plugin-system detail
 
 ### Multi-Platform
 - **BaluHost** — Web UI (this repo)
@@ -170,7 +171,7 @@ Production runs at `/opt/baluhost` with:
 ```
 push to main → CI checks (GitHub-hosted) → Deploy (self-hosted on NAS)
                                             ├── DB backup (pg_dump)
-                                            ├── git pull + pip install
+                                            ├── git reset --hard (to deployed commit) + pip install
                                             ├── Alembic migrations
                                             ├── Frontend build (npm)
                                             ├── Service restart
@@ -192,7 +193,16 @@ BaluHost/
 │   │   ├── models/          # SQLAlchemy ORM models
 │   │   ├── schemas/         # Pydantic schemas
 │   │   ├── core/            # Config, security, database
-│   │   └── middleware/      # Security headers, rate limiting
+│   │   ├── middleware/      # Security headers, rate limiting
+│   │   └── plugins/         # Plugin system
+│   │       ├── sandbox/     # Subprocess isolation & capability RPC
+│   │       ├── sdk/         # Worker-side Plugin SDK
+│   │       ├── signing.py   # ed25519 index-signature verification
+│   │       ├── scope_catalog.py  # Capability scopes registry
+│   │       ├── installer.py # Plugin install / uninstall
+│   │       ├── manifest.py  # Plugin manifest parsing
+│   │       ├── marketplace.py    # Marketplace index & updates
+│   │       └── resolver.py  # Dependency resolution
 │   ├── baluhost_tui/        # Terminal UI (Textual)
 │   ├── tests/               # Pytest suite
 │   └── alembic/             # Database migrations
