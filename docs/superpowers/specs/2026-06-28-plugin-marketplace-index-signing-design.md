@@ -19,7 +19,7 @@ The existing marketplace spec (`docs/superpowers/specs/2026-04-13-plugin-marketp
 - The signature is the new trust anchor; archive integrity stays transitively covered via the now-signed `checksum_sha256` (no installer change).
 - **Fail-closed from day one:** an unsigned or invalidly-signed index is rejected (the admin-only Marketplace tab shows an error instead of listings). No transitional warn-only window.
 - **Rotation-friendly:** the backend trusts a *list* of public keys (mirrors the existing MultiFernet dual-key pattern), so a key can be rotated without breaking installs.
-- **Fork-friendly (#207):** the trusted public key(s) and signature URL are config values, env-overridable, so a fork can point at its own market with its own key. Upstream ships a baked-in default key.
+- **Fork-friendly (#207):** the trusted public key(s) and signature URL are config values, env-overridable, so a fork can point at its own market with its own key. The code ships with an **empty** key default; upstream and forks alike supply their key out-of-band (env / deploy-time edit) — see *Key Provisioning*.
 
 ## Non-Goals
 
@@ -98,9 +98,17 @@ def verify_detached_ed25519(
 
 ### Config (MODIFY — `backend/app/core/config.py`)
 
-- `plugins_marketplace_public_keys: list[str]` — base64 ed25519 public keys. Default `[<upstream public key>]` (baked in once the keypair is generated). Env-overridable (`PLUGINS_MARKETPLACE_PUBLIC_KEYS`) for forks.
+- `plugins_marketplace_public_keys: list[str]` — base64 ed25519 public keys. **Default `[]` (empty).** Chosen approach (see *Key Provisioning* below): the code ships with no baked-in key; the maintainer fills the real public key before deploy. An empty list is self-documenting fail-closed — `verify_detached_ed25519` raises on an empty key list, so an unconfigured backend rejects every index (Marketplace listing returns 502) until a key is supplied. Env-overridable (`PLUGINS_MARKETPLACE_PUBLIC_KEYS`) for forks and for the upstream deploy.
 - `plugins_marketplace_signature_url: Optional[str] = None` — default None → service derives `index_url + ".sig"`. Override available if a fork hosts the sig elsewhere.
 - `get_marketplace_service()` passes both into `MarketplaceService(...)`.
+
+### Key Provisioning (chosen approach: defer, fill before deploy)
+
+The signing keypair lives entirely **outside** code, this session, and git — the private key is the root of Track C's trust and must never touch the AI session transcript or the repo. Therefore:
+
+- The PR ships `plugins_marketplace_public_keys` with an **empty default** — no placeholder string, no real key.
+- The maintainer generates the keypair **offline** (own trusted machine), stores the private key as the Plugin-Market GitHub secret, and supplies the public key to the upstream deploy via **env var** (`PLUGINS_MARKETPLACE_PUBLIC_KEYS`) on `.env.production`, or by a one-line edit to the config default at deploy time.
+- Until both (a) the public key is configured and (b) the live index is signed, the admin-only Marketplace listing is fail-closed (502). On the greenfield deployment (0 external plugins) this affects only the listing, never a running plugin.
 
 ### Companion: `BaluHost-Plugin-Market` repo (documented checklist — executed by the maintainer, not by this PR)
 
@@ -166,7 +174,7 @@ One cohesive backend PR on a branch off `main`. Suggested task order:
 2. `MarketplaceService` wiring + `IndexSignatureError` + service tests.
 3. Config settings + `get_marketplace_service()` threading + route 502 mapping + route test.
 
-The companion `BaluHost-Plugin-Market` changes (keypair, `sign_index.py`, CI, secret) are a separate operator checklist (above), sequenced before the backend deploy. The baked-in default public key is filled in once the keypair is generated (a one-line config edit folded into task 3, or a follow-up if the key is generated after the PR).
+The companion `BaluHost-Plugin-Market` changes (keypair, `sign_index.py`, CI, secret) are a separate operator checklist (above), sequenced before the backend deploy. The config default ships **empty** (chosen approach: defer); the real public key is supplied out-of-band at deploy via `PLUGINS_MARKETPLACE_PUBLIC_KEYS` on `.env.production` — never committed.
 
 ## Self-Review
 
@@ -174,4 +182,4 @@ The companion `BaluHost-Plugin-Market` changes (keypair, `sign_index.py`, CI, se
 - **Consistency:** `IndexSignatureError(MarketplaceError)` mirrors `IndexFetchError`/`IndexParseError`; 502 mapping + scrubbing matches existing routes and the Posten-2 policy; trusted-key list mirrors MultiFernet; config env-override matches #207 fork model.
 - **Scope:** backend-only PR + documented external-repo checklist; no installer/frontend change.
 - **Ambiguity:** signature is over raw bytes (no canonicalization); `.sig` is base64 of the 64-byte signature; public keys are base64 of 32 raw bytes; signature URL defaults to `index_url + ".sig"`.
-- **Open operational item:** the actual upstream public key value is generated out-of-band (step 1) and baked into the config default; until then the default list is a placeholder the maintainer fills in before deploy.
+- **Open operational item:** the actual upstream public key is generated out-of-band and supplied via env (`PLUGINS_MARKETPLACE_PUBLIC_KEYS`) at deploy; the code default stays empty (fail-closed until configured). The private key never enters code, git, or this session.
