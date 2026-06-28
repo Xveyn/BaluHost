@@ -139,6 +139,42 @@ async def get_plugin_details(
     plugin_manager: PluginManager = Depends(get_plugin_manager),
 ) -> PluginDetailResponse:
     """Get detailed information about a specific plugin."""
+    # External plugin: use manifest + DB record (no exec)
+    _discovered = plugin_manager.get_discovered(name)
+    if _discovered is not None and _discovered.source == "external" and _discovered.manifest is not None:
+        manifest = _discovered.manifest
+        db_record = plugin_service.get_installed_plugin(db, name)
+        return PluginDetailResponse(
+            name=manifest.name,
+            version=manifest.version,
+            display_name=manifest.display_name,
+            description=manifest.description,
+            author=manifest.author,
+            category=manifest.category,
+            homepage=manifest.homepage,
+            min_baluhost_version=manifest.min_baluhost_version,
+            dependencies=list(getattr(manifest, "plugin_dependencies", []) or []),
+            required_permissions=list(manifest.required_permissions),
+            granted_permissions=(db_record.granted_permissions or []) if db_record else [],
+            dangerous_permissions=PermissionManager.get_dangerous_permissions(
+                list(manifest.required_permissions)
+            ),
+            is_enabled=plugin_manager.is_enabled(name),
+            is_installed=db_record is not None,
+            has_ui=manifest.ui is not None,
+            has_routes=True,
+            has_background_tasks=False,
+            has_dashboard_panel=False,
+            dashboard_panel_enabled=db_record.dashboard_panel_enabled if db_record else False,
+            nav_items=[],
+            dashboard_widgets=[],
+            installed_at=db_record.installed_at if db_record else None,
+            enabled_at=db_record.enabled_at if db_record else None,
+            config=(db_record.config or {}) if db_record else {},
+            config_schema=None,
+            translations=None,
+        )
+
     # Try to load plugin
     try:
         plugin = plugin_manager.get_plugin(name)
@@ -215,6 +251,13 @@ async def toggle_plugin(
 
     Admin only. When enabling, required permissions must be granted.
     """
+    # External sandboxed plugin: use manifest path (no exec)
+    discovered = plugin_manager.get_discovered(name)
+    if discovered is not None and discovered.source == "external" and discovered.manifest is not None:
+        return await _toggle_external(
+            name, body, db, current_user, plugin_manager, discovered
+        )
+
     # Try to load plugin first
     try:
         plugin = plugin_manager.get_plugin(name)
@@ -312,6 +355,64 @@ async def toggle_plugin(
             is_enabled=False,
             message=f"Plugin '{meta.display_name}' disabled successfully",
         )
+
+
+async def _toggle_external(
+    name: str,
+    body: PluginToggleRequest,
+    db: Session,
+    current_user,
+    plugin_manager: PluginManager,
+    discovered,
+) -> PluginToggleResponse:
+    """Enable/disable an external sandboxed plugin via its manifest (no exec)."""
+    manifest = discovered.manifest
+    if manifest is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plugin not found")
+
+    if body.enabled:
+        api_scopes = list(getattr(manifest, "api_scopes", []) or [])
+        plugin_service.enable_plugin(
+            db,
+            name=name,
+            version=manifest.version,
+            display_name=manifest.display_name,
+            permissions=body.grant_permissions,
+            default_config={},
+            installed_by=current_user.username,
+            api_scopes=api_scopes,
+        )
+        success = await plugin_manager.enable_plugin(
+            name, body.grant_permissions, db, granted_api_scopes=api_scopes
+        )
+        if not success:
+            plugin_service.rollback_enable(db, name)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to enable plugin",
+            )
+        invalidate_plugin_cache(name)
+        logger.info("External plugin %s enabled by %s", name, current_user.username)
+        return PluginToggleResponse(
+            name=name,
+            is_enabled=True,
+            message=f"Plugin '{manifest.display_name}' enabled successfully",
+        )
+
+    success = await plugin_manager.disable_plugin(name)
+    plugin_service.disable_plugin_record(db, name)
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to disable plugin",
+        )
+    invalidate_plugin_cache(name)
+    logger.info("External plugin %s disabled by %s", name, current_user.username)
+    return PluginToggleResponse(
+        name=name,
+        is_enabled=False,
+        message=f"Plugin '{manifest.display_name}' disabled successfully",
+    )
 
 
 @router.post("/{name}/dashboard-panel")

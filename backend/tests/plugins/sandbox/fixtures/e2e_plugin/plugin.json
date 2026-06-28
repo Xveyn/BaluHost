@@ -1,0 +1,10 @@
+{
+  "manifest_version": 1,
+  "name": "e2e_plugin",
+  "version": "1.0.0",
+  "display_name": "E2E Plugin",
+  "description": "phase 4 e2e fixture",
+  "author": "tests",
+  "api_scopes": ["storage", "core.system_metrics"],
+  "entrypoint": "__init__.py"
+}

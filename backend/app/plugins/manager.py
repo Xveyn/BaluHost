@@ -24,7 +24,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional, Sequence, Set
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.plugins.base import BackgroundTaskSpec, PluginBase
@@ -121,6 +121,7 @@ class PluginManager:
         self._hook_manager = create_plugin_manager()
         self._event_manager: Optional[EventManager] = None
         self._background_tasks: Dict[str, List[asyncio.Task]] = {}
+        self._sandboxes: Dict[str, Any] = {}
         self._routers_mounted = False
         self._discovered: Optional[Dict[str, DiscoveredPlugin]] = None
 
@@ -163,6 +164,20 @@ class PluginManager:
             return "bundled" if parent_dir.resolve() == BUNDLED_PLUGINS_DIR.resolve() else "external"
         except OSError:
             return "external"
+
+    def _supervisor_factory(self, plugin_name: str, plugin_dir: Path, capability_router: Any) -> Any:
+        """Build a SandboxSupervisor (overridable in tests)."""
+        from app.plugins.sandbox.supervisor import SandboxSupervisor  # noqa: PLC0415
+
+        return SandboxSupervisor(plugin_name, plugin_dir, capability_router=capability_router)
+
+    def is_sandboxed(self, name: str) -> bool:
+        """Return True if plugin ``name`` is running in a sandbox subprocess."""
+        return name in self._sandboxes
+
+    def get_sandbox(self, name: str) -> Any:
+        """Return the SandboxSupervisor for ``name``, or None."""
+        return self._sandboxes.get(name)
 
     def _scan_directory(self, scan_dir: Path) -> List[DiscoveredPlugin]:
         """Scan a single directory for plugin candidates.
@@ -308,6 +323,20 @@ class PluginManager:
             scan_dir = plugin_path.parent
             source = discovered.source
 
+        # External plugins that ship a manifest are marketplace plugins — they
+        # run in a sandboxed subprocess and must NEVER be exec'd in the host.
+        # (Manifest-less "external" dirs, e.g. test tmp_paths, keep the legacy
+        # in-process path — same predicate the enable_plugin external branch uses.)
+        if (
+            discovered is not None
+            and discovered.source == "external"
+            and discovered.manifest is not None
+        ):
+            raise PluginLoadError(
+                f"External plugin '{name}' must not be loaded in-process; "
+                "it runs in a sandboxed subprocess."
+            )
+
         init_file = plugin_path / "__init__.py"
         if not init_file.exists():
             raise PluginLoadError(f"Plugin __init__.py not found: {init_file}")
@@ -395,6 +424,7 @@ class PluginManager:
         granted_permissions: List[str],
         db: Session,
         start_background_tasks: bool = True,
+        granted_api_scopes: Optional[List[str]] = None,
     ) -> bool:
         """Enable a plugin.
 
@@ -403,10 +433,15 @@ class PluginManager:
             granted_permissions: List of granted permission strings
             db: Database session
             start_background_tasks: Whether to start background tasks (False on secondary workers)
+            granted_api_scopes: API capability scopes granted to external plugins
 
         Returns:
             True if plugin was enabled successfully
         """
+        discovered = self.get_discovered(name)
+        if discovered is not None and discovered.source == "external" and discovered.manifest is not None:
+            return await self._enable_external(name, discovered, granted_api_scopes or [])
+
         if name not in self._plugins:
             try:
                 self.load_plugin(name)
@@ -458,6 +493,30 @@ class PluginManager:
             logger.exception(f"Failed to enable plugin {name}: {e}")
             return False
 
+    async def _enable_external(
+        self, name: str, discovered: "DiscoveredPlugin", granted_api_scopes: List[str]
+    ) -> bool:
+        """Enable an external plugin as a sandboxed subprocess (no in-host exec).
+
+        Spawned on every uvicorn worker (no primary-only gating) so the catch-all
+        proxy can serve the plugin regardless of which worker handles the request.
+        """
+        if name in self._sandboxes:
+            return True
+        from app.plugins.sandbox.host_capabilities import build_capability_router  # noqa: PLC0415
+
+        router = build_capability_router(name, set(granted_api_scopes))
+        supervisor = self._supervisor_factory(name, discovered.path, router)
+        try:
+            await supervisor.start()
+        except Exception:
+            logger.exception("Failed to start sandbox for external plugin %s", name)
+            return False
+        self._sandboxes[name] = supervisor
+        self._enabled.add(name)
+        logger.info("Enabled external (sandboxed) plugin: %s", name)
+        return True
+
     async def disable_plugin(self, name: str) -> bool:
         """Disable a plugin.
 
@@ -467,6 +526,16 @@ class PluginManager:
         Returns:
             True if plugin was disabled successfully
         """
+        if name in self._sandboxes:
+            supervisor = self._sandboxes.pop(name)
+            try:
+                await supervisor.stop()
+            except Exception:
+                logger.exception("Error stopping sandbox for %s", name)
+            self._enabled.discard(name)
+            logger.info("Disabled external (sandboxed) plugin: %s", name)
+            return True
+
         if name not in self._enabled:
             return True
 
@@ -595,6 +664,7 @@ class PluginManager:
                 record.granted_permissions or [],
                 db,
                 start_background_tasks=start_background_tasks,
+                granted_api_scopes=record.granted_api_scopes or [],
             )
 
         logger.info(f"Loaded {len(self._enabled)} enabled plugins")
@@ -631,23 +701,38 @@ class PluginManager:
             return []
 
     def get_router(self) -> APIRouter:
-        """Get a combined router for all enabled plugins.
+        """Combined router: bundled plugin routes + a catch-all for sandboxed ones."""
+        from fastapi import Request  # noqa: PLC0415
+        from app.api.deps import get_current_user  # noqa: PLC0415
+        from app.plugins.sandbox.proxy import proxy_request  # noqa: PLC0415
 
-        Returns:
-            APIRouter with all plugin routes mounted
-        """
         router = APIRouter(prefix="/plugins", tags=["plugins"])
 
+        # Bundled plugins: explicit routers, registered FIRST so they win.
         for name in self._enabled:
             plugin = self._plugins.get(name)
             if plugin:
                 plugin_router = plugin.get_router()
                 if plugin_router:
                     router.include_router(
-                        plugin_router,
-                        prefix=f"/{name}",
-                        tags=[f"plugin:{name}"],
+                        plugin_router, prefix=f"/{name}", tags=[f"plugin:{name}"]
                     )
+
+        # Catch-all for external/sandboxed plugins, registered LAST.
+        manager = self
+
+        @router.api_route(
+            "/{name}/{path:path}",
+            methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+            include_in_schema=False,
+        )
+        async def _sandbox_proxy(
+            name: str,
+            path: str,
+            request: Request,
+            current_user=Depends(get_current_user),
+        ):
+            return await proxy_request(name, path, request, current_user, manager)
 
         return router
 
@@ -726,6 +811,25 @@ class PluginManager:
         result = {}
 
         for name in discovered:
+            info = self.get_discovered(name)
+            if info is not None and info.source == "external" and info.manifest is not None:
+                m = info.manifest
+                result[name] = {
+                    "name": m.name,
+                    "version": m.version,
+                    "display_name": m.display_name,
+                    "description": m.description,
+                    "author": m.author,
+                    "category": m.category,
+                    "required_permissions": list(m.required_permissions),
+                    "is_enabled": name in self._enabled,
+                    "has_ui": m.ui is not None,
+                    "has_routes": True,
+                    "dangerous_permissions": PermissionManager.get_dangerous_permissions(
+                        list(m.required_permissions)
+                    ),
+                }
+                continue
             try:
                 if name not in self._plugins:
                     self.load_plugin(name)
