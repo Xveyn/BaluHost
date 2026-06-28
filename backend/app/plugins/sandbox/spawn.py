@@ -62,6 +62,8 @@ def _grant_group_rx_tree(root: str, gid: int) -> None:
     """
     def _fix(path: str, is_dir: bool) -> None:
         try:
+            if os.path.islink(path):
+                return
             os.chown(path, -1, gid)
             mode = os.stat(path).st_mode
             os.chmod(path, mode | (0o050 if is_dir else 0o040))
@@ -86,10 +88,11 @@ def grant_plugin_group_access(argv: list) -> None:
     if gid is None:
         return
     connect = _flag_value(argv, "--connect")
-    if connect and os.path.exists(connect):
+    sock_path = connect[5:] if connect and connect.startswith("unix:") else connect
+    if sock_path and os.path.exists(sock_path):
         try:
-            os.chown(connect, -1, gid)   # pathname UDS: connect() needs group write
-            os.chmod(connect, 0o660)
+            os.chown(sock_path, -1, gid)   # pathname UDS: connect() needs group write
+            os.chmod(sock_path, 0o660)
         except OSError:
             pass
     plugin_dir = _flag_value(argv, "--plugin-dir")

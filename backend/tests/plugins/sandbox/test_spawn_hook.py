@@ -95,8 +95,9 @@ def test_grant_plugin_group_access_chowns_socket_and_dir():
     stat_result = MagicMock()
     stat_result.st_mode = 0o750
 
+    # Production format: supervisor passes "unix:<path>" — the scheme must be stripped
     argv = [
-        "--connect", "/run/x.sock",
+        "--connect", "unix:/run/x.sock",
         "--plugin-dir", "/d",
         "-m", "worker",
         "--plugin-name", "demo",
@@ -106,6 +107,7 @@ def test_grant_plugin_group_access_chowns_socket_and_dir():
     with patch.object(spawn, "_plugin_group_gid", return_value=4242), \
          patch.object(spawn.os.path, "exists", return_value=True), \
          patch.object(spawn.os.path, "isdir", return_value=True), \
+         patch.object(spawn.os.path, "islink", return_value=False), \
          patch.object(spawn.os, "walk", return_value=iter([("/d", [], ["__init__.py"])])), \
          patch.object(spawn.os, "chown", create=True) as mock_chown, \
          patch.object(spawn.os, "chmod") as mock_chmod, \
@@ -114,7 +116,9 @@ def test_grant_plugin_group_access_chowns_socket_and_dir():
 
     import os as _os
 
-    # UDS socket: chgrp + mode 0o660
+    # UDS socket: unix: scheme must be stripped → chown/chmod on the bare path "/run/x.sock".
+    # This assertion FAILS against the buggy version that passed the full "unix:/run/x.sock"
+    # to os.path.exists (which returned True due to mock) and then chowned the wrong path.
     mock_chown.assert_any_call("/run/x.sock", -1, 4242)
     mock_chmod.assert_any_call("/run/x.sock", 0o660)
 
@@ -127,13 +131,46 @@ def test_grant_plugin_group_access_chowns_socket_and_dir():
 def test_grant_plugin_group_access_noop_when_group_absent():
     from unittest.mock import patch
 
-    argv = ["--connect", "/run/x.sock", "--plugin-dir", "/d"]
+    # Use production unix: format here too for consistency
+    argv = ["--connect", "unix:/run/x.sock", "--plugin-dir", "/d"]
     # os.chown is POSIX-only; use create=True so the test works on Windows too.
     with patch.object(spawn, "_plugin_group_gid", return_value=None), \
          patch.object(spawn.os, "chown", create=True) as mock_chown:
         spawn.grant_plugin_group_access(argv)
 
     mock_chown.assert_not_called()
+
+
+def test_grant_group_rx_tree_skips_symlinks():
+    """Symlinks inside the plugin dir must be skipped — no chown/chmod on them."""
+    import os as _os
+    from unittest.mock import MagicMock, patch
+
+    stat_result = MagicMock()
+    stat_result.st_mode = 0o755
+
+    symlink_path = _os.path.join("/d", "link.py")
+    normal_path = _os.path.join("/d", "__init__.py")
+
+    def _is_link(path):
+        return path == symlink_path
+
+    # os.chown is POSIX-only; use create=True so the test works on Windows too.
+    with patch.object(spawn.os.path, "islink", side_effect=_is_link), \
+         patch.object(spawn.os, "walk", return_value=iter([("/d", [], ["__init__.py", "link.py"])])), \
+         patch.object(spawn.os, "chown", create=True) as mock_chown, \
+         patch.object(spawn.os, "chmod") as mock_chmod, \
+         patch.object(spawn.os, "stat", return_value=stat_result):
+        spawn._grant_group_rx_tree("/d", 4242)
+
+    # The symlink must never be chowned or chmoded
+    for call in mock_chown.call_args_list:
+        assert call.args[0] != symlink_path, "symlink must not be chowned"
+    for call in mock_chmod.call_args_list:
+        assert call.args[0] != symlink_path, "symlink must not be chmoded"
+
+    # The regular file IS chowned
+    mock_chown.assert_any_call(normal_path, -1, 4242)
 
 
 @pytest.mark.asyncio
