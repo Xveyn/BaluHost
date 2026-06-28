@@ -1,7 +1,10 @@
 /**
  * Plugin Documentation Component
  *
- * Displays documentation about the plugin system, permissions, hooks, and risks.
+ * Operator-focused reference for the plugin system: the two trust tiers
+ * (bundled in-process/trusted vs external sandboxed), the external
+ * capability-scope model (rendered from the live catalog), and a condensed
+ * bundled-plugin reference.
  */
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -9,112 +12,49 @@ import {
   AlertTriangle,
   FileText,
   Shield,
+  ShieldCheck,
+  Boxes,
   Zap,
-  Folder,
   Users,
   Database,
   Network,
-  Bell,
   Server,
-  HardDrive,
-  Activity,
-  Smartphone,
-  Key,
-  Info,
   Plug,
+  Info,
   Store,
 } from 'lucide-react';
-import type { PermissionInfo } from '../../api/plugins';
+import type { PermissionInfo, ScopeInfo } from '../../api/plugins';
 import { useFormattedVersion } from '../../contexts/VersionContext';
 
 interface PluginDocumentationProps {
   permissions: PermissionInfo[];
+  scopeCatalog: ScopeInfo[];
 }
 
-// Hook category keys for iteration
-const HOOK_CATEGORY_KEYS = ['file', 'user', 'backup', 'share', 'system', 'raid', 'smart', 'device', 'smart_device', 'vpn'] as const;
-
-// Hook names organized by category key
-const HOOKS_BY_CATEGORY_KEY: Record<string, string[]> = {
-  file: ['on_file_uploaded', 'on_file_deleted', 'on_file_moved', 'on_file_downloaded'],
-  user: ['on_user_login', 'on_user_logout', 'on_user_created', 'on_user_deleted'],
-  backup: ['on_backup_started', 'on_backup_completed'],
-  share: ['on_share_created', 'on_share_accessed'],
-  system: ['on_system_startup', 'on_system_shutdown', 'on_storage_threshold'],
-  raid: ['on_raid_degraded', 'on_raid_rebuild_started', 'on_raid_rebuild_completed'],
-  smart: ['on_disk_health_warning'],
-  device: ['on_device_registered', 'on_device_removed'],
-  smart_device: ['on_smart_device_added', 'on_smart_device_state_changed', 'on_smart_device_removed'],
-  vpn: ['on_vpn_client_created', 'on_vpn_client_revoked'],
-};
-
-// Permission category keys and their permissions
+// Permission category keys and their permissions (bundled plugins only).
 const PERMISSION_CATEGORY_KEYS = ['file', 'system', 'network', 'database', 'user', 'device', 'events'] as const;
 
 const PERMISSION_CATEGORY_DATA: Record<string, { icon: React.ElementType; permissions: string[] }> = {
-  file: {
-    icon: FileText,
-    permissions: ['file:read', 'file:write', 'file:delete'],
-  },
-  system: {
-    icon: Server,
-    permissions: ['system:info', 'system:execute'],
-  },
-  network: {
-    icon: Network,
-    permissions: ['network:outbound'],
-  },
-  database: {
-    icon: Database,
-    permissions: ['db:read', 'db:write'],
-  },
-  user: {
-    icon: Users,
-    permissions: ['user:read', 'user:write'],
-  },
-  device: {
-    icon: Plug,
-    permissions: ['device:control'],
-  },
-  events: {
-    icon: Zap,
-    permissions: ['notification:send', 'task:background', 'event:subscribe', 'event:emit'],
-  },
+  file: { icon: FileText, permissions: ['file:read', 'file:write', 'file:delete'] },
+  system: { icon: Server, permissions: ['system:info', 'system:execute'] },
+  network: { icon: Network, permissions: ['network:outbound'] },
+  database: { icon: Database, permissions: ['db:read', 'db:write'] },
+  user: { icon: Users, permissions: ['user:read', 'user:write'] },
+  device: { icon: Plug, permissions: ['device:control'] },
+  events: { icon: Zap, permissions: ['notification:send', 'task:background', 'event:subscribe', 'event:emit'] },
 };
 
-// Icons for hook categories
-const HOOK_CATEGORY_ICONS: Record<string, React.ElementType> = {
-  file: FileText,
-  user: Users,
-  backup: HardDrive,
-  share: Folder,
-  system: Server,
-  raid: Activity,
-  smart: HardDrive,
-  device: Smartphone,
-  smart_device: Plug,
-  vpn: Key,
-};
-
-export default function PluginDocumentation({ permissions }: PluginDocumentationProps) {
+export default function PluginDocumentation({ permissions, scopeCatalog }: PluginDocumentationProps) {
   const { t } = useTranslation('plugins');
-  // Create a lookup map for permission details
   const permissionMap = new Map(permissions.map((p) => [p.value, p]));
   const formattedVersion = useFormattedVersion('BaluHost');
 
-  // Build hooks data with translations
-  const hooksByCategory = useMemo(() => {
-    return HOOK_CATEGORY_KEYS.map((key) => ({
-      key,
-      label: t(`hookCategories.${key}`),
-      hooks: HOOKS_BY_CATEGORY_KEY[key].map((hookName) => ({
-        name: hookName,
-        description: t(`hooks.${hookName}`),
-      })),
-    }));
-  }, [t]);
+  // Separator-safe scope-description lookup (scope keys contain ':' and '.').
+  const scopeDescs = t('scopeDescriptions', { returnObjects: true }) as Record<
+    string,
+    { label: string; description: string }
+  >;
 
-  // Build permission categories with translations
   const permissionCategories = useMemo(() => {
     return PERMISSION_CATEGORY_KEYS.map((key) => ({
       key,
@@ -124,26 +64,17 @@ export default function PluginDocumentation({ permissions }: PluginDocumentation
     }));
   }, [t]);
 
-  // Total hooks count
-  const totalHooks = useMemo(() => {
-    return hooksByCategory.reduce((sum, cat) => sum + cat.hooks.length, 0);
-  }, [hooksByCategory]);
-
   return (
     <div className="space-y-6">
-      {/* Risk Warning Banner */}
+      {/* 1. Security banner (reframed, two-tier) */}
       <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4">
         <div className="flex items-start gap-3">
           <AlertTriangle className="h-5 w-5 text-amber-400 flex-shrink-0 mt-0.5" />
           <div>
             <h3 className="font-medium text-amber-200">{t('docs.securityWarning')}</h3>
-            <p className="mt-1 text-sm text-amber-200/80">
-              {t('docs.securityWarningDescription')}
-            </p>
+            <p className="mt-1 text-sm text-amber-200/80">{t('docs.securityWarningDescription')}</p>
             <div className="mt-3">
-              <p className="text-xs font-medium text-amber-300">
-                {t('docs.dangerousPermissions')}:
-              </p>
+              <p className="text-xs font-medium text-amber-300">{t('docs.dangerousPermissions')}:</p>
               <ul className="mt-1 text-xs text-amber-200/70 space-y-1">
                 <li>• <code className="text-amber-300">file:write</code> - {t('docs.permissionDescFileWrite')}</li>
                 <li>• <code className="text-amber-300">file:delete</code> - {t('docs.permissionDescFileDelete')}</li>
@@ -156,76 +87,101 @@ export default function PluginDocumentation({ permissions }: PluginDocumentation
         </div>
       </div>
 
-      {/* System Overview */}
+      {/* 2. Trust tiers (centerpiece) */}
       <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
         <div className="flex items-center gap-2 mb-4">
-          <Info className="h-5 w-5 text-sky-400" />
-          <h2 className="text-lg font-medium text-white">{t('docs.systemOverview')}</h2>
+          <Shield className="h-5 w-5 text-sky-400" />
+          <h2 className="text-lg font-medium text-white">{t('tiers.title')}</h2>
         </div>
-        <div className="space-y-4 text-sm text-slate-300">
-          <div>
-            <h3 className="font-medium text-white mb-2">{t('docs.installation')}</h3>
-            <p className="text-slate-400">
-              {t('docs.installationDesc')
-                .split('{{path}}')
-                .map((part, i, arr) => (
-                  <span key={i}>
-                    {part.split('{{manifest}}').map((subPart, j, subArr) => (
-                      <span key={j}>
-                        {subPart}
-                        {j < subArr.length - 1 && (
-                          <code className="px-1.5 py-0.5 rounded bg-slate-800 text-sky-400 text-xs">
-                            plugin.json
-                          </code>
-                        )}
-                      </span>
-                    ))}
-                    {i < arr.length - 1 && (
-                      <code className="px-1.5 py-0.5 rounded bg-slate-800 text-sky-400 text-xs">
-                        backend/app/plugins/installed/
-                      </code>
-                    )}
-                  </span>
-                ))}
-            </p>
-            <div className="mt-3 flex items-start gap-2 rounded-lg border border-sky-500/30 bg-sky-500/5 p-3">
-              <Store className="h-4 w-4 text-sky-400 flex-shrink-0 mt-0.5" />
-              <p className="text-xs text-sky-200/90">{t('docs.marketplaceHint')}</p>
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="rounded-lg border border-slate-700 bg-slate-800/30 p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <ShieldCheck className="h-5 w-5 text-emerald-400" />
+              <h3 className="text-sm font-medium text-white">{t('tiers.bundled.label')}</h3>
             </div>
+            <p className="text-sm text-slate-400">{t('tiers.bundled.description')}</p>
           </div>
-          <div>
-            <h3 className="font-medium text-white mb-2">{t('docs.lifecycle')}</h3>
-            <ol className="list-decimal list-inside text-slate-400 space-y-1">
-              <li><span className="text-slate-300">{t('docs.discovery')}</span> - {t('docs.discoveryDesc')}</li>
-              <li><span className="text-slate-300">{t('docs.registration')}</span> - {t('docs.registrationDesc')}</li>
-              <li><span className="text-slate-300">{t('docs.permissionCheck')}</span> - {t('docs.permissionCheckDesc')}</li>
-              <li><span className="text-slate-300">{t('docs.activation')}</span> - {t('docs.activationDesc')}</li>
-            </ol>
-          </div>
-          <div>
-            <h3 className="font-medium text-white mb-2">{t('docs.pluginStructure')}</h3>
-            <pre className="p-3 rounded-lg bg-slate-800/50 text-xs text-slate-400 overflow-x-auto">
-{`my_plugin/
-├── plugin.json      # ${t('docs.pluginStructureManifest')}
-├── __init__.py      # ${t('docs.pluginStructureEntry')}
-├── routes.py        # ${t('docs.pluginStructureRoutes')}
-└── ui/
-    └── bundle.js    # ${t('docs.pluginStructureUI')}`}
-            </pre>
+          <div className="rounded-lg border border-slate-700 bg-slate-800/30 p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Boxes className="h-5 w-5 text-sky-400" />
+              <h3 className="text-sm font-medium text-white">{t('tiers.external.label')}</h3>
+            </div>
+            <p className="text-sm text-slate-400">{t('tiers.external.description')}</p>
           </div>
         </div>
       </div>
 
-      {/* Permissions Section */}
+      {/* 3. Capability scopes (external, from live catalog) */}
+      <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <Boxes className="h-5 w-5 text-sky-400" />
+          <h2 className="text-lg font-medium text-white">{t('tiers.scopesTitle')}</h2>
+        </div>
+        <p className="text-sm text-slate-400 mb-4">{t('tiers.scopesIntro')}</p>
+        {scopeCatalog.length === 0 ? (
+          <p className="text-sm text-slate-500">{t('tiers.scopesUnavailable')}</p>
+        ) : (
+          <div className="space-y-4">
+            {(['frontend', 'backend'] as const).map((tier) => {
+              const scopes = scopeCatalog.filter((s) => s.tier === tier);
+              if (scopes.length === 0) return null;
+              return (
+                <div key={tier} className="space-y-2">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    {t(`scopeTiers.${tier}`)}
+                  </div>
+                  <ul className="space-y-2">
+                    {scopes.map((scope) => {
+                      const meta = scopeDescs?.[scope.key];
+                      return (
+                        <li key={scope.key} className="rounded-lg border border-slate-700 bg-slate-800/30 p-3">
+                          <div className="flex items-center gap-2">
+                            <code className="text-xs px-1.5 py-0.5 rounded bg-slate-700 text-slate-300">{scope.key}</code>
+                            <span className="text-sm font-medium text-white">{meta?.label ?? scope.key}</span>
+                            {scope.dangerous && <AlertTriangle className="h-3 w-3 text-amber-400" />}
+                          </div>
+                          {meta?.description && <p className="text-xs text-slate-500 mt-1">{meta.description}</p>}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* 4. Installing & enabling (reframed) */}
+      <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <Info className="h-5 w-5 text-sky-400" />
+          <h2 className="text-lg font-medium text-white">{t('tiers.installTitle')}</h2>
+        </div>
+        <div className="space-y-4 text-sm text-slate-300">
+          <div>
+            <h3 className="font-medium text-white mb-1">{t('tiers.external.label')}</h3>
+            <p className="text-slate-400">{t('tiers.installExternal')}</p>
+          </div>
+          <div>
+            <h3 className="font-medium text-white mb-1">{t('tiers.bundled.label')}</h3>
+            <p className="text-slate-400">{t('tiers.installBundled')}</p>
+          </div>
+          <div className="flex items-start gap-2 rounded-lg border border-sky-500/30 bg-sky-500/5 p-3">
+            <Store className="h-4 w-4 text-sky-400 flex-shrink-0 mt-0.5" />
+            <p className="text-xs text-sky-200/90">{t('docs.marketplaceHint')}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* 5a. Bundled reference — permission categories (condensed) */}
       <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
         <div className="flex items-center gap-2 mb-4">
           <Shield className="h-5 w-5 text-sky-400" />
           <h2 className="text-lg font-medium text-white">{t('docs.permissions')}</h2>
           <span className="text-xs text-slate-500">({permissions.length} {t('docs.available')})</span>
         </div>
-        <p className="text-sm text-slate-400 mb-4">
-          {t('docs.permissionsDescription')}
-        </p>
+        <p className="text-sm text-slate-400 mb-4">{t('docs.permissionsDescription')}</p>
         <div className="grid gap-4 md:grid-cols-2">
           {permissionCategories.map((category) => {
             const CategoryIcon = category.icon;
@@ -254,9 +210,7 @@ export default function PluginDocumentation({ permissions }: PluginDocumentation
                         >
                           {perm.value}
                         </code>
-                        {perm.dangerous && (
-                          <AlertTriangle className="h-3 w-3 text-amber-400" />
-                        )}
+                        {perm.dangerous && <AlertTriangle className="h-3 w-3 text-amber-400" />}
                       </div>
                       <p className="text-xs text-slate-500 mt-1">
                         {t(`permissionDescriptions.${perm.value}`, { defaultValue: perm.description })}
@@ -270,45 +224,28 @@ export default function PluginDocumentation({ permissions }: PluginDocumentation
         </div>
       </div>
 
-      {/* Hooks Reference */}
+      {/* 5b. Bundled reference — event hooks (summary + GitHub link) */}
       <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
-        <div className="flex items-center gap-2 mb-4">
+        <div className="flex items-center gap-2 mb-2">
           <Zap className="h-5 w-5 text-sky-400" />
           <h2 className="text-lg font-medium text-white">{t('docs.eventHooks')}</h2>
-          <span className="text-xs text-slate-500">
-            ({totalHooks} {t('docs.hooks')})
-          </span>
         </div>
-        <p className="text-sm text-slate-400 mb-4">
+        <p className="text-sm text-slate-400">
           {t('docs.eventHooksDescription')}{' '}
           <code className="px-1.5 py-0.5 rounded bg-slate-800 text-sky-400 text-xs">event:subscribe</code>{' '}
-          {t('docs.required')}.
+          {t('docs.required')}.{' '}
+          <a
+            href="https://github.com/Xveyn/BaluHost"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sky-400 hover:underline"
+          >
+            {t('docs.documentationOnGitHub')}
+          </a>
         </p>
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {hooksByCategory.map((category) => {
-            const CategoryIcon = HOOK_CATEGORY_ICONS[category.key] || Bell;
-            return (
-              <div key={category.key} className="rounded-lg border border-slate-700 bg-slate-800/30 p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <CategoryIcon className="h-4 w-4 text-slate-400" />
-                  <h3 className="text-sm font-medium text-white">{category.label}</h3>
-                  <span className="text-xs text-slate-500">({category.hooks.length})</span>
-                </div>
-                <ul className="space-y-2">
-                  {category.hooks.map((hook) => (
-                    <li key={hook.name} className="text-xs">
-                      <code className="text-sky-400">{hook.name}</code>
-                      <p className="text-slate-500 mt-0.5">{hook.description}</p>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            );
-          })}
-        </div>
       </div>
 
-      {/* Version Info */}
+      {/* 6. Version footer (unchanged) */}
       <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
         <div className="flex items-center justify-between text-sm">
           <div className="flex items-center gap-4 text-slate-400">

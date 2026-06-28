@@ -250,7 +250,7 @@ export default function PluginsPage() {
 
       {/* Documentation Tab */}
       {activeTab === 'documentation' && (
-        <PluginDocumentation permissions={allPermissions} />
+        <PluginDocumentation permissions={allPermissions} scopeCatalog={scopeCatalog} />
       )}
 
       {/* Plugins Tab */}
