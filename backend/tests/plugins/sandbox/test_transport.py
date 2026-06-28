@@ -48,3 +48,23 @@ async def test_accept_roundtrip_carries_a_frame(tmp_path):
 async def test_connect_to_host_rejects_unknown_scheme():
     with pytest.raises(ValueError):
         await connect_to_host("carrierpigeon:/nope")
+
+
+@pytest.mark.skipif(not _use_unix_socket(), reason="UDS only (Linux/macOS)")
+def test_two_listeners_same_dir_get_distinct_sockets(tmp_path):
+    """Two WorkerListeners on the same plugin dir must not share a socket path."""
+    import asyncio
+
+    async def run():
+        a = WorkerListener(tmp_path)
+        b = WorkerListener(tmp_path)
+        addr_a = await a.start()
+        addr_b = await b.start()
+        try:
+            assert addr_a != addr_b
+            assert addr_a.startswith("unix:") and addr_b.startswith("unix:")
+        finally:
+            await a.close()
+            await b.close()
+
+    asyncio.run(run())

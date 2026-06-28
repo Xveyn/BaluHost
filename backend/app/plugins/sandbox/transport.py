@@ -10,6 +10,7 @@ that an RpcChannel wraps; the channel itself is transport-agnostic.
 """
 import asyncio
 import os
+import secrets
 import sys
 from pathlib import Path
 from typing import Optional, Tuple
@@ -45,7 +46,7 @@ class WorkerListener:
                 writer.close()
 
         if _use_unix_socket():
-            path = str(self._socket_dir / "plugin.sock")
+            path = str(self._socket_dir / f"plugin-{os.getpid()}-{secrets.token_hex(4)}.sock")
             # Stale socket file from a crashed prior worker would block bind.
             try:
                 os.unlink(path)
