@@ -1,5 +1,6 @@
 """Phase 4: production-wired CapabilityRouter factory."""
 import asyncio
+from unittest.mock import AsyncMock
 
 from app.plugins.sandbox.capabilities import CapabilityContext, CapabilityRouter
 from app.plugins.sandbox.host_capabilities import build_capability_router
@@ -29,3 +30,49 @@ def test_metrics_reader_projects_telemetry(monkeypatch):
     ctx = CapabilityContext(user_id=1, username="u", role="user")
     result = asyncio.run(router.dispatch("core.system_metrics", {}, ctx))
     assert result == {"result": {"cpu_usage": 12.5, "memory_percent": 40.0}}
+
+
+def test_notifier_uses_injected_session_factory_and_targets_user(monkeypatch):
+    """Verify that notifier uses injected session_factory and targets acting user."""
+    import app.plugins.sandbox.host_capabilities as hc
+
+    # Record what the notification service's create method receives
+    recorded_kwargs = {}
+
+    async def stub_create(db, **kwargs):
+        recorded_kwargs.update(kwargs)
+
+    stub_service = AsyncMock()
+    stub_service.create = stub_create
+
+    # Stub get_notification_service to return our stub
+    monkeypatch.setattr(hc, "get_notification_service", lambda: stub_service)
+
+    # Stub SessionLocal to be a context manager that does nothing (no DB access)
+    class FakeSessionContext:
+        def __enter__(self):
+            return None  # db session object (unused by stub)
+
+        def __exit__(self, *args):
+            pass
+
+    monkeypatch.setattr(hc, "SessionLocal", lambda: FakeSessionContext())
+
+    # Build router with core.notify scope
+    router = build_capability_router("test-plugin", {"core.notify"})
+
+    # Dispatch core.notify with user_id=99
+    ctx = CapabilityContext(user_id=99, username="testuser", role="user")
+    payload = {"type": "info", "title": "Test Title", "message": "Test Message"}
+
+    result = asyncio.run(router.dispatch("core.notify", payload, ctx))
+
+    # Verify the dispatch succeeded
+    assert "error" not in result, f"dispatch failed with error: {result.get('error')}"
+
+    # Verify the notifier recorded the correct user_id
+    assert recorded_kwargs.get("user_id") == 99
+    assert recorded_kwargs.get("category") == "plugin"
+    assert recorded_kwargs.get("notification_type") == "info"
+    assert recorded_kwargs.get("title") == "Test Title"
+    assert recorded_kwargs.get("message") == "Test Message"

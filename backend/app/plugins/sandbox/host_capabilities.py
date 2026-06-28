@@ -8,6 +8,7 @@ filters the plugin's granted scopes down to the known host catalog.
 from __future__ import annotations
 
 import logging
+from typing import Any, Awaitable, Callable
 
 from app.core.database import SessionLocal
 from app.plugins.sandbox.capabilities import (
@@ -42,18 +43,28 @@ def _read_metrics() -> dict:
     return out
 
 
-async def _notify(context: CapabilityContext, payload: dict) -> None:
-    """Create an in-app notification for the request's acting user only."""
-    service = get_notification_service()
-    with SessionLocal() as db:
-        await service.create(
-            db,
-            user_id=context.user_id,
-            category="plugin",
-            notification_type=payload["type"],
-            title=payload["title"],
-            message=payload["message"],
-        )
+def _make_notifier(
+    session_factory: Callable[[], Any]
+) -> Callable[[CapabilityContext, dict], Awaitable[None]]:
+    """Create a notifier closure that captures the injected session_factory.
+
+    Returns an async function that creates an in-app notification for the
+    request's acting user only, using the provided session factory.
+    """
+
+    async def _notify(context: CapabilityContext, payload: dict) -> None:
+        service = get_notification_service()
+        with session_factory() as db:
+            await service.create(
+                db,
+                user_id=context.user_id,
+                category="plugin",
+                notification_type=payload["type"],
+                title=payload["title"],
+                message=payload["message"],
+            )
+
+    return _notify
 
 
 def build_capability_router(
@@ -66,6 +77,6 @@ def build_capability_router(
         granted_scopes=filtered,
         session_factory=SessionLocal,
         metrics_reader=_read_metrics,
-        notifier=_notify,
+        notifier=_make_notifier(SessionLocal),
         audit_logger=get_audit_logger_db(),
     )
