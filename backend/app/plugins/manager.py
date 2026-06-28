@@ -32,6 +32,7 @@ from app.plugins.events import EventManager, get_event_manager, start_event_mana
 from app.plugins.hooks import create_plugin_manager
 from app.plugins.manifest import ManifestError, PluginManifest, load_manifest
 from app.plugins.permissions import PermissionManager
+from app.services.audit.logger_db import get_audit_logger_db
 
 
 logger = logging.getLogger(__name__)
@@ -64,6 +65,16 @@ class PluginLoadError(Exception):
 
 class PluginPermissionError(Exception):
     """Raised when a plugin lacks required permissions."""
+
+    pass
+
+
+class SandboxHardeningUnavailable(Exception):
+    """Raised when prod hardening is required but the box is not provisioned.
+
+    The signal is a ``None`` return from ``select_spawn_hook()`` — which only
+    happens on prod Linux without the wrapper/plugin user. Callers fail closed.
+    """
 
     pass
 
@@ -166,10 +177,21 @@ class PluginManager:
             return "external"
 
     def _supervisor_factory(self, plugin_name: str, plugin_dir: Path, capability_router: Any) -> Any:
-        """Build a SandboxSupervisor (overridable in tests)."""
+        """Build a SandboxSupervisor (overridable in tests).
+
+        Selects the spawn hook (hardened on a provisioned prod-Linux box, plain
+        otherwise). A ``None`` selection means hardening is required but the box
+        is unprovisioned → raise so the caller can fail closed.
+        """
+        from app.plugins.sandbox.spawn import select_spawn_hook  # noqa: PLC0415
         from app.plugins.sandbox.supervisor import SandboxSupervisor  # noqa: PLC0415
 
-        return SandboxSupervisor(plugin_name, plugin_dir, capability_router=capability_router)
+        hook = select_spawn_hook()
+        if hook is None:
+            raise SandboxHardeningUnavailable(plugin_name)
+        return SandboxSupervisor(
+            plugin_name, plugin_dir, capability_router=capability_router, spawn_hook=hook
+        )
 
     def is_sandboxed(self, name: str) -> bool:
         """Return True if plugin ``name`` is running in a sandbox subprocess."""
@@ -506,7 +528,21 @@ class PluginManager:
         from app.plugins.sandbox.host_capabilities import build_capability_router  # noqa: PLC0415
 
         router = build_capability_router(name, set(granted_api_scopes))
-        supervisor = self._supervisor_factory(name, discovered.path, router)
+        try:
+            supervisor = self._supervisor_factory(name, discovered.path, router)
+        except SandboxHardeningUnavailable:
+            logger.error(
+                "Refusing to spawn external plugin %s: sandbox hardening required "
+                "but baluhost-plugin user / spawn wrapper is not provisioned",
+                name,
+            )
+            get_audit_logger_db().log_security_event(
+                action="plugin_sandbox_hardening_unavailable",
+                resource=f"plugin:{name}",
+                details={"reason": "baluhost-plugin user or spawn wrapper not provisioned"},
+                success=False,
+            )
+            return False
         try:
             await supervisor.start()
         except Exception:
