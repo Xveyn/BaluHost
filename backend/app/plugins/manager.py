@@ -811,6 +811,25 @@ class PluginManager:
         result = {}
 
         for name in discovered:
+            info = self.get_discovered(name)
+            if info is not None and info.source == "external" and info.manifest is not None:
+                m = info.manifest
+                result[name] = {
+                    "name": m.name,
+                    "version": m.version,
+                    "display_name": m.display_name,
+                    "description": m.description,
+                    "author": m.author,
+                    "category": m.category,
+                    "required_permissions": list(m.required_permissions),
+                    "is_enabled": name in self._enabled,
+                    "has_ui": m.ui is not None,
+                    "has_routes": True,
+                    "dangerous_permissions": PermissionManager.get_dangerous_permissions(
+                        list(m.required_permissions)
+                    ),
+                }
+                continue
             try:
                 if name not in self._plugins:
                     self.load_plugin(name)
