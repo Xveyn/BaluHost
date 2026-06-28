@@ -533,6 +533,16 @@ if health_check; then
     log_info "Duration: ${DURATION}s"
     log_info "Backup: $BACKUP_FILE"
 
+    # ─── 8b. Marketplace Signature Smoke-Check (non-fatal) ───────────────
+    # Verify the live marketplace index is signed by a configured trusted key.
+    # Never fails the deploy: the backend already fail-closes the (admin-only)
+    # Marketplace listing, so a signing hiccup has no runtime-plugin impact.
+    # The entrypoint always exits 0 and prints PASS/WARN; the `|| log_warn`
+    # only catches a failure to launch python at all.
+    log_step "Marketplace Signature Smoke-Check"
+    ( cd "$INSTALL_DIR/backend" && "$VENV_BIN/python" -m app.plugins.verify_index_signature ) \
+        || log_warn "Marketplace smoke-check could not run (non-fatal)."
+
     # Opt-in companion build+install runs last, after the deploy is already
     # marked successful, so it can never trigger a rollback of a healthy box.
     if [[ "${INSTALL_COMPANION:-0}" == "1" || "${INSTALL_COMPANION,,}" == "true" ]]; then
