@@ -2,7 +2,7 @@
 # BaluHost plugin sandbox — hardened worker spawn wrapper.
 #
 # Invoked ONLY by the baluhost service user via a scoped sudoers entry:
-#   baluhost ALL=(root) NOPASSWD: /opt/baluhost/deploy/bin/spawn-plugin-worker.sh
+#   baluhost ALL=(root) NOPASSWD: /usr/local/sbin/baluhost-spawn-plugin-worker.sh
 #
 # Validates the caller-influenced flags, then drops privilege and isolates:
 #   prlimit (limits, root) -> unshare --net (netns, root) ->

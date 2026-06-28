@@ -30,7 +30,7 @@ def test_dev_mode_in_development_environment_is_allowed():
 def test_plugin_sandbox_settings_defaults():
     s = Settings(environment="development", nas_mode="dev")
     assert s.plugin_sandbox_user == "baluhost-plugin"
-    assert s.plugin_sandbox_wrapper_path == "/opt/baluhost/deploy/bin/spawn-plugin-worker.sh"
+    assert s.plugin_sandbox_wrapper_path == "/usr/local/sbin/baluhost-spawn-plugin-worker.sh"
 
 
 def test_plugin_sandbox_settings_overridable():
