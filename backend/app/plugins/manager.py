@@ -24,7 +24,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional, Sequence, Set
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.plugins.base import BackgroundTaskSpec, PluginBase
@@ -701,23 +701,38 @@ class PluginManager:
             return []
 
     def get_router(self) -> APIRouter:
-        """Get a combined router for all enabled plugins.
+        """Combined router: bundled plugin routes + a catch-all for sandboxed ones."""
+        from fastapi import Request  # noqa: PLC0415
+        from app.api.deps import get_current_user  # noqa: PLC0415
+        from app.plugins.sandbox.proxy import proxy_request  # noqa: PLC0415
 
-        Returns:
-            APIRouter with all plugin routes mounted
-        """
         router = APIRouter(prefix="/plugins", tags=["plugins"])
 
+        # Bundled plugins: explicit routers, registered FIRST so they win.
         for name in self._enabled:
             plugin = self._plugins.get(name)
             if plugin:
                 plugin_router = plugin.get_router()
                 if plugin_router:
                     router.include_router(
-                        plugin_router,
-                        prefix=f"/{name}",
-                        tags=[f"plugin:{name}"],
+                        plugin_router, prefix=f"/{name}", tags=[f"plugin:{name}"]
                     )
+
+        # Catch-all for external/sandboxed plugins, registered LAST.
+        manager = self
+
+        @router.api_route(
+            "/{name}/{path:path}",
+            methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+            include_in_schema=False,
+        )
+        async def _sandbox_proxy(
+            name: str,
+            path: str,
+            request: Request,
+            current_user=Depends(get_current_user),
+        ):
+            return await proxy_request(name, path, request, current_user, manager)
 
         return router
 
