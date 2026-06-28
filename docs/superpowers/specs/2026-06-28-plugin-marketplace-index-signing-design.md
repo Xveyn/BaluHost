@@ -3,7 +3,7 @@
 **Status:** Spec
 **Date:** 2026-06-28
 **Track:** Plugin-Sandboxing Track C — Provenance/Integrity (final strategic track after A: frontend iframe ✅, B: backend isolation ✅)
-**Scope:** Backend verification of a detached ed25519 signature over the marketplace `index.json`, plus a documented companion checklist for the external `BaluHost-Plugin-Market` repo (CI signing + key). No installer change, no frontend change.
+**Scope:** Backend verification of a detached ed25519 signature over the marketplace `index.json`; two deploy scripts (one-time public-key provisioning helper + a non-fatal per-deploy signature smoke-check); plus a documented companion checklist for the external `BaluHost-Plugin-Market` repo (CI signing + key). No installer change, no frontend change, no new sudoers entry, no new GitHub secret.
 
 ## Problem
 
@@ -20,6 +20,7 @@ The existing marketplace spec (`docs/superpowers/specs/2026-04-13-plugin-marketp
 - **Fail-closed from day one:** an unsigned or invalidly-signed index is rejected (the admin-only Marketplace tab shows an error instead of listings). No transitional warn-only window.
 - **Rotation-friendly:** the backend trusts a *list* of public keys (mirrors the existing MultiFernet dual-key pattern), so a key can be rotated without breaking installs.
 - **Fork-friendly (#207):** the trusted public key(s) and signature URL are config values, env-overridable, so a fork can point at its own market with its own key. The code ships with an **empty** key default; upstream and forks alike supply their key out-of-band (env / deploy-time edit) — see *Key Provisioning*.
+- **Operationally automated:** a one-time idempotent provisioning helper sets the public key into `.env.production` from a server-side key file (no hand-editing), and a non-fatal per-deploy smoke-check verifies the live index signature on every deploy — surfacing a broken/forgotten signing setup in the deploy log instead of only when an admin opens the Marketplace tab.
 
 ## Non-Goals
 
@@ -98,7 +99,7 @@ def verify_detached_ed25519(
 
 ### Config (MODIFY — `backend/app/core/config.py`)
 
-- `plugins_marketplace_public_keys: list[str]` — base64 ed25519 public keys. **Default `[]` (empty).** Chosen approach (see *Key Provisioning* below): the code ships with no baked-in key; the maintainer fills the real public key before deploy. An empty list is self-documenting fail-closed — `verify_detached_ed25519` raises on an empty key list, so an unconfigured backend rejects every index (Marketplace listing returns 502) until a key is supplied. Env-overridable (`PLUGINS_MARKETPLACE_PUBLIC_KEYS`) for forks and for the upstream deploy.
+- `plugins_marketplace_public_keys: list[str]` — base64 ed25519 public keys. **Default `[]` (empty).** Chosen approach (see *Key Provisioning* below): the code ships with no baked-in key; the maintainer fills the real public key before deploy. An empty list is self-documenting fail-closed — `verify_detached_ed25519` raises on an empty key list, so an unconfigured backend rejects every index (Marketplace listing returns 502) until a key is supplied. Env-overridable (`PLUGINS_MARKETPLACE_PUBLIC_KEYS`) for forks and for the upstream deploy. **Env representation:** a JSON array of base64 strings (Pydantic Settings' default parse for `list[str]`), e.g. `PLUGINS_MARKETPLACE_PUBLIC_KEYS=["<b64key>"]` — the provisioning helper emits exactly this form.
 - `plugins_marketplace_signature_url: Optional[str] = None` — default None → service derives `index_url + ".sig"`. Override available if a fork hosts the sig elsewhere.
 - `get_marketplace_service()` passes both into `MarketplaceService(...)`.
 
@@ -109,6 +110,21 @@ The signing keypair lives entirely **outside** code, this session, and git — t
 - The PR ships `plugins_marketplace_public_keys` with an **empty default** — no placeholder string, no real key.
 - The maintainer generates the keypair **offline** (own trusted machine), stores the private key as the Plugin-Market GitHub secret, and supplies the public key to the upstream deploy via **env var** (`PLUGINS_MARKETPLACE_PUBLIC_KEYS`) on `.env.production`, or by a one-line edit to the config default at deploy time.
 - Until both (a) the public key is configured and (b) the live index is signed, the admin-only Marketplace listing is fail-closed (502). On the greenfield deployment (0 external plugins) this affects only the listing, never a running plugin.
+
+### Deploy Automation (provisioning helper + per-deploy smoke-check)
+
+Two scripts remove the manual `.env.production` edit and surface signing health on every deploy. Neither needs a GitHub secret (the public key is not secret) nor a new sudoers entry (see invocation notes).
+
+**1. Provisioning helper — `deploy/scripts/install-marketplace-pubkey.sh` (NEW, one-time / on rotation).**
+- Reads the base64 public key(s) from a server-side file (default `/etc/baluhost/marketplace-pubkey.b64`, override via `$MARKETPLACE_PUBKEY_FILE`), one base64 key per non-empty / non-`#` line. The maintainer drops this file on the box (server access) — public material only.
+- Validates each line is base64 of exactly 32 bytes (a valid ed25519 public key) and **fails loudly** on a bad key rather than writing one that would silently fail-close the marketplace.
+- Builds the JSON-array env value and **idempotently** sets `PLUGINS_MARKETPLACE_PUBLIC_KEYS=[...]` in `/opt/baluhost/.env.production`: replace the line if present, append if absent, no-op if already identical. Preserves the file's `600` / `baluhost:baluhost` mode+owner.
+- **Invocation:** run once manually as root at setup, and again when rotating keys (drop a new file, re-run). It is intentionally **not** wired into the routine deploy — the key persists across deploys, so re-asserting it every time adds a sudoers entry for no benefit. (Wiring it behind the existing `SYNC_PERMISSIONS` opt-in block in `ci-deploy.sh` is a possible later convenience, but would require a deploy-sudoers allowlist entry; deferred.)
+
+**2. Per-deploy smoke-check — backend entrypoint + `ci-deploy.sh` step (NEW, every deploy, non-fatal).**
+- Backend module `app/plugins/verify_index_signature.py` with a `__main__`: loads `settings`, fetches the live `index.json` + its `.sig` (httpx), runs the shared `verify_detached_ed25519`, prints a one-line `PASS` / `WARN: <reason>`, and **always exits 0** (a signing hiccup must never fail a healthy deploy). Reuses the exact verification code path (DRY) — no second implementation.
+- Distinguishes: key not configured (`WARN: marketplace signing not configured`), index/sig unreachable (`WARN: …`), signature invalid (`WARN: signature verification failed` — the one that matters).
+- `ci-deploy.sh`: after the success-path health check, a new non-fatal step runs `"$VENV_BIN/python" -m app.plugins.verify_index_signature` (env already exported by `load_env_production`) and logs its line. Mirrors the existing non-fatal opt-in steps' style (`|| log_warn …`); never triggers rollback. Always-on (not behind `SYNC_PERMISSIONS`) — verification is the genuinely per-deploy concern.
 
 ### Companion: `BaluHost-Plugin-Market` repo (documented checklist — executed by the maintainer, not by this PR)
 
@@ -165,21 +181,29 @@ The signature must be live (step 2) **before** the backend enforces (step 4), or
 
 **`backend/tests/api/test_plugins_marketplace_routes.py` (EXTEND)** — signature failure surfaces as a scrubbed 502.
 
-All tests run cross-platform (pure crypto + in-memory fetchers; no network, no real keys).
+**`backend/tests/plugins/test_verify_index_signature.py` (NEW)** — the smoke-check entrypoint's logic (factored into a testable function returning a `(ok, message)` result, with the `__main__` only printing + exiting 0): valid live index → PASS; empty key → `WARN: marketplace signing not configured`; fetch failure (injected fetcher raises) → WARN; invalid signature → WARN. Inject the fetcher; no network. Assert the function never raises (the entrypoint must be crash-proof).
+
+The two **shell scripts** (`install-marketplace-pubkey.sh`, the `ci-deploy.sh` step) are validated with `bash -n` (syntax) plus a focused unit test of the helper's idempotent line-edit on a temp `.env` fixture if practical; their live behavior is covered by manual smoke on the box (consistent with how the other `deploy/scripts/install-*.sh` are handled).
+
+All Python tests run cross-platform (pure crypto + in-memory fetchers; no network, no real keys).
 
 ## Decomposition & Rollout
 
-One cohesive backend PR on a branch off `main`. Suggested task order:
+One cohesive PR on a branch off `main`. Suggested task order:
 1. `signing.py` + `test_signing.py` (the pure verify unit, TDD).
 2. `MarketplaceService` wiring + `IndexSignatureError` + service tests.
 3. Config settings + `get_marketplace_service()` threading + route 502 mapping + route test.
+4. Smoke-check entrypoint `app/plugins/verify_index_signature.py` + `test_verify_index_signature.py`, then wire the non-fatal step into `ci-deploy.sh` (`bash -n`).
+5. Provisioning helper `deploy/scripts/install-marketplace-pubkey.sh` (idempotent line-edit + base64/32-byte validation; `bash -n` + temp-`.env` unit check).
 
-The companion `BaluHost-Plugin-Market` changes (keypair, `sign_index.py`, CI, secret) are a separate operator checklist (above), sequenced before the backend deploy. The config default ships **empty** (chosen approach: defer); the real public key is supplied out-of-band at deploy via `PLUGINS_MARKETPLACE_PUBLIC_KEYS` on `.env.production` — never committed.
+The companion `BaluHost-Plugin-Market` changes (keypair, `sign_index.py`, CI, secret) are a separate operator checklist (above), sequenced before the backend deploy. The config default ships **empty** (chosen approach: defer); the real public key is supplied out-of-band via the provisioning helper reading a server-side key file → `PLUGINS_MARKETPLACE_PUBLIC_KEYS` on `.env.production` — never committed.
+
+Note: tasks 4–5 touch `deploy/` (CODEOWNERS-protected) but add **no** sudoers entry and **no** GitHub secret; the helper is a manually-run root script and the smoke-check is a non-fatal venv-python invocation.
 
 ## Self-Review
 
-- **Coverage:** verification point (get_index pre-parse), detached raw-ed25519, fail-closed, rotation list, fork config, companion CI, tests — all specified.
-- **Consistency:** `IndexSignatureError(MarketplaceError)` mirrors `IndexFetchError`/`IndexParseError`; 502 mapping + scrubbing matches existing routes and the Posten-2 policy; trusted-key list mirrors MultiFernet; config env-override matches #207 fork model.
-- **Scope:** backend-only PR + documented external-repo checklist; no installer/frontend change.
+- **Coverage:** verification point (get_index pre-parse), detached raw-ed25519, fail-closed, rotation list, fork config, companion CI, provisioning helper, per-deploy smoke-check, tests — all specified.
+- **Consistency:** `IndexSignatureError(MarketplaceError)` mirrors `IndexFetchError`/`IndexParseError`; 502 mapping + scrubbing matches existing routes and the Posten-2 policy; trusted-key list mirrors MultiFernet; config env-override matches #207 fork model; the smoke-check + helper follow the existing `ci-deploy.sh` non-fatal-step / `deploy/scripts/install-*.sh` patterns; smoke-check reuses `verify_detached_ed25519` (no duplicate crypto).
+- **Scope:** one PR — backend verify + 2 deploy scripts; documented external-repo checklist; no installer/frontend change, no new sudoers entry, no new GitHub secret.
 - **Ambiguity:** signature is over raw bytes (no canonicalization); `.sig` is base64 of the 64-byte signature; public keys are base64 of 32 raw bytes; signature URL defaults to `index_url + ".sig"`.
 - **Open operational item:** the actual upstream public key is generated out-of-band and supplied via env (`PLUGINS_MARKETPLACE_PUBLIC_KEYS`) at deploy; the code default stays empty (fail-closed until configured). The private key never enters code, git, or this session.
