@@ -179,9 +179,11 @@ class TestListMarketplace:
         assert data["plugins"][0]["latest_version"] == "1.0.0"
         assert data["plugins"][0]["versions"][0]["checksum_sha256"]
 
-    def test_signature_failure_returns_scrubbed_502(
+    def test_signature_failure_returns_curated_502(
         self, client: TestClient, admin_headers: dict, override_marketplace
     ):
+        # The signature error routes through BadGatewayError (a ServiceError), so
+        # the curated public_message is PRESERVED, not scrubbed to a generic body.
         _, attach = override_marketplace
         archive = _build_plugin_zip("demo")
         attach(
