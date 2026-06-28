@@ -10,7 +10,6 @@ It is SKIPPED on Windows dev machines and any unprovisioned host. It must never
 fail the Windows dev suite.
 """
 import os
-import shutil
 import sys
 
 import pytest
