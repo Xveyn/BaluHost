@@ -44,7 +44,7 @@ Builds a `CapabilityRouter` with real host dependencies. The router itself (Phas
 
 **Interfaces:**
 - Consumes: `CapabilityRouter`, `CapabilityContext` from `app.plugins.sandbox.capabilities`; `SessionLocal` from `app.core.database`; `read_shm`, `TELEMETRY_FILE` from `app.services.monitoring.shm`; `get_notification_service` from `app.services.notifications.service`; `get_audit_logger_db` from `app.services.audit.logger_db`.
-- Produces: `build_capability_router(plugin_name: str, granted_scopes: "set[str] | frozenset[str]") -> CapabilityRouter`. Used by Task 3 (manager) when spawning an external plugin.
+- Produces: `build_capability_router(plugin_name: str, granted_scopes: "set[str] | frozenset[str]") -> CapabilityRouter`. Used by Task 4 (manager) when spawning an external plugin.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -347,7 +347,7 @@ git commit -m "feat(plugin-sandbox): dispatch forwards query+headers, timeout + 
 
 ---
 
-## Task 2b: Unique per-spawn worker socket path (prod-only collision fix)
+## Task 3: Unique per-spawn worker socket path (prod-only collision fix)
 
 `WorkerListener` binds a **fixed** path `plugin_dir/plugin.sock` (`transport.py:48`).
 With one subprocess per uvicorn worker, the 4 prod workers each start a listener for
@@ -434,7 +434,7 @@ git commit -m "fix(plugin-sandbox): unique per-spawn UDS socket path (no collisi
 
 ---
 
-## Task 3: PluginManager dual-path (external enable/disable, load_plugin guard, scope threading)
+## Task 4: PluginManager dual-path (external enable/disable, load_plugin guard, scope threading)
 
 **Files:**
 - Modify: `backend/app/plugins/manager.py`
@@ -663,7 +663,7 @@ git commit -m "feat(plugin-sandbox): PluginManager dual-path — external spawns
 
 ---
 
-## Task 4: Catch-all proxy route (auth, caps, header allowlist, error scrubbing)
+## Task 5: Catch-all proxy route (auth, caps, header allowlist, error scrubbing)
 
 **Files:**
 - Create: `backend/app/plugins/sandbox/proxy.py`
@@ -950,7 +950,7 @@ git commit -m "feat(plugin-sandbox): catch-all proxy route with caps + header al
 
 ---
 
-## Task 5: Toggle/details/list route dual-path for external plugins
+## Task 6: Toggle/details/list route dual-path for external plugins
 
 The toggle, details, and list routes currently call `load_plugin`/`get_plugin` which now raises for external. Branch them onto the manifest path (`DiscoveredPlugin.manifest`) so external plugins are manageable without exec.
 
@@ -1143,7 +1143,7 @@ git commit -m "feat(plugin-sandbox): route dual-path — manage external plugins
 
 ---
 
-## Task 6: End-to-end — sample external plugin through the full proxy→RPC→capability path
+## Task 7: End-to-end — sample external plugin through the full proxy→RPC→capability path
 
 A real subprocess test (mirrors `test_phase3_e2e.py`) proving an external plugin's own route + a `storage.*` call + a `core.*` call work, and a non-granted scope is denied.
 
@@ -1246,7 +1246,7 @@ git commit -m "test(plugin-sandbox): Phase 4 e2e — external plugin storage rou
 
 ---
 
-## Task 7: Full sandbox + plugin suite regression
+## Task 8: Full sandbox + plugin suite regression
 
 **Files:** none (verification only).
 
@@ -1280,11 +1280,11 @@ git commit -m "chore(plugin-sandbox): ruff clean-up for Phase 4"
 
 ## Self-Review Notes (coverage vs. spec)
 
-- Scope-storage → Task 1 (consume existing column; filter to known catalog) + Task 3/5 (thread `granted_api_scopes`). No migration (column exists).
-- Dual-path / no host exec → Task 3 (`load_plugin` guard, `_enable_external`) + Task 5 (routes).
+- Scope-storage → Task 1 (consume existing column; filter to known catalog) + Task 4/6 (thread `granted_api_scopes`). No migration (column exists).
+- Dual-path / no host exec → Task 4 (`load_plugin` guard, `_enable_external`) + Task 6 (routes).
 - core.* catalog (system_metrics + notify) → Task 1 wires both; `storage.*` via existing CapabilityRouter.
-- One subprocess per worker → Task 2b (unique socket path, prevents cross-worker collision) + Task 3 `_enable_external` (no primary-only gating) + accepted-limitation note.
-- Proxy + header allowlist + caps + scrubbing → Task 4.
-- Token never forwarded → Task 4 (`ALLOWED_REQUEST_HEADERS`) + tests (positive assertion).
+- One subprocess per worker → Task 3 (unique socket path, prevents cross-worker collision) + Task 4 `_enable_external` (no primary-only gating) + accepted-limitation note.
+- Proxy + header allowlist + caps + scrubbing → Task 5.
+- Token never forwarded → Task 5 (`ALLOWED_REQUEST_HEADERS`) + tests (positive assertion).
 - Capability deps wired → Task 1.
-- Testing matrix (dual-path, no-exec, proxy auth/headers/caps/scrub, scope enforcement, e2e) → Tasks 3,4,6.
+- Testing matrix (dual-path, no-exec, proxy auth/headers/caps/scrub, scope enforcement, e2e) → Tasks 4,5,7.
