@@ -551,6 +551,13 @@ class PluginManager:
             return False
         self._sandboxes[name] = supervisor
         self._enabled.add(name)
+        get_audit_logger_db().log_security_event(
+            action="plugin_sandbox_spawned",
+            user="system",
+            resource=f"plugin:{name}",
+            details={"granted_api_scopes": sorted(granted_api_scopes)},
+            success=True,
+        )
         logger.info("Enabled external (sandboxed) plugin: %s", name)
         return True
 
