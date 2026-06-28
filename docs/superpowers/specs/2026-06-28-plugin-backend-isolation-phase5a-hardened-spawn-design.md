@@ -201,7 +201,14 @@ closes the channel and SIGKILLs the process if still alive.)
 **`backend/app/core/config.py`**
 
 - `plugin_sandbox_user: str = "baluhost-plugin"`
-- `plugin_sandbox_wrapper_path: str = "/opt/baluhost/deploy/bin/spawn-plugin-worker.sh"`
+- `plugin_sandbox_wrapper_path: str = "/usr/local/sbin/baluhost-spawn-plugin-worker.sh"`
+
+> **Implementation note (as built):** the wrapper is installed to
+> `/usr/local/sbin/baluhost-spawn-plugin-worker.sh`, NOT under `/opt/baluhost`.
+> `/opt/baluhost` (INSTALL_DIR) is owned by `baluhost`, so any wrapper under it
+> would be swappable by `baluhost` (rename a parent dir, substitute a malicious
+> script) → root RCE via sudo. `/usr/local/sbin` has a fully root-owned path
+> chain. The repo SOURCE stays at `deploy/install/bin/spawn-plugin-worker.sh`.
 
 Both are plain settings (no production validator — they have safe defaults and
 are only consulted on Linux prod). Documented in `.env.example`.
@@ -258,11 +265,12 @@ Key properties (each maps to a CI-CD reviewer-checklist item):
 **`deploy/install/templates/baluhost-plugin-sudoers` (NEW)**
 
 ```
-baluhost ALL=(root) NOPASSWD: /opt/baluhost/deploy/bin/spawn-plugin-worker.sh
+@@BALUHOST_USER@@ ALL=(root) NOPASSWD: /usr/local/sbin/baluhost-spawn-plugin-worker.sh
 ```
 
 Installed by the existing module-10 pattern (`process_template` → `chmod 440` →
-`visudo -cf` validate → roll back on syntax error). `%BALUHOST_USER%` templated.
+`visudo -cf` validate → roll back on syntax error). `@@BALUHOST_USER@@` is the
+real `process_template` placeholder token (matches sibling sudoers templates).
 
 **`deploy/install/modules/03-user-setup.sh`**
 
@@ -280,19 +288,36 @@ Installed by the existing module-10 pattern (`process_template` → `chmod 440` 
 
 **`deploy/install/bin/` install step**
 
-A module (extend module 10 or a small dedicated block) copies
-`spawn-plugin-worker.sh` to `/opt/baluhost/deploy/bin/`, `chown root:root`,
-`chmod 0755`, and runs `bash -n` to syntax-check it.
+Module 10 copies `spawn-plugin-worker.sh` to
+`/usr/local/sbin/baluhost-spawn-plugin-worker.sh`, `install -o root -g root -m
+0755`, syntax-checking the SOURCE with `bash -n` *before* the install so a broken
+source never clobbers the live binary.
 
 ### Socket / filesystem access model
 
 | Object | Owner / mode | baluhost-plugin can |
 |---|---|---|
-| `/var/lib/baluhost/plugins/<name>/` | `baluhost:baluhost-plugin` `0750` | traverse + read (code, site-packages) |
-| UDS socket (host-created in plugin dir) | `baluhost:baluhost-plugin`, group-connectable | connect |
-| `/opt/baluhost/backend` (venv + app code) | group/world readable; not secret | read (run the worker) |
-| `/opt/baluhost/.env.production` | `baluhost:baluhost` `0640` | **no** |
+| `/var/lib/baluhost/plugins` (parent) | `baluhost:baluhost-plugin` `0750` | traverse |
+| `/var/lib/baluhost/plugins/<name>/` (per-plugin) | host-normalized `baluhost:baluhost-plugin`, dirs g+rx / files g+r | traverse + read (code, site-packages) |
+| UDS socket (host-created in plugin dir) | host-normalized `baluhost:baluhost-plugin` `0660` | connect |
+| venv + app code (`.venv`, `app/`) | group/world readable; not secret | read (run the worker) |
+| `.env.production` | `baluhost:baluhost` `0640` | **no** |
 | NAS storage mountpoints | `baluhost:baluhost` | **no** (not in group) |
+
+> **Implementation note (as built — closes review finding I-1):** the backend
+> runs as `baluhost` with **primary group `baluhost`** (systemd `Group=baluhost`)
+> and umask `0o002`, so files it creates — including the per-spawn UDS socket and
+> the marketplace-installer's per-plugin dir — land with group `baluhost`, which
+> the worker (`baluhost-plugin`, deliberately **not** in `baluhost`) cannot reach.
+> Merely adding `baluhost` to the `baluhost-plugin` group is insufficient (it does
+> not change the egid of created files). The reachability is therefore established
+> **actively at spawn time**: `hardened_spawn` calls `grant_plugin_group_access()`
+> which (running as the file-owning `baluhost`, a member of the `baluhost-plugin`
+> group, so `chgrp` needs no root) `chgrp`s the socket to `baluhost-plugin` + sets
+> mode `0660` (pathname-UDS `connect()` needs group **write**), and `chgrp`s the
+> plugin dir tree to `baluhost-plugin` adding g+rx on dirs / g+r on files
+> (symlinks skipped; `os.walk` does not descend dir symlinks). This grants the
+> worker exactly socket-connect + own-code-read and nothing broader.
 
 The worker reads only code; secrets reach it through neither the filesystem
 (ownership) nor the environment (scrubbing).
@@ -303,7 +328,8 @@ The worker reads only code; secrets reach it through neither the filesystem
 2. Prod Linux, provisioned → `hardened_spawn`; supervisor stores it.
 3. `supervisor.start()` → `_spawn_and_connect()` builds the worker argv,
    calls `hardened_spawn(argv, cwd)`.
-4. `hardened_spawn` scrubs env, prepends `sudo -n <wrapper>`, spawns.
+4. `hardened_spawn` grants the plugin group socket-connect + dir-read access
+   (`grant_plugin_group_access`), scrubs env, prepends `sudo -n <wrapper>`, spawns.
 5. Wrapper validates args, `setpriv`-drops to `baluhost-plugin`, `unshare --net`,
    `exec`s the worker.
 6. Worker connects to the host's UDS socket, answers health handshake.
