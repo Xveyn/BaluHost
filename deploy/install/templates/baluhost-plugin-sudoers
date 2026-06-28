@@ -1,0 +1,7 @@
+# BaluHost plugin sandbox (Track B Phase 5a)
+# Allow the backend service user to invoke ONLY the hardened spawn wrapper as
+# root. The wrapper validates every caller-influenced argument; no args pinned
+# here because the worker's --connect/--plugin-dir/--plugin-name vary per spawn.
+# The wrapper is installed to /usr/local/sbin (root:root 0755, outside
+# /opt/baluhost) so the baluhost user cannot swap it.
+@@BALUHOST_USER@@ ALL=(root) NOPASSWD: /usr/local/sbin/baluhost-spawn-plugin-worker.sh
