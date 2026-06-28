@@ -50,6 +50,7 @@ class PluginInfo(BaseModel):
     has_ui: bool = False
     has_routes: bool = False
     error: Optional[str] = None
+    is_external: bool = False
     translations: Optional[Dict[str, Dict[str, str]]] = None
 
 
@@ -108,6 +109,8 @@ class PluginDetailResponse(BaseModel):
     has_background_tasks: bool = False
     has_dashboard_panel: bool = False
     dashboard_panel_enabled: bool = False
+    is_external: bool = False
+    requested_api_scopes: List[str] = []
 
     # UI info
     nav_items: List[PluginNavItemSchema] = []
@@ -131,7 +134,11 @@ class PluginToggleRequest(BaseModel):
     enabled: bool
     grant_permissions: List[str] = Field(
         default_factory=list,
-        description="Permissions to grant (only for enabling)",
+        description="Permissions to grant (bundled plugins, old model)",
+    )
+    grant_api_scopes: List[str] = Field(
+        default_factory=list,
+        description="Capability scopes to grant an external plugin (filtered to the catalog)",
     )
 
 

@@ -890,6 +890,7 @@ class PluginManager:
                     "is_enabled": name in self._enabled,
                     "has_ui": m.ui is not None,
                     "has_routes": True,
+                    "is_external": True,
                     "dangerous_permissions": PermissionManager.get_dangerous_permissions(
                         list(m.required_permissions)
                     ),
@@ -913,6 +914,7 @@ class PluginManager:
                     "is_enabled": name in self._enabled,
                     "has_ui": plugin.get_ui_manifest() is not None,
                     "has_routes": plugin.get_router() is not None,
+                    "is_external": False,
                     "dangerous_permissions": PermissionManager.get_dangerous_permissions(
                         meta.required_permissions
                     ),
@@ -922,6 +924,7 @@ class PluginManager:
                     "name": name,
                     "error": str(e),
                     "is_enabled": False,
+                    "is_external": False,
                 }
 
         return result

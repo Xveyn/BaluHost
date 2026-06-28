@@ -52,7 +52,7 @@ def test_toggle_enable_external_uses_manifest(tmp_path, db_session, monkeypatch)
 
     monkeypatch.setattr(mgr, "enable_plugin", fake_enable)
 
-    body = plugins_route.PluginToggleRequest(enabled=True, grant_permissions=[])
+    body = plugins_route.PluginToggleRequest(enabled=True, grant_permissions=[], grant_api_scopes=["storage"])
     user = types.SimpleNamespace(id=1, username="admin", role="admin")
     resp = asyncio.run(
         plugins_route.toggle_plugin(
@@ -171,6 +171,91 @@ def test_get_scope_catalog_endpoint_returns_six_entries():
     for s in resp.scopes:
         assert s.tier in ("frontend", "backend")
         assert s.dangerous is False
+
+
+def test_toggle_enable_external_filters_grant_api_scopes_to_catalog(tmp_path, db_session, monkeypatch):
+    PluginManager.reset_instance()
+    mgr = PluginManager(plugins_dir=tmp_path)
+    pdir = tmp_path / "weather"
+    pdir.mkdir()
+
+    class _M:
+        api_scopes = ["storage", "core.notify"]
+        version = "2.0.0"
+        display_name = "Weather"
+        required_permissions = []
+
+    mgr._discovered = {
+        "weather": DiscoveredPlugin(name="weather", path=pdir, source="external", manifest=_M()),
+    }
+
+    captured = {}
+
+    async def fake_enable(name, perms, db, start_background_tasks=True, granted_api_scopes=None):
+        captured["scopes"] = granted_api_scopes
+        return True
+
+    monkeypatch.setattr(mgr, "enable_plugin", fake_enable)
+
+    persisted = {}
+    real_enable = plugins_route.plugin_service.enable_plugin
+
+    def spy_enable(db, **kwargs):
+        persisted["api_scopes"] = kwargs.get("api_scopes")
+        return real_enable(db, **kwargs)
+
+    monkeypatch.setattr(plugins_route.plugin_service, "enable_plugin", spy_enable)
+
+    # "network:evil" is NOT in the catalog -> must be dropped.
+    body = plugins_route.PluginToggleRequest(
+        enabled=True, grant_permissions=[],
+        grant_api_scopes=["storage", "core.notify", "network:evil"],
+    )
+    user = types.SimpleNamespace(id=1, username="admin", role="admin")
+    resp = asyncio.run(
+        plugins_route.toggle_plugin(
+            request=_make_mock_request(), response=_make_mock_response(), name="weather", body=body,
+            db=db_session, current_user=user, plugin_manager=mgr,
+        )
+    )
+    assert resp.is_enabled is True
+    assert sorted(captured["scopes"]) == ["core.notify", "storage"]
+    assert sorted(persisted["api_scopes"]) == ["core.notify", "storage"]
+
+
+def test_get_plugin_details_external_surfaces_requested_scopes_and_flag(tmp_path, db_session):
+    PluginManager.reset_instance()
+    mgr = PluginManager(plugins_dir=tmp_path)
+    pdir = tmp_path / "weather"
+    pdir.mkdir()
+
+    class _M:
+        manifest_version = 1
+        name = "weather"
+        version = "2.0.0"
+        display_name = "Weather"
+        description = "d"
+        author = "a"
+        category = "general"
+        homepage = None
+        min_baluhost_version = None
+        plugin_dependencies = []
+        required_permissions = []
+        api_scopes = ["storage", "core.notify"]
+        ui = None
+
+    mgr._discovered = {
+        "weather": DiscoveredPlugin(name="weather", path=pdir, source="external", manifest=_M()),
+    }
+    user = types.SimpleNamespace(id=1, username="admin", role="admin")
+    resp = asyncio.run(
+        plugins_route.get_plugin_details(
+            request=_make_mock_request(), response=_make_mock_response(),
+            name="weather", db=db_session, current_user=user, plugin_manager=mgr,
+        )
+    )
+    assert resp.is_external is True
+    assert sorted(resp.requested_api_scopes) == ["core.notify", "storage"]
 
 
 def test_ui_manifest_enrichment_uses_discovered_manifest_for_abi(monkeypatch):

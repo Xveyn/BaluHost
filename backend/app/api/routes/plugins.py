@@ -82,6 +82,7 @@ async def list_plugins(
                 has_ui=info.get("has_ui", False),
                 has_routes=info.get("has_routes", False),
                 error=info.get("error"),
+                is_external=info.get("is_external", False),
                 translations=translations,
             )
         )
@@ -185,6 +186,8 @@ async def get_plugin_details(
             has_background_tasks=False,
             has_dashboard_panel=False,
             dashboard_panel_enabled=db_record.dashboard_panel_enabled if db_record else False,
+            is_external=True,
+            requested_api_scopes=list(getattr(manifest, "api_scopes", []) or []),
             nav_items=[],
             dashboard_widgets=[],
             installed_at=db_record.installed_at if db_record else None,
@@ -243,6 +246,8 @@ async def get_plugin_details(
         has_background_tasks=len(plugin.get_background_tasks()) > 0,
         has_dashboard_panel=plugin.get_dashboard_panel() is not None,
         dashboard_panel_enabled=db_record.dashboard_panel_enabled if db_record else False,
+        is_external=False,
+        requested_api_scopes=[],
         nav_items=[
             PluginNavItemSchema(**item.model_dump())
             for item in (ui_manifest.nav_items if ui_manifest else [])
@@ -390,7 +395,7 @@ async def _toggle_external(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plugin not found")
 
     if body.enabled:
-        api_scopes = list(getattr(manifest, "api_scopes", []) or [])
+        api_scopes = [s for s in body.grant_api_scopes if s in CATALOG_KEYS]
         plugin_service.enable_plugin(
             db,
             name=name,
