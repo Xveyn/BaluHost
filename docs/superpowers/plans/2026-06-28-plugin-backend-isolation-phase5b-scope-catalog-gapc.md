@@ -42,7 +42,21 @@
 - `client/src/api/plugins.ts` — `ScopeInfo`, `getScopeCatalog()`; `grant_api_scopes` on toggle; `requested_api_scopes`/`is_external` on detail; `is_external` on list.
 - `client/src/pages/PluginsPage.tsx` — scope-picker modal + external branch in the enable flow.
 - `client/src/i18n/locales/en/plugins.json` + `client/src/i18n/locales/de/plugins.json` — `scopeDescriptions`, `scopeTiers`, `picker`.
-- `client/src/pages/__tests__/PluginsPage.scopePicker.test.tsx` (or co-located) — picker + Gap-C nav vitest.
+
+**Frontend — create (tests):** this repo uses a **centralized mirror tree** under `client/src/__tests__/<area>/` (NOT co-located, NOT per-dir `__tests__/`). Depth from a test file back to `src/` is `../../`. New tests:
+- `client/src/__tests__/api/plugins.scopeCatalog.test.ts`
+- `client/src/__tests__/pages/PluginsPage.scopePicker.test.tsx`
+- `client/src/__tests__/contexts/PluginContext.externalNav.test.tsx`
+
+**Repo vitest convention (verified):** `useTranslation` is universally stubbed as `t: (key) => key` — tests assert on i18n **keys**, not translated text. `apiClient` is mocked via `vi.mock('../../lib/api', …)`. Contexts (`AuthContext`) are mocked, not provided. There is no shared i18n test provider / render helper. Mock skeleton to reuse:
+
+```ts
+vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (k: string) => k }) }));
+vi.mock('../../lib/api', () => ({
+  apiClient: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() },
+  memoizedApiRequest: vi.fn(),
+}));
+```
 
 ---
 
@@ -159,29 +173,33 @@ class ScopeCatalogResponse(BaseModel):
     scopes: List[ScopeInfoSchema] = []
 ```
 
-- [ ] **Step 6: Write the failing endpoint test**
+- [ ] **Step 6: Write the failing endpoint test (direct-call style)**
 
-Append to `backend/tests/plugins/test_scope_catalog.py`:
+The route tests in this repo call handlers directly (no TestClient/auth-header fixtures) — see `backend/tests/plugins/test_external_plugin_routes.py`, which defines `_make_mock_request()` / `_make_mock_response()` and imports the route module as `plugins_route`. Append this endpoint test to **`backend/tests/plugins/test_external_plugin_routes.py`** (it already has the helpers, `asyncio`, `types`):
 
 ```python
-def test_scope_catalog_endpoint_returns_catalog(client, admin_auth_headers):
-    resp = client.get("/api/plugins/scope-catalog", headers=admin_auth_headers)
-    assert resp.status_code == 200
-    scopes = resp.json()["scopes"]
-    assert len(scopes) == 6
-    keys = {s["key"] for s in scopes}
+def test_get_scope_catalog_endpoint_returns_six_entries():
+    user = types.SimpleNamespace(id=1, username="admin", role="admin")
+    resp = asyncio.run(
+        plugins_route.get_scope_catalog(
+            request=_make_mock_request(), response=_make_mock_response(), current_user=user,
+        )
+    )
+    assert len(resp.scopes) == 6
+    keys = {s.key for s in resp.scopes}
     assert "read:system-info" in keys
     assert "core.notify" in keys
-    for s in scopes:
-        assert set(s) >= {"key", "tier", "dangerous"}
+    for s in resp.scopes:
+        assert s.tier in ("frontend", "backend")
+        assert s.dangerous is False
 ```
 
-> NOTE for the implementer: use the project's existing TestClient + auth-header fixtures (the same ones `backend/tests/plugins/test_external_plugin_routes.py` or other route tests use). If the fixture names differ from `client` / `admin_auth_headers`, match the real fixtures. The catalog endpoint requires `get_current_user` (any authenticated user), so a normal-user token is also acceptable.
+(The pure catalog-data tests in Steps 1-4 stay in `test_scope_catalog.py`; only the endpoint test lives here so it can reuse the mock-request helpers.)
 
 - [ ] **Step 7: Run it to verify it fails**
 
-Run: `python -m pytest tests/plugins/test_scope_catalog.py::test_scope_catalog_endpoint_returns_catalog -v`
-Expected: FAIL — 404 (route not yet defined).
+Run: `python -m pytest tests/plugins/test_external_plugin_routes.py::test_get_scope_catalog_endpoint_returns_six_entries -v`
+Expected: FAIL — `AttributeError: module ... has no attribute 'get_scope_catalog'` (route not yet defined).
 
 - [ ] **Step 8: Add the endpoint**
 
@@ -220,15 +238,15 @@ async def get_scope_catalog(
 
 > NOTE: `/scope-catalog` must be registered BEFORE the `@router.get("/{name}")` detail route (line 132) so it is not captured as `name="scope-catalog"`. Placing it right after `list_permissions` (line 102) satisfies this.
 
-- [ ] **Step 9: Run the full scope-catalog test module**
+- [ ] **Step 9: Run the catalog + endpoint tests**
 
-Run: `python -m pytest tests/plugins/test_scope_catalog.py -v`
-Expected: PASS (6 tests).
+Run: `python -m pytest tests/plugins/test_scope_catalog.py tests/plugins/test_external_plugin_routes.py::test_get_scope_catalog_endpoint_returns_six_entries -v`
+Expected: PASS (5 catalog tests + 1 endpoint test).
 
 - [ ] **Step 10: Commit**
 
 ```bash
-git add backend/app/plugins/scope_catalog.py backend/app/schemas/plugin.py backend/app/api/routes/plugins.py backend/tests/plugins/test_scope_catalog.py
+git add backend/app/plugins/scope_catalog.py backend/app/schemas/plugin.py backend/app/api/routes/plugins.py backend/tests/plugins/test_scope_catalog.py backend/tests/plugins/test_external_plugin_routes.py
 git commit -m "feat(plugin-sandbox): scope catalog module + GET /scope-catalog (Phase 5b)"
 ```
 
@@ -238,19 +256,19 @@ git commit -m "feat(plugin-sandbox): scope catalog module + GET /scope-catalog (
 
 **Files:**
 - Modify: `backend/app/plugins/manifest.py`
-- Test: `backend/tests/plugins/test_manifest.py` (or the existing manifest test module — discover its real path)
+- Test: `backend/tests/plugins/test_manifest.py` (existing module — has a `valid_manifest_data` fixture with a `ui` block; append the new tests here)
 
 **Interfaces:**
 - Produces: `ManifestNavItem{path: str, label: str, icon: Optional[str]=None, admin_only: bool=False, order: int=100}`.
 - Produces: `PluginManifestUI` gains `nav_items: List[ManifestNavItem]` (default `[]`) and `dashboard_widgets: List[str]` (default `[]`). `bundle`/`styles` unchanged. (Task 3 reads `discovered.manifest.ui.nav_items` / `.bundle` / `.styles` / `.dashboard_widgets`.)
 
-- [ ] **Step 1: Locate the manifest test file**
+- [ ] **Step 1: (no separate step — tests go into the existing `test_manifest.py`)**
 
-Find the existing manifest test module (it loads `plugin.json` / `PluginManifest`). Use `mcp__vectordb-search__search_code` with query "load_manifest PluginManifest test parse plugin.json ui bundle". Add the new tests there; if none exists, create `backend/tests/plugins/test_manifest_ui.py`.
+The manifest test module is `backend/tests/plugins/test_manifest.py` (verified to exist, with a `valid_manifest_data` fixture whose `ui` is `{"bundle": ..., "styles": None}`). Append the new tests to it.
 
 - [ ] **Step 2: Write the failing test**
 
-Add:
+Append to `backend/tests/plugins/test_manifest.py`:
 
 ```python
 from app.plugins.manifest import PluginManifestUI, ManifestNavItem
@@ -280,7 +298,7 @@ def test_manifest_ui_without_nav_items_defaults_empty():
 
 - [ ] **Step 3: Run it to verify it fails**
 
-Run: `python -m pytest tests/plugins/test_manifest_ui.py -v` (or the chosen module)
+Run: `python -m pytest tests/plugins/test_manifest.py -v` (or the chosen module)
 Expected: FAIL — `ImportError: cannot import name 'ManifestNavItem'`.
 
 - [ ] **Step 4: Extend the manifest model**
@@ -311,7 +329,7 @@ class PluginManifestUI(BaseModel):
 
 - [ ] **Step 5: Run the manifest tests to verify they pass**
 
-Run: `python -m pytest tests/plugins/test_manifest_ui.py -v`
+Run: `python -m pytest tests/plugins/test_manifest.py -v`
 Expected: PASS (2 tests).
 
 - [ ] **Step 6: Run the full manifest test module for regressions**
@@ -322,7 +340,7 @@ Expected: PASS (existing manifest tests still green — backward-compatible defa
 - [ ] **Step 7: Commit**
 
 ```bash
-git add backend/app/plugins/manifest.py backend/tests/plugins/test_manifest_ui.py
+git add backend/app/plugins/manifest.py backend/tests/plugins/test_manifest.py
 git commit -m "feat(plugin-sandbox): static nav_items/dashboard_widgets in PluginManifestUI (Phase 5b)"
 ```
 
@@ -461,12 +479,14 @@ with:
                 continue
 
             # External sandboxed plugin: surface UI from its static manifest.
+            # getattr guards against test-double manifests (e.g. object()) that some
+            # sandbox tests place in _enabled without a real PluginManifest.
             discovered = self.get_discovered(name)
             if (
                 discovered is not None
                 and discovered.source == "external"
                 and discovered.manifest is not None
-                and discovered.manifest.ui is not None
+                and getattr(discovered.manifest, "ui", None) is not None
             ):
                 ui = discovered.manifest.ui
                 manifest["plugins"].append({
@@ -839,11 +859,13 @@ git commit -m "feat(plugin-sandbox): scope-picker backend -- grant_api_scopes th
 
 **Files:**
 - Modify: `backend/app/plugins/manager.py` (`_enable_external`, after line 553)
-- Test: the 5a fail-closed audit test module — find it (query "plugin_sandbox_hardening_unavailable audit log_security_event _enable_external test").
+- Test: `backend/tests/plugins/test_manager_sandbox_failclosed.py` (the 5a fail-closed audit module — append the success-path test here)
 
 **Interfaces:**
 - Consumes: `get_audit_logger_db()` (already imported/used in `_enable_external`).
 - Produces: on successful spawn, a security event `action="plugin_sandbox_spawned", user="system", resource=f"plugin:{name}", details={"granted_api_scopes": sorted(...)}, success=True`.
+
+> **Existing-test impact (review finding):** `test_manager_sandbox_failclosed.py::test_enable_external_uses_selected_hook` patches the supervisor + `build_capability_router` but NOT `get_audit_logger_db`. After this change its success path will call the real `get_audit_logger_db().log_security_event(...)`. It will still pass (audit errors are swallowed and `_enable_external` returns `True` regardless), but to keep it clean and avoid a stray audit row, add `monkeypatch.setattr("app.plugins.manager.get_audit_logger_db", lambda: <stub>)` to that test as part of this task. Step 5 (full-module run) verifies it.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -891,7 +913,7 @@ def test_enable_external_emits_spawned_audit_on_success(tmp_path, monkeypatch):
 
 - [ ] **Step 2: Run it to verify it fails**
 
-Run: `python -m pytest <audit_test_module> -k spawned_audit -v`
+Run: `python -m pytest tests/plugins/test_manager_sandbox_failclosed.py -k spawned_audit -v`
 Expected: FAIL — no `plugin_sandbox_spawned` event emitted.
 
 - [ ] **Step 3: Emit the success audit**
@@ -914,18 +936,18 @@ In `backend/app/plugins/manager.py`, in `_enable_external`, after `self._enabled
 
 - [ ] **Step 4: Run the audit test to verify it passes**
 
-Run: `python -m pytest <audit_test_module> -k spawned_audit -v`
+Run: `python -m pytest tests/plugins/test_manager_sandbox_failclosed.py -k spawned_audit -v`
 Expected: PASS.
 
 - [ ] **Step 5: Run the full audit module for regressions**
 
-Run: `python -m pytest <audit_test_module> -v`
+Run: `python -m pytest tests/plugins/test_manager_sandbox_failclosed.py -v`
 Expected: PASS (fail-closed test still green).
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add backend/app/plugins/manager.py <audit_test_module>
+git add backend/app/plugins/manager.py backend/tests/plugins/test_manager_sandbox_failclosed.py
 git commit -m "feat(plugin-sandbox): success audit plugin_sandbox_spawned on external enable (Phase 5a follow-up)"
 ```
 
@@ -1058,22 +1080,23 @@ git commit -m "docs(plugin-sandbox): document bundled vs external trust tiers (P
 
 **Files:**
 - Modify: `client/src/api/plugins.ts`
-- Test: `client/src/api/__tests__/plugins.scopeCatalog.test.ts` (new) — match the repo's existing vitest layout for api tests (discover where other `src/api/*` tests live; co-locate accordingly).
+- Test: `client/src/__tests__/api/plugins.scopeCatalog.test.ts` (new — centralized mirror tree; see Global/File-Structure note)
 
 **Interfaces:**
 - Produces: `ScopeInfo {key: string; tier: 'frontend' | 'backend'; dangerous: boolean}`, `ScopeCatalogResponse {scopes: ScopeInfo[]}`, `getScopeCatalog(): Promise<ScopeCatalogResponse>`. `PluginToggleRequest.grant_api_scopes?: string[]`. `PluginDetail.requested_api_scopes?: string[]` + `.is_external?: boolean`. `PluginInfo.is_external?: boolean`. Task 10 consumes all of these.
 
 - [ ] **Step 1: Write the failing test**
 
-Create the test (adjust path to match the repo's api-test convention):
+Create `client/src/__tests__/api/plugins.scopeCatalog.test.ts` (imports reach `src/` via `../../`):
 
 ```ts
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { apiClient } from '../../lib/api';
-import { getScopeCatalog } from '../plugins';
+import { getScopeCatalog } from '../../api/plugins';
 
 vi.mock('../../lib/api', () => ({
   apiClient: { get: vi.fn() },
+  memoizedApiRequest: vi.fn(),
 }));
 
 describe('getScopeCatalog', () => {
@@ -1098,7 +1121,7 @@ describe('getScopeCatalog', () => {
 
 - [ ] **Step 2: Run it to verify it fails**
 
-Run (from `client/`): `npx vitest run src/api/__tests__/plugins.scopeCatalog.test.ts`
+Run (from `client/`): `npx vitest run src/__tests__/api/plugins.scopeCatalog.test.ts`
 Expected: FAIL — `getScopeCatalog` is not exported.
 
 - [ ] **Step 3: Add the types and function**
@@ -1152,7 +1175,7 @@ export async function getScopeCatalog(): Promise<ScopeCatalogResponse> {
 
 - [ ] **Step 4: Run the test to verify it passes**
 
-Run: `npx vitest run src/api/__tests__/plugins.scopeCatalog.test.ts`
+Run: `npx vitest run src/__tests__/api/plugins.scopeCatalog.test.ts`
 Expected: PASS.
 
 - [ ] **Step 5: Type-check**
@@ -1163,7 +1186,7 @@ Expected: no new errors.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add client/src/api/plugins.ts client/src/api/__tests__/plugins.scopeCatalog.test.ts
+git add client/src/api/plugins.ts client/src/__tests__/api/plugins.scopeCatalog.test.ts
 git commit -m "feat(plugin-sandbox): frontend scope-catalog client + is_external/requested_api_scopes types (Phase 5b)"
 ```
 
@@ -1173,53 +1196,126 @@ git commit -m "feat(plugin-sandbox): frontend scope-catalog client + is_external
 
 **Files:**
 - Modify: `client/src/pages/PluginsPage.tsx`
-- Test: `client/src/pages/__tests__/PluginsPage.scopePicker.test.tsx` (new) — match the repo's page-test layout.
+- Test: `client/src/__tests__/pages/PluginsPage.scopePicker.test.tsx` (new — centralized mirror tree)
 
 **Interfaces:**
 - Consumes: `getScopeCatalog`, `ScopeInfo`, `PluginDetail.is_external`, `PluginDetail.requested_api_scopes`, `PluginToggleRequest.grant_api_scopes` (Task 9); `t('scopeDescriptions'|'scopeTiers'|'picker', ...)` (Task 11).
 - Produces: an external-only scope-picker; bundled plugins keep the unchanged permissions modal.
 
+**TEST CONVENTION (verified — do NOT deviate):** `useTranslation` is stubbed `t:(k)=>k`, so the DOM shows i18n **keys**, not English. Assert on keys (`'picker.title'`, `'picker.grant'`, `'modal.enableDesc'`, `'buttons.enable'`). The scope checkboxes are labelled by `scope.key` (the `scopeDescriptions` lookup returns `undefined` under the stub and the code falls back to `scope.key`), so `getByRole('checkbox', {name:/storage/i})` works as written. There is NO i18n provider/render helper in this repo.
+
 - [ ] **Step 1: Write the failing test**
 
-Create `client/src/pages/__tests__/PluginsPage.scopePicker.test.tsx`. Mock `../api/plugins` (so `getScopeCatalog`, `getPluginDetails`, `togglePlugin`, `listPermissions` are stubs), mock `../contexts/PluginContext`'s `usePlugins` to return one external plugin (`is_external: true`, `is_enabled: false`, `required_permissions: []`). Stub `getPluginDetails` → `{ is_external: true, requested_api_scopes: ['storage', 'read:power'], required_permissions: [], ... }`, `getScopeCatalog` → the 6-entry catalog. Then:
+Create `client/src/__tests__/pages/PluginsPage.scopePicker.test.tsx`. Mock every module `PluginsPage` imports (the page pulls in heavy children + hooks). Paths are relative to the test file (`../../`):
 
 ```tsx
-// Pseudocode shape — fill against the real testing-library setup used elsewhere.
-it('external plugin: opens scope-picker, pre-checks requested, sends checked subset', async () => {
-  render(<PluginsPage />);
-  // click Enable on the external plugin card
-  fireEvent.click(await screen.findByText(/Enable/i));
-  // picker title visible
-  expect(await screen.findByText(/Grant capability scopes/i)).toBeInTheDocument();
-  // requested scopes pre-checked: 'storage' and 'read:power'
-  const storage = screen.getByRole('checkbox', { name: /storage/i });
-  expect(storage).toBeChecked();
-  // deselect read:power, confirm
-  fireEvent.click(screen.getByRole('checkbox', { name: /read:power/i }));
-  fireEvent.click(screen.getByRole('button', { name: /Grant & Enable/i }));
-  await waitFor(() =>
-    expect(togglePlugin).toHaveBeenCalledWith('weather', {
-      enabled: true,
-      grant_api_scopes: ['storage'],
-    }),
-  );
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import PluginsPage from '../../pages/PluginsPage';
+import { usePlugins } from '../../contexts/PluginContext';
+import {
+  getScopeCatalog, getPluginDetails, togglePlugin, listPermissions,
+} from '../../api/plugins';
+
+vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (k: string) => k }) }));
+vi.mock('../../contexts/PluginContext', () => ({ usePlugins: vi.fn() }));
+vi.mock('../../api/plugins', () => ({
+  getScopeCatalog: vi.fn(),
+  getPluginDetails: vi.fn(),
+  togglePlugin: vi.fn().mockResolvedValue({ name: 'x', is_enabled: true, message: 'ok' }),
+  listPermissions: vi.fn().mockResolvedValue({ permissions: [] }),
+  toggleDashboardPanel: vi.fn(),
+  uninstallPlugin: vi.fn(),
+}));
+vi.mock('../../hooks/useConfirmDialog', () => ({
+  useConfirmDialog: () => ({ confirm: vi.fn(), dialog: null }),
+}));
+vi.mock('../../lib/pluginI18n', () => ({ resolvePluginString: (_t: unknown, _k: unknown, f: string) => f }));
+vi.mock('../../lib/safeUrl', () => ({ safeExternalUrl: () => null }));
+vi.mock('../../components/plugins/PluginDocumentation', () => ({ default: () => null }));
+vi.mock('../../components/plugins/PluginSettingsSection', () => ({ PluginSettingsSection: () => null }));
+vi.mock('../../components/plugins/MarketplaceTab', () => ({ default: () => null }));
+vi.mock('../../components/LocalOnlyAction', () => ({ LocalOnlyAction: ({ children }: { children: React.ReactNode }) => children }));
+
+const mockUsePlugins = usePlugins as unknown as ReturnType<typeof vi.fn>;
+const CATALOG = {
+  scopes: [
+    { key: 'read:system-info', tier: 'frontend', dangerous: false },
+    { key: 'read:storage', tier: 'frontend', dangerous: false },
+    { key: 'read:power', tier: 'frontend', dangerous: false },
+    { key: 'storage', tier: 'backend', dangerous: false },
+    { key: 'core.system_metrics', tier: 'backend', dangerous: false },
+    { key: 'core.notify', tier: 'backend', dangerous: false },
+  ],
+};
+
+function makePlugin(over: Record<string, unknown> = {}) {
+  return {
+    name: 'weather', version: '2.0.0', display_name: 'Weather', description: 'd',
+    author: 'a', category: 'general', required_permissions: [], dangerous_permissions: [],
+    is_enabled: false, has_ui: true, has_routes: true, is_external: true, ...over,
+  };
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  (getScopeCatalog as ReturnType<typeof vi.fn>).mockResolvedValue(CATALOG);
 });
 
-it('bundled plugin: shows the permissions modal, not the scope-picker', async () => {
-  // usePlugins returns a bundled plugin (is_external:false, required_permissions:['file:read'])
-  // getPluginDetails -> { is_external:false, required_permissions:['file:read'], ... }
-  render(<PluginsPage />);
-  fireEvent.click(await screen.findByText(/Enable/i));
-  expect(await screen.findByText(/requires the following permissions/i)).toBeInTheDocument();
-  expect(screen.queryByText(/Grant capability scopes/i)).not.toBeInTheDocument();
+describe('PluginsPage scope-picker (external) vs permissions modal (bundled)', () => {
+  it('external: pre-checks requested scopes, sends the checked subset', async () => {
+    mockUsePlugins.mockReturnValue({
+      plugins: [makePlugin()], isLoading: false, error: null, refreshPlugins: vi.fn(),
+    });
+    (getPluginDetails as ReturnType<typeof vi.fn>).mockResolvedValue(
+      makePlugin({ is_installed: false, requested_api_scopes: ['storage', 'read:power'], dashboard_panel_enabled: false }),
+    );
+
+    render(<PluginsPage />);
+    // Wait until the catalog has loaded before opening the picker (avoids the
+    // mount-effect race: selectedScopes is computed from scopeCatalog at click time).
+    await waitFor(() => expect(getScopeCatalog).toHaveBeenCalled());
+
+    fireEvent.click(await screen.findByText('buttons.enable'));
+
+    expect(await screen.findByText('picker.title')).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: /storage/i })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: /read:power/i })).toBeChecked();
+
+    fireEvent.click(screen.getByRole('checkbox', { name: /read:power/i }));
+    fireEvent.click(screen.getByText('picker.grant'));
+
+    await waitFor(() =>
+      expect(togglePlugin).toHaveBeenCalledWith('weather', {
+        enabled: true,
+        grant_api_scopes: ['storage'],
+      }),
+    );
+  });
+
+  it('bundled: shows the permissions modal, not the scope-picker', async () => {
+    mockUsePlugins.mockReturnValue({
+      plugins: [makePlugin({ is_external: false, required_permissions: ['file:read'] })],
+      isLoading: false, error: null, refreshPlugins: vi.fn(),
+    });
+    (getPluginDetails as ReturnType<typeof vi.fn>).mockResolvedValue(
+      makePlugin({ is_external: false, required_permissions: ['file:read'], dangerous_permissions: [], granted_permissions: [] }),
+    );
+
+    render(<PluginsPage />);
+    fireEvent.click(await screen.findByText('buttons.enable'));
+
+    expect(await screen.findByText('modal.enableDesc')).toBeInTheDocument();
+    expect(screen.queryByText('picker.title')).not.toBeInTheDocument();
+  });
 });
 ```
 
-> NOTE: match the existing PluginsPage/Vitest test conventions (provider wrappers, i18n test setup, query helpers). If the repo wraps pages in an i18n provider for tests, reuse that helper so `t()` keys resolve (or assert on stable test-ids instead of translated text).
+> NOTE: confirm the exact import specifiers `PluginsPage.tsx` uses for its children/hooks against the file, and mirror them in the `vi.mock` calls (Vitest matches by resolved path). If a child import path differs, adjust the mock path. `React` is referenced in the `LocalOnlyAction` mock typing — add `import React from 'react';` if the test's TS config needs it.
 
 - [ ] **Step 2: Run it to verify it fails**
 
-Run (from `client/`): `npx vitest run src/pages/__tests__/PluginsPage.scopePicker.test.tsx`
+Run (from `client/`): `npx vitest run src/__tests__/pages/PluginsPage.scopePicker.test.tsx`
 Expected: FAIL — no scope-picker; `togglePlugin` not called with `grant_api_scopes`.
 
 - [ ] **Step 3: Add state, catalog load, and the external enable branch**
@@ -1429,7 +1525,7 @@ In `client/src/pages/PluginsPage.tsx`, immediately before the closing `{dialog}`
 
 - [ ] **Step 5: Run the picker tests to verify they pass**
 
-Run: `npx vitest run src/pages/__tests__/PluginsPage.scopePicker.test.tsx`
+Run: `npx vitest run src/__tests__/pages/PluginsPage.scopePicker.test.tsx`
 Expected: PASS (2 tests).
 
 - [ ] **Step 6: Type-check + lint**
@@ -1440,7 +1536,7 @@ Expected: no new errors. (`ScopeInfo` is imported as a type; `descs` typed inlin
 - [ ] **Step 7: Commit**
 
 ```bash
-git add client/src/pages/PluginsPage.tsx client/src/pages/__tests__/PluginsPage.scopePicker.test.tsx
+git add client/src/pages/PluginsPage.tsx client/src/__tests__/pages/PluginsPage.scopePicker.test.tsx
 git commit -m "feat(plugin-sandbox): external-plugin scope-picker modal in PluginsPage (Phase 5b)"
 ```
 
@@ -1514,10 +1610,10 @@ In `client/src/i18n/locales/de/plugins.json`, add the mirrored blocks:
 Run (from `client/`): `node -e "JSON.parse(require('fs').readFileSync('src/i18n/locales/en/plugins.json','utf8')); JSON.parse(require('fs').readFileSync('src/i18n/locales/de/plugins.json','utf8')); console.log('ok')"`
 Expected: `ok` (no JSON syntax errors — trailing-comma / missing-comma check).
 
-- [ ] **Step 4: Re-run the picker test (now with real i18n keys)**
+- [ ] **Step 4: Re-run the picker test (still green)**
 
-Run: `npx vitest run src/pages/__tests__/PluginsPage.scopePicker.test.tsx`
-Expected: PASS (translated labels resolve if the test renders real i18n; otherwise unchanged).
+Run: `npx vitest run src/__tests__/pages/PluginsPage.scopePicker.test.tsx`
+Expected: PASS, unchanged. (The picker test asserts on i18n KEYS, not translated text — per the repo's `t:(k)=>k` stub — so adding the real locale strings does not affect it. The new keys are exercised at runtime, not in this unit test.)
 
 - [ ] **Step 5: Commit**
 
@@ -1531,19 +1627,19 @@ git commit -m "i18n(plugin-sandbox): scope picker labels/descriptions/tiers (de+
 ## Task 12: Gap-C frontend nav rendering — vitest
 
 **Files:**
-- Test: `client/src/contexts/__tests__/PluginContext.externalNav.test.tsx` (new) — match the repo's context-test layout.
+- Test: `client/src/__tests__/contexts/PluginContext.externalNav.test.tsx` (new — centralized mirror tree)
 
 **Interfaces:**
 - Consumes: `PluginContext` already flattens `enabledPlugins[].nav_items` into `pluginNavItems` (no code change expected). This task verifies Gap C end-to-end on the client and is the place to catch any special-casing the external `bundle_path` needs.
 
 - [ ] **Step 1: Write the test**
 
-Create `client/src/contexts/__tests__/PluginContext.externalNav.test.tsx`. Mock `../../api/plugins`'s `getUIManifest` to return one external plugin with `nav_items`, and `listPlugins` to return it. Render a consumer of `usePlugins()` and assert `pluginNavItems` contains the external nav entry with the plugin-prefixed path:
+Create `client/src/__tests__/contexts/PluginContext.externalNav.test.tsx` (imports reach `src/` via `../../`). Mock `../../api/plugins`'s `getUIManifest` to return one external plugin with `nav_items`, and `listPlugins` to return it. Render a consumer of `usePlugins()` and assert `pluginNavItems` contains the external nav entry with the plugin-prefixed path:
 
 ```tsx
 import { render, screen, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
-import { PluginProvider, usePlugins } from '../PluginContext';
+import { PluginProvider, usePlugins } from '../../contexts/PluginContext';
 
 vi.mock('../../api/plugins', () => ({
   listPlugins: vi.fn().mockResolvedValue({ plugins: [], total: 0 }),
@@ -1562,7 +1658,7 @@ vi.mock('../../api/plugins', () => ({
 }));
 
 // AuthContext provides a token so PluginContext loads (mock per repo convention).
-vi.mock('../AuthContext', () => ({ useAuth: () => ({ token: 't' }) }));
+vi.mock('../../contexts/AuthContext', () => ({ useAuth: () => ({ token: 't' }) }));
 vi.mock('../../lib/features', () => ({ isPi: false }));
 
 function Probe() {
@@ -1586,7 +1682,7 @@ describe('PluginContext external nav (Gap C)', () => {
 
 - [ ] **Step 2: Run it to verify it passes (no source change needed)**
 
-Run (from `client/`): `npx vitest run src/contexts/__tests__/PluginContext.externalNav.test.tsx`
+Run (from `client/`): `npx vitest run src/__tests__/contexts/PluginContext.externalNav.test.tsx`
 Expected: PASS — confirms Gap C surfaces nav with no PluginContext change.
 
 > If it FAILS because the external `bundle_path` / nav needs special handling that the existing context doesn't do, capture the gap and fix it minimally in `PluginContext.tsx` (the spec anticipated "verify; no special-casing expected, but confirm").
@@ -1599,7 +1695,7 @@ Expected: PASS (whole suite green).
 - [ ] **Step 4: Commit**
 
 ```bash
-git add client/src/contexts/__tests__/PluginContext.externalNav.test.tsx
+git add client/src/__tests__/contexts/PluginContext.externalNav.test.tsx
 git commit -m "test(plugin-sandbox): Gap C end-to-end -- external nav renders from /ui/manifest (Phase 5b)"
 ```
 
@@ -1608,7 +1704,7 @@ git commit -m "test(plugin-sandbox): Gap C end-to-end -- external nav renders fr
 ## Final Verification
 
 - [ ] **Backend:** from `backend/`, run the touched modules:
-  `python -m pytest tests/plugins/test_scope_catalog.py tests/plugins/test_manifest_ui.py tests/plugins/test_external_ui_manifest.py tests/plugins/test_external_plugin_routes.py tests/plugins/sandbox/test_spawn_integration_linux.py -v`
+  `python -m pytest tests/plugins/test_scope_catalog.py tests/plugins/test_manifest.py tests/plugins/test_external_ui_manifest.py tests/plugins/test_external_plugin_routes.py tests/plugins/sandbox/test_spawn_integration_linux.py -v`
   Expected: all pass (Linux integration test SKIPPED on Windows). Then a broader `python -m pytest tests/plugins -v` for plugin-suite regressions. (The full backend suite may hang on Windows — defer to CI per project convention.)
 - [ ] **Frontend:** from `client/`, `npx vitest run` then `npx tsc --noEmit` and `npm run build`.
 - [ ] Then invoke **superpowers:finishing-a-development-branch** to open the cohesive 5b PR (stacked on 5a until #286 merges).
