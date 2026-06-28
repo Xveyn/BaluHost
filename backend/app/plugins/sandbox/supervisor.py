@@ -112,17 +112,17 @@ class SandboxSupervisor:
         if self._inflight_sem.locked():
             raise SupervisorError(f"plugin {self.plugin_name}: too many in-flight requests")
         request_id = secrets.token_hex(16)
-        self._inflight[request_id] = CapabilityContext(
-            user_id=context["user_id"],
-            username=context["username"],
-            role=context["role"],
-        )
         worker_context = {
             "user_id": context["user_id"],
             "username": context["username"],
             "role": context["role"],
         }
         async with self._inflight_sem:
+            self._inflight[request_id] = CapabilityContext(
+                user_id=context["user_id"],
+                username=context["username"],
+                role=context["role"],
+            )
             try:
                 resp = await channel.call(
                     MsgType.HTTP_REQUEST,

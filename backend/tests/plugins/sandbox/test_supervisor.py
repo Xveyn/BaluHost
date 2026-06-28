@@ -402,3 +402,48 @@ def test_dispatch_timeout_raises_supervisor_timeout():
     sup = _supervisor_with_channel(_SlowChannel())
     with pytest.raises(SupervisorTimeout):
         asyncio.run(sup.dispatch("GET", "x", b"", {"user_id": 1, "username": "u", "role": "user"}, timeout=0.01))
+
+
+async def test_dispatch_cap_exceeded_raises_supervisor_error():
+    """When max_inflight capacity is reached, a new dispatch raises SupervisorError."""
+    # Create supervisor with max_inflight=1
+    sup = SandboxSupervisor("weather", ".", max_inflight=1)
+
+    # Block the channel indefinitely
+    blocking_event = asyncio.Event()
+
+    class _BlockingChannel:
+        async def call(self, msg_type, body, timeout=None):
+            await blocking_event.wait()
+            return Message(id="x", type=MsgType.HTTP_RESPONSE, body={"status": 200, "headers": {}, "body": {"ok": True}})
+
+    sup._channel = _BlockingChannel()
+    ctx = {"user_id": 1, "username": "u", "role": "user"}
+
+    # Start the first dispatch in a task (blocks on channel.call inside the async with)
+    blocking_task = asyncio.create_task(sup.dispatch("GET", "x", b"", ctx))
+
+    # Yield control so the first dispatch acquires the semaphore
+    await asyncio.sleep(0)
+
+    # Now the second dispatch should fail because the semaphore is locked
+    with pytest.raises(SupervisorError, match="too many in-flight"):
+        await sup.dispatch("GET", "y", b"", ctx)
+
+    # Clean up the blocking task
+    blocking_task.cancel()
+    try:
+        await blocking_task
+    except asyncio.CancelledError:
+        pass
+
+
+def test_dispatch_with_headers_none_forwards_empty_headers():
+    """When dispatch(..., headers=None) is called, the forwarded headers is {} with no auth/cookie."""
+    channel = _FakeChannel()
+    sup = _supervisor_with_channel(channel)
+    ctx = {"user_id": 1, "username": "u", "role": "user"}
+    asyncio.run(sup.dispatch("GET", "status", b"", ctx, headers=None))
+    assert channel.last_body["headers"] == {}
+    assert "authorization" not in channel.last_body["headers"]
+    assert "cookie" not in channel.last_body["headers"]
