@@ -248,6 +248,13 @@ class Settings(BaseSettings):
     # Cache TTL for the fetched marketplace index (seconds).
     plugins_marketplace_cache_ttl: int = 300
 
+    # Plugin sandbox (Track B, Phase 5a) — hardened worker spawn.
+    # The unprivileged OS user the external-plugin worker runs as, and the
+    # root-owned wrapper that drops to it. Only consulted on prod Linux; dev
+    # and Windows ignore them and use the plain subprocess spawn.
+    plugin_sandbox_user: str = "baluhost-plugin"
+    plugin_sandbox_wrapper_path: str = "/opt/baluhost/deploy/bin/spawn-plugin-worker.sh"
+
     model_config = SettingsConfigDict(
         env_file=(".env", "../.env", "../../.env"),
         env_file_encoding="utf-8",
