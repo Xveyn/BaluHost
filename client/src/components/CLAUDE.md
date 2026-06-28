@@ -13,6 +13,8 @@ Reusable, generic building blocks. No business logic, no API calls.
 - `Tabs.tsx`, `SortableHeader.tsx` — Navigation/tables
 - `ByteSizeInput.tsx` — Byte-aware number input
 - `AdminBadge.tsx`, `PluginBadge.tsx`, `DeveloperBadge.tsx` — Role indicators
+- `Pill.tsx` — Inline status/tag pill chip
+- `index.ts` — Barrel re-export for all ui/ primitives
 
 ### Top-level Components (shared across pages)
 - `Layout.tsx` — Main layout with sidebar navigation, header, power menu, notification center
@@ -25,6 +27,13 @@ Reusable, generic building blocks. No business logic, no API calls.
 - `VpnManagement.tsx` — VPN client management
 - `ShareFileModal.tsx`, `CreateFileShareModal.tsx`, `EditFileShareModal.tsx` — File sharing modals
 - Settings: `AppearanceSettings.tsx`, `LanguageSettings.tsx`, `ByteUnitSettings.tsx`, `BackupSettings.tsx`
+- `AdminDataTable.tsx` — Generic sortable/filterable table for admin views
+- `DesktopPairingDialog.tsx` — Desktop client pairing QR/PIN dialog
+- `EnergyMonitor.tsx` — Energy consumption monitoring widget
+- `ImpersonationBanner.tsx` — Banner shown when admin is impersonating a user
+- `LocalOnlyAction.tsx` — Wrapper that gates actions to local-network-only access
+- `UserMenu.tsx` — User dropdown menu (avatar, logout, settings link)
+- `UserMenuQuickSettings.tsx` — Quick-settings panel within the user menu
 
 ### Feature Subdirectories
 | Directory | Feature |
@@ -58,6 +67,11 @@ Reusable, generic building blocks. No business logic, no API calls.
 | `setup/` | Setup wizard step components |
 | `vcl/` | File versioning UI |
 | `webdav/` | WebDAV server control |
+| `balupi/` | BaluPi-specific compact UI components |
+| `nfs/` | NFS share management components |
+| `quickSettings/` | Quick-settings panel components (user menu) |
+| `status-bar-config/` | Status bar strip configuration editor |
+| `topbar/` | Topbar/header components including status strip |
 
 ## Conventions
 

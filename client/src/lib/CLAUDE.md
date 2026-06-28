@@ -23,6 +23,10 @@ Shared utility functions and core infrastructure. No React components — pure T
 | `openapi-transform.ts` | OpenAPI schema transformation for API docs page |
 | `pluginI18n.ts` | Plugin translation resolution helper |
 | `mockSyncApi.ts` | Mock sync API for development |
+| `safeUrl.ts` | Safe URL construction/validation helpers |
+| `sleep-utils.ts` | Sleep mode utilities (idle detection helpers) |
+| `twoFactorCode.ts` | TOTP two-factor code formatting and validation |
+| `plugin-sandbox/` | Host side of the sandboxed-plugin iframe bridge: `hostBridge.ts` (message bus), `protocol.ts` (message types/protocol), `scopeCatalog.ts` (capability scope definitions) |
 
 ## Key Patterns
 

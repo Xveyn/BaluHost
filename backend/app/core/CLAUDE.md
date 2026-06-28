@@ -15,6 +15,8 @@ Application foundation: configuration, database, security, and cross-cutting inf
 | `logging_config.py` | Structured logging setup. JSON format for production (pythonjsonlogger), text for dev. In-memory ring buffer for SSE log streaming |
 | `network_utils.py` | IP address classification: `is_private_or_local_ip()`, `is_localhost()`. Handles IPv4, IPv6, IPv6-mapped-IPv4 |
 | `power_rating.py` | `@requires_power(ServicePowerProperty)` decorator and `PowerPropertyContext` async context manager. Registers/unregisters power demands with PowerManager for CPU frequency scaling |
+| `exceptions.py` | `ServiceError` base + subclasses (`NotFoundError` 404, `ForbiddenError` 403, `BadRequestError` 400, `ConflictError` 409, `UnprocessableError` 422, `BadGatewayError` 502, `ServiceUnavailableError` 503). Each carries a client-safe `public_message`; raise instead of `HTTPException(500, str(e))` so internals never leak |
+| `exception_handlers.py` | `register_exception_handlers(app)`: ServiceError → mapped status + `public_message`; global 5xx scrubber rewrites any `HTTPException(>=500)` detail to "Internal server error"; bare `Exception` → generic 500. To surface a curated message on a 5xx, raise a `ServiceError` subclass — NOT `HTTPException(>=500)` |
 
 ## Key Patterns
 

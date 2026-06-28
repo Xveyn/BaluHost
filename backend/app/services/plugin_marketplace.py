@@ -29,6 +29,7 @@ from app.plugins.installer import (
     InstalledArtifact,
     PluginInstaller,
 )
+from app.plugins.signing import SignatureError, verify_detached_ed25519
 from app.plugins.marketplace import (
     SUPPORTED_INDEX_VERSIONS,
     MarketplaceEntry,
@@ -52,6 +53,11 @@ class IndexFetchError(MarketplaceError):
 
 class IndexParseError(MarketplaceError):
     """``index.json`` was not valid JSON or did not match the schema."""
+
+
+class IndexSignatureError(MarketplaceError):
+    """``index.json`` failed detached-signature verification (or the .sig
+    could not be fetched). Fail-closed: the index is never trusted."""
 
 
 class PluginNotFoundError(MarketplaceError):
@@ -96,10 +102,14 @@ class MarketplaceService:
         *,
         index_url: str,
         installer: PluginInstaller,
+        public_keys: Sequence[str],
+        signature_url: Optional[str] = None,
         index_fetcher: Optional[IndexFetcher] = None,
         cache_ttl: int = 300,
     ) -> None:
         self._index_url = index_url
+        self._signature_url = signature_url or (index_url + ".sig")
+        self._public_keys = list(public_keys)
         self._installer = installer
         self._fetch = index_fetcher or _default_index_fetcher
         self._cache_ttl = cache_ttl
@@ -133,6 +143,18 @@ class MarketplaceService:
             raise IndexFetchError(
                 f"failed to fetch marketplace index from {self._index_url}: {exc}"
             ) from exc
+
+        try:
+            sig = self._fetch(self._signature_url)
+        except Exception as exc:
+            raise IndexSignatureError(
+                f"failed to fetch index signature from {self._signature_url}: {exc}"
+            ) from exc
+
+        try:
+            verify_detached_ed25519(raw, sig.decode("ascii").strip(), self._public_keys)
+        except (SignatureError, UnicodeDecodeError) as exc:
+            raise IndexSignatureError(f"index signature verification failed: {exc}") from exc
 
         try:
             payload = json.loads(raw)
@@ -259,6 +281,8 @@ def get_marketplace_service() -> MarketplaceService:
     _instance = MarketplaceService(
         index_url=settings.plugins_marketplace_index_url,
         installer=installer,
+        public_keys=settings.plugins_marketplace_public_keys,
+        signature_url=settings.plugins_marketplace_signature_url,
         cache_ttl=settings.plugins_marketplace_cache_ttl,
     )
     return _instance

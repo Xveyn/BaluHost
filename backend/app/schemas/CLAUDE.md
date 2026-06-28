@@ -26,6 +26,20 @@ Pydantic v2 models for API request/response validation. One file per feature dom
 
 **Power Permissions** (`power_permissions.py`): `UserPowerPermissionsResponse`, `UserPowerPermissionsUpdate`, `MyPowerPermissionsResponse` — per-user power action delegation (incl. `can_toggle_desktop`). UI name: "System Permissions / Systemberechtigungen"; backend stays `power_permissions`.
 
+**Fans** (`fans.py`): Fan config, curve profiles, sample, schedule schemas
+
+**VPN** (`vpn.py`): WireGuard client/config create/response schemas
+
+**Backup** (`backup.py`): Backup create, status, restore request schemas
+
+**Scheduler** (`scheduler.py`): Scheduler config, execution history, run-now schemas
+
+**Plugin** (`plugin.py`): Plugin metadata, enable/disable, permission grant schemas
+
+**Plugin Marketplace** (`plugin_marketplace.py`): Track C — marketplace index, version entry, and install-request schemas
+
+**Shares** (`shares.py`): Public share link and user-share create/response schemas
+
 ## Adding a Schema
 
 1. Create `schemas/my_feature.py`

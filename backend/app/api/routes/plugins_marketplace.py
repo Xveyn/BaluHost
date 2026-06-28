@@ -4,13 +4,16 @@ Mounted at ``/api/plugins/marketplace`` alongside the regular
 ``/api/plugins`` routes. Admin-only; every route is rate-limited with the
 ``admin_operations`` bucket.
 """
-from __future__ import annotations
-
+# NOTE: deliberately NO ``from __future__ import annotations`` here. Under it,
+# FastAPI (0.115.x) on Python 3.14 fails to resolve the imported ``InstallRequest``
+# forward-ref and demotes the request body to a query param (install → 422).
+# Eager annotations keep the body binding correct on 3.14; harmless on 3.11.
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 
 from app.api.deps import get_current_admin, require_local_admin
+from app.core.exceptions import BadGatewayError
 from app.core.rate_limiter import get_limit, user_limiter
 from app.models.user import User
 from app.plugins.installer import (
@@ -33,6 +36,7 @@ from app.schemas.plugin_marketplace import (
 from app.services.plugin_marketplace import (
     IndexFetchError,
     IndexParseError,
+    IndexSignatureError,
     MarketplaceService,
     PluginNotFoundError,
     get_marketplace_service,
@@ -113,6 +117,9 @@ async def list_marketplace(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="malformed marketplace index",
         ) from exc
+    except IndexSignatureError as exc:
+        logger.warning("marketplace index signature verification failed: %s", exc)
+        raise BadGatewayError("marketplace index signature verification failed") from exc
 
 
 @router.post(
@@ -156,6 +163,9 @@ async def install_plugin(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="checksum mismatch",
         ) from exc
+    except IndexSignatureError as exc:
+        logger.warning("marketplace index signature verification failed for %r: %s", plugin_name, exc)
+        raise BadGatewayError("marketplace index signature verification failed") from exc
     except (DownloadError, IndexFetchError) as exc:
         logger.warning("marketplace download failed for %r: %s", plugin_name, exc)
         raise HTTPException(

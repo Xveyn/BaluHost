@@ -12,21 +12,21 @@ SQLAlchemy 2.0 ORM models. All models inherit from `Base` (declarative base in `
 
 ## Model Groups
 
-**Auth & Users**: `user.py`, `refresh_token.py`, `api_key.py`, `desktop_pairing.py`
+**Auth & Users**: `user.py`, `refresh_token.py`, `api_key.py`, `desktop_pairing.py`, `auth_policy.py`
 
 **Files & Storage**: `file_metadata.py`, `file_share.py`, `file_activity.py`, `ssd_file_cache.py`, `migration_job.py`
 
 **Monitoring & Metrics**: `monitoring.py` (CpuSample, MemorySample, NetworkSample, DiskIoSample, ProcessSample, MonitoringConfig), `service_heartbeat.py`
 
-**Power & Hardware**: `power.py` (profiles, demands, auto-scaling), `power_preset.py`, `fans.py` (config, samples, schedules, curve profiles), `sleep.py`, `smart_device.py`, `power_permissions.py` (UI name: "System Permissions / Systemberechtigungen"; table/columns keep the `power_permissions` name)
+**Power & Hardware**: `power.py` (profiles, demands, auto-scaling), `power_preset.py`, `fans.py` (config, samples, schedules, curve profiles), `sleep.py`, `smart_device.py`, `power_permissions.py` (UI name: "System Permissions / Systemberechtigungen"; table/columns keep the `power_permissions` name), `gpu_power.py`, `power_boost_rule.py`
 
-**Networking**: `vpn.py` (VPNConfig, VPNClient), `vpn_profile.py`, `mobile.py`, `server_profile.py`, `fritzbox.py`, `webdav_state.py`
+**Networking**: `vpn.py` (VPNConfig, VPNClient), `vpn_profile.py`, `mobile.py`, `server_profile.py`, `fritzbox.py`, `webdav_state.py`, `device.py`, `nfs_export.py`
 
-**System Services**: `scheduler_history.py` (SchedulerExecution, SchedulerConfig), `scheduler_state.py`, `backup.py`, `audit_log.py`, `notification.py`, `update_history.py`, `version_history.py`
+**System Services**: `scheduler_history.py` (SchedulerExecution, SchedulerConfig), `scheduler_state.py`, `backup.py`, `audit_log.py`, `notification.py`, `update_history.py`, `version_history.py`, `status_bar.py`, `notification_routing.py`, `rate_limit_config.py`, `system_lifecycle.py`
 
 **Versioning**: `vcl.py` (FileVersion, VersionBlob, VCLSettings, VCLStats)
 
-**Plugins & Integrations**: `plugin.py`, `pihole.py`, `dns_queries.py`, `ad_discovery.py`, `cloud.py`, `cloud_export.py`, `benchmark.py`, `energy_price_config.py`
+**Plugins & Integrations**: `plugin.py`, `plugin_storage.py`, `pihole.py`, `dns_queries.py`, `ad_discovery.py`, `cloud.py`, `cloud_export.py`, `benchmark.py`, `energy_price_config.py`
 
 **Desktop Sync**: `desktop_sync_folder.py`, `sync_progress.py`, `sync_state.py`
 

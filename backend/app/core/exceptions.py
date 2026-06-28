@@ -45,6 +45,11 @@ class UnprocessableError(ServiceError):
     public_message = "Invalid request"
 
 
+class BadGatewayError(ServiceError):
+    http_status = 502
+    public_message = "Bad gateway"
+
+
 class ServiceUnavailableError(ServiceError):
     http_status = 503
     public_message = "Service temporarily unavailable"

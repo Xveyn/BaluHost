@@ -45,7 +45,7 @@ FastAPI-basierter Backend für NAS-Management mit vollständiger Database-Integr
 
 ### Automation & Plugins
 - **Scheduler System** - Geplante Tasks (Backups, Cleanup, etc.)
-- **Plugin System** - Erweiterbare Architektur mit Pluggy-Hooks, async Events, Permissions, Background-Tasks und Dashboard-Panels. Mitgelieferte Plugins: Optical Drive, Storage Analytics, Tapo Smart Plug
+- **Plugin System** - Erweiterbare Architektur mit zwei Vertrauensstufen: **Bundled Plugins** (In-Process, voll vertrauenswürdig; Pluggy-Hooks, async Events, Permissions, Background-Tasks, Dashboard-Panels) und **External/Marketplace Plugins** (sandboxed Subprocess, default-deny Capability-Scopes, ed25519-signierter Index, fail-closed). Bundled Plugins: Optical Drive, Storage Analytics, Tapo Smart Plug. Details: `app/plugins/README.md`
 - **Smart Device Framework** - Unified API für IoT-Geräte mit Capability-Protocols (Switch, Dimmer, Power Monitor, etc.), SHM-basiertem Polling und verschlüsselter Konfiguration
 - **Update Service** - System-Update-Verwaltung
 
@@ -60,7 +60,7 @@ FastAPI-basierter Backend für NAS-Management mit vollständiger Database-Integr
 - **Rate Limiting** - Konfigurierbare API-Rate-Limits
 - **Service Status Management** - Überwachung aller Hintergrunddienste
 - **Custom API Docs** - Styled Swagger UI matching frontend design
-- **VCL (Virtual Command Line)** - Web-basierte Terminal-Emulation
+- **VCL (Version Control Light)** - File-Versionierung (leichtgewichtiges Versionskontrollsystem)
 - **Benchmark Tools** - Storage-Performance-Tests
 - **Dev Mode** - Windows-kompatible Sandbox (2x5GB RAID1 = 5 GB effective)
 
@@ -97,10 +97,10 @@ python scripts/seed.py
 alembic upgrade head
 ```
 
-#### Production (PostgreSQL Migration)
-Phase 1 PostgreSQL Migration ist implementiert. Schritte zur Migration:
+#### Production (PostgreSQL)
+**PostgreSQL 17.7 ist seit Januar 2026 die produktive Datenbank** (deployed, Migration abgeschlossen). Die folgenden Schritte sind ausschließlich bei der Erstinstallation einer neuen Instanz notwendig — in der laufenden Produktion bereits erledigt.
 
-**1. PostgreSQL Setup**
+**1. PostgreSQL Setup (Erstinstallation)**
 ```bash
 # Option A: Docker Compose (empfohlen)
 python scripts/setup_postgresql.py --docker
@@ -121,7 +121,7 @@ DATABASE_URL=postgresql://baluhost_user:baluhost_password@localhost:5432/baluhos
 DATABASE_URL=postgresql+asyncpg://baluhost_user:baluhost_password@localhost:5432/baluhost
 ```
 
-**3. SQLite → PostgreSQL Migration**
+**3. SQLite → PostgreSQL Migration (einmalig, bereits durchgeführt)**
 ```bash
 # Dry-run (preview ohne Änderungen)
 python scripts/migrate_sqlite_to_postgresql.py --dry-run
@@ -149,7 +149,7 @@ python scripts/migrate_sqlite_to_postgresql.py --verbose
 alembic upgrade head
 ```
 
-**Nach erfolgreichem Migration:**
+**Verify nach Erstinstallation:**
 ```bash
 # Verify PostgreSQL connection
 python -c "from app.core.database import engine; print(engine)"
@@ -220,7 +220,7 @@ app/
       health.py          # Health Check Endpoints
       admin_db.py        # Admin Database Tools
       rate_limit_config.py # Rate Limiting Config
-      vcl.py             # Virtual Command Line
+      vcl.py             # Version Control Light (File Versioning)
       server_profiles.py # Remote Server Profiles
       metrics.py         # Prometheus Metrics
       smart_devices.py   # Unified Smart Device API
@@ -329,6 +329,15 @@ app/
     emit.py              # Helper: emit_hook() / emit_event()
     permissions.py       # Granulares Permission-System
     dashboard_panel.py   # Dashboard-Panel-Schemas (Gauge, Stat, Status, Chart)
+    signing.py           # ed25519-Signaturprüfung für Marketplace-Index
+    scope_catalog.py     # Capability-Scope-Definitionen (default-deny)
+    installer.py         # Plugin-Installer (Download, Verify, Install)
+    manifest.py          # Plugin-Manifest-Parser und Validator
+    marketplace.py       # Marketplace-Client (Index-Fetch, Suche, Updates)
+    resolver.py          # Dependency-Resolver für Plugin-Abhängigkeiten
+    core_versions.py     # Core-API-Versionen für Kompatibilitätsprüfung
+    sandbox/             # Subprocess-Sandbox für externe Plugins (Track B)
+    sdk/                 # Plugin-SDK für externe Plugin-Autoren
     smart_device/        # Smart-Device-Subsystem
       base.py            # SmartDevicePlugin ABC
       capabilities.py    # Capability-Protocols (Switch, Dimmer, Color, etc.)
@@ -611,7 +620,7 @@ pytest tests/test_files_api_integration.py::test_create_folder_creates_metadata 
 ```
 
 ### Test Coverage
-- 82 test files, 1465 test functions
+- ~290 test files, 3000+ test functions
 - Unit, integration, and security tests
 - Database-backed Fixtures
 - Automatic Rollback für Test Isolation
@@ -631,8 +640,10 @@ alembic upgrade head
 # Create Admin User
 python scripts/seed.py
 
-# Start with Gunicorn
-gunicorn app.main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000
+# Start via systemd (Produktion — 4 Uvicorn-Worker unter baluhost-backend.service)
+sudo systemctl start baluhost-backend
+# oder direkt mit Uvicorn (4 Worker)
+uvicorn app.main:app --workers 4 --host 0.0.0.0 --port 8000
 ```
 
 ### Docker (Optional)
@@ -651,7 +662,8 @@ CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 - **Deployment**: `docs/DEPLOYMENT.md`
 
 ## Nächste Schritte
-- Weitere Plugin-Integrationen entwickeln
+- ~~Plugin-Sandboxing (Backend-Isolation)~~ — **implementiert und gemergt** (Track B, Phase 1–5b; PRs #282–#287)
+- Externe Plugin-Dokumentation (PluginDocumentation.tsx) und Prod-Provisioning (Module 03+10 auf BaluNode) vor erstem externem Plugin
 - Cluster-Support für Multi-Node-Setups
 - LDAP/Active Directory Integration
 - S3-kompatible API für externe Tools
