@@ -90,3 +90,21 @@ def test_proxy_crash_scrubbed_502():
         asyncio.run(proxy.proxy_request("weather", "x", req, _USER, _Mgr(_Sup(raise_exc=SupervisorError("boom")))))
     assert ei.value.status_code == 502
     assert "boom" not in str(ei.value.detail)
+
+
+def test_proxy_content_length_precheck_413():
+    """Verify Content-Length precheck rejects before buffering."""
+    headers = {"content-length": str(proxy.REQUEST_BODY_MAX + 1)}
+    req = _make_request(method="POST", headers=headers, body=b"")
+    with pytest.raises(HTTPException) as ei:
+        asyncio.run(proxy.proxy_request("weather", "x", req, _USER, _Mgr(_Sup())))
+    assert ei.value.status_code == 413
+
+
+def test_proxy_bare_exception_scrubbed_502():
+    """Verify bare Exception (not SupervisorError) is scrubbed without leaking details."""
+    req = _make_request()
+    with pytest.raises(HTTPException) as ei:
+        asyncio.run(proxy.proxy_request("weather", "x", req, _USER, _Mgr(_Sup(raise_exc=RuntimeError("internal secret detail")))))
+    assert ei.value.status_code == 502
+    assert "secret" not in str(ei.value.detail).lower()

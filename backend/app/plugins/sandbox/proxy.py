@@ -2,7 +2,7 @@
 
 Forwards a token-free, header-allowlisted request to the plugin's worker over
 RPC and turns the worker's response back into a FastAPI Response. Every plugin
-failure is scrubbed: crash -> 502, timeout -> 504, unreachable/disabled -> 503.
+failure is scrubbed: crash -> 502, timeout -> 504, unreachable/disabled -> 502.
 The Authorization and Cookie headers are never forwarded.
 """
 from __future__ import annotations
