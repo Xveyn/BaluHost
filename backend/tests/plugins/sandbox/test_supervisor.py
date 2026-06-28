@@ -104,6 +104,9 @@ async def test_handshake_timeout_raises_and_kills(tmp_path):
         await sup.start()
     # No lingering process / clean state:
     assert await sup.health() is False
+    # _hard_kill() nulls self._process — prove it actually ran, not just that the
+    # supervisor self-reports unhealthy.
+    assert sup._process is None
 
 
 async def test_spawn_hook_failure_propagates_cleanly(tmp_path):

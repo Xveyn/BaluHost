@@ -114,6 +114,46 @@ else
     log_warn "Hardware sudoers template not found: $HARDWARE_SUDOERS_TEMPLATE (skipping)"
 fi
 
+# --- Install plugin-sandbox wrapper + sudoers rule (Track B Phase 5a) ---
+log_step "Plugin Sandbox Spawn Wrapper"
+
+WRAPPER_SRC="$SCRIPT_DIR/bin/spawn-plugin-worker.sh"
+WRAPPER_DST="/usr/local/sbin/baluhost-spawn-plugin-worker.sh"
+
+if [[ -f "$WRAPPER_SRC" ]]; then
+    if ! bash -n "$WRAPPER_SRC"; then
+        log_error "Spawn wrapper source failed syntax check: $WRAPPER_SRC — aborting (live binary untouched)"
+        exit 1
+    fi
+    install -o root -g root -m 0755 "$WRAPPER_SRC" "$WRAPPER_DST"
+    if bash -n "$WRAPPER_DST"; then
+        log_info "Installed plugin spawn wrapper: $WRAPPER_DST (root:root 0755)"
+    else
+        log_error "Spawn wrapper failed post-install syntax check! Removing $WRAPPER_DST"
+        rm -f "$WRAPPER_DST"
+        exit 1
+    fi
+
+    PLUGIN_SUDOERS_TEMPLATE="$TEMPLATE_DIR/baluhost-plugin-sudoers"
+    PLUGIN_SUDOERS_OUTPUT="/etc/sudoers.d/baluhost-plugin"
+    if [[ -f "$PLUGIN_SUDOERS_TEMPLATE" ]]; then
+        process_template "$PLUGIN_SUDOERS_TEMPLATE" "$PLUGIN_SUDOERS_OUTPUT" \
+            "BALUHOST_USER=$BALUHOST_USER"
+        chmod 440 "$PLUGIN_SUDOERS_OUTPUT"
+        if visudo -cf "$PLUGIN_SUDOERS_OUTPUT" &>/dev/null; then
+            log_info "Installed plugin sudoers rule: $PLUGIN_SUDOERS_OUTPUT"
+        else
+            log_error "Plugin sudoers syntax check failed! Removing $PLUGIN_SUDOERS_OUTPUT"
+            rm -f "$PLUGIN_SUDOERS_OUTPUT"
+            exit 1
+        fi
+    else
+        log_warn "Plugin sudoers template not found: $PLUGIN_SUDOERS_TEMPLATE (skipping)"
+    fi
+else
+    log_warn "Spawn wrapper source not found: $WRAPPER_SRC (skipping; external plugins fail closed)"
+fi
+
 # --- Install polkit rule for core-uptime sleep inhibitor ---
 log_step "Polkit Rule (Core Uptime Inhibitor)"
 
