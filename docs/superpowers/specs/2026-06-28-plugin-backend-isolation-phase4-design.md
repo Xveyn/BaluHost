@@ -25,19 +25,26 @@ Plugins `spec.loader.exec_module(module)` — also auch für `source == "externa
 In-Process-RCE. Phase 4 schneidet das ab und verdrahtet die Sandbox in den echten
 Request-Pfad.
 
-### Korrektur einer Spec-Annahme
+### Scope-Storage existiert bereits (Track A)
 
-Die übergeordnete Spec (Zeile ~168) behauptet, `granted_api_scopes` sei als
-DB-Spalte „bereits vorhanden" (aus Track A). **Das stimmt nicht.** Tatsächlich:
+Anders als zunächst angenommen ist die Scope-Storage-Schicht **schon vorhanden**
+— Track A hat sie gebaut:
 
-- DB `InstalledPlugin` hat nur **`granted_permissions`** (JSON) — die alte
-  `PluginPermission`-Enum (`file:write`, `system:execute`, …), gegated durch
-  `PluginGateMiddleware`.
-- Das Manifest (`plugin.json`) hat ein deklaratives Feld **`api_scopes`**
-  (`manifest.py:57`), das aktuell **nirgends gespeichert oder durchgesetzt** wird —
-  es wartet auf genau diese Phase.
+- DB-Spalte `InstalledPlugin.granted_api_scopes` (JSON, `models/plugin.py:29-31`),
+  Migration `alembic/versions/1ab0b6db5b1c_installed_plugins_granted_api_scopes.py`.
+- `plugin_service.enable_plugin(..., api_scopes=...)` persistiert sie
+  (`plugin_service.py:42,62,71`).
+- Die Toggle-Route liest die deklarierten `manifest.api_scopes` und reicht sie als
+  granted weiter (`routes/plugins.py:247-261`) — **declared == granted**.
+- `get_ui_manifest` exponiert `record.granted_api_scopes` ans Frontend, wo die
+  Track-A-iframe-Bridge schon darauf gated (`routes/plugins.py:121-123`).
 
-Phase 4 führt deshalb die fehlende `granted_api_scopes`-DB-Spalte ein.
+**Konsequenz für Phase 4:** Keine Migration, keine Spalten- oder API-Änderung am
+Enable-Pfad nötig. Die im Brainstorm gewählte „dedizierte `granted_api_scopes`-Spalte"
+ist damit bereits erfüllt. Phase 4 muss die Scopes nur noch vom DB-Record **bis in den
+`CapabilityRouter` durchreichen** — heute endet der Wert bei der Frontend-Exposition;
+der Backend-Sandbox-Pfad liest ihn noch nicht. Die granulare Subset-Auswahl beim
+Install bleibt eine reine Phase-5-UI-Frage (schreibt eine Teilmenge in dieselbe Spalte).
 
 ---
 
@@ -45,7 +52,7 @@ Phase 4 führt deshalb die fehlende `granted_api_scopes`-DB-Spalte ein.
 
 | Frage | Entscheidung |
 |---|---|
-| Scope-Storage | **Dedizierte `granted_api_scopes`-JSON-Spalte** (Alembic-Migration), getrennt von `granted_permissions`. |
+| Scope-Storage | **Dedizierte `granted_api_scopes`-JSON-Spalte** — **bereits von Track A gebaut** (Spalte + Migration + Enable-Persistenz). Phase 4 reicht sie nur in den `CapabilityRouter` durch, keine Migration. |
 | Scope-Vergabe-Tiefe in Phase 4 | **Backend-only** (Spalte + API + Durchsetzung). Install-Scope-Picker-UI → Phase 5. |
 | `core.*`-Katalog v1 | **`core.system_metrics` + `core.notify`** ausliefern (beide Stubs sind fertig + getestet, beide harmlos). Plus `storage.*` und eigene Routen. |
 | Multi-Worker-Topologie | **Ein Subprozess pro uvicorn-Worker.** Aktueller 1:1-Transport bleibt unverändert; kein Cross-Worker-IPC. |
@@ -54,17 +61,18 @@ Phase 4 führt deshalb die fehlende `granted_api_scopes`-DB-Spalte ein.
 
 ## Architektur
 
-### 1. Scope-Storage & -Vergabe
+### 1. Scope-Storage & -Durchreichung
 
-- **Neue Spalte** `granted_api_scopes: JSON` (nullable, default `list`) auf
-  `installed_plugins`. Migration **muss an die echten `alembic heads` ketten**, nicht
-  an den stale dev-DB-Head (siehe `project_alembic_migration_head_pitfall`).
-- `enable`-Pfad eines externen Plugins akzeptiert + persistiert `granted_api_scopes`.
-  **v1: Backend-only** — kein UI-Picker (Phase 5).
-- Gewährbare Menge = die im Manifest deklarierten `api_scopes` ∩ bekannter Host-Katalog
-  (`storage`, `core.system_metrics`, `core.notify`). Unbekannte/nicht-deklarierte Scopes
-  werden beim Grant abgelehnt.
-- `CapabilityRouter.granted_scopes` wird aus dieser Spalte gespeist.
+- **Keine Migration / keine Spalte** — `granted_api_scopes` existiert bereits
+  (Track A, s.o.). Phase 4 **konsumiert** sie nur.
+- Phase 4 liest `record.granted_api_scopes` (DB) und speist daraus
+  `CapabilityRouter.granted_scopes` (als `frozenset`). Heute landet der Wert nur im
+  Frontend; der Sandbox-Pfad liest ihn noch nicht.
+- Beim Bau des `CapabilityRouter` werden die granted Scopes gegen den bekannten
+  Host-Katalog gefiltert (`storage`, `core.system_metrics`, `core.notify`); unbekannte
+  Strings werden ignoriert (kein Crash, defensiv).
+- **v1: Backend-only** — granulare Subset-Auswahl-UI beim Install → Phase 5
+  (schreibt eine Teilmenge in dieselbe, bereits existierende Spalte).
 - Die alten `PluginPermission`-Enum-Strings (`granted_permissions`) bleiben
   **unangetastet** — informativ nur für bundled.
 
@@ -73,12 +81,18 @@ Phase 4 führt deshalb die fehlende `granted_api_scopes`-DB-Spalte ein.
 - `enable_plugin` / `load_plugin` verzweigen auf `discovered.source`:
   - `bundled` → **unveränderter** `exec_module`-Pfad (trusted, in-process).
   - `external` → **nie** `exec_module`. Stattdessen:
-    1. Manifest lesen (ohne Code-Ausführung),
+    1. Manifest aus `DiscoveredPlugin.manifest` (bei Discovery geparst, ohne exec),
     2. `CapabilityRouter` mit `granted_api_scopes` + injizierten Host-Deps bauen,
     3. `SandboxSupervisor` starten (`.start()` → spawn + Health-Handshake),
     4. in neuem `self._sandboxes[name]` registrieren (getrennt von `self._plugins`).
+- `load_plugin(external)` **raised** (`PluginLoadError`) statt zu exec-en — die
+  bestehenden Route-Handler (`get_plugin_details`, `toggle`, `get_all_plugins`) müssen
+  für external auf den Manifest-Metadaten-Pfad branchen (kein PluginBase-Instanz).
 - `disable_plugin` (external) → `supervisor.stop()` (graceful `shutdown`-RPC →
   SIGTERM → SIGKILL mit Timeout). `shutdown_all` nimmt Sandboxes mit.
+- **Toggle-Route** (`routes/plugins.py`) bekommt einen external-Branch: kein
+  `load_plugin`, Version/Display-Name aus dem Manifest, dann `plugin_service.enable_plugin`
+  + `manager.enable_plugin` (external). Lifecycle pro uvicorn-Worker.
 - **Multi-Worker:** Jeder uvicorn-Worker spawnt + besitzt seinen **eigenen**
   Subprozess. Der aktuelle 1:1-Transport (`WorkerListener` lauscht, Worker connectet
   einmal zurück) bleibt unverändert. `start_background_tasks`-Gating ist fürs Spawnen
@@ -145,9 +159,10 @@ Phase 4 führt deshalb die fehlende `granted_api_scopes`-DB-Spalte ein.
 
 ## Testing (TDD, subagent-driven wie Vorphasen)
 
-- **Migration:** round-trip up/down; bestehende Records unverändert; default `[]`.
 - **Dual-Path:** external → kein `exec_module`, Supervisor gestartet, in `_sandboxes`;
   bundled → unveränderter Pfad, in `_plugins`. disable → Supervisor gestoppt.
+- **Kein-exec-Garantie:** `load_plugin(external)` führt `exec_module` **nie** aus
+  (raised stattdessen); Metadaten für external kommen aus `DiscoveredPlugin.manifest`.
 - **Proxy:** Auth-Gate vor Forward; `Authorization`/`Cookie` erscheinen **nie** im an
   das Plugin gesendeten `http_request` (Positiv-Assertion, analog Track-A
   `'BaluHost' in window === false`); Header-Allowlist greift; Body-Cap → 413;
