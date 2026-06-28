@@ -37,7 +37,7 @@ The same machine doubles as a KDE Plasma desktop and — thanks to the Radeon GP
 | **Database** | PostgreSQL 17.7 with Alembic migrations |
 | **Proxy** | Nginx (port 80, rate limiting, security headers) |
 | **Backend** | systemd-managed, 4 Uvicorn workers on port 8000, auto-restart |
-| **Testing** | <!-- STATS:TEST_COUNT:START -->3388 tests<!-- STATS:TEST_COUNT:END --> across <!-- STATS:TEST_FILES:START -->290 test files<!-- STATS:TEST_FILES:END -->, CI/CD via GitHub Actions |
+| **Testing** | <!-- STATS:TEST_COUNT:START -->3677 tests<!-- STATS:TEST_COUNT:END --> across <!-- STATS:TEST_FILES:START -->345 test files<!-- STATS:TEST_FILES:END -->, CI/CD via GitHub Actions |
 | **Monitoring** | Prometheus / Grafana ready |
 
 ---
@@ -344,22 +344,22 @@ docs/
 | Metric | Count |
 |--------|-------|
 | **Version** | ![Latest Release](https://img.shields.io/github/v/release/Xveyn/BaluHost?label=) |
-| **Backend code** | 178,368 lines across 941 Python files |
-| &nbsp;&nbsp;↳ Application (`app/`) | 108,275 lines / 466 files |
-| &nbsp;&nbsp;↳ Tests (`tests/`) | 53,908 lines / 290 files |
+| **Backend code** | 186,407 lines across 1,018 Python files |
+| &nbsp;&nbsp;↳ Application (`app/`) | 110,959 lines / 485 files |
+| &nbsp;&nbsp;↳ Tests (`tests/`) | 59,161 lines / 345 files |
 | &nbsp;&nbsp;↳ Scripts (`scripts/`) | 6,306 lines / 48 files |
-| &nbsp;&nbsp;↳ Alembic migrations | 6,902 lines / 110 files |
+| &nbsp;&nbsp;↳ Alembic migrations | 7,004 lines / 113 files |
 | &nbsp;&nbsp;↳ Terminal UI (`baluhost_tui/`) | 2,977 lines / 27 files |
-| **Frontend code** | 86,386 lines across 514 source files (`client/src/`, .ts/.tsx/.js/.jsx/.css) |
-| **Test functions** | 3388 |
+| **Frontend code** | 87,317 lines across 536 source files (`client/src/`, .ts/.tsx/.js/.jsx/.css) |
+| **Test functions** | 3677 |
 | **API route modules** | 66 |
-| **Service modules** | 201 |
-| **Database models** | 52 |
-| **Database migrations** | 109 |
+| **Service modules** | 202 |
+| **Database models** | 53 |
+| **Database migrations** | 112 |
 | **Frontend pages** | 33 |
 | **CI/CD workflows** | 10 |
 
-<sub>LOC counted via `git ls-files` (respects `.gitignore`, excludes virtualenvs, `node_modules/`, `dist/`, caches, dev-storage). Last measured 2026-06-13.</sub>
+<sub>LOC counted via `git ls-files` (respects `.gitignore`, excludes virtualenvs, `node_modules/`, `dist/`, caches, dev-storage). Last measured 2026-06-28.</sub>
 <!-- STATS:PROJECT:END -->
 
 ---

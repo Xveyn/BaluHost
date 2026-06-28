@@ -7,6 +7,216 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.38.0] - 2026-06-28
+
+### Added
+
+- **(plugin-market)** idempotent marketplace public-key provisioning helper
+- **(plugin-market)** per-deploy marketplace signature smoke-check
+- **(plugin-market)** config keys + route 502 mapping for index signing
+- **(plugin-market)** fail-closed index signature gate in MarketplaceService
+- **(plugin-market)** detached ed25519 signature verify util
+- **(plugins)** rewrite Documentation tab tier-first with live scope catalog
+- **(plugin-sandbox)** external-plugin scope-picker modal in PluginsPage (Phase 5b)
+- **(plugin-sandbox)** frontend scope-catalog client + is_external/requested_api_scopes types (Phase 5b)
+- **(plugin-sandbox)** success audit plugin_sandbox_spawned on external enable (Phase 5a follow-up)
+- **(plugin-sandbox)** scope-picker backend -- grant_api_scopes threading + is_external/requested_api_scopes (Phase 5b)
+- **(plugin-sandbox)** Gap C -- external plugins surface static UI in get_ui_manifest (Phase 5b)
+- **(plugin-sandbox)** static nav_items/dashboard_widgets in PluginManifestUI (Phase 5b)
+- **(plugin-sandbox)** scope catalog module + GET /scope-catalog (Phase 5b)
+- **(plugin-sandbox)** provision baluhost-plugin user, scoped sudoers, wrapper install
+- **(plugin-sandbox)** root-owned hardened spawn wrapper + arg-validation tests
+- **(plugin-sandbox)** wire spawn-hook selection + fail-closed audit into PluginManager
+- **(plugin-sandbox)** hardened_spawn + scrub_env + select_spawn_hook (auto-detect, fail-closed)
+- **(plugin-sandbox)** config for hardened worker spawn (user + wrapper path)
+- **(plugin-sandbox)** route dual-path — manage external plugins via manifest, no exec (Phase 4)
+- **(plugin-sandbox)** catch-all proxy route with caps + header allowlist + scrubbing (Phase 4)
+- **(plugin-sandbox)** PluginManager dual-path — external spawns supervisor, no host exec (Phase 4)
+- **(plugin-sandbox)** dispatch forwards query+headers, timeout + in-flight cap (Phase 4)
+- **(plugin-sandbox)** production-wired CapabilityRouter factory (Phase 4)
+- **(plugin-sandbox)** worker Plugin-SDK + loader + register(host) authoring contract (Track B Phase 3)
+- **(plugin-sandbox)** supervisor routes cap_call to CapabilityRouter via in-flight context (Track B Phase 3)
+- **(plugin-sandbox)** core.system_metrics + core.notify capabilities (Track B Phase 3)
+- **(plugin-sandbox)** CapabilityRouter default-deny + storage.* (Track B Phase 3)
+- **(plugin-sandbox)** SandboxSupervisor spawn/handshake/dispatch/stop (Track B Phase 2b)
+- **(plugin-sandbox)** worker entry point with health/echo handler + RpcChannel.wait_closed (Track B Phase 2a)
+- **(plugin-sandbox)** cross-platform host<->worker transport (UDS prod / TCP dev) (Track B Phase 2a)
+- **(plugin-sandbox)** add duplex RpcChannel with correlation IDs (Track B Phase 1)
+- **(plugin-sandbox)** add RPC frame codec + message envelope (Track B Phase 1)
+- **(plugin-sandbox)** remove main-context pluginSDK/pluginLoader (close audit gap)
+- **(plugin-sandbox)** declare optical_drive api_scopes + min_runtime_abi
+- **(plugin-sandbox)** expose min_runtime_abi; migrate storage_analytics to BaluHost.api
+- **(plugin-sandbox)** runtime storage proxy; wire into window.BaluHost
+- **(plugin-sandbox)** host bridge storage channel (per-user, quota-aware)
+- **(plugin-sandbox)** per-user plugin_storage service + _storage routes
+- **(plugin-sandbox)** plugin_storage model + migration
+- **(plugin-sandbox)** feed theme + ABI floor into the sandbox host
+- **(plugin-sandbox)** compile plugin-runtime.css + link from host.html
+- **(plugin-sandbox)** full window.BaluHost surface + theme apply in runtime
+- **(plugin-sandbox)** theme handshake + ABI gate in host bridge
+- **(plugin-sandbox)** scope_denied audit route + bridge firing
+- **(plugin-sandbox)** persist declared api_scopes into granted_api_scopes on enable
+- **(plugin-sandbox)** expose granted_api_scopes via ui manifest, wire PluginPage
+- **(plugin-sandbox)** InstalledPlugin.granted_api_scopes column + migration
+- **(plugin-sandbox)** manifest api_scopes + min_runtime_abi fields
+- **(plugin-sandbox)** PluginSandboxHost component, wire PluginPage to the sandbox
+- **(plugin-sandbox)** serve framable host.html bootstrap + CORS, middleware carve-out
+- **(plugin-sandbox)** in-iframe runtime SDK + separate vite runtime build
+- **(plugin-sandbox)** host bridge controller with policy-enforced api channel
+- **(plugin-sandbox)** scope catalog + default-deny api policy matcher
+- **(plugin-sandbox)** message envelope protocol + validators
+- **(core)** global exception handlers + 5xx scrubber net (B3 / GAP-10)
+- **(core)** add ServiceError exception hierarchy (B3)
+- **(sleep)** UI toggle + i18n for suspend-on-core-uptime-exit
+- **(sleep)** frontend types + history label for suspend-on-exit
+- **(sleep)** arm + fire true suspend on core-uptime window end
+- **(sleep)** schema + trigger + get_config for suspend-on-exit
+- **(sleep)** add core_uptime_suspend_on_exit column + migration
+
+### Changed
+
+- **(#258)** hoist fritzbox secret-key sets to module-level frozensets
+- **(notifications)** route firebase.py output through logger (no print)
+- **(core)** curate error leaks in backup/vcl/plugins/misc routes (B3 / AP6)
+- **(core)** curate error leaks in power/monitoring/smart/sleep routes (B3 / AP6)
+- **(core)** drop detail=str(e) leak wrappers in benchmark.py (B3 / AP5)
+- **(core)** scrub exception text from marketplace route details (B3 / AP4)
+- **(core)** scrub error leaks in vpn.py routes (B3 / AP3)
+- **(core)** scrub error leaks in cloud.py routes (B3 / AP2)
+- **(core)** drop detail=str(e) leak wrappers in fans.py (B3 / AP1)
+
+### Fixed
+
+- **(plugin-market)** harden smoke-check main() to always exit 0
+- **(plugin-market)** drop redundant Body() marker, document 3.14 annotation fix
+- **(client)** include vite-env.d.ts in test tsconfig so tsc -b resolves build globals
+- **(plugin-sandbox)** drop unused listPermissions import in scope-picker test
+- **(plugin-sandbox)** /ui/manifest resolves ABI from each plugin's discovered manifest (Phase 5b Gap C)
+- **(plugin-sandbox)** strip unix: scheme before socket chown + skip symlinks in dir tree (Phase 5a I-1)
+- **(plugin-sandbox)** grant plugin-group UDS+dir access in hardened_spawn (I-1) + audit user + deploy src-check
+- **(plugin-sandbox)** install wrapper to /usr/local/sbin/ (root-owned path)
+- **(plugin-sandbox)** disable_plugin hard-kills on stop() failure (no orphaned worker)
+- **(plugin-sandbox)** toggle external predicate manifest-check + disable-path test (Phase 4 Task 6 review)
+- **(plugin-sandbox)** correct proxy error-code docstring + precheck/scrub tests (Phase 4 Task 5 review)
+- **(plugin-sandbox)** manifest-conditioned load_plugin exec-guard + adjust multipath tests for sandboxed externals (Phase 4 Task 4 review)
+- **(plugin-sandbox)** unique per-spawn UDS socket path (no collision across workers)
+- **(plugin-sandbox)** in-flight registration inside semaphore + cap/headers tests (Phase 4 Task 2 review)
+- **(plugin-sandbox)** notifier uses injected session_factory + test (Phase 4 Task 1 review)
+- **(plugin-sandbox)** unguessable cap request token + scrubbed worker context (Track B Phase 3)
+- **(plugin-sandbox)** require full context in supervisor.dispatch (no silent user_id=0)
+- **(plugin-sandbox)** auto-disable on non-SupervisorError restart failure
+- **(plugin-sandbox)** close WorkerListener if spawn hook fails (Track B Phase 2b)
+- **(plugin-sandbox)** WorkerListener.close() must not await wait_closed()
+- **(plugin-sandbox)** declare msgpack dependency (was only in working tree)
+- **(plugin-sandbox)** add LIFECYCLE_RESULT response type; revert read-loop to Phase-1 form (Track B Phase 2a)
+- **(plugin-sandbox)** normalize decode_payload failures to FrameError for clean drop (Track B Phase 1)
+- **(#258)** redact secret-key material + drop OSError/404-wrap leaks in service layer
+- **(plugin-sandbox)** hoist load_manifest to module top-level; strengthen min_runtime_abi test
+- **(plugin-sandbox)** bound _storage gate carve-out to exact namespace; tidy tests + 413 route test
+- **(plugin-sandbox)** guard runtime message listener to window.parent only
+- **(plugin-sandbox)** explicit undefined check on ABI gate; clarify interim theme handling
+- **(plugin-sandbox)** drop constructor parameter property (erasableSyntaxOnly)
+- **(plugin-sandbox)** escape host.html interpolation (CodeQL XSS) + drop unused test var
+- **(plugin-sandbox)** navigate boundary + scopeCatalog tests + lint cleanups (final review)
+- **(plugin-sandbox)** tighten _audit gate carve-out to exact route + bound audit body (Task 10b review)
+- **(plugin-sandbox)** stabilize bridge lifecycle, recreate only per plugin session (Task 6 review)
+- **(plugin-sandbox)** make host.html/CORS/carve-out tests actually execute (Task 5 review)
+- **(security)** use realpath+startswith barrier in _validate_backup_dir
+- **(security)** use direct is_relative_to guard in _validate_backup_dir
+- **(security)** validate custom backup_path against allowed storage roots
+- **(security)** tighten CSP connect-src to 'self' (audit Härtung #8)
+- **(security)** dedicated TOTP_ENCRYPTION_KEY w/ VPN-key fallback (Posten 3 #3)
+- **(security)** dedicated CLOUD_ENCRYPTION_KEY w/ SECRET_KEY-derived fallback (Posten 3 #1)
+- **(security)** tighten nginx auth_limit 10r/s -> 5r/m on /api/auth/ (audit HÄRTUNG)
+- **(security)** trust nginx X-Forwarded-For for real client IP (audit #9 follow-up)
+- **(security)** compare service token as bytes to avoid 500 on non-ASCII header (audit #2 hardening)
+- **(security)** route mobile debug output through logger, drop FCM token from logs (audit #4)
+- **(security)** avatar extension from validated MIME, not user filename (audit #3)
+- **(security)** constant-time service-token compare (audit #2)
+- **(security)** reject inactive users in get_current_user_optional (audit #1)
+- **(security)** validate commit SHA in rollback() too (audit #6 completion)
+- **(security)** validate Pi-hole upstream DNS as IPs before container shell (audit #7)
+- **(security)** validate commit SHA before git checkout (audit #6)
+- **(security)** WebDAV user isolation via Path.resolve() (audit #5)
+- **(security)** lower file_upload rate limit 50000->300/min (Posten 5 #1)
+- **(security)** fail-fast on NAS_MODE=dev under ENVIRONMENT=production (Posten 5 #5)
+- **(security)** cap WebSocket connections per user at 5 (Posten 5 #2)
+- **(security)** bound chunked upload to declared total_size (Posten 5 #3)
+- **(security)** restrict admin SSRF targets to LAN hosts (Posten 4)
+- **(deps)** bump cryptography to >=48.0.1 (Dependabot #53)
+- **(deps)** bump vite to 7.3.5 and override undici to 7.28.0
+- **(security)** VPN-key plaintext hard-fail in prod + widen admin-db redaction (Posten 3 #2/#4)
+- **(security)** admin-gate SSH connectivity-test and start endpoints (audit #4)
+- **(security)** WS endpoint rejects access tokens fail-closed (audit #5)
+- **(security)** sanitize plugin.homepage href against javascript: URLs (audit #3)
+- **(admin)** make loadOwners unmount guard actually work (#247)
+- **(sleep)** keep schedule loop sleep-at-start; adjust suspend-on-exit test mocks
+- **(files)** sanitize upload filename to prevent cross-user path traversal
+- **(backup)** prevent tar-slip in restore via data filter
+- **(lint)** drop unused vars, catch bindings, and imports (#210)
+- **(lint)** remove useless rethrow catches (#210)
+- **(lint)** empty e2e catch blocks (#210)
+- **(lint)** prefer-const in AdminDatabase (#210)
+- **(install)** bind POSTGRES_PASSWORD/USER via psql vars instead of interpolating (#219)
+- **(mobile)** push device_removed on automatic expiry/deactivation (#228)
+- **(mobile)** tie refresh-token TTL to device authorization validity (#227)
+- **(tauri)** commit pinned Cargo.lock to fix brotli build conflict
+- **(api)** return v1 router directly to survive FastAPI 0.137 nesting (#234)
+- **(deps)** pin esbuild to >=0.28.1 to close RCE alert (#47)
+
+### Documentation
+
+- **(readme)** refresh README files for currency (sandbox/signing, prod facts)
+- **(claude)** refresh CLAUDE.md indexes incl. Track C signing surface
+- **(spec)** align Track C design with shipped impl (CSV env + BadGatewayError)
+- **(plan)** correct Task 5 interface descriptor to plain CSV (not JSON array)
+- **(plan)** review fix — CSV list-env convention to match config.py
+- **(plan)** implementation plan for Track C marketplace index signing
+- **(plugin-market)** add deploy automation to Track C spec
+- **(plugin-market)** pin key-provisioning to empty default (defer/fill-before-deploy)
+- **(plugin-market)** spec for Track C — ed25519 index signing
+- **(plan)** review fixes — reuse docs.dangerousPermissions, commit-footer constraint, hooks-count decision
+- **(plan)** implementation plan for two-tier PluginDocumentation rewrite
+- **(plugin-sandbox)** spec for two-tier PluginDocumentation rewrite
+- **(plugin-sandbox)** document bundled vs external trust tiers (Phase 5a follow-up)
+- **(plugin-sandbox)** apply critical-review fixes to Phase 5b plan
+- **(plugin-sandbox)** Phase 5b implementation plan (scope catalog, picker, Gap C)
+- **(plugin-sandbox)** Phase 5b spec — scope catalog, scope-picker, Gap C UI surfacing
+- **(plugin-sandbox)** correct Phase 5a spec to as-built (install path + socket/FS reachability)
+- **(plugin-sandbox)** Phase 5a implementation plan — hardened worker spawn
+- **(plugin-sandbox)** Phase 5a spec — hardened worker spawn (low-priv user + netns + rlimits)
+- **(plugin-sandbox)** renumber Phase 4 plan to sequential integer tasks (2b->3, +1)
+- **(plugin-sandbox)** fold critical-review fixes into Phase 4 plan
+- **(plugin-sandbox)** Track B Phase 4 implementation plan (7 tasks, TDD)
+- **(plugin-sandbox)** correct Phase 4 spec — granted_api_scopes already exists (Track A)
+- **(plugin-sandbox)** Track B Phase 4 design — request-proxy + PluginManager dual-path
+- **(plugin-sandbox)** Track B Phase 3 plan (Capability-Layer + Plugin-SDK)
+- **(plugin-sandbox)** Track B Phase 2b plan (SandboxSupervisor)
+- **(plugin-sandbox)** Track B Phase 2a plan (transport + worker runner)
+- **(plugin-sandbox)** make Phase-1 RPC tests Windows-portable (loopback TCP)
+- **(plugin-sandbox)** Track B Phase 1 implementation plan (RPC foundation)
+- **(plugin-sandbox)** add frontend Plugin-Documentation update to Track B scope
+- **(plugin-sandbox)** Track B backend-isolation design spec
+- **(plugin-sandbox)** correct storage_analytics migration example to own-routes + empty scopes
+- **(plugin-sandbox)** correct ui primitive count to 17 in ABI history
+- **(plugin-sandbox)** author migration guide + runtime ABI doc
+- **(plugin-sandbox)** apply plan review corrections
+- **(plugin-sandbox)** Phase 3-5 implementation plan (TDD, task-by-task)
+- **(plugin-sandbox)** Phase 3-5 design spec (runtime UI/theme/storage, migration, e2e)
+- **(plan)** final-review fixes — X-Frame-Options carve-out, runtime dev-serving, test robustness
+- **(plan)** plugin frontend iframe sandbox — Phases 1-2 (bridge + API policy)
+- **(spec)** plugin frontend iframe sandbox (Track A)
+- AP0 implementation plan (foundation + 5xx net)
+- add 5xx scrubber net + work-package structure to error-leakage spec
+- spec for global exception handler + error-leakage fix (B3 / audit GAP-10)
+- implementation plan for suspend-on-core-uptime-exit
+- spec for suspend-on-core-uptime-exit option
+- implementation plan for ESLint CI gate (#210)
+- spec for ESLint CI gate (#210)
+- translate PRODUCTION_DEPLOYMENT_NOTES.de.md to German (#217)
+
+---
+
 ## [1.37.0] - 2026-06-13
 
 ### Added
