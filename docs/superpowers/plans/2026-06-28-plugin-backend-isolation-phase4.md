@@ -26,6 +26,7 @@
 
 - **Create** `backend/app/plugins/sandbox/host_capabilities.py` — builds a production-wired `CapabilityRouter` (session factory, metrics reader, notifier, audit logger).
 - **Create** `backend/app/plugins/sandbox/proxy.py` — the catch-all proxy handler + caps + header allowlist + error scrubbing.
+- **Modify** `backend/app/plugins/sandbox/transport.py` — unique per-spawn UDS socket name so one subprocess per uvicorn worker does not collide on a shared socket path.
 - **Modify** `backend/app/plugins/sandbox/supervisor.py` — `dispatch()` forwards `query` + `headers`, honours a per-request timeout and a max-in-flight semaphore.
 - **Modify** `backend/app/plugins/manager.py` — `_sandboxes` registry, dual-path `enable_plugin`/`disable_plugin`/`shutdown_all`, `load_plugin(external)` guard, `granted_api_scopes` threading, catch-all wired into `get_router()`.
 - **Modify** `backend/app/api/routes/plugins.py` — toggle/details/list branch onto the manifest path for external (no `load_plugin` exec).
@@ -66,13 +67,20 @@ def test_build_returns_capability_router_with_filtered_scopes():
 def test_metrics_reader_projects_telemetry(monkeypatch):
     import app.plugins.sandbox.host_capabilities as hc
 
+    # Stub with the REAL telemetry SHM shape (latest_cpu_usage + latest_memory_sample.percent).
     monkeypatch.setattr(
-        hc, "read_shm", lambda *_a, **_k: {"cpu_percent": 12.5, "memory_percent": 40.0, "secret": "x"}
+        hc,
+        "read_shm",
+        lambda *_a, **_k: {
+            "latest_cpu_usage": 12.5,
+            "latest_memory_sample": {"percent": 40.0, "used": 1, "total": 2},
+            "cpu": [],
+        },
     )
     router = build_capability_router("weather", {"core.system_metrics"})
     ctx = CapabilityContext(user_id=1, username="u", role="user")
     result = asyncio.run(router.dispatch("core.system_metrics", {}, ctx))
-    assert result == {"result": {"cpu_percent": 12.5, "memory_percent": 40.0}}
+    assert result == {"result": {"cpu_usage": 12.5, "memory_percent": 40.0}}
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -112,14 +120,21 @@ logger = logging.getLogger(__name__)
 # plugin was granted that is not in here is silently dropped (defensive).
 KNOWN_SCOPES: frozenset[str] = frozenset(CAPABILITY_SCOPE.values())
 
-# Keys projected out of the telemetry SHM snapshot for core.system_metrics.
-_METRIC_KEYS = ("cpu_percent", "memory_percent")
-
-
 def _read_metrics() -> dict:
-    """Curated read-only system metrics from the monitoring SHM snapshot."""
+    """Curated read-only system metrics from the monitoring SHM snapshot.
+
+    The telemetry SHM (telemetry.py) exposes ``latest_cpu_usage`` and a
+    ``latest_memory_sample`` dict with a ``percent`` field — NOT top-level
+    ``cpu_percent``/``memory_percent``. Project a small, stable subset.
+    """
     snapshot = read_shm(TELEMETRY_FILE) or {}
-    return {k: snapshot[k] for k in _METRIC_KEYS if k in snapshot}
+    mem = snapshot.get("latest_memory_sample") or {}
+    out: dict = {}
+    if snapshot.get("latest_cpu_usage") is not None:
+        out["cpu_usage"] = snapshot["latest_cpu_usage"]
+    if isinstance(mem, dict) and mem.get("percent") is not None:
+        out["memory_percent"] = mem["percent"]
+    return out
 
 
 async def _notify(context: CapabilityContext, payload: dict) -> None:
@@ -328,6 +343,93 @@ Expected: PASS (all prior supervisor tests + the 2 new ones).
 ```bash
 git add backend/app/plugins/sandbox/supervisor.py backend/tests/plugins/sandbox/test_supervisor.py
 git commit -m "feat(plugin-sandbox): dispatch forwards query+headers, timeout + in-flight cap (Phase 4)"
+```
+
+---
+
+## Task 2b: Unique per-spawn worker socket path (prod-only collision fix)
+
+`WorkerListener` binds a **fixed** path `plugin_dir/plugin.sock` (`transport.py:48`).
+With one subprocess per uvicorn worker, the 4 prod workers each start a listener for
+the same plugin and collide on that path (unlink/rebind race → cross-wiring). Dev uses
+an ephemeral TCP port so this is **invisible in Windows tests but breaks Linux prod**.
+Fix: make the UDS socket filename unique per `WorkerListener` instance.
+
+**Files:**
+- Modify: `backend/app/plugins/sandbox/transport.py`
+- Test: `backend/tests/plugins/sandbox/test_transport.py` (append)
+
+**Interfaces:**
+- Produces: `WorkerListener(socket_dir)` now binds a unique `plugin-<pid>-<token>.sock`; `connect_address` still a `unix:<path>` / `tcp:<host>:<port>` string consumed unchanged by `connect_to_host`.
+
+- [ ] **Step 1: Write the failing test**
+
+```python
+# append to backend/tests/plugins/sandbox/test_transport.py
+import sys
+
+import pytest
+
+from app.plugins.sandbox.transport import WorkerListener, _use_unix_socket
+
+
+@pytest.mark.skipif(not _use_unix_socket(), reason="UDS only (Linux/macOS)")
+def test_two_listeners_same_dir_get_distinct_sockets(tmp_path):
+    """Two WorkerListeners on the same plugin dir must not share a socket path."""
+    import asyncio
+
+    async def run():
+        a = WorkerListener(tmp_path)
+        b = WorkerListener(tmp_path)
+        addr_a = await a.start()
+        addr_b = await b.start()
+        try:
+            assert addr_a != addr_b
+            assert addr_a.startswith("unix:") and addr_b.startswith("unix:")
+        finally:
+            await a.close()
+            await b.close()
+
+    asyncio.run(run())
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `cd backend && python -m pytest tests/plugins/sandbox/test_transport.py -k distinct_sockets -v`
+Expected: FAIL on Linux/macOS (both bind `plugin.sock` → equal paths or bind error). On Windows it is skipped — run this task's verification on a Linux box or trust the code review.
+
+- [ ] **Step 3: Edit `transport.py` — unique socket name**
+
+Add the imports at the top (next to `import os`):
+
+```python
+import secrets
+```
+
+In `WorkerListener.start()`, replace the fixed-path line:
+
+```python
+            path = str(self._socket_dir / "plugin.sock")
+```
+
+with a per-instance unique name:
+
+```python
+            path = str(self._socket_dir / f"plugin-{os.getpid()}-{secrets.token_hex(4)}.sock")
+```
+
+The existing `os.unlink(path)` stale-cleanup stays (harmless for a fresh unique name). `close()` already stops the server; the unique file is cleaned on the next process restart via the dir lifecycle (no extra unlink needed — leftover empty socket files are inert).
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+Run: `cd backend && python -m pytest tests/plugins/sandbox/test_transport.py -v`
+Expected: PASS (existing transport tests + the new distinct-socket test on UDS platforms).
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add backend/app/plugins/sandbox/transport.py backend/tests/plugins/sandbox/test_transport.py
+git commit -m "fix(plugin-sandbox): unique per-spawn UDS socket path (no collision across workers)"
 ```
 
 ---
@@ -735,6 +837,18 @@ async def proxy_request(
     if supervisor is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plugin not found")
 
+    # Reject oversized bodies BEFORE buffering them into memory. The
+    # Content-Length header can lie, so we also guard after the read.
+    declared = request.headers.get("content-length")
+    if declared is not None:
+        try:
+            if int(declared) > REQUEST_BODY_MAX:
+                raise HTTPException(
+                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    detail="Request body too large",
+                )
+        except ValueError:
+            pass  # malformed header — fall through to the post-read guard
     body = await request.body()
     if len(body) > REQUEST_BODY_MAX:
         raise HTTPException(
@@ -1155,16 +1269,21 @@ git commit -m "chore(plugin-sandbox): ruff clean-up for Phase 4"
 
 ---
 
-## Accepted limitation (document, do not fix here)
+## Accepted limitations & authoring constraints (document, do not fix here)
 
-Because each uvicorn worker owns its own subprocess and there is no cross-worker IPC, an external plugin **enabled at runtime** via the toggle route only spawns a worker on the uvicorn process that handled the toggle; the other workers serve it after the next restart (their startup `load_enabled_plugins` spawns it). This matches the existing bundled-plugin behaviour (runtime route changes need a restart). Lazy-spawn-on-first-request is a possible future enhancement, out of scope for Phase 4.
+- **Runtime-enable is per-worker.** Each uvicorn worker owns its own subprocess and there is no cross-worker IPC, so an external plugin **enabled at runtime** via the toggle route only spawns a worker on the uvicorn process that handled the toggle; the other workers serve it after the next restart (their startup `load_enabled_plugins` spawns it). This matches the existing bundled-plugin behaviour (runtime route changes need a restart).
+- **Idle process count = workers × external plugins.** With 4 workers and N external plugins, 4N subprocesses run idle. Acceptable for a home NAS with few plugins. **Lazy-spawn-on-first-request** (spawn in the catch-all handler when `get_sandbox(name)` is None but the DB says enabled) would remove idle processes and fix the per-worker runtime-enable gap — tracked as a future optimization, out of scope for Phase 4.
+- **Reserved top-level route names.** An external plugin cannot expose a root route named `toggle`, `config`, `ui`, or `dashboard-panel` (shadowed by the management routes in `routes/plugins.py`, registered before the catch-all), and no plugin may be named `marketplace` or `permissions` (`PluginGate._LIST_PATHS`). Surface this in the Phase 5 authoring docs.
+- **Multi-value query params collapse.** `dict(request.query_params)` keeps only the last value per key. Fine for v1; note in authoring docs.
+- **Raw request body.** The plugin receives the raw request bytes (no JSON-parsing convenience in the SDK). Deliberate for v1.
+- **Body-size DoS depends on the edge for truly-malicious clients.** The proxy rejects via `Content-Length` precheck then a post-read guard, but a client that streams a huge body while lying about (or omitting) `Content-Length` is only fully bounded by nginx `client_max_body_size`. Verify the prod nginx limit covers `/api/plugins/`.
 
 ## Self-Review Notes (coverage vs. spec)
 
 - Scope-storage → Task 1 (consume existing column; filter to known catalog) + Task 3/5 (thread `granted_api_scopes`). No migration (column exists).
 - Dual-path / no host exec → Task 3 (`load_plugin` guard, `_enable_external`) + Task 5 (routes).
 - core.* catalog (system_metrics + notify) → Task 1 wires both; `storage.*` via existing CapabilityRouter.
-- One subprocess per worker → Task 3 `_enable_external` (no primary-only gating) + accepted-limitation note.
+- One subprocess per worker → Task 2b (unique socket path, prevents cross-worker collision) + Task 3 `_enable_external` (no primary-only gating) + accepted-limitation note.
 - Proxy + header allowlist + caps + scrubbing → Task 4.
 - Token never forwarded → Task 4 (`ALLOWED_REQUEST_HEADERS`) + tests (positive assertion).
 - Capability deps wired → Task 1.
