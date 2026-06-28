@@ -5,6 +5,6 @@
   "display_name": "E2E Plugin",
   "description": "phase 4 e2e fixture",
   "author": "tests",
-  "api_scopes": ["storage"],
+  "api_scopes": ["storage", "core.system_metrics"],
   "entrypoint": "__init__.py"
 }
