@@ -7,6 +7,7 @@ operates on an in-memory fake marketplace (same pattern as
 """
 from __future__ import annotations
 
+import base64
 import hashlib
 import io
 import json
@@ -16,16 +17,33 @@ from typing import Dict
 
 import pytest
 
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
 from app.plugins.core_versions import CoreVersions, CoreVersionsError
 from app.plugins.installer import PluginInstaller
 from app.services.plugin_marketplace import (
     IndexFetchError,
     IndexParseError,
+    IndexSignatureError,
     MarketplaceService,
     PluginNotFoundError,
     get_marketplace_service,
     reset_marketplace_service,
 )
+
+
+_TEST_SK = Ed25519PrivateKey.generate()
+_TEST_PUB_B64 = base64.b64encode(
+    _TEST_SK.public_key().public_bytes(
+        serialization.Encoding.Raw, serialization.PublicFormat.Raw
+    )
+).decode()
+
+
+def _sign_index(index_raw: bytes) -> bytes:
+    """base64 detached signature bytes, as the .sig file would contain."""
+    return base64.b64encode(_TEST_SK.sign(index_raw))
 
 
 def _build_plugin_zip(name: str, version: str = "1.0.0") -> bytes:
@@ -100,14 +118,32 @@ def plugins_dir(tmp_path: Path) -> Path:
 
 
 class _Fake:
-    """Captures an index JSON + archive map and exposes the two fetchers."""
+    """Captures an index JSON + archive map; serves index + .sig + archives."""
 
-    def __init__(self, *, index: dict, archives: Dict[str, bytes]):
+    INDEX_URL = "https://plugins.example/index.json"
+    SIG_URL = "https://plugins.example/index.json.sig"
+
+    def __init__(
+        self,
+        *,
+        index: dict,
+        archives: Dict[str, bytes],
+        signature: bytes | None = None,
+        sig_fetch_error: bool = False,
+    ):
         self.index_raw = json.dumps(index).encode()
         self.archives = archives
         self.index_calls = 0
+        self.sig_fetch_error = sig_fetch_error
+        # Default: a valid signature by the test key. Tests can override with a
+        # bogus value to exercise the rejection path.
+        self.signature = signature if signature is not None else _sign_index(self.index_raw)
 
     def fetch_index(self, url: str) -> bytes:
+        if url == self.SIG_URL:
+            if self.sig_fetch_error:
+                raise RuntimeError("sig unreachable")
+            return self.signature
         self.index_calls += 1
         return self.index_raw
 
@@ -134,6 +170,7 @@ def _build_service(
         index_url="https://plugins.example/index.json",
         installer=installer,
         index_fetcher=fake.fetch_index,
+        public_keys=[_TEST_PUB_B64],
         cache_ttl=cache_ttl,
     )
 
@@ -203,6 +240,7 @@ class TestIndexFetching:
             index_url="https://x/index.json",
             installer=installer,
             index_fetcher=boom,
+            public_keys=[_TEST_PUB_B64],
         )
         with pytest.raises(IndexFetchError, match="connection refused"):
             svc.get_index()
@@ -212,6 +250,7 @@ class TestIndexFetching:
     ):
         fake = _Fake(index={"index_version": 1, "plugins": []}, archives={})
         fake.index_raw = b"{not json"
+        fake.signature = _sign_index(fake.index_raw)
         svc = _build_service(plugins_dir, core, fake)
         with pytest.raises(IndexParseError):
             svc.get_index()
@@ -389,3 +428,31 @@ class TestGetMarketplaceServiceDependency:
         svc2 = get_marketplace_service()
         assert svc is svc2
         assert (tmp_path / "plugins").is_dir()
+
+
+class TestSignatureGate:
+    def test_rejects_invalid_signature(self, plugins_dir: Path, core: CoreVersions):
+        idx = _make_index(
+            [("demo", "1.0.0", _build_plugin_zip("demo"), "https://plugins.example/demo.bhplugin")]
+        )
+        fake = _Fake(index=idx, archives={}, signature=base64.b64encode(b"\x00" * 64))
+        svc = _build_service(plugins_dir, core, fake)
+        with pytest.raises(IndexSignatureError):
+            svc.get_index()
+
+    def test_rejects_unfetchable_signature(self, plugins_dir: Path, core: CoreVersions):
+        idx = _make_index(
+            [("demo", "1.0.0", _build_plugin_zip("demo"), "https://plugins.example/demo.bhplugin")]
+        )
+        fake = _Fake(index=idx, archives={}, sig_fetch_error=True)
+        svc = _build_service(plugins_dir, core, fake)
+        with pytest.raises(IndexSignatureError):
+            svc.get_index()
+
+    def test_valid_signature_returns_index(self, plugins_dir: Path, core: CoreVersions):
+        idx = _make_index(
+            [("demo", "1.0.0", _build_plugin_zip("demo"), "https://plugins.example/demo.bhplugin")]
+        )
+        fake = _Fake(index=idx, archives={})
+        svc = _build_service(plugins_dir, core, fake)
+        assert svc.get_index().get_plugin("demo").latest_version == "1.0.0"
