@@ -13,7 +13,7 @@
 - **`cryptography` is already a dependency** (used for Fernet) — do not add a new package. Use `cryptography.hazmat.primitives.asymmetric.ed25519`.
 - **Sign/verify the RAW bytes** of `index.json` — never a re-serialized/canonicalized form. The `.sig` content is base64 of the 64-byte signature; public keys are base64 of the 32-byte raw key.
 - **Fail-closed:** an empty trusted-key list, a missing/unfetchable `.sig`, or an invalid signature must reject the index (→ `IndexSignatureError` → 502). Never fall back to unsigned.
-- **Env value MUST be single-quoted** when written to `.env.production`: `PLUGINS_MARKETPLACE_PUBLIC_KEYS='["<b64>"]'`. The value is consumed by bash `source` (ci-deploy.sh), systemd `EnvironmentFile`, and Pydantic — all three strip ONE layer of outer quoting and keep the inner JSON `"` intact. An unquoted `=["x"]` gets its inner quotes eaten by bash `source` and breaks JSON parsing.
+- **Env value is comma-separated, unquoted** base64 keys: `PLUGINS_MARKETPLACE_PUBLIC_KEYS=key1,key2`. base64 (standard alphabet `A-Za-z0-9+/=`) contains no comma, so CSV is unambiguous. This matches the project's **existing list-from-env convention** — `config.py` parses `cors_origins` and `privileged_roles` from env via `@field_validator(..., mode="before")` that comma-splits a plain string (NOT pydantic's JSON default). The new field gets the same kind of validator. Plain CSV with no quotes/brackets is consumed verbatim by bash `source` (ci-deploy.sh), systemd `EnvironmentFile`, and python-dotenv alike — no quote-stripping pitfalls. (The validator also accepts a `[`-prefixed JSON array string for forks who prefer it.)
 - **Test fakes must be URL-aware.** The service fetches the index AND the `.sig` through the *same* fetcher. Existing fakes return the index for any URL — that returns index bytes for the `.sig` URL and breaks verification. Every fake must serve the index for the index URL and a (correctly-signed-by-the-test-key) signature for `index_url + ".sig"`, and the service must be built with the matching test public key.
 - **Repo hook:** the Grep/Glob tools are blocked. Use Read / `mcp__vectordb-search__*`. Do NOT put the word `grep` (or `rg`) in any Bash tool command or its description — even inside a description it trips the hook. The deploy shell *script files* may use `grep` internally (they run on the server); just never invoke them via a Bash command string that itself contains `grep`.
 - **Windows test runs:** the full backend suite can hang on Windows — run the **targeted** test files named in each task (`python -m pytest tests/plugins/test_signing.py -v`, etc.). The full suite can go to CI.
@@ -541,21 +541,42 @@ def _build_service(
 Run (from `backend/`): `python -m pytest tests/api/test_plugins_marketplace_routes.py -v`
 Expected: FAIL — the new test gets a 500 (unmapped `IndexSignatureError`) instead of a scrubbed 502; existing tests still pass (they now sign correctly).
 
-- [ ] **Step 3: Add the config settings**
+- [ ] **Step 3a: Add the config fields**
 
 In `backend/app/core/config.py`, immediately after line 249 (`plugins_marketplace_cache_ttl: int = 300`) and before the `# Plugin sandbox (Track B, Phase 5a)` block, add:
 
 ```python
     # Marketplace index signing (Track C) — trusted ed25519 public keys, each
     # base64 of the 32-byte raw key. Empty default = fail-closed until a key is
-    # provisioned (deploy/scripts/install-marketplace-pubkey.sh). Env (JSON,
-    # single-quoted in .env.production): PLUGINS_MARKETPLACE_PUBLIC_KEYS='["<b64>"]'.
+    # provisioned (deploy/scripts/install-marketplace-pubkey.sh). Env is
+    # comma-separated (base64 has no comma), parsed by the validator below:
+    #   PLUGINS_MARKETPLACE_PUBLIC_KEYS=key1,key2
     plugins_marketplace_public_keys: list[str] = Field(default_factory=list)
     # Detached signature URL; None → derived as <index_url> + ".sig".
     plugins_marketplace_signature_url: str | None = None
 ```
 
 (`Field` is already imported at the top of `config.py`.)
+
+- [ ] **Step 3b: Add the env-parsing validator (matches the project's list convention)**
+
+In `backend/app/core/config.py`, add a `mode="before"` validator immediately after the existing `parse_privileged_roles` validator (around line 482, inside the `Settings` class). It mirrors that validator so a comma-separated env string parses into a list, with a `[`-prefixed JSON array also accepted:
+
+```python
+    @field_validator("plugins_marketplace_public_keys", mode="before")
+    def parse_marketplace_public_keys(cls, value: list[str] | str) -> list[str]:
+        if isinstance(value, str):
+            s = value.strip()
+            if s.startswith("["):
+                import json
+                return json.loads(s)
+            return [k.strip() for k in s.split(",") if k.strip()]
+        if isinstance(value, list):
+            return value
+        return []
+```
+
+(No dedicated unit test — this is a verbatim mirror of the proven `parse_privileged_roles`/`assemble_cors_origins` validators; Step 6's route-test run imports `app.main`, which constructs `settings` and would fail loudly on any error here.)
 
 - [ ] **Step 4: Thread the settings into `get_marketplace_service()`**
 
@@ -850,18 +871,16 @@ done < "$PUBKEY_FILE"
 
 [[ "${#keys[@]}" -gt 0 ]] || err "no public keys found in $PUBKEY_FILE"
 
-# Build JSON array: ["k1","k2"]
-json="["
+# Build a comma-separated value (base64 contains no comma → unambiguous).
+# Plain CSV with no quotes/brackets is consumed verbatim by bash `source`
+# (ci-deploy), systemd EnvironmentFile, and python-dotenv — no quote-stripping
+# pitfalls. The Settings validator (parse_marketplace_public_keys) comma-splits.
+csv=""
 for i in "${!keys[@]}"; do
-    [[ "$i" -gt 0 ]] && json+=","
-    json+="\"${keys[$i]}\""
+    [[ "$i" -gt 0 ]] && csv+=","
+    csv+="${keys[$i]}"
 done
-json+="]"
-
-# Single-quote the value: bash `source` (ci-deploy), systemd EnvironmentFile,
-# and python-dotenv each strip one outer quote layer and keep the inner JSON
-# quotes intact. An unquoted value loses its inner quotes under bash `source`.
-new_line="$KEY_VAR='$json'"
+new_line="$KEY_VAR=$csv"
 
 # Idempotent set: no-op if identical, replace if present, append if absent.
 # Write through the existing file (truncate+rewrite) to preserve owner/mode.
@@ -901,17 +920,17 @@ INSTALL_DIR="$TMP" MARKETPLACE_PUBKEY_FILE="$TMP/key.b64" bash deploy/scripts/in
 cat "$TMP/.env.production"
 ```
 
-Expected: first run prints `Appended PLUGINS_MARKETPLACE_PUBLIC_KEYS …`, second prints `… already up to date`, and the final `cat` shows the original `DATABASE_URL` line plus exactly one line `PLUGINS_MARKETPLACE_PUBLIC_KEYS='["<PUB>"]'` (single-quoted, inner double quotes intact).
+Expected: first run prints `Appended PLUGINS_MARKETPLACE_PUBLIC_KEYS …`, second prints `… already up to date`, and the final `cat` shows the original `DATABASE_URL` line plus exactly one line `PLUGINS_MARKETPLACE_PUBLIC_KEYS=<PUB>` (plain, unquoted, no brackets).
 
-- [ ] **Step 4: Verify the written value round-trips as JSON**
+- [ ] **Step 4: Verify the written value parses to the key list**
 
-Run (confirms the inner quotes survive and parse):
+Run (confirms the CSV value splits to the expected single key):
 
 ```bash
-python -c "import json,re,io; s=open('$TMP/.env.production').read(); line=[l for l in s.splitlines() if l.startswith('PLUGINS_MARKETPLACE_PUBLIC_KEYS=')][0]; val=line.split('=',1)[1].strip().strip(chr(39)); print('parsed:', json.loads(val))"
+python -c "s=open('$TMP/.env.production').read(); line=[l for l in s.splitlines() if l.startswith('PLUGINS_MARKETPLACE_PUBLIC_KEYS=')][0]; val=line.split('=',1)[1]; print('parsed:', [k for k in val.split(',') if k])"
 ```
 
-Expected: `parsed: ['<PUB>']` — a one-element list, proving the JSON survived the single-quote wrapping.
+Expected: `parsed: ['<PUB>']` — a one-element list (the trailing `=` base64 padding stays attached to the key, since the split is on the first `=` only).
 
 - [ ] **Step 5: Commit**
 
@@ -938,6 +957,11 @@ git commit -F <msgfile>   # subject: "feat(plugin-market): idempotent marketplac
 
 **2. Placeholder scan:** No TBD/TODO; every code step shows complete code; every run step has an exact command + expected result. `<msgfile>` denotes "write the message (subject line shown + the two-line footer) and commit with `git commit -F`" — per Global Constraints, not a content placeholder.
 
-**3. Type/name consistency:** `verify_detached_ed25519(message, signature_b64, public_keys_b64)` and `SignatureError` identical across Tasks 1/2/4. `IndexSignatureError` defined in Task 2, imported in Task 3. `MarketplaceService.__init__` keyword params `public_keys` + `signature_url` match the calls in Task 2 test helpers, Task 3 `get_marketplace_service`, and Task 3 route test helper. `check_index_signature(index_url, signature_url, public_keys, fetcher) -> tuple[bool, str]` consistent between Task 4 module and test. Config field names match the settings reads in `get_marketplace_service` (Task 3) and the smoke-check `main()` (Task 4). Env var `PLUGINS_MARKETPLACE_PUBLIC_KEYS` single-quoted form consistent between the helper (Task 5) and the Global Constraints rationale.
+**3. Type/name consistency:** `verify_detached_ed25519(message, signature_b64, public_keys_b64)` and `SignatureError` identical across Tasks 1/2/4. `IndexSignatureError` defined in Task 2, imported in Task 3. `MarketplaceService.__init__` keyword params `public_keys` + `signature_url` match the calls in Task 2 test helpers, Task 3 `get_marketplace_service`, and Task 3 route test helper. `check_index_signature(index_url, signature_url, public_keys, fetcher) -> tuple[bool, str]` consistent between Task 4 module and test. Config field names match the settings reads in `get_marketplace_service` (Task 3) and the smoke-check `main()` (Task 4). Env var `PLUGINS_MARKETPLACE_PUBLIC_KEYS` uses the project's CSV list convention: the helper (Task 5) writes plain `key1,key2`, the validator (Task 3b) comma-splits it — mirroring `parse_privileged_roles`.
 
-**4. Critical-path checks:** Existing marketplace tests would break without the URL-aware signed fakes — addressed in Task 2 Step 1 (service tests) and Task 3 Step 1 (route tests), which are done *before* the corresponding source change so the failing run is observed. The `.sig` fetch reuses the single injected fetcher — both fakes branch on the sig URL. Install route raises `IndexSignatureError` via `get_index` — mapped in Task 3 Step 5(c).
+**4. Critical-path checks (status-quo verified during review):**
+- Existing marketplace tests would break without the URL-aware signed fakes — addressed in Task 2 Step 1 (service tests) and Task 3 Step 1 (route tests), done *before* the corresponding source change so the failing run is observed. The `.sig` fetch reuses the single injected fetcher — both fakes branch on the sig URL.
+- Install route raises `IndexSignatureError` via `get_index` — mapped in Task 3 Step 5(c).
+- **List-env convention:** verified `config.py` parses list env vars via `mode="before"` comma-split validators (`assemble_cors_origins`, `parse_privileged_roles`), NOT pydantic JSON — so the plan uses CSV + a mirrored validator (Task 3b), not a JSON array. This avoids both a startup parse contradiction and the shell/systemd quote-stripping hazard.
+- **Construction sites:** verified the only `MarketplaceService(...)` constructions are the two test `_build_service` helpers + `get_marketplace_service` — all three updated for the new required `public_keys` kwarg (Tasks 2/3). No hidden break.
+- `Sequence` is already imported in `plugin_marketplace.py`; `Field` already imported in `config.py`; `cryptography` already a dependency (Fernet) so `…asymmetric.ed25519` is available.
