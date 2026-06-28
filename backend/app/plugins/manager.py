@@ -121,6 +121,7 @@ class PluginManager:
         self._hook_manager = create_plugin_manager()
         self._event_manager: Optional[EventManager] = None
         self._background_tasks: Dict[str, List[asyncio.Task]] = {}
+        self._sandboxes: Dict[str, Any] = {}
         self._routers_mounted = False
         self._discovered: Optional[Dict[str, DiscoveredPlugin]] = None
 
@@ -163,6 +164,20 @@ class PluginManager:
             return "bundled" if parent_dir.resolve() == BUNDLED_PLUGINS_DIR.resolve() else "external"
         except OSError:
             return "external"
+
+    def _supervisor_factory(self, plugin_name: str, plugin_dir: Path, capability_router: Any) -> Any:
+        """Build a SandboxSupervisor (overridable in tests)."""
+        from app.plugins.sandbox.supervisor import SandboxSupervisor  # noqa: PLC0415
+
+        return SandboxSupervisor(plugin_name, plugin_dir, capability_router=capability_router)
+
+    def is_sandboxed(self, name: str) -> bool:
+        """Return True if plugin ``name`` is running in a sandbox subprocess."""
+        return name in self._sandboxes
+
+    def get_sandbox(self, name: str) -> Any:
+        """Return the SandboxSupervisor for ``name``, or None."""
+        return self._sandboxes.get(name)
 
     def _scan_directory(self, scan_dir: Path) -> List[DiscoveredPlugin]:
         """Scan a single directory for plugin candidates.
@@ -395,6 +410,7 @@ class PluginManager:
         granted_permissions: List[str],
         db: Session,
         start_background_tasks: bool = True,
+        granted_api_scopes: Optional[List[str]] = None,
     ) -> bool:
         """Enable a plugin.
 
@@ -403,10 +419,15 @@ class PluginManager:
             granted_permissions: List of granted permission strings
             db: Database session
             start_background_tasks: Whether to start background tasks (False on secondary workers)
+            granted_api_scopes: API capability scopes granted to external plugins
 
         Returns:
             True if plugin was enabled successfully
         """
+        discovered = self.get_discovered(name)
+        if discovered is not None and discovered.source == "external" and discovered.manifest is not None:
+            return await self._enable_external(name, discovered, granted_api_scopes or [])
+
         if name not in self._plugins:
             try:
                 self.load_plugin(name)
@@ -458,6 +479,30 @@ class PluginManager:
             logger.exception(f"Failed to enable plugin {name}: {e}")
             return False
 
+    async def _enable_external(
+        self, name: str, discovered: "DiscoveredPlugin", granted_api_scopes: List[str]
+    ) -> bool:
+        """Enable an external plugin as a sandboxed subprocess (no in-host exec).
+
+        Spawned on every uvicorn worker (no primary-only gating) so the catch-all
+        proxy can serve the plugin regardless of which worker handles the request.
+        """
+        if name in self._sandboxes:
+            return True
+        from app.plugins.sandbox.host_capabilities import build_capability_router  # noqa: PLC0415
+
+        router = build_capability_router(name, set(granted_api_scopes))
+        supervisor = self._supervisor_factory(name, discovered.path, router)
+        try:
+            await supervisor.start()
+        except Exception:
+            logger.exception("Failed to start sandbox for external plugin %s", name)
+            return False
+        self._sandboxes[name] = supervisor
+        self._enabled.add(name)
+        logger.info("Enabled external (sandboxed) plugin: %s", name)
+        return True
+
     async def disable_plugin(self, name: str) -> bool:
         """Disable a plugin.
 
@@ -467,6 +512,16 @@ class PluginManager:
         Returns:
             True if plugin was disabled successfully
         """
+        if name in self._sandboxes:
+            supervisor = self._sandboxes.pop(name)
+            try:
+                await supervisor.stop()
+            except Exception:
+                logger.exception("Error stopping sandbox for %s", name)
+            self._enabled.discard(name)
+            logger.info("Disabled external (sandboxed) plugin: %s", name)
+            return True
+
         if name not in self._enabled:
             return True
 
@@ -595,6 +650,7 @@ class PluginManager:
                 record.granted_permissions or [],
                 db,
                 start_background_tasks=start_background_tasks,
+                granted_api_scopes=record.granted_api_scopes or [],
             )
 
         logger.info(f"Loaded {len(self._enabled)} enabled plugins")
