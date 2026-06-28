@@ -38,6 +38,10 @@ class SupervisorError(Exception):
     """Raised when the worker cannot be started, handshaked, or reached."""
 
 
+class SupervisorTimeout(SupervisorError):
+    """Raised when a single dispatched request exceeds its timeout."""
+
+
 class SandboxSupervisor:
     """Owns one external plugin's worker process and the RPC channel to it."""
 
@@ -52,6 +56,7 @@ class SandboxSupervisor:
         max_restarts: int = 3,
         restart_window: float = 60.0,
         capability_router: Optional[CapabilityRouter] = None,
+        max_inflight: int = 10,
     ) -> None:
         self.plugin_name = plugin_name
         self._plugin_dir = Path(plugin_dir)
@@ -70,6 +75,7 @@ class SandboxSupervisor:
         self._stopping = False
         self._disabled = False
         self._inflight: dict[str, CapabilityContext] = {}
+        self._inflight_sem = asyncio.Semaphore(max_inflight)
 
     @property
     def disabled(self) -> bool:
@@ -83,14 +89,28 @@ class SandboxSupervisor:
         self._supervise_task = asyncio.create_task(self._supervise())
 
     async def dispatch(
-        self, method: str, path: str, body: bytes, context: dict
+        self,
+        method: str,
+        path: str,
+        body: bytes,
+        context: dict,
+        *,
+        query: "dict | None" = None,
+        headers: "dict | None" = None,
+        timeout: float = 30.0,
     ) -> dict:
-        """Proxy one HTTP request into the worker and return its response body."""
+        """Proxy one HTTP request into the worker and return its response dict.
+
+        ``headers`` must already be allowlist-filtered by the caller — this
+        method forwards them verbatim and never adds Authorization/Cookie.
+        """
         if self._disabled:
             raise SupervisorError(f"plugin {self.plugin_name} is disabled")
         channel = self._channel
         if channel is None:
             raise SupervisorError(f"plugin {self.plugin_name} is not running")
+        if self._inflight_sem.locked():
+            raise SupervisorError(f"plugin {self.plugin_name}: too many in-flight requests")
         request_id = secrets.token_hex(16)
         self._inflight[request_id] = CapabilityContext(
             user_id=context["user_id"],
@@ -102,19 +122,27 @@ class SandboxSupervisor:
             "username": context["username"],
             "role": context["role"],
         }
-        try:
-            resp = await channel.call(
-                MsgType.HTTP_REQUEST,
-                {
-                    "request_id": request_id,
-                    "method": method,
-                    "path": path,
-                    "body": body,
-                    "context": worker_context,
-                },
-            )
-        finally:
-            self._inflight.pop(request_id, None)
+        async with self._inflight_sem:
+            try:
+                resp = await channel.call(
+                    MsgType.HTTP_REQUEST,
+                    {
+                        "request_id": request_id,
+                        "method": method,
+                        "path": path,
+                        "query": query or {},
+                        "headers": headers or {},
+                        "body": body,
+                        "context": worker_context,
+                    },
+                    timeout=timeout,
+                )
+            except asyncio.TimeoutError as exc:
+                raise SupervisorTimeout(
+                    f"plugin {self.plugin_name} request timed out"
+                ) from exc
+            finally:
+                self._inflight.pop(request_id, None)
         return resp.body
 
     async def health(self) -> bool:

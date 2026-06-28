@@ -7,10 +7,11 @@ from pathlib import Path
 
 import pytest
 
-from app.plugins.sandbox.protocol import MsgType
+from app.plugins.sandbox.protocol import Message, MsgType
 from app.plugins.sandbox.supervisor import (
     SandboxSupervisor,
     SupervisorError,
+    SupervisorTimeout,
     _default_spawn as _default_spawn_passthrough,
 )
 
@@ -358,3 +359,46 @@ async def test_cap_call_roundtrips_with_host_resolved_context(tmp_path):
             await supervisor.stop()
     finally:
         caps.plugin_storage_service = caps_orig
+
+
+# ---------------------------------------------------------------------------
+# Phase 4 — query + headers forwarding, timeout, in-flight cap
+# ---------------------------------------------------------------------------
+
+class _FakeChannel:
+    """Records the last HTTP_REQUEST body; returns a canned response."""
+
+    def __init__(self):
+        self.last_body = None
+
+    async def call(self, msg_type, body, timeout=None):
+        self.last_body = body
+        return Message(id="x", type=MsgType.HTTP_RESPONSE, body={"status": 200, "headers": {}, "body": {"ok": True}})
+
+
+def _supervisor_with_channel(channel):
+    sup = SandboxSupervisor("weather", ".")
+    sup._channel = channel
+    return sup
+
+
+def test_dispatch_forwards_query_and_headers():
+    channel = _FakeChannel()
+    sup = _supervisor_with_channel(channel)
+    ctx = {"user_id": 1, "username": "u", "role": "user"}
+    asyncio.run(
+        sup.dispatch("GET", "status", b"", ctx, query={"a": "1"}, headers={"content-type": "application/json"})
+    )
+    assert channel.last_body["query"] == {"a": "1"}
+    assert channel.last_body["headers"] == {"content-type": "application/json"}
+    assert "authorization" not in channel.last_body["headers"]
+
+
+def test_dispatch_timeout_raises_supervisor_timeout():
+    class _SlowChannel:
+        async def call(self, msg_type, body, timeout=None):
+            raise asyncio.TimeoutError
+
+    sup = _supervisor_with_channel(_SlowChannel())
+    with pytest.raises(SupervisorTimeout):
+        asyncio.run(sup.dispatch("GET", "x", b"", {"user_id": 1, "username": "u", "role": "user"}, timeout=0.01))
