@@ -831,7 +831,7 @@ git commit -F <msgfile>   # subject: "feat(plugin-market): per-deploy marketplac
 
 **Interfaces:**
 - Consumes: a server-side key file (default `/etc/baluhost/marketplace-pubkey.b64`).
-- Produces: an idempotent `PLUGINS_MARKETPLACE_PUBLIC_KEYS='[...]'` line in `/opt/baluhost/.env.production`.
+- Produces: an idempotent plain-CSV `PLUGINS_MARKETPLACE_PUBLIC_KEYS=key1,key2` line (no quotes/brackets — matches the comma-split validator) in `/opt/baluhost/.env.production`.
 
 - [ ] **Step 1: Write the helper script**
 
