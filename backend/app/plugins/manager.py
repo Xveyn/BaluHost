@@ -551,6 +551,13 @@ class PluginManager:
             return False
         self._sandboxes[name] = supervisor
         self._enabled.add(name)
+        get_audit_logger_db().log_security_event(
+            action="plugin_sandbox_spawned",
+            user="system",
+            resource=f"plugin:{name}",
+            details={"granted_api_scopes": sorted(granted_api_scopes)},
+            success=True,
+        )
         logger.info("Enabled external (sandboxed) plugin: %s", name)
         return True
 
@@ -805,6 +812,28 @@ class PluginManager:
                         "dashboard_widgets": ui_manifest.dashboard_widgets,
                         "translations": plugin.get_translations() or None,
                     })
+                continue
+
+            # External sandboxed plugin: surface UI from its static manifest.
+            # getattr guards against test-double manifests (e.g. object()) that some
+            # sandbox tests place in _enabled without a real PluginManifest.
+            discovered = self.get_discovered(name)
+            if (
+                discovered is not None
+                and discovered.source == "external"
+                and discovered.manifest is not None
+                and getattr(discovered.manifest, "ui", None) is not None
+            ):
+                ui = discovered.manifest.ui
+                manifest["plugins"].append({
+                    "name": name,
+                    "display_name": discovered.manifest.display_name,
+                    "nav_items": [item.model_dump() for item in ui.nav_items],
+                    "bundle_path": ui.bundle,
+                    "styles_path": ui.styles,
+                    "dashboard_widgets": ui.dashboard_widgets,
+                    "translations": None,  # external plugins ship UI strings inside their bundle
+                })
 
         return manifest
 
@@ -868,6 +897,7 @@ class PluginManager:
                     "is_enabled": name in self._enabled,
                     "has_ui": m.ui is not None,
                     "has_routes": True,
+                    "is_external": True,
                     "dangerous_permissions": PermissionManager.get_dangerous_permissions(
                         list(m.required_permissions)
                     ),
@@ -891,6 +921,7 @@ class PluginManager:
                     "is_enabled": name in self._enabled,
                     "has_ui": plugin.get_ui_manifest() is not None,
                     "has_routes": plugin.get_router() is not None,
+                    "is_external": False,
                     "dangerous_permissions": PermissionManager.get_dangerous_permissions(
                         meta.required_permissions
                     ),
@@ -900,6 +931,7 @@ class PluginManager:
                     "name": name,
                     "error": str(e),
                     "is_enabled": False,
+                    "is_external": False,
                 }
 
         return result

@@ -13,6 +13,7 @@ from app.middleware.plugin_gate import invalidate_plugin_cache
 from app.plugins.manifest import load_manifest
 from app.plugins.manager import PluginManager, PluginLoadError
 from app.plugins.permissions import PermissionManager
+from app.plugins.scope_catalog import SCOPE_CATALOG, CATALOG_KEYS
 from app.services import plugin_service
 from app.services import plugin_storage_service
 from app.services.audit.logger_db import get_audit_logger_db
@@ -30,7 +31,9 @@ from app.schemas.plugin import (
     PluginToggleRequest,
     PluginToggleResponse,
     PluginUIManifestResponse,
+    ScopeCatalogResponse,
     ScopeDeniedReport,
+    ScopeInfoSchema,
 )
 
 
@@ -79,6 +82,7 @@ async def list_plugins(
                 has_ui=info.get("has_ui", False),
                 has_routes=info.get("has_routes", False),
                 error=info.get("error"),
+                is_external=info.get("is_external", False),
                 translations=translations,
             )
         )
@@ -102,6 +106,21 @@ async def list_permissions(
     )
 
 
+@router.get("/scope-catalog", response_model=ScopeCatalogResponse)
+@user_limiter.limit(get_limit("admin_operations"))
+async def get_scope_catalog(
+    request: Request, response: Response,
+    current_user: User = Depends(get_current_user),
+) -> ScopeCatalogResponse:
+    """Grantable external-plugin capability scopes (structural; labels are i18n on the client)."""
+    return ScopeCatalogResponse(
+        scopes=[
+            ScopeInfoSchema(key=s.key, tier=s.tier, dangerous=s.dangerous)
+            for s in SCOPE_CATALOG
+        ]
+    )
+
+
 @router.get("/ui/manifest", response_model=PluginUIManifestResponse)
 @user_limiter.limit(get_limit("admin_operations"))
 async def get_ui_manifest(
@@ -121,11 +140,12 @@ async def get_ui_manifest(
     for item in result.plugins:
         record = plugin_service.get_installed_plugin(db, item.name)
         item.granted_api_scopes = (record.granted_api_scopes or []) if record else []
-        try:
-            _manifest = load_manifest(plugin_manager.plugins_dir / item.name)
-            item.min_runtime_abi = getattr(_manifest, "min_runtime_abi", None)
-        except Exception:
-            item.min_runtime_abi = None
+        discovered = plugin_manager.get_discovered(item.name)
+        item.min_runtime_abi = (
+            discovered.manifest.min_runtime_abi
+            if discovered is not None and discovered.manifest is not None
+            else None
+        )
     return result
 
 
@@ -166,6 +186,8 @@ async def get_plugin_details(
             has_background_tasks=False,
             has_dashboard_panel=False,
             dashboard_panel_enabled=db_record.dashboard_panel_enabled if db_record else False,
+            is_external=True,
+            requested_api_scopes=list(getattr(manifest, "api_scopes", []) or []),
             nav_items=[],
             dashboard_widgets=[],
             installed_at=db_record.installed_at if db_record else None,
@@ -224,6 +246,8 @@ async def get_plugin_details(
         has_background_tasks=len(plugin.get_background_tasks()) > 0,
         has_dashboard_panel=plugin.get_dashboard_panel() is not None,
         dashboard_panel_enabled=db_record.dashboard_panel_enabled if db_record else False,
+        is_external=False,
+        requested_api_scopes=[],
         nav_items=[
             PluginNavItemSchema(**item.model_dump())
             for item in (ui_manifest.nav_items if ui_manifest else [])
@@ -371,7 +395,7 @@ async def _toggle_external(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plugin not found")
 
     if body.enabled:
-        api_scopes = list(getattr(manifest, "api_scopes", []) or [])
+        api_scopes = [s for s in body.grant_api_scopes if s in CATALOG_KEYS]
         plugin_service.enable_plugin(
             db,
             name=name,

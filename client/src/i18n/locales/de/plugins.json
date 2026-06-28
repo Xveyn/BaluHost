@@ -209,5 +209,24 @@
     "event:subscribe": "System-Events abonnieren",
     "event:emit": "Eigene Events senden",
     "device:control": "Smart-Home-Geräte steuern (ein/aus, Helligkeit usw.)"
+  },
+  "scopeTiers": {
+    "frontend": "Frontend (UI-Daten)",
+    "backend": "Backend (Capabilities)"
+  },
+  "picker": {
+    "title": "Capability-Scopes gewähren — {{name}}",
+    "desc": "Dieses externe Plugin läuft in der Sandbox. Wähle, welche Capability-Scopes gewährt werden. Angefragte Scopes sind vorausgewählt; du kannst weniger gewähren.",
+    "dangerous": "Gefährlich",
+    "noScopes": "Dieses Plugin fordert keine Capability-Scopes an.",
+    "grant": "Gewähren & Aktivieren"
+  },
+  "scopeDescriptions": {
+    "read:system-info": { "label": "Systeminfo", "description": "Systemmetriken und Hardware-Informationen lesen" },
+    "read:storage": { "label": "Speicherinfo", "description": "Speichernutzung und Datenträgerdaten lesen" },
+    "read:power": { "label": "Energieinfo", "description": "Energie- und Leistungsdaten lesen" },
+    "storage": { "label": "Plugin-Speicher", "description": "Eigenen Key-Value-Speicher des Plugins lesen und schreiben" },
+    "core.system_metrics": { "label": "Systemmetriken", "description": "Kern-Systemmetriken über die Capability-Bridge abfragen" },
+    "core.notify": { "label": "Benachrichtigungen", "description": "Benachrichtigungen über den Kern senden" }
   }
 }

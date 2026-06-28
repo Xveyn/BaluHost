@@ -20,6 +20,22 @@ plugins/
     └── tapo_smart_plug/ # TP-Link Tapo smart plug integration with mock backend
 ```
 
+## Trust Tiers
+
+Two plugin trust tiers with different isolation:
+
+- **Bundled (in-process, fully trusted).** Plugins under `installed/`. Loaded as
+  Python in the host process, old permission model (`required_permissions` granted
+  in the enable modal). Full access to host APIs. Maintained in-repo.
+- **External (sandboxed subprocess).** Marketplace plugins discovered as
+  `source="external"`. Spawned via the hardened wrapper as the low-privilege
+  `baluhost-plugin` user, in a network namespace, fail-closed if unprovisioned
+  (Phase 5a). They reach the host only through default-deny **capability scopes**
+  (`CAPABILITY_SCOPE`) over UDS-RPC — no host Python import, no DB/FS/shell access.
+  The admin grants a subset of the plugin's requested `api_scopes` at enable time
+  via the scope-picker (Phase 5b); the catalog of grantable scopes is
+  `app/plugins/scope_catalog.py`.
+
 ## Plugin Lifecycle
 
 1. **Discovery**: `PluginManager` scans `installed/` for `__init__.py` files with a `PluginBase` subclass

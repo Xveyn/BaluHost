@@ -27,11 +27,23 @@ class UnsupportedManifestVersionError(ManifestError):
     """Raised when manifest_version is not in SUPPORTED_MANIFEST_VERSIONS."""
 
 
+class ManifestNavItem(BaseModel):
+    """A static sidebar nav entry declared by an external plugin in plugin.json."""
+
+    path: str
+    label: str
+    icon: Optional[str] = None
+    admin_only: bool = False
+    order: int = 100
+
+
 class PluginManifestUI(BaseModel):
     """UI section of a plugin manifest."""
 
     bundle: str = Field(..., description="Path to the JS bundle, relative to plugin dir")
     styles: Optional[str] = Field(default=None, description="Optional CSS path")
+    nav_items: List[ManifestNavItem] = Field(default_factory=list)
+    dashboard_widgets: List[str] = Field(default_factory=list)
 
 
 class PluginManifest(BaseModel):

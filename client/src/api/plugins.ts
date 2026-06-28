@@ -12,6 +12,16 @@ export interface PluginNavItem {
   order: number;
 }
 
+export interface ScopeInfo {
+  key: string;
+  tier: 'frontend' | 'backend';
+  dangerous: boolean;
+}
+
+export interface ScopeCatalogResponse {
+  scopes: ScopeInfo[];
+}
+
 export type PluginTranslations = Record<string, Record<string, string>> | null;
 
 export interface PluginInfo {
@@ -27,6 +37,7 @@ export interface PluginInfo {
   has_ui: boolean;
   has_routes: boolean;
   error?: string;
+  is_external?: boolean;
   translations?: PluginTranslations;
 }
 
@@ -71,6 +82,8 @@ export interface PluginDetail {
   has_background_tasks: boolean;
   has_dashboard_panel: boolean;
   dashboard_panel_enabled: boolean;
+  is_external?: boolean;
+  requested_api_scopes?: string[];
   nav_items: PluginNavItem[];
   dashboard_widgets: string[];
   installed_at?: string;
@@ -83,6 +96,7 @@ export interface PluginDetail {
 export interface PluginToggleRequest {
   enabled: boolean;
   grant_permissions?: string[];
+  grant_api_scopes?: string[];
 }
 
 export interface PluginToggleResponse {
@@ -173,6 +187,14 @@ export async function getUIManifest(): Promise<PluginUIManifest> {
  */
 export async function listPermissions(): Promise<PermissionListResponse> {
   const response = await apiClient.get<PermissionListResponse>('/api/plugins/permissions');
+  return response.data;
+}
+
+/**
+ * List the catalog of capability scopes grantable to external plugins
+ */
+export async function getScopeCatalog(): Promise<ScopeCatalogResponse> {
+  const response = await apiClient.get<ScopeCatalogResponse>('/api/plugins/scope-catalog');
   return response.data;
 }
 

@@ -7,7 +7,9 @@ import pytest
 
 from app.plugins.manifest import (
     ManifestError,
+    ManifestNavItem,
     PluginManifest,
+    PluginManifestUI,
     UnsupportedManifestVersionError,
     load_manifest,
 )
@@ -145,3 +147,25 @@ class TestPythonRequirements:
             "pyowm==3.3.0",
             "anyio",
         ]
+
+
+def test_manifest_ui_nav_items_parse():
+    ui = PluginManifestUI.model_validate({
+        "bundle": "bundle.js",
+        "nav_items": [
+            {"path": "weather", "label": "Weather", "icon": "cloud", "order": 50},
+        ],
+        "dashboard_widgets": ["WeatherWidget"],
+    })
+    assert len(ui.nav_items) == 1
+    assert ui.nav_items[0] == ManifestNavItem(
+        path="weather", label="Weather", icon="cloud", admin_only=False, order=50
+    )
+    assert ui.dashboard_widgets == ["WeatherWidget"]
+
+
+def test_manifest_ui_without_nav_items_defaults_empty():
+    ui = PluginManifestUI.model_validate({"bundle": "bundle.js"})
+    assert ui.nav_items == []
+    assert ui.dashboard_widgets == []
+    assert ui.styles is None
