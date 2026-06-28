@@ -19,7 +19,7 @@ def check_index_signature(
     fetcher: Callable[[str], bytes],
 ) -> tuple[bool, str]:
     """Return ``(ok, message)``. Never raises."""
-    if not list(public_keys):
+    if not public_keys:
         return False, "marketplace signing not configured"
     try:
         raw = fetcher(index_url)
@@ -46,14 +46,19 @@ def _default_fetcher(url: str) -> bytes:
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
-    from app.core.config import settings
+    # Wrap the whole body: even a config-load / attribute error must print a
+    # WARN and exit 0 — this entrypoint must NEVER fail a deploy on its own.
+    try:
+        from app.core.config import settings
 
-    index_url = settings.plugins_marketplace_index_url
-    sig_url = settings.plugins_marketplace_signature_url or (index_url + ".sig")
-    ok, message = check_index_signature(
-        index_url, sig_url, settings.plugins_marketplace_public_keys, _default_fetcher
-    )
-    print(f"PASS: {message}" if ok else f"WARN: {message}")
+        index_url = settings.plugins_marketplace_index_url
+        sig_url = settings.plugins_marketplace_signature_url or (index_url + ".sig")
+        ok, message = check_index_signature(
+            index_url, sig_url, settings.plugins_marketplace_public_keys, _default_fetcher
+        )
+        print(f"PASS: {message}" if ok else f"WARN: {message}")
+    except Exception as exc:  # noqa: BLE001 - never fail a deploy from here
+        print(f"WARN: smoke-check could not run: {exc}")
     return 0  # always non-fatal
 
 
