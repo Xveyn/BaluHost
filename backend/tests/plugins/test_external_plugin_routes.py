@@ -155,3 +155,19 @@ def test_get_plugin_details_external_uses_manifest_no_exec(tmp_path, db_session,
     assert result.has_ui is False  # manifest.ui is None
     assert result.nav_items == []
     assert result.config == {}
+
+
+def test_get_scope_catalog_endpoint_returns_six_entries():
+    user = types.SimpleNamespace(id=1, username="admin", role="admin")
+    resp = asyncio.run(
+        plugins_route.get_scope_catalog(
+            request=_make_mock_request(), response=_make_mock_response(), current_user=user,
+        )
+    )
+    assert len(resp.scopes) == 6
+    keys = {s.key for s in resp.scopes}
+    assert "read:system-info" in keys
+    assert "core.notify" in keys
+    for s in resp.scopes:
+        assert s.tier in ("frontend", "backend")
+        assert s.dangerous is False

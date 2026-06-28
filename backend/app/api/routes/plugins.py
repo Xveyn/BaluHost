@@ -13,6 +13,7 @@ from app.middleware.plugin_gate import invalidate_plugin_cache
 from app.plugins.manifest import load_manifest
 from app.plugins.manager import PluginManager, PluginLoadError
 from app.plugins.permissions import PermissionManager
+from app.plugins.scope_catalog import SCOPE_CATALOG, CATALOG_KEYS
 from app.services import plugin_service
 from app.services import plugin_storage_service
 from app.services.audit.logger_db import get_audit_logger_db
@@ -30,7 +31,9 @@ from app.schemas.plugin import (
     PluginToggleRequest,
     PluginToggleResponse,
     PluginUIManifestResponse,
+    ScopeCatalogResponse,
     ScopeDeniedReport,
+    ScopeInfoSchema,
 )
 
 
@@ -99,6 +102,21 @@ async def list_permissions(
     perms = PermissionManager.get_all_permissions()
     return PermissionListResponse(
         permissions=[PermissionInfo(**p) for p in perms]
+    )
+
+
+@router.get("/scope-catalog", response_model=ScopeCatalogResponse)
+@user_limiter.limit(get_limit("admin_operations"))
+async def get_scope_catalog(
+    request: Request, response: Response,
+    current_user: User = Depends(get_current_user),
+) -> ScopeCatalogResponse:
+    """Grantable external-plugin capability scopes (structural; labels are i18n on the client)."""
+    return ScopeCatalogResponse(
+        scopes=[
+            ScopeInfoSchema(key=s.key, tier=s.tier, dangerous=s.dangerous)
+            for s in SCOPE_CATALOG
+        ]
     )
 
 

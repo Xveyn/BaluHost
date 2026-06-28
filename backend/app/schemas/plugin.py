@@ -172,6 +172,20 @@ class PermissionListResponse(BaseModel):
     permissions: List[PermissionInfo]
 
 
+class ScopeInfoSchema(BaseModel):
+    """A single grantable external-plugin capability scope (structural only)."""
+
+    key: str
+    tier: str  # "frontend" | "backend"
+    dangerous: bool
+
+
+class ScopeCatalogResponse(BaseModel):
+    """Catalog of scopes grantable to external plugins. Labels are i18n on the client."""
+
+    scopes: List[ScopeInfoSchema] = []
+
+
 class DashboardPanelToggleRequest(BaseModel):
     """Request to enable/disable a plugin's Dashboard panel."""
 
