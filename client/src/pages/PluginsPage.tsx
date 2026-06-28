@@ -11,9 +11,11 @@ import type {
   PluginDetail,
   PluginInfo,
   PermissionInfo,
+  ScopeInfo,
 } from '../api/plugins';
 import {
   getPluginDetails,
+  getScopeCatalog,
   listPermissions,
   togglePlugin,
   toggleDashboardPanel,
@@ -47,6 +49,9 @@ export default function PluginsPage() {
   const [showPermissionModal, setShowPermissionModal] = useState(false);
   const [selectedPermissions, setSelectedPermissions] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<TabType>('plugins');
+  const [scopeCatalog, setScopeCatalog] = useState<ScopeInfo[]>([]);
+  const [showScopeModal, setShowScopeModal] = useState(false);
+  const [selectedScopes, setSelectedScopes] = useState<string[]>([]);
 
   // Load all permissions on mount
   useEffect(() => {
@@ -55,14 +60,23 @@ export default function PluginsPage() {
       .catch(console.error);
   }, []);
 
-  const loadPluginDetails = async (name: string) => {
+  // Load scope catalog on mount (for external plugin scope-picker)
+  useEffect(() => {
+    getScopeCatalog()
+      .then((res) => setScopeCatalog(res.scopes))
+      .catch(console.error);
+  }, []);
+
+  const loadPluginDetails = async (name: string): Promise<PluginDetail | null> => {
     setDetailsLoading(true);
     setActionError(null);
     try {
       const details = await getPluginDetails(name);
       setSelectedPlugin(details);
+      return details;
     } catch {
       setActionError(t('errors.loadDetailsFailed'));
+      return null;
     } finally {
       setDetailsLoading(false);
     }
@@ -85,9 +99,20 @@ export default function PluginsPage() {
         setActionLoading(false);
       }
     } else {
-      // Show permission modal for enabling
-      setSelectedPermissions(plugin.required_permissions);
-      setShowPermissionModal(true);
+      // Enable: load details to learn tier + requested scopes
+      const details = await loadPluginDetails(plugin.name);
+      if (!details) return;
+      if (details.is_external) {
+        setSelectedScopes(
+          (details.requested_api_scopes ?? []).filter((s) =>
+            scopeCatalog.some((c) => c.key === s),
+          ),
+        );
+        setShowScopeModal(true);
+      } else {
+        setSelectedPermissions(plugin.required_permissions);
+        setShowPermissionModal(true);
+      }
     }
   };
 
@@ -102,6 +127,25 @@ export default function PluginsPage() {
       await togglePlugin(selectedPlugin.name, {
         enabled: true,
         grant_permissions: selectedPermissions,
+      });
+      await refreshPlugins();
+      await loadPluginDetails(selectedPlugin.name);
+    } catch {
+      setActionError(t('errors.enableFailed'));
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleEnableWithScopes = async () => {
+    if (!selectedPlugin) return;
+    setActionLoading(true);
+    setActionError(null);
+    setShowScopeModal(false);
+    try {
+      await togglePlugin(selectedPlugin.name, {
+        enabled: true,
+        grant_api_scopes: selectedScopes,
       });
       await refreshPlugins();
       await loadPluginDetails(selectedPlugin.name);
@@ -548,6 +592,98 @@ export default function PluginsPage() {
           </div>
         </div>
       )}
+      {/* Scope Grant Modal (external plugins only) */}
+      {showScopeModal && selectedPlugin && (() => {
+        const descs = t('scopeDescriptions', { returnObjects: true }) as Record<
+          string,
+          { label: string; description: string }
+        >;
+        const requested = (selectedPlugin.requested_api_scopes ?? []).filter((s) =>
+          scopeCatalog.some((c) => c.key === s),
+        );
+        const byTier = (tier: 'frontend' | 'backend') =>
+          requested
+            .map((key) => scopeCatalog.find((c) => c.key === key)!)
+            .filter((c) => c.tier === tier);
+        const renderScope = (scope: ScopeInfo) => {
+          const isChecked = selectedScopes.includes(scope.key);
+          const meta = descs?.[scope.key];
+          return (
+            <label
+              key={scope.key}
+              className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer transition ${
+                scope.dangerous
+                  ? 'bg-amber-500/10 border border-amber-500/20'
+                  : 'bg-slate-800/50 border border-slate-700'
+              }`}
+            >
+              <input
+                type="checkbox"
+                checked={isChecked}
+                onChange={(e) => {
+                  if (e.target.checked) {
+                    setSelectedScopes([...selectedScopes, scope.key]);
+                  } else {
+                    setSelectedScopes(selectedScopes.filter((s) => s !== scope.key));
+                  }
+                }}
+                className="mt-1 rounded border-slate-600 text-blue-500 focus:ring-blue-500 focus:ring-offset-slate-900"
+              />
+              <div>
+                <div className={`text-sm font-medium ${scope.dangerous ? 'text-amber-400' : 'text-white'}`}>
+                  {meta?.label ?? scope.key}
+                  {scope.dangerous && (
+                    <span className="ml-2 text-xs text-amber-500">({t('picker.dangerous')})</span>
+                  )}
+                </div>
+                {meta?.description && (
+                  <p className="text-xs text-slate-500 mt-0.5">{meta.description}</p>
+                )}
+              </div>
+            </label>
+          );
+        };
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 w-full max-w-md mx-4 shadow-2xl">
+              <h3 className="text-lg font-medium text-white mb-2">
+                {t('picker.title', { name: selectedPlugin.display_name })}
+              </h3>
+              <p className="text-sm text-slate-400 mb-4">{t('picker.desc')}</p>
+              {requested.length === 0 ? (
+                <p className="text-sm text-slate-500 mb-6">{t('picker.noScopes')}</p>
+              ) : (
+                <div className="space-y-4 mb-6 max-h-72 overflow-y-auto">
+                  {(['frontend', 'backend'] as const).map((tier) =>
+                    byTier(tier).length === 0 ? null : (
+                      <div key={tier} className="space-y-2">
+                        <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                          {t(`scopeTiers.${tier}`)}
+                        </div>
+                        {byTier(tier).map(renderScope)}
+                      </div>
+                    ),
+                  )}
+                </div>
+              )}
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowScopeModal(false)}
+                  className="flex-1 px-4 py-2 text-sm font-medium rounded-lg border border-slate-700 text-slate-300 hover:border-slate-600 transition-all touch-manipulation active:scale-95"
+                >
+                  {t('buttons.cancel')}
+                </button>
+                <button
+                  onClick={handleEnableWithScopes}
+                  className="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all touch-manipulation active:scale-95"
+                >
+                  {t('picker.grant')}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
       {dialog}
     </div>
   );
