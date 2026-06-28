@@ -4,7 +4,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import PluginsPage from '../../pages/PluginsPage';
 import { usePlugins } from '../../contexts/PluginContext';
 import {
-  getScopeCatalog, getPluginDetails, togglePlugin, listPermissions,
+  getScopeCatalog, getPluginDetails, togglePlugin,
 } from '../../api/plugins';
 
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (k: string) => k }) }));
