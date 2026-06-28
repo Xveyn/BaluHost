@@ -32,6 +32,8 @@ Translations are split by feature domain. Each namespace is a separate JSON file
 | `apiDocs` | API documentation page |
 | `manual` | User manual |
 | `pihole` | Pi-hole DNS dashboard |
+| `setup` | Setup wizard steps |
+| `statusBar` | Status bar strip labels and tooltips |
 
 ## Usage in Components
 

@@ -41,6 +41,13 @@ Business logic layer. Routes delegate to services — services contain the actua
 | `user_metadata_cache.py` | Cached user metadata for file operations |
 | `balupi_handshake.py` | BaluPi companion device startup/shutdown notifications |
 | `dashboard_panel_bridge.py` | Plugin dashboard panel SHM-to-WebSocket bridge |
+| `plugin_marketplace.py` | `MarketplaceService`: fetches upstream `index.json`, fail-closed ed25519 signature gate (Track C), drives install/uninstall via `PluginInstaller` |
+| `plugin_storage_service.py` | Sandboxed plugin KV storage with per-plugin quota enforcement |
+| `plugin_update_check.py` | Plugin update checker — compares installed versions against marketplace index |
+| `auth_policy.py` | Auth policy CRUD and evaluation (per-user/per-route policy rules) |
+| `nfs_service.py` | NFS share management (export config, mount lifecycle) |
+| `notification_routing.py` | Notification routing rules — maps event types to per-user delivery channels |
+| `pin_service.py` | Device PIN management (set, verify, clear) |
 
 ### Service Subdirectories
 
@@ -108,6 +115,8 @@ Business logic layer. Routes delegate to services — services contain the actua
 **`benchmark/`** — Disk benchmarking (fio backend + dev mock)
 
 **`update/`** — Self-hosted update mechanism with rollback
+
+**`status_bar/`** — Topbar status strip: catalog-driven collectors and strip service
 
 **`setup/`** — First-run setup wizard: detection, step tracking, completion
 - `service.py` — Setup required detection, completed step tracking, completion flag

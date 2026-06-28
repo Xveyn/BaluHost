@@ -19,7 +19,7 @@ All modules import from `lib/api.ts`:
 - Return `res.data` directly (unwrap axios response)
 - No error handling here — callers handle errors via `handleApiError()` from `lib/errorHandling.ts`
 
-## Files (~45 modules)
+## Files (~57 modules)
 
 | File | Backend prefix | Key operations |
 |---|---|---|
@@ -38,6 +38,21 @@ All modules import from `lib/api.ts`:
 | `schedulers.ts` | `/api/schedulers` | Scheduler status, history, run-now |
 | `pihole.ts` | `/api/pihole` | Pi-hole status, DNS queries, blocklists |
 | `cloud-import.ts` | `/api/cloud` | Cloud import (rclone) operations |
+| `cloud-export.ts` | `/api/cloud` | Cloud export operations |
+| `users.ts` | `/api/users` | User CRUD, role management |
+| `mobile.ts` | `/api/mobile` | Mobile device registration and management |
+| `samba.ts` | `/api/samba` | Samba/SMB share configuration |
+| `webdav.ts` | `/api/webdav` | WebDAV server management |
+| `updates.ts` | `/api/updates` | Self-hosted update mechanism |
+| `energy.ts` | `/api/energy` | Energy consumption statistics |
+| `benchmark.ts` | `/api/benchmark` | Disk benchmark initiation and results |
+| `setup.ts` | `/api/setup` | Setup wizard steps and state |
+| `two-factor.ts` | `/api/totp` | TOTP two-factor authentication |
+| `remote-servers.ts` | `/api/remote-servers` | Remote server profile management |
+| `statusBar.ts` | `/api/system` | Status bar indicator data (catalog-driven) |
+| `gpuPower.ts` | `/api/power` | GPU power monitoring and presence detection |
+| `nfs.ts` | `/api/nfs` | NFS share management |
+| `plugins-marketplace.ts` | `/api/plugins` | Plugin marketplace listing and install (external market) |
 
 ## Adding a New API Module
 

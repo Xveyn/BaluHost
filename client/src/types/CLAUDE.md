@@ -10,6 +10,8 @@ TypeScript type definitions and ambient declarations.
 | `vcl.ts` | File versioning (VCL) types |
 | `electron.d.ts` | Ambient declarations for Electron IPC bridge (`window.electronAPI`) |
 | `plugin-sdk.d.ts` | Ambient declarations for plugin SDK globals |
+| `balu-global.d.ts` | Ambient global declarations (project-wide type augmentations) |
+| `gpuPower.ts` | GPU power monitoring types |
 
 ## Conventions
 

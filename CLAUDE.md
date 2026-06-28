@@ -80,6 +80,7 @@ client/
 **Scheduler service**: `backend/app/services/scheduler/service.py`
 **Scheduler Dashboard**: `client/src/pages/SchedulerDashboard.tsx`
 **Setup wizard**: `backend/app/services/setup/`, `backend/app/api/routes/setup.py`
+**Marketplace index signing**: `backend/app/plugins/signing.py`, gate in `backend/app/services/plugin_marketplace.py:get_index()`
 
 Each major directory has its own CLAUDE.md with structure, conventions, and patterns specific to that area. **Keep these in sync when adding/removing files or changing patterns.**
 
@@ -87,7 +88,7 @@ Each major directory has its own CLAUDE.md with structure, conventions, and patt
 - `api/CLAUDE.md` — Routes, auth dependencies, endpoint conventions
 - `compat/CLAUDE.md` — WebDAV bridge, asyncio patches
 - `core/CLAUDE.md` — Config, DB, security, lifespan, rate limiting
-- `middleware/CLAUDE.md` — All 7 middleware with purpose and scope
+- `middleware/CLAUDE.md` — All 8 middleware with purpose and scope
 - `models/CLAUDE.md` — SQLAlchemy model groups, conventions
 - `plugins/CLAUDE.md` — Plugin system architecture and lifecycle
 - `schemas/CLAUDE.md` — Pydantic schema conventions
@@ -102,6 +103,44 @@ Each major directory has its own CLAUDE.md with structure, conventions, and patt
 - `lib/CLAUDE.md` — Core utilities, feature flags, error handling
 - `pages/CLAUDE.md` — Route pages, device modes, lazy loading
 - `types/CLAUDE.md` — TypeScript types, ambient declarations
+
+## Plugin Marketplace Signing — Trust Mechanic (fail-closed)
+
+External (marketplace) plugins are the untrusted-code attack surface. Their
+`index.json` is cryptographically anchored so a compromised/MITM'd index can't
+become RCE. **Do not weaken or bypass any part of this chain.**
+
+- **Detached ed25519 over the RAW index bytes.** `MarketplaceService.get_index()`
+  fetches `index.json` + `index.json.sig` and verifies the signature over the
+  *exact bytes* it will then `json.loads` (no re-fetch → no TOCTOU), **before**
+  the index is parsed or trusted. Verify util: `app/plugins/signing.py`
+  (`verify_detached_ed25519`). The cache stores only post-verification indexes.
+- **Fail-closed, always.** An empty trusted-key list, a missing/unfetchable
+  `.sig`, or an invalid signature **rejects** the index (`IndexSignatureError`).
+  There is **no unsigned fallback** — never add one. Archive integrity stays
+  transitive via the now-signed `checksum_sha256` (no installer change).
+- **Trusted keys come from config, default empty.** `settings.plugins_marketplace_public_keys`
+  (`config.py`). Empty default = the marketplace is rejected until a key is
+  provisioned — that is intentional, not a bug. Env is **plain CSV**
+  (`PLUGINS_MARKETPLACE_PUBLIC_KEYS=key1,key2`), parsed by a `mode="before"`
+  comma-split validator mirroring `parse_privileged_roles` — **not** Pydantic's
+  JSON default (base64 has no comma; avoids shell/systemd quote-stripping).
+- **The signing PRIVATE key never enters this repo, a commit, or an AI session.**
+  It lives on the maintainer's machine / as the `BaluHost-Plugin-Market` GitHub
+  secret. Only the public key is provisioned, out-of-band, via
+  `deploy/scripts/install-marketplace-pubkey.sh` (idempotent; validates each key
+  decodes to 32 bytes). Rotation = append more keys to the CSV.
+- **Deploy verifies, never blocks.** `python -m app.plugins.verify_index_signature`
+  runs as a non-fatal smoke-check in `deploy/scripts/ci-deploy.sh` (always exits 0;
+  prints PASS/WARN).
+- **Route error mapping:** `IndexSignatureError` → `BadGatewayError` (a
+  `ServiceError`, 502) so the curated detail survives the global 5xx scrubber —
+  a plain `HTTPException(502)` would be rewritten to "Internal server error".
+
+Provisioning on a fresh box (companion-repo signing setup + `install-marketplace-pubkey.sh`)
+is a one-time operator step needed before the first signed index; until then the
+marketplace is fail-closed (harmless — 0 external plugins deployed). Design detail:
+`docs/superpowers/specs/2026-06-28-plugin-marketplace-index-signing-design.md`.
 
 ## Contact & Support
 

@@ -13,6 +13,17 @@ plugins/
 ├── emit.py              # Convenience: emit_hook(), emit_event(), emit_event_sync()
 ├── permissions.py       # PluginPermission enum, DANGEROUS_PERMISSIONS list
 ├── dashboard_panel.py   # Dashboard panel bridge for plugin data
+├── installer.py         # Plugin install/uninstall/upgrade mechanics
+├── manifest.py          # Plugin manifest parsing and validation
+├── marketplace.py       # Marketplace index fetch and caching
+├── resolver.py          # Dependency/version resolution
+├── core_versions.py     # Core API version table (loaded from core_versions.json)
+├── core_versions.json   # JSON data: core API ↔ plugin version constraints
+├── scope_catalog.py     # Catalog of grantable capability scopes (admin scope-picker at enable time)
+├── signing.py           # Track C: ed25519 detached index-signature verify (fail-closed)
+├── verify_index_signature.py  # Track C: non-fatal deploy signature smoke-check
+├── sandbox/             # Subprocess-isolation layer (protocol, channel, transport, worker, supervisor, capabilities, host_capabilities, proxy, spawn, loader)
+├── sdk/                 # Plugin authoring toolkit (cli, validator, dry_install)
 ├── smart_device/        # SmartDevice plugin framework (base class, manager, poller, capabilities)
 └── installed/           # Plugin implementations
     ├── optical_drive/   # CD/DVD burning, reading, ISO browsing
@@ -34,7 +45,10 @@ Two plugin trust tiers with different isolation:
   (`CAPABILITY_SCOPE`) over UDS-RPC — no host Python import, no DB/FS/shell access.
   The admin grants a subset of the plugin's requested `api_scopes` at enable time
   via the scope-picker (Phase 5b); the catalog of grantable scopes is
-  `app/plugins/scope_catalog.py`.
+  `app/plugins/scope_catalog.py`. The marketplace `index.json` is verified against a
+  **detached ed25519 signature (fail-closed)** before it is trusted — an empty or
+  unrecognised trusted-key list causes the index to be rejected; see `signing.py`
+  and `services/plugin_marketplace.py`.
 
 ## Plugin Lifecycle
 
