@@ -17,6 +17,12 @@
 - **Test convention.** Tests live in the centralized mirror tree `client/src/__tests__/<area>/` (NOT co-located). `react-i18next` is stubbed `t: (k) => k`, so assert on i18n KEYS and scope keys, never English copy. `toBeInTheDocument()` matchers are available globally (vitest setup) — do not import `@testing-library/jest-dom` per-file.
 - **Pre-PR gates (run from `client/`):** `npx eslint .` (0 errors; warnings OK), `npm run build` (`tsc -b` over the app/node/test projects — exit 0, NOT `tsc --noEmit`), `npx vitest run`. The `tsconfig.test.json` already includes `src/vite-env.d.ts` (the `__DEVICE_MODE__` fix from #287) — do not remove it.
 - **Line endings.** Repo is `core.autocrlf=true` on Windows; LF↔CRLF warnings on commit are expected and harmless.
+- **Commit footer.** Every commit message must end with exactly these two trailer lines (after a blank line):
+  ```
+  Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+  Claude-Session: https://claude.ai/code/session_01Qc4Ly7J5ALeCgujbKfs7FA
+  ```
+  The single-line `git commit -m "..."` examples below are abbreviated — append the footer (use `git commit -F` with a message file or repeated `-m` flags). Do NOT use `--no-verify`.
 - **Branch:** `feat/plugin-documentation-two-tier` (already created from `main` after #287 merge). The spec lives at `docs/superpowers/specs/2026-06-28-plugin-documentation-two-tier-design.md`.
 
 ---
@@ -41,7 +47,7 @@ Add the new keys and reword the three reused strings, in both locale files. **No
 
 **Interfaces:**
 - Consumes: nothing.
-- Produces: i18n keys the Task 2 rewrite renders — `tiers.title`, `tiers.bundled.{label,description}`, `tiers.external.{label,description}`, `tiers.scopesTitle`, `tiers.scopesIntro`, `tiers.scopesUnavailable`, `tiers.installTitle`, `tiers.installExternal`, `tiers.installBundled`, `tiers.bundledOnlyPerms`; plus reworded values for the unchanged keys `docs.securityWarning`, `docs.securityWarningDescription`, `docs.permissionsDescription`.
+- Produces: i18n keys the Task 2 rewrite renders — `tiers.title`, `tiers.bundled.{label,description}`, `tiers.external.{label,description}`, `tiers.scopesTitle`, `tiers.scopesIntro`, `tiers.scopesUnavailable`, `tiers.installTitle`, `tiers.installExternal`, `tiers.installBundled`; plus reworded values for the unchanged keys `docs.securityWarning`, `docs.securityWarningDescription`, `docs.dangerousPermissions`, `docs.permissionsDescription`.
 
 - [ ] **Step 1: Read the German locale to learn its structure**
 
@@ -67,18 +73,18 @@ In `client/src/i18n/locales/en/plugins.json`, add this top-level block (place it
     "scopesUnavailable": "The scope catalog is currently unavailable.",
     "installTitle": "Installing & enabling",
     "installExternal": "Install external plugins from the Marketplace tab (downloaded and checksum-verified). When you enable one, pick which of its requested capability scopes to grant.",
-    "installBundled": "Bundled plugins ship with BaluHost; enabling one grants its declared permissions via the permission dialog.",
-    "bundledOnlyPerms": "High-risk permissions (bundled plugins only)"
+    "installBundled": "Bundled plugins ship with BaluHost; enabling one grants its declared permissions via the permission dialog."
   },
 ```
 
-- [ ] **Step 3: Reword the three reused English values**
+- [ ] **Step 3: Reword the reused English values**
 
-In the same file's `docs` block, replace these three values (keys unchanged):
+In the same file's `docs` block, replace these values (keys unchanged):
 
 ```json
     "securityWarning": "Heads Up — Plugins Run at Two Trust Levels",
     "securityWarningDescription": "Bundled plugins ship with BaluHost and run in-process with full host access. External marketplace plugins are sandboxed, but you still grant them capability scopes — only install and grant what you trust.",
+    "dangerousPermissions": "High-risk permissions (bundled plugins only)",
 ```
 
 and:
@@ -107,18 +113,18 @@ In `client/src/i18n/locales/de/plugins.json`, add the mirrored block (placed nex
     "scopesUnavailable": "Der Scope-Katalog ist derzeit nicht verfügbar.",
     "installTitle": "Installieren & Aktivieren",
     "installExternal": "Installiere externe Plugins über den Marketplace-Tab (heruntergeladen und per Prüfsumme verifiziert). Beim Aktivieren wählst du aus, welche der angeforderten Capability-Scopes du gewährst.",
-    "installBundled": "Bundled-Plugins werden mit BaluHost ausgeliefert; beim Aktivieren werden ihre deklarierten Berechtigungen über den Berechtigungsdialog gewährt.",
-    "bundledOnlyPerms": "Risikoreiche Berechtigungen (nur Bundled)"
+    "installBundled": "Bundled-Plugins werden mit BaluHost ausgeliefert; beim Aktivieren werden ihre deklarierten Berechtigungen über den Berechtigungsdialog gewährt."
   },
 ```
 
-- [ ] **Step 5: Reword the three reused German values**
+- [ ] **Step 5: Reword the reused German values**
 
 In the German `docs` block, replace:
 
 ```json
     "securityWarning": "Achtung — Plugins laufen auf zwei Vertrauensstufen",
     "securityWarningDescription": "Bundled-Plugins werden mit BaluHost ausgeliefert und laufen In-Process mit vollem Host-Zugriff. Externe Marketplace-Plugins laufen in einer Sandbox, aber du gewährst ihnen trotzdem Capability-Scopes — installiere und gewähre nur, was du vertraust.",
+    "dangerousPermissions": "Risikoreiche Berechtigungen (nur Bundled)",
 ```
 
 and:
@@ -317,7 +323,7 @@ export default function PluginDocumentation({ permissions, scopeCatalog }: Plugi
             <h3 className="font-medium text-amber-200">{t('docs.securityWarning')}</h3>
             <p className="mt-1 text-sm text-amber-200/80">{t('docs.securityWarningDescription')}</p>
             <div className="mt-3">
-              <p className="text-xs font-medium text-amber-300">{t('tiers.bundledOnlyPerms')}:</p>
+              <p className="text-xs font-medium text-amber-300">{t('docs.dangerousPermissions')}:</p>
               <ul className="mt-1 text-xs text-amber-200/70 space-y-1">
                 <li>• <code className="text-amber-300">file:write</code> - {t('docs.permissionDescFileWrite')}</li>
                 <li>• <code className="text-amber-300">file:delete</code> - {t('docs.permissionDescFileDelete')}</li>
@@ -615,7 +621,7 @@ git commit -m "i18n(plugins): drop stale install/lifecycle/hooks doc keys (unuse
 ## Self-Review
 
 **1. Spec coverage:**
-- §1 Security banner reframed → Task 2 Step 3 (banner section, `tiers.bundledOnlyPerms` prefix, reworded `docs.securityWarning*` from Task 1). ✓
+- §1 Security banner reframed → Task 2 Step 3 (banner section, reworded `docs.dangerousPermissions` "(bundled plugins only)" prefix, reworded `docs.securityWarning*` from Task 1). ✓
 - §2 Trust Tiers (NEW) → Task 2 Step 3 (two-card `md:grid-cols-2`, `ShieldCheck`/`Boxes`, `tiers.title`). ✓
 - §3 Capability Scopes (NEW, live catalog, grouped by tier, separator-safe lookup, conditional danger flag) → Task 2 Step 3. ✓
 - §4 Installing & enabling reframed → Task 2 Step 3 (`tiers.install*` + `docs.marketplaceHint`). ✓
@@ -630,5 +636,7 @@ git commit -m "i18n(plugins): drop stale install/lifecycle/hooks doc keys (unuse
 **2. Placeholder scan:** No TBD/TODO/"add error handling" — all code shown in full, all commands concrete with expected output.
 
 **3. Type consistency:** `PluginDocumentationProps { permissions: PermissionInfo[]; scopeCatalog: ScopeInfo[] }` matches the test's `render(<PluginDocumentation permissions={...} scopeCatalog={...} />)` and `PluginsPage`'s `scopeCatalog` state type (`ScopeInfo[]`). `scopeDescs` typed `Record<string, { label; description }>` matches the picker. Tier literal `('frontend'|'backend')` matches `ScopeInfo.tier` and `scopeTiers.*`. Removal list (Task 3) is disjoint from the keep list and from keys the rewrite uses.
+
+**Hooks-count decision:** The spec §5 asks for a "total count" in the condensed hooks summary but also mandates removing `HOOKS_BY_CATEGORY_KEY` / `totalHooks` — without that data a live count is impossible, and a hardcoded "26" would drift (the very thing this PR removes). Resolution: omit the count; the GitHub "full list" link is the source of truth. (Surfaced and approved during the pre-execution review.)
 
 **Decomposition note:** The spec listed 4 tasks; prop-threading was merged into the component rewrite (Task 2) because an unused `scopeCatalog` prop would fail the eslint `no-unused-vars` gate on its own — the two are not independently shippable. i18n-add (Task 1) precedes the rewrite so no fallback-key intermediate state ships; i18n-removal (Task 3) follows the rewrite so keys are genuinely unused when deleted.
