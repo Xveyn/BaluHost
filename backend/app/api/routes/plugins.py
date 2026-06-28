@@ -253,7 +253,7 @@ async def toggle_plugin(
     """
     # External sandboxed plugin: use manifest path (no exec)
     discovered = plugin_manager.get_discovered(name)
-    if discovered is not None and discovered.source == "external":
+    if discovered is not None and discovered.source == "external" and discovered.manifest is not None:
         return await _toggle_external(
             name, body, db, current_user, plugin_manager, discovered
         )

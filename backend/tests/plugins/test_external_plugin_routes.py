@@ -64,6 +64,44 @@ def test_toggle_enable_external_uses_manifest(tmp_path, db_session, monkeypatch)
     assert enabled["scopes"] == ["storage"]
 
 
+def test_toggle_disable_external_uses_manifest(tmp_path, db_session, monkeypatch):
+    PluginManager.reset_instance()
+    mgr = PluginManager(plugins_dir=tmp_path)
+    pdir = tmp_path / "weather"
+    pdir.mkdir()
+
+    class _M:
+        api_scopes = ["storage"]
+        version = "2.0.0"
+        display_name = "Weather"
+        required_permissions = []
+
+    mgr._discovered = {
+        "weather": DiscoveredPlugin(name="weather", path=pdir, source="external", manifest=_M()),
+    }
+
+    disabled = {}
+
+    async def fake_disable(name):
+        disabled["called"] = True
+        disabled["name"] = name
+        return True
+
+    monkeypatch.setattr(mgr, "disable_plugin", fake_disable)
+
+    body = plugins_route.PluginToggleRequest(enabled=False, grant_permissions=[])
+    user = types.SimpleNamespace(id=1, username="admin", role="admin")
+    resp = asyncio.run(
+        plugins_route.toggle_plugin(
+            request=_make_mock_request(), response=_make_mock_response(), name="weather", body=body,
+            db=db_session, current_user=user, plugin_manager=mgr,
+        )
+    )
+    assert resp.is_enabled is False
+    assert disabled.get("called") is True
+    assert disabled.get("name") == "weather"
+
+
 def test_get_plugin_details_external_uses_manifest_no_exec(tmp_path, db_session, monkeypatch):
     """get_plugin_details for external+manifest plugin returns manifest data, never calls load_plugin."""
     PluginManager.reset_instance()
