@@ -171,3 +171,44 @@ def test_get_scope_catalog_endpoint_returns_six_entries():
     for s in resp.scopes:
         assert s.tier in ("frontend", "backend")
         assert s.dangerous is False
+
+
+def test_ui_manifest_enrichment_uses_discovered_manifest_for_abi(monkeypatch):
+    """min_runtime_abi must come from the plugin's OWN discovered manifest, not from
+    load_manifest(plugins_dir / name) — that path is wrong for external plugins."""
+    from app.api.routes import plugins as plugins_route
+
+    class _Mgr:
+        def get_ui_manifest(self):
+            return {"plugins": [{
+                "name": "weather", "display_name": "Weather",
+                "nav_items": [], "bundle_path": "bundle.js",
+                "styles_path": None, "dashboard_widgets": [], "translations": None,
+            }]}
+
+        def get_discovered(self, name):
+            return types.SimpleNamespace(
+                manifest=types.SimpleNamespace(min_runtime_abi=2)
+            )
+
+    def fake_get_installed(db, name):
+        return types.SimpleNamespace(granted_api_scopes=["storage"])
+
+    monkeypatch.setattr(plugins_route.plugin_service, "get_installed_plugin", fake_get_installed)
+
+    # Old code path resolved via load_manifest(plugins_dir / name); guard it.
+    def boom(_path):
+        raise AssertionError("must not resolve manifest via plugins_dir")
+
+    monkeypatch.setattr(plugins_route, "load_manifest", boom)
+
+    user = types.SimpleNamespace(id=1, username="admin", role="admin")
+    result = asyncio.run(
+        plugins_route.get_ui_manifest(
+            request=_make_mock_request(), response=_make_mock_response(),
+            db=object(), current_user=user, plugin_manager=_Mgr(),
+        )
+    )
+    item = next(p for p in result.plugins if p.name == "weather")
+    assert item.min_runtime_abi == 2
+    assert item.granted_api_scopes == ["storage"]
