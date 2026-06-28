@@ -563,12 +563,18 @@ class PluginManager:
             True if plugin was disabled successfully
         """
         if name in self._sandboxes:
-            supervisor = self._sandboxes.pop(name)
+            supervisor = self._sandboxes[name]
             try:
                 await supervisor.stop()
             except Exception:
-                logger.exception("Error stopping sandbox for %s", name)
-            self._enabled.discard(name)
+                logger.exception("Error stopping sandbox for %s; forcing kill", name)
+                try:
+                    await supervisor._hard_kill()
+                except Exception:
+                    logger.exception("Hard-kill of sandbox %s also failed", name)
+            finally:
+                self._sandboxes.pop(name, None)
+                self._enabled.discard(name)
             logger.info("Disabled external (sandboxed) plugin: %s", name)
             return True
 
