@@ -38,6 +38,65 @@ def scrub_env() -> dict:
     return env
 
 
+def _plugin_group_gid() -> Optional[int]:
+    """GID of the plugin group (== settings.plugin_sandbox_user). None if absent / non-POSIX."""
+    try:
+        import grp  # POSIX-only
+        return grp.getgrnam(settings.plugin_sandbox_user).gr_gid
+    except (ImportError, KeyError):
+        return None
+
+
+def _flag_value(argv: list, flag: str) -> Optional[str]:
+    """Return the value following ``flag`` in argv, or None."""
+    try:
+        return argv[argv.index(flag) + 1]
+    except (ValueError, IndexError):
+        return None
+
+
+def _grant_group_rx_tree(root: str, gid: int) -> None:
+    """chgrp ``root`` recursively to gid and add group-read (+ group-exec on dirs).
+
+    Best-effort: skips anything it cannot change.
+    """
+    def _fix(path: str, is_dir: bool) -> None:
+        try:
+            os.chown(path, -1, gid)
+            mode = os.stat(path).st_mode
+            os.chmod(path, mode | (0o050 if is_dir else 0o040))
+        except OSError:
+            pass
+
+    _fix(root, True)
+    for dirpath, dirnames, filenames in os.walk(root):
+        for d in dirnames:
+            _fix(os.path.join(dirpath, d), True)
+        for f in filenames:
+            _fix(os.path.join(dirpath, f), False)
+
+
+def grant_plugin_group_access(argv: list) -> None:
+    """Make the host-created UDS socket and the plugin dir reachable by the
+    unprivileged plugin user, and nothing else. Best-effort; no-op when the
+    plugin group is absent (dev) or paths are unwritable. Only called from the
+    hardened path, so dev/Windows are never touched.
+    """
+    gid = _plugin_group_gid()
+    if gid is None:
+        return
+    connect = _flag_value(argv, "--connect")
+    if connect and os.path.exists(connect):
+        try:
+            os.chown(connect, -1, gid)   # pathname UDS: connect() needs group write
+            os.chmod(connect, 0o660)
+        except OSError:
+            pass
+    plugin_dir = _flag_value(argv, "--plugin-dir")
+    if plugin_dir and os.path.isdir(plugin_dir):
+        _grant_group_rx_tree(plugin_dir, gid)
+
+
 async def hardened_spawn(argv: list, cwd: str) -> asyncio.subprocess.Process:
     """Spawn the worker through the root-owned sudo wrapper with a scrubbed env.
 
@@ -45,6 +104,7 @@ async def hardened_spawn(argv: list, cwd: str) -> asyncio.subprocess.Process:
     ``--connect/--plugin-dir/--plugin-name`` flags it needs and reconstructs the
     privilege-dropping exec line from trusted constants.
     """
+    grant_plugin_group_access(argv)
     wrapped = ["sudo", "-n", settings.plugin_sandbox_wrapper_path, *argv]
     return await asyncio.create_subprocess_exec(*wrapped, cwd=cwd, env=scrub_env())
 

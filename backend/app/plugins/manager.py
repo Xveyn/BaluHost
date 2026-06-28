@@ -541,6 +541,7 @@ class PluginManager:
                 resource=f"plugin:{name}",
                 details={"reason": "baluhost-plugin user or spawn wrapper not provisioned"},
                 success=False,
+                user="system",
             )
             return False
         try:

@@ -26,6 +26,7 @@ async def test_enable_external_fails_closed_when_hook_none(tmp_path):
     kwargs = audit.return_value.log_security_event.call_args.kwargs
     assert kwargs["action"] == "plugin_sandbox_hardening_unavailable"
     assert kwargs["success"] is False
+    assert kwargs["user"] == "system"
 
 
 @pytest.mark.asyncio

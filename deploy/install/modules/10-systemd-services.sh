@@ -121,11 +121,15 @@ WRAPPER_SRC="$SCRIPT_DIR/bin/spawn-plugin-worker.sh"
 WRAPPER_DST="/usr/local/sbin/baluhost-spawn-plugin-worker.sh"
 
 if [[ -f "$WRAPPER_SRC" ]]; then
+    if ! bash -n "$WRAPPER_SRC"; then
+        log_error "Spawn wrapper source failed syntax check: $WRAPPER_SRC — aborting (live binary untouched)"
+        exit 1
+    fi
     install -o root -g root -m 0755 "$WRAPPER_SRC" "$WRAPPER_DST"
     if bash -n "$WRAPPER_DST"; then
         log_info "Installed plugin spawn wrapper: $WRAPPER_DST (root:root 0755)"
     else
-        log_error "Spawn wrapper failed syntax check! Removing $WRAPPER_DST"
+        log_error "Spawn wrapper failed post-install syntax check! Removing $WRAPPER_DST"
         rm -f "$WRAPPER_DST"
         exit 1
     fi
