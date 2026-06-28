@@ -98,9 +98,9 @@
   },
   "ui": "Benutzeroberfläche",
   "docs": {
-    "securityWarning": "Achtung — Plugins laufen mit echten Berechtigungen",
-    "securityWarningDescription": "Plugins können Dateien lesen, ins Netzwerk kommunizieren und System-Befehle ausführen — je nachdem welche Berechtigungen du vergibst. Installiere nur Plugins denen du vertraust und prüfe immer was sie anfordern.",
-    "dangerousPermissions": "Kritische Berechtigungen",
+    "securityWarning": "Achtung — Plugins laufen auf zwei Vertrauensstufen",
+    "securityWarningDescription": "Bundled-Plugins werden mit BaluHost ausgeliefert und laufen In-Process mit vollem Host-Zugriff. Externe Marketplace-Plugins laufen in einer Sandbox, aber du gewährst ihnen trotzdem Capability-Scopes — installiere und gewähre nur, was du vertraust.",
+    "dangerousPermissions": "Risikoreiche Berechtigungen (nur Bundled)",
     "permissionDescFileWrite": "Kann Dateien auf dem NAS erstellen und ändern",
     "permissionDescFileDelete": "Kann Dateien dauerhaft löschen",
     "permissionDescSystemExecute": "Kann Shell-Befehle auf dem Server ausführen",
@@ -126,7 +126,7 @@
     "pluginStructureUI": "Optional — React-Frontend-Bundle",
     "permissions": "Berechtigungs-Referenz",
     "available": "verfügbar",
-    "permissionsDescription": "Jedes Plugin deklariert welche Berechtigungen es braucht. Kritische Berechtigungen (orange markiert) geben breiten Systemzugriff — vergib sie nur an Plugins denen du vertraust.",
+    "permissionsDescription": "Bundled-Plugins deklarieren, welche Berechtigungen sie benötigen. Gefährliche Berechtigungen (orange markiert) gewähren weitreichenden Systemzugriff — gewähre sie nur Bundled-Plugins, denen du vertraust.",
     "eventHooks": "Event-Hooks",
     "hooks": "Hooks",
     "eventHooksDescription": "Plugins können auf Ereignisse auf deinem NAS reagieren (Datei-Uploads, User-Logins, RAID-Warnungen usw.) indem sie Event-Hooks abonnieren. Benötigt die",
@@ -213,6 +213,23 @@
   "scopeTiers": {
     "frontend": "Frontend (UI-Daten)",
     "backend": "Backend (Capabilities)"
+  },
+  "tiers": {
+    "title": "Vertrauensstufen",
+    "bundled": {
+      "label": "Bundled (In-Process, vertraut)",
+      "description": "Werden mit BaluHost ausgeliefert und laufen als Python im Server mit vollem Host-Zugriff (das Berechtigungsmodell unten). Werden im Repo gepflegt."
+    },
+    "external": {
+      "label": "Extern (Sandbox)",
+      "description": "Marketplace-Plugins laufen in einem isolierten Subprozess als Benutzer mit minimalen Rechten ohne Netzwerk und erreichen den Host nur über die Capability-Scopes, die du gewährst — kein Host-Code-, Datenbank-, Dateisystem- oder Shell-Zugriff."
+    },
+    "scopesTitle": "Capability-Scopes",
+    "scopesIntro": "Wenn du ein externes Plugin aktivierst, gewährst du im Aktivierungsdialog eine Teilmenge dieser Scopes. Jeder Scope wird von der Sandbox erzwungen.",
+    "scopesUnavailable": "Der Scope-Katalog ist derzeit nicht verfügbar.",
+    "installTitle": "Installieren & Aktivieren",
+    "installExternal": "Installiere externe Plugins über den Marketplace-Tab (heruntergeladen und per Prüfsumme verifiziert). Beim Aktivieren wählst du aus, welche der angeforderten Capability-Scopes du gewährst.",
+    "installBundled": "Bundled-Plugins werden mit BaluHost ausgeliefert; beim Aktivieren werden ihre deklarierten Berechtigungen über den Berechtigungsdialog gewährt."
   },
   "picker": {
     "title": "Capability-Scopes gewähren — {{name}}",
