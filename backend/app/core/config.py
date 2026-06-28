@@ -247,6 +247,14 @@ class Settings(BaseSettings):
     plugins_marketplace_index_url: str = "https://xveyn.github.io/BaluHost-Plugin-Market/index.json"
     # Cache TTL for the fetched marketplace index (seconds).
     plugins_marketplace_cache_ttl: int = 300
+    # Marketplace index signing (Track C) — trusted ed25519 public keys, each
+    # base64 of the 32-byte raw key. Empty default = fail-closed until a key is
+    # provisioned (deploy/scripts/install-marketplace-pubkey.sh). Env is
+    # comma-separated (base64 has no comma), parsed by the validator below:
+    #   PLUGINS_MARKETPLACE_PUBLIC_KEYS=key1,key2
+    plugins_marketplace_public_keys: list[str] = Field(default_factory=list)
+    # Detached signature URL; None → derived as <index_url> + ".sig".
+    plugins_marketplace_signature_url: str | None = None
 
     # Plugin sandbox (Track B, Phase 5a) — hardened worker spawn.
     # The unprivileged OS user the external-plugin worker runs as, and the
@@ -480,6 +488,18 @@ class Settings(BaseSettings):
         if isinstance(value, list):
             return value
         return ["admin"]
+
+    @field_validator("plugins_marketplace_public_keys", mode="before")
+    def parse_marketplace_public_keys(cls, value: list[str] | str) -> list[str]:
+        if isinstance(value, str):
+            s = value.strip()
+            if s.startswith("["):
+                import json
+                return json.loads(s)
+            return [k.strip() for k in s.split(",") if k.strip()]
+        if isinstance(value, list):
+            return value
+        return []
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

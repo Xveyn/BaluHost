@@ -7,6 +7,7 @@ so no network or pip is involved.
 """
 from __future__ import annotations
 
+import base64
 import hashlib
 import io
 import json
@@ -15,6 +16,8 @@ from pathlib import Path
 from typing import Dict
 
 import pytest
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -24,6 +27,13 @@ from app.services.plugin_marketplace import (
     MarketplaceService,
     get_marketplace_service,
 )
+
+_TEST_SK = Ed25519PrivateKey.generate()
+_TEST_PUB_B64 = base64.b64encode(
+    _TEST_SK.public_key().public_bytes(
+        serialization.Encoding.Raw, serialization.PublicFormat.Raw
+    )
+).decode()
 
 
 def _build_plugin_zip(name: str, version: str = "1.0.0") -> bytes:
@@ -78,7 +88,13 @@ def _make_index(entries: list[tuple[str, str, bytes, str]]) -> dict:
     }
 
 
-def _build_service(plugins_dir: Path, *, index: dict, archives: Dict[str, bytes]):
+def _build_service(
+    plugins_dir: Path,
+    *,
+    index: dict,
+    archives: Dict[str, bytes],
+    bad_signature: bool = False,
+):
     core = CoreVersions(
         baluhost_version="1.30.0",
         python_version="3.11",
@@ -92,11 +108,23 @@ def _build_service(plugins_dir: Path, *, index: dict, archives: Dict[str, bytes]
         fetcher=lambda url: archives[url],
         pip_runner=lambda r, t, c: t.mkdir(parents=True, exist_ok=True),
     )
+    index_url = "https://plugins.example/index.json"
+    sig_url = index_url + ".sig"
     index_bytes = json.dumps(index).encode()
+    signature = (
+        base64.b64encode(b"\x00" * 64)
+        if bad_signature
+        else base64.b64encode(_TEST_SK.sign(index_bytes))
+    )
+
+    def _fetch(url: str) -> bytes:
+        return signature if url == sig_url else index_bytes
+
     return MarketplaceService(
-        index_url="https://plugins.example/index.json",
+        index_url=index_url,
         installer=installer,
-        index_fetcher=lambda url: index_bytes,
+        index_fetcher=_fetch,
+        public_keys=[_TEST_PUB_B64],
     )
 
 
@@ -108,8 +136,8 @@ def override_marketplace(tmp_path: Path):
 
     created: dict = {}
 
-    def _attach(index: dict, archives: Dict[str, bytes]) -> MarketplaceService:
-        service = _build_service(plugins_dir, index=index, archives=archives)
+    def _attach(index: dict, archives: Dict[str, bytes], *, bad_signature: bool = False) -> MarketplaceService:
+        service = _build_service(plugins_dir, index=index, archives=archives, bad_signature=bad_signature)
         created["svc"] = service
         app.dependency_overrides[get_marketplace_service] = lambda: service
         return service
@@ -151,6 +179,20 @@ class TestListMarketplace:
         assert data["plugins"][0]["latest_version"] == "1.0.0"
         assert data["plugins"][0]["versions"][0]["checksum_sha256"]
 
+    def test_signature_failure_returns_scrubbed_502(
+        self, client: TestClient, admin_headers: dict, override_marketplace
+    ):
+        _, attach = override_marketplace
+        archive = _build_plugin_zip("demo")
+        attach(
+            _make_index([("demo", "1.0.0", archive, "https://plugins.example/demo.bhplugin")]),
+            {},
+            bad_signature=True,
+        )
+        response = client.get("/api/plugins/marketplace", headers=admin_headers)
+        assert response.status_code == 502
+        assert response.json()["detail"] == "marketplace index signature verification failed"
+
     def test_refresh_query_invalidates_cache(
         self,
         client: TestClient,
@@ -176,11 +218,13 @@ class TestListMarketplace:
         svc._fetch = counted
         client.get("/api/plugins/marketplace", headers=admin_headers)
         client.get("/api/plugins/marketplace", headers=admin_headers)
-        assert call_count["n"] == 1
+        # With signature verification each non-cached fetch makes 2 HTTP calls
+        # (index + detached .sig), so count == 2 after one real fetch + one cache hit.
+        assert call_count["n"] == 2
         client.get(
             "/api/plugins/marketplace?refresh=true", headers=admin_headers
         )
-        assert call_count["n"] == 2
+        assert call_count["n"] == 4
 
 
 class TestInstallPlugin:

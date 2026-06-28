@@ -281,7 +281,8 @@ def get_marketplace_service() -> MarketplaceService:
     _instance = MarketplaceService(
         index_url=settings.plugins_marketplace_index_url,
         installer=installer,
-        public_keys=[],  # Task 3 (config threading) will wire in the real public keys
+        public_keys=settings.plugins_marketplace_public_keys,
+        signature_url=settings.plugins_marketplace_signature_url,
         cache_ttl=settings.plugins_marketplace_cache_ttl,
     )
     return _instance
