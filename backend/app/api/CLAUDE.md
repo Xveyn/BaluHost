@@ -7,6 +7,7 @@ REST API endpoints for BaluHost. All routes are registered in `routes/__init__.p
 - `deps.py` — FastAPI dependency injection for auth (`get_current_user`, `get_current_admin`, `get_current_user_optional`, `verify_mobile_device_token`)
 - `docs.py` — Custom Swagger UI + ReDoc with BaluHost dark theme styling
 - `routes/` — One file per feature domain (~65 route modules)
+  - `auth.py` — Auth endpoints. Recovery-code routes: `POST /recovery-codes` (step-up: TOTP if 2FA on, else current-password), `GET /recovery-codes/status`, `POST /recovery-reset` (LAN-only, no session issued; consumes a single-use code to reset password).
   - `setup.py` — Setup wizard endpoints (status, admin creation, user creation, file access, completion)
   - `plugins_marketplace.py` — Marketplace listing + install routes. **Must be registered before `plugins.router`** in `routes/__init__.py`; otherwise `GET /plugins/marketplace` is swallowed as a plugin-name lookup.
 - `versioned/` — API versioning support (reserved)

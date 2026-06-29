@@ -22,6 +22,7 @@ Business logic layer. Routes delegate to services — services contain the actua
 | `upload_progress.py` | SSE-based upload progress tracking |
 | `api_key_service.py` | API key CRUD, validation, usage tracking |
 | `totp_service.py` | TOTP 2FA setup, verification, backup codes |
+| `recovery_code_service.py` | Password recovery codes — generate/verify/consume single-use codes (hash+encrypt at rest), timing-equalized username verify |
 | `token_service.py` | Refresh token management, rotation |
 | `plugin_service.py` | Plugin install/uninstall/toggle operations |
 | `power_permissions.py` | Per-user power action permissions (get, update, check), incl. `can_toggle_desktop`. UI name: "System Permissions / Systemberechtigungen"; backend identifiers stay `power_permissions` (deliberate — no rename/migration). |
