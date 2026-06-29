@@ -13,7 +13,6 @@ from datetime import datetime, timezone
 
 import pyotp
 import qrcode
-from cryptography.fernet import Fernet, MultiFernet
 from sqlalchemy.orm import Session
 
 from app.models.user import User
@@ -26,32 +25,19 @@ BACKUP_CODE_LENGTH = 8
 ISSUER_NAME = "BaluHost"
 
 
-def _get_totp_fernet() -> MultiFernet:
-    """Encrypt with TOTP_ENCRYPTION_KEY when set (else the VPN key); decrypt by trying the
-    dedicated key first, then the VPN key (dual-key fallback for secrets written under the
-    VPN-key fallback). The "not set in prod" warning lives in the config validator."""
-    from app.core.config import settings
-    keys: list[Fernet] = []
-    if settings.totp_encryption_key:
-        keys.append(Fernet(settings.totp_encryption_key.encode()))
-    if settings.vpn_encryption_key:
-        keys.append(Fernet(settings.vpn_encryption_key.encode()))
-    if not keys:
-        raise ValueError(
-            "No encryption key configured for TOTP "
-            "(set TOTP_ENCRYPTION_KEY or VPN_ENCRYPTION_KEY)"
-        )
-    return MultiFernet(keys)
+def _get_totp_fernet():
+    from app.core.crypto import get_at_rest_fernet
+    return get_at_rest_fernet()
 
 
 def _totp_encrypt(plaintext: str) -> str:
-    """Encrypt a plain-text string for TOTP storage."""
-    return _get_totp_fernet().encrypt(plaintext.encode()).decode()
+    from app.core.crypto import encrypt_at_rest
+    return encrypt_at_rest(plaintext)
 
 
 def _totp_decrypt(ciphertext: str) -> str:
-    """Decrypt a TOTP-stored ciphertext."""
-    return _get_totp_fernet().decrypt(ciphertext.encode()).decode()
+    from app.core.crypto import decrypt_at_rest
+    return decrypt_at_rest(ciphertext)
 
 
 def generate_setup(user: User) -> dict:
