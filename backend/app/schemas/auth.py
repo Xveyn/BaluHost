@@ -1,7 +1,7 @@
 from datetime import datetime
 import re
 
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 from app.schemas.user import UserPublic
 from app.schemas.validators import validate_username
@@ -93,6 +93,31 @@ class ChangePasswordRequest(BaseModel):
     @classmethod
     def validate_new_password_strength(cls, v: str) -> str:
         """Enforce password policy on new password."""
+        return _validate_password_strength(v)
+
+
+class RecoveryCodesGenerateRequest(BaseModel):
+    code: str | None = None              # fresh TOTP/backup code (when 2FA enabled)
+    current_password: str | None = None  # password re-entry (when 2FA disabled)
+
+
+class RecoveryCodesResponse(BaseModel):
+    recovery_codes: list[str]
+
+
+class RecoveryCodesStatusResponse(BaseModel):
+    configured: bool
+    remaining: int
+
+
+class RecoveryResetRequest(BaseModel):
+    username: str = Field(max_length=64)
+    recovery_code: str = Field(max_length=32)
+    new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_new_password_strength(cls, v: str) -> str:
         return _validate_password_strength(v)
 
 
