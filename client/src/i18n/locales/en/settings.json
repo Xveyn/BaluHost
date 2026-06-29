@@ -397,6 +397,8 @@
     "generateFailed": "Failed to generate recovery codes",
     "stepUpCode": "2FA code",
     "stepUpPassword": "Current password",
+    "stepUpHintCode": "Enter your current 2FA code (or a backup code) to confirm.",
+    "stepUpHintPassword": "Enter your current password to confirm.",
     "generate": "Generate codes",
     "regenerate": "Regenerate codes",
     "generating": "Generating…",
