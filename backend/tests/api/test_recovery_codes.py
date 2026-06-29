@@ -31,33 +31,66 @@ class TestRecoveryCodeManagement:
     def test_generate_requires_auth(self, client):
         assert client.post(f"{PREFIX}/auth/recovery-codes", json={}).status_code == 401
 
-    def test_totp_stepup_required_and_succeeds(self, client, user_headers):
-        """TOTP-enabled user must provide a valid TOTP code, not a password, to generate codes."""
-        # Enable 2FA for testuser via the API (mirrors test_2fa_endpoints.py patterns).
-        setup_resp = client.post(f"{PREFIX}/auth/2fa/setup", headers=user_headers)
+    def test_totp_stepup_required_and_succeeds(self, client, totp_stepup_user_and_headers):
+        """TOTP-enabled user must provide a valid TOTP code, not a password, to generate codes.
+
+        Uses a dedicated throwaway user so the shared testuser (user_headers) is never
+        mutated — this prevents order-dependent failures in test_status_unconfigured_then_*
+        which asserts testuser has no 2FA configured.
+        """
+        step_headers = totp_stepup_user_and_headers
+        # Enable 2FA for the dedicated user via the API (mirrors test_2fa_endpoints.py patterns).
+        setup_resp = client.post(f"{PREFIX}/auth/2fa/setup", headers=step_headers)
         assert setup_resp.status_code == 200
         secret = setup_resp.json()["secret"]
         totp = pyotp.TOTP(secret)
         verify_resp = client.post(
             f"{PREFIX}/auth/2fa/verify-setup",
             json={"secret": secret, "code": totp.now()},
-            headers=user_headers,
+            headers=step_headers,
         )
         assert verify_resp.status_code == 200
 
         # (a) Wrong TOTP code → step-up fails → 401.
         bad = client.post(f"{PREFIX}/auth/recovery-codes",
-                          json={"code": "000000"}, headers=user_headers)
+                          json={"code": "000000"}, headers=step_headers)
         assert bad.status_code == 401
 
         # (b) Fresh valid TOTP code → 200 + exactly 10 codes.
         good = client.post(f"{PREFIX}/auth/recovery-codes",
-                           json={"code": totp.now()}, headers=user_headers)
+                           json={"code": totp.now()}, headers=step_headers)
         assert good.status_code == 200
         assert len(good.json()["recovery_codes"]) == 10
 
 
 import pytest
+
+
+@pytest.fixture
+def totp_stepup_user_and_headers(client, db_session):
+    """Dedicated throwaway user for test_totp_stepup_required_and_succeeds.
+
+    Creates a fresh user (username=totpstepup) that is independent of the
+    shared testuser, so enabling 2FA here never leaks into other tests that
+    rely on testuser having no 2FA configured.
+    """
+    from app.services import users as user_service
+    from app.schemas.user import UserCreate
+    user_service.create_user(
+        UserCreate(
+            username="totpstepup",
+            email="totpstepup@example.com",
+            password="StrongPass9x",
+            role="user",
+        ),
+        db=db_session,
+    )
+    login = client.post(
+        f"{PREFIX}/auth/login",
+        json={"username": "totpstepup", "password": "StrongPass9x"},
+    )
+    assert login.status_code == 200, f"Dedicated-user login failed: {login.json()}"
+    return {"Authorization": f"Bearer {login.json()['access_token']}"}
 
 
 @pytest.fixture
