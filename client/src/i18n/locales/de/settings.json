@@ -397,6 +397,8 @@
     "generateFailed": "Fehler beim Generieren der Wiederherstellungs-Codes",
     "stepUpCode": "2FA-Code",
     "stepUpPassword": "Aktuelles Passwort",
+    "stepUpHintCode": "Gib zur Bestätigung deinen aktuellen 2FA-Code (oder einen Backup-Code) ein.",
+    "stepUpHintPassword": "Gib zur Bestätigung dein aktuelles Passwort ein.",
     "generate": "Codes generieren",
     "regenerate": "Codes neu generieren",
     "generating": "Wird generiert…",

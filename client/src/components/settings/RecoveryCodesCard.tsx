@@ -80,20 +80,32 @@ export const RecoveryCodesCard: React.FC = () => {
         </div>
       )}
 
-      <label className="mt-4 block space-y-1">
-        <span className="text-xs text-slate-300">{twoFA ? t('recovery.stepUpCode') : t('recovery.stepUpPassword')}</span>
+      <div className="mt-4 space-y-3">
         <input
           type={twoFA ? 'text' : 'password'}
+          inputMode={twoFA ? 'text' : undefined}
           autoComplete={twoFA ? 'one-time-code' : 'current-password'}
-          value={stepUp} onChange={(e) => setStepUp(e.target.value)}
-          className="w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-sm"
+          placeholder={twoFA ? t('recovery.stepUpCode') : t('recovery.stepUpPassword')}
+          aria-label={twoFA ? t('recovery.stepUpCode') : t('recovery.stepUpPassword')}
+          className="input"
+          value={stepUp}
+          onChange={(e) => setStepUp(e.target.value)}
         />
-      </label>
-      <button onClick={handleGenerate} disabled={loading || !stepUp}
-        className="mt-3 rounded-lg bg-sky-600 px-3 py-2 text-sm font-medium text-white disabled:opacity-50">
-        {loading ? t('recovery.generating') : status?.configured ? t('recovery.regenerate') : t('recovery.generate')}
-      </button>
-      {status?.configured && <p className="mt-1 text-xs text-slate-400">{t('recovery.regenWarning')}</p>}
+        <p className="text-xs text-slate-400">
+          {twoFA ? t('recovery.stepUpHintCode') : t('recovery.stepUpHintPassword')}
+        </p>
+
+        <div className="flex gap-2">
+          <button
+            onClick={handleGenerate}
+            disabled={loading || !stepUp}
+            className="btn btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loading ? t('recovery.generating') : status?.configured ? t('recovery.regenerate') : t('recovery.generate')}
+          </button>
+        </div>
+        {status?.configured && <p className="text-xs text-slate-400">{t('recovery.regenWarning')}</p>}
+      </div>
     </div>
   );
 };
