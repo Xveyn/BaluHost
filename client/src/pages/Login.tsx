@@ -7,6 +7,7 @@ import { localApi } from '../lib/localApi';
 import { buildApiUrl, isTauri } from '../lib/api';
 import { sanitizeTwoFactorCode, isTwoFactorCodeComplete } from '../lib/twoFactorCode';
 import { loginWithPin } from '../api/pin';
+import { ForgotPasswordForm } from '../components/auth/ForgotPasswordForm';
 import { useVersion } from '../contexts/VersionContext';
 import { DeveloperBadge } from '../components/ui/DeveloperBadge';
 import { useAuth } from '../contexts/AuthContext';
@@ -34,6 +35,7 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [pinMode, setPinMode] = useState(false);
   const [pin, setPin] = useState('');
+  const [forgotMode, setForgotMode] = useState(false);
 
   // Check if local backend is available on component mount
   useEffect(() => {
@@ -343,6 +345,10 @@ export default function Login() {
                     {t('pin.usePassword')}
                   </button>
                 </form>
+              ) : forgotMode ? (
+                <div className="mt-8 sm:mt-10">
+                  <ForgotPasswordForm onDone={() => setForgotMode(false)} />
+                </div>
               ) : (
               <form onSubmit={handleSubmit} className="mt-8 sm:mt-10 space-y-4 sm:space-y-5">
                 {error && (
@@ -398,6 +404,13 @@ export default function Login() {
                   disabled={loading}
                 >
                   {loading ? t('form.loading') : t('form.submit')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setForgotMode(true)}
+                  className="w-full text-center text-xs text-sky-400 hover:text-sky-300 transition-colors"
+                >
+                  {t('forgot.forgotLink')}
                 </button>
               </form>
               )}

@@ -33,6 +33,20 @@
     "usePin": "Stattdessen PIN verwenden",
     "usePassword": "Passwort verwenden"
   },
+  "forgot": {
+    "forgotLink": "Passwort vergessen?",
+    "hint": "Benutzername und einen Recovery-Code eingeben, um ein neues Passwort zu setzen.",
+    "username": "Benutzername",
+    "code": "Recovery-Code",
+    "newPassword": "Neues Passwort",
+    "confirm": "Neues Passwort bestätigen",
+    "reset": "Passwort zurücksetzen",
+    "resetting": "Zurücksetzen...",
+    "back": "Abbrechen",
+    "mismatch": "Die Passwörter stimmen nicht überein.",
+    "success": "Passwort erfolgreich zurückgesetzt. Bitte einloggen.",
+    "failed": "Passwort zurücksetzen fehlgeschlagen."
+  },
   "defaultCredentials": "Standard-Anmeldedaten",
   "systemStatus": "System-Status",
   "optimal": "Optimal",
