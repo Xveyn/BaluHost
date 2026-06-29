@@ -111,8 +111,8 @@ class RecoveryCodesStatusResponse(BaseModel):
 
 
 class RecoveryResetRequest(BaseModel):
-    username: str = Field(max_length=64)
-    recovery_code: str = Field(max_length=32)
+    username: str = Field(min_length=1, max_length=64)
+    recovery_code: str = Field(min_length=1, max_length=32)
     new_password: str
 
     @field_validator("new_password")

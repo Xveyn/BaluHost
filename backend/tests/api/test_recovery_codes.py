@@ -28,3 +28,97 @@ class TestRecoveryCodeManagement:
 
     def test_generate_requires_auth(self, client):
         assert client.post(f"{PREFIX}/auth/recovery-codes", json={}).status_code == 401
+
+
+import pytest
+
+
+@pytest.fixture
+def reset_user(db_session):
+    from app.services import users as user_service
+    from app.schemas.user import UserCreate
+    from app.services import recovery_code_service
+    u = user_service.create_user(
+        UserCreate(username="resetme", email="reset@example.com", password="OldPass123x", role="user"),
+        db=db_session,
+    )
+    codes = recovery_code_service.generate_recovery_codes(db_session, u.id)
+    return u, codes
+
+
+class TestRecoveryReset:
+    # The test client sends host='testclient', which is not a recognised private IP.
+    # Patch the bound name in the auth module to True for all tests in this class;
+    # test_non_local_forbidden overrides it to False via its own monkeypatch call.
+    @pytest.fixture(autouse=True)
+    def _patch_local_ip(self, monkeypatch):
+        import app.api.routes.auth as auth_routes
+        monkeypatch.setattr(auth_routes, "is_private_or_local_ip", lambda ip: True)
+
+    def test_happy_path_no_token_and_login_works(self, client, reset_user, db_session):
+        u, codes = reset_user
+        r = client.post(f"{PREFIX}/auth/recovery-reset", json={
+            "username": "resetme", "recovery_code": codes[0], "new_password": "BrandNew9xPass",
+        })
+        assert r.status_code == 200, r.text
+        assert "access_token" not in r.json()
+        login = client.post(f"{PREFIX}/auth/login", json={"username": "resetme", "password": "BrandNew9xPass"})
+        assert login.status_code == 200
+
+    def test_revokes_existing_refresh_tokens(self, client, reset_user, db_session):
+        u, codes = reset_user
+        from app.services.token_service import token_service
+        # seed an active refresh token
+        from datetime import datetime, timezone, timedelta
+        token_service.store_refresh_token(
+            db_session, jti="jti-test", user_id=u.id, token="rawtok",
+            expires_at=datetime.now(timezone.utc) + timedelta(days=7),
+        )
+        client.post(f"{PREFIX}/auth/recovery-reset", json={
+            "username": "resetme", "recovery_code": codes[0], "new_password": "BrandNew9xPass",
+        })
+        assert token_service.is_token_revoked(db_session, "jti-test") is True
+
+    def test_wrong_code_generic(self, client, reset_user):
+        r = client.post(f"{PREFIX}/auth/recovery-reset", json={
+            "username": "resetme", "recovery_code": "WRONGCODE0", "new_password": "BrandNew9xPass",
+        })
+        assert r.status_code == 401
+        assert r.json()["detail"] == "Invalid username or recovery code"
+
+    def test_unknown_user_same_generic(self, client):
+        r = client.post(f"{PREFIX}/auth/recovery-reset", json={
+            "username": "ghost", "recovery_code": "ABCD123456", "new_password": "BrandNew9xPass",
+        })
+        assert r.status_code == 401
+        assert r.json()["detail"] == "Invalid username or recovery code"
+
+    def test_weak_password_422_does_not_consume(self, client, reset_user):
+        u, codes = reset_user
+        bad = client.post(f"{PREFIX}/auth/recovery-reset", json={
+            "username": "resetme", "recovery_code": codes[0], "new_password": "weak",
+        })
+        assert bad.status_code == 422
+        good = client.post(f"{PREFIX}/auth/recovery-reset", json={
+            "username": "resetme", "recovery_code": codes[0], "new_password": "BrandNew9xPass",
+        })
+        assert good.status_code == 200
+
+    def test_non_local_forbidden(self, client, reset_user, monkeypatch):
+        u, codes = reset_user
+        import app.api.routes.auth as auth_routes
+        monkeypatch.setattr(auth_routes, "is_private_or_local_ip", lambda ip: False)
+        r = client.post(f"{PREFIX}/auth/recovery-reset", json={
+            "username": "resetme", "recovery_code": codes[0], "new_password": "BrandNew9xPass",
+        })
+        assert r.status_code == 403
+        assert r.json()["detail"]["error"] == "local_network_required"
+
+    def test_audit_rows_written(self, client, reset_user, db_session):
+        u, codes = reset_user
+        client.post(f"{PREFIX}/auth/recovery-reset", json={
+            "username": "resetme", "recovery_code": codes[0], "new_password": "BrandNew9xPass",
+        })
+        from app.models import AuditLog
+        row = db_session.query(AuditLog).filter(AuditLog.action == "password_reset_via_recovery").first()
+        assert row is not None

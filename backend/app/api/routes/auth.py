@@ -24,8 +24,12 @@ from app.models.user import User as UserModel
 from app.core.config import settings
 from app.services.audit.logger_db import get_audit_logger_db
 from app.plugins.emit import emit_hook
+from app.core.network_utils import is_private_or_local_ip
 
+import logging
 import time as _time
+
+logger = logging.getLogger(__name__)
 
 from cachetools import TTLCache
 
@@ -575,6 +579,65 @@ async def recovery_codes_status(
     from app.services import recovery_code_service
     remaining = recovery_code_service.get_recovery_codes_remaining(db, current_user.id)
     return RecoveryCodesStatusResponse(configured=remaining > 0, remaining=remaining)
+
+
+@router.post("/recovery-reset")
+@limiter.limit(get_limit("auth_recovery_reset"))
+async def recovery_reset(
+    payload: RecoveryResetRequest,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+):
+    """Reset a password via a single-use recovery code — LAN-only. Issues NO session.
+
+    The user logs in normally afterward (2FA stays enforced). On success the user's
+    refresh tokens are revoked. Generic failures avoid username enumeration.
+    """
+    from app.services import recovery_code_service
+    from app.services.token_service import token_service
+    audit_logger = get_audit_logger_db()
+    ip_address = request.client.host if request.client else None
+
+    # LAN gate (real client IP via --proxy-headers --forwarded-allow-ips=127.0.0.1).
+    if not is_private_or_local_ip(ip_address):
+        audit_logger.log_security_event(
+            action="password_reset_via_recovery_failed", user=payload.username,
+            details={"ip_address": ip_address, "reason": "non_local"}, success=False, db=db,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"error": "local_network_required",
+                    "message": "Password recovery is only available from the local network."},
+        )
+
+    user_record = recovery_code_service.verify_and_consume_for_username(
+        db, payload.username, payload.recovery_code
+    )
+    if not user_record:
+        audit_logger.log_security_event(
+            action="password_reset_via_recovery_failed", user=payload.username,
+            details={"ip_address": ip_address}, success=False, db=db,
+        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
+                            detail="Invalid username or recovery code")
+
+    user_service.update_user_password(user_record.id, payload.new_password, db=db)
+    token_service.revoke_all_user_tokens(db, user_record.id, reason="password_reset_via_recovery")
+
+    # Best-effort Samba sync — never fail the reset on an SMB hiccup.
+    if user_record.smb_enabled:
+        try:
+            from app.services import samba_service
+            await samba_service.sync_smb_password(user_record.username, payload.new_password)
+        except Exception:
+            logger.warning("Samba password sync failed after recovery reset for %s", user_record.username)
+
+    audit_logger.log_security_event(
+        action="password_reset_via_recovery", user=user_record.username,
+        details={"ip_address": ip_address}, success=True, db=db,
+    )
+    return {"message": "Password reset successfully"}
 
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
