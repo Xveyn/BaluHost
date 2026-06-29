@@ -35,7 +35,7 @@
   },
   "forgot": {
     "forgotLink": "Passwort vergessen?",
-    "hint": "Benutzername und einen Recovery-Code eingeben, um ein neues Passwort zu setzen.",
+    "hint": "Benutzernamen und einen Recovery-Code eingeben, um ein neues Passwort zu setzen.",
     "username": "Benutzername",
     "code": "Recovery-Code",
     "newPassword": "Neues Passwort",
