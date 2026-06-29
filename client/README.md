@@ -17,7 +17,7 @@ Modern React TypeScript frontend for the BaluHost home server platform.
 
 ```
 src/
-├── api/                    # API client modules (38 modules)
+├── api/                    # API client modules (39 modules)
 │   ├── admin-db.ts        # Admin database API
 │   ├── api-keys.ts        # API key management
 │   ├── backend-logs.ts    # Backend logs API
@@ -41,6 +41,7 @@ src/
 │   ├── power-management.ts # Power management API
 │   ├── power.ts           # Power API
 │   ├── raid.ts            # RAID management API
+│   ├── recovery-codes.ts  # Password recovery codes API
 │   ├── remote-servers.ts  # Remote servers API
 │   ├── samba.ts           # Samba shares API
 │   ├── schedulers.ts      # Scheduler API

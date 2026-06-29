@@ -81,6 +81,8 @@ The same machine doubles as a KDE Plasma desktop and — thanks to the Radeon GP
 
 ### Security
 - JWT authentication with role-based access (admin/user)
+- Two-factor authentication (TOTP) with single-use backup codes
+- Self-service password recovery codes (single-use, LAN-only reset, step-up protected, no email required)
 - Rate limiting on all endpoints (slowapi)
 - Security headers (CSP, HSTS, X-Frame-Options)
 - Path jailing for user file isolation
