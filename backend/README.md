@@ -7,6 +7,7 @@ FastAPI-basierter Backend für NAS-Management mit vollständiger Database-Integr
 ### Core Features
 - **JWT Authentication** - Sichere Token-basierte Auth mit Refresh Tokens
 - **Two-Factor Authentication (TOTP)** - Optionale 2FA mit Authenticator Apps
+- **Password Recovery Codes** - Self-Service "Passwort vergessen" über einmalige Codes (LAN-only Reset, Step-up-geschützt, kein E-Mail-Versand)
 - **SQLite/PostgreSQL Database** - Persistente Datenspeicherung mit Alembic Migrations
 - **User Management** - CRUD Operations mit Rollen (Admin/User)
 - **File Metadata** - Database-backed Ownership & Permissions

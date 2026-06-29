@@ -33,6 +33,20 @@
     "usePin": "Use a PIN instead",
     "usePassword": "Use password"
   },
+  "forgot": {
+    "forgotLink": "Forgot password?",
+    "hint": "Enter your username and a recovery code to set a new password.",
+    "username": "Username",
+    "code": "Recovery Code",
+    "newPassword": "New Password",
+    "confirm": "Confirm New Password",
+    "reset": "Reset Password",
+    "resetting": "Resetting...",
+    "back": "Cancel",
+    "mismatch": "Passwords do not match.",
+    "success": "Password reset successfully. Please log in.",
+    "failed": "Password reset failed."
+  },
   "defaultCredentials": "Default credentials",
   "systemStatus": "System Status",
   "optimal": "Optimal",

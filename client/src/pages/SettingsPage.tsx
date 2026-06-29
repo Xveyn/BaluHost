@@ -4,6 +4,7 @@ import { useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { User, Lock, Clock, Download, Globe, GitBranch, Bell, HardDrive, Plug } from 'lucide-react';
 import TwoFactorCard from '../components/settings/TwoFactorCard';
+import { RecoveryCodesCard } from '../components/settings/RecoveryCodesCard';
 import { DesktopPinSettings } from '../components/settings/DesktopPinSettings';
 import { useTwoFactorStatus } from '../components/quickSettings/twoFactorStatusStore';
 import VCLTrackingPanel from '../components/vcl/VCLTrackingPanel';
@@ -290,6 +291,9 @@ export default function SettingsPage() {
 
             {/* Two-Factor Authentication */}
             <TwoFactorCard />
+
+            {/* Recovery Codes */}
+            <RecoveryCodesCard />
 
             {/* Desktop-app PIN (2FA-gated) */}
             <DesktopPinSettings twoFactorEnabled={twoFactorEnabled} />

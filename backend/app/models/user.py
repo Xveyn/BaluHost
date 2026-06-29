@@ -51,6 +51,10 @@ class User(Base):
         DateTime(timezone=True), nullable=True
     )
 
+    # Password recovery codes (self-service forgot-password, LAN-only reset).
+    # Fernet-encrypted JSON array of SHA-256 hashes; None = not configured.
+    password_recovery_codes_encrypted: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
     # PIN login (Tauri local channel) — anchored on 2FA
     pin_hash: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     pin_grace_until: Mapped[Optional[datetime]] = mapped_column(

@@ -382,5 +382,24 @@
     "removed": "PIN entfernt",
     "saveError": "PIN konnte nicht gespeichert werden",
     "removeError": "PIN konnte nicht entfernt werden"
+  },
+  "recovery": {
+    "title": "Wiederherstellungs-Codes",
+    "desc": "Mit Wiederherstellungs-Codes kannst du Zugang zu deinem Konto wiederherstellen, wenn du dein Passwort vergisst.",
+    "banner": "Keine Wiederherstellungs-Codes gesetzt — generiere welche, um den Kontozugang zu sichern.",
+    "remaining": "{{count}} Wiederherstellungs-Code(s) verbleibend",
+    "copy": "In Zwischenablage kopieren",
+    "download": ".txt herunterladen",
+    "shownOnce": "Diese Codes sichern — sie werden nicht erneut angezeigt.",
+    "copied": "Wiederherstellungs-Codes kopiert",
+    "copyUnavailable": "Zwischenablage nicht verfügbar — Download verwenden",
+    "generated": "Wiederherstellungs-Codes generiert",
+    "generateFailed": "Fehler beim Generieren der Wiederherstellungs-Codes",
+    "stepUpCode": "2FA-Code",
+    "stepUpPassword": "Aktuelles Passwort",
+    "generate": "Codes generieren",
+    "regenerate": "Codes neu generieren",
+    "generating": "Wird generiert…",
+    "regenWarning": "Neu generieren macht alle bestehenden Wiederherstellungs-Codes ungültig."
   }
 }

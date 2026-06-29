@@ -382,5 +382,24 @@
     "removed": "PIN removed",
     "saveError": "Could not save PIN",
     "removeError": "Could not remove PIN"
+  },
+  "recovery": {
+    "title": "Recovery Codes",
+    "desc": "Recovery codes can be used to regain access to your account if you lose your password.",
+    "banner": "No recovery codes set — generate some to protect account access.",
+    "remaining": "{{count}} recovery code(s) remaining",
+    "copy": "Copy to clipboard",
+    "download": "Download .txt",
+    "shownOnce": "Save these codes — they won't be shown again.",
+    "copied": "Recovery codes copied",
+    "copyUnavailable": "Clipboard not available — use Download instead",
+    "generated": "Recovery codes generated",
+    "generateFailed": "Failed to generate recovery codes",
+    "stepUpCode": "2FA code",
+    "stepUpPassword": "Current password",
+    "generate": "Generate codes",
+    "regenerate": "Regenerate codes",
+    "generating": "Generating…",
+    "regenWarning": "Regenerating will invalidate all existing recovery codes."
   }
 }
