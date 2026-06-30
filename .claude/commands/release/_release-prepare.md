@@ -96,6 +96,14 @@ versehentlich als echten Release:
 
 ```
 
+**Wichtig:** Die Sektion muss mit einer eigenen `---`-Zeile enden (wie im Template
+oben) — `create-release.yml` extrahiert beim späteren Release-Build alles zwischen
+der Versions-Kopfzeile und der ersten folgenden `---`-Zeile. Fehlt der Trenner,
+werden Inhalte der nächsten (älteren) Sektion mit in die veröffentlichten
+Release-Notes gezogen. Aus demselben Grund darf innerhalb der kuratierten Bullets
+selbst keine eigene `---`-Zeile vorkommen (z.B. als horizontale Linie) — das würde
+die Extraktion vorzeitig abschneiden.
+
 ```bash
 python scripts/insert_changelog_section.py \
   --section /tmp/unreleased-section.md \
@@ -109,12 +117,12 @@ git checkout -b "release/v${NEW_VERSION}" origin/main
 git add CHANGELOG.md README.md  # + jede in Schritt 4 geänderte CLAUDE.md
 git commit -m "chore: release v${NEW_VERSION}"
 git push -u origin "release/v${NEW_VERSION}"
-gh pr create \
-  --base main \
-  --head "release/v${NEW_VERSION}" \
-  --title "chore: release v${NEW_VERSION}" \
-  --label "release:<bump_type>" \
-  --body "$(cat <<'EOF'
+```
+
+Schreibe den PR-Body **mit dem Write-Tool** nach `/tmp/release-pr-body.md` — Heredocs
+schlagen sowohl im Bash- als auch im PowerShell-Tool fehl:
+
+```
 ## Changelog
 
 <kuratierte Bullet-Liste aus Schritt 3>
@@ -134,8 +142,17 @@ mergen, NICHT über den Standard-"Merge pull request"-Button ohne die
 Commit-Message anzupassen -- sonst greift der `chore: release v`-Skip-Filter
 in `deploy-production.yml` nicht und es entsteht ein irrtümlich benannter
 Pre-Release-Tag.
-EOF
-)"
+```
+
+Dann:
+
+```bash
+gh pr create \
+  --base main \
+  --head "release/v${NEW_VERSION}" \
+  --title "chore: release v${NEW_VERSION}" \
+  --label "release:<bump_type>" \
+  --body-file /tmp/release-pr-body.md
 ```
 
 **ZEIGE DEM BENUTZER** den PR-Link + den Merge-Hinweis aus dem PR-Body.

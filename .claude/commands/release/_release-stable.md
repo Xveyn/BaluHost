@@ -30,6 +30,17 @@ Erwartet: `1`. Bei `0`: Release-Prep-PR wurde noch nicht gemerged — abbrechen,
 Benutzer informieren. Bei `>1`: inkonsistenter Zustand — abbrechen, Benutzer
 informieren (manuell prüfen).
 
+Zusätzlich: bestätige, dass es einen gemergten Release-Prep-PR mit genau dieser
+Zielversion gibt (ein Tippfehler bei der Versionsabfrage in Schritt 1 würde sonst
+unbemerkt eine falsche Version taggen):
+
+```bash
+gh pr list --state merged --search "chore: release v<version> in:title" --limit 1
+```
+
+Erwartet: genau ein Treffer. Bei `0`: falsche Version eingegeben oder PR-Titel
+weicht ab — mit dem Benutzer abklären, bevor der Workflow getriggert wird.
+
 ### 3. Workflow triggern
 
 **FRAGE DEN BENUTZER:** Trigger für Version `<version>` ausführen?
