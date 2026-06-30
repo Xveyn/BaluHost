@@ -51,7 +51,7 @@ separate** step — not label-triggered-on-merge like `Zeiterfassung`.
 | Doc-currency checklist | **Prompting-based** (the prepare command walks README.md + all CLAUDE.md files), not a CI gate — can be revisited later |
 | Pre-release tag during release-prep | **None** — reuse the existing `chore: release v` commit-message skip-filter in `deploy-production.yml`; no change to that file |
 | Version bump timing | Stays in the **promote** step (not in the prepare PR) — preserves the existing invariant that `pyproject.toml` only advances at the moment of the real stable cut |
-| Merge strategy for the prepare PR | **Squash merge required**, commit title `chore: release vX.Y.Z` |
+| Merge strategy for the prepare PR | Repo has **squash merge disabled** (`allow_squash_merge: false`, verified via `gh api repos/Xveyn/BaluHost`) — only "Create a merge commit" is enabled. Merge via `gh pr merge --merge --subject "chore: release vX.Y.Z"` (or edit the commit message in the merge-commit dialog before confirming) so the resulting `head_commit.message` still starts with `chore: release v` |
 | Frontend changelog display | **Out of scope** — separate future spec |
 
 ## Why the version bump can't move into the prepare PR
@@ -88,9 +88,12 @@ Phase 1 — /release-prepare   (NEW command, replaces dead _release.md)
   │     `# Changelog` / `---` header — same insertion point insert_changelog_section.py already uses
   ├─ Branch `release/vX.Y.Z` off main; commit CHANGELOG.md + any README/CLAUDE.md doc fixes
   └─ Open PR → main, title `chore: release vX.Y.Z`, label `release:<type>` (labels already exist)
-       Tell the user: MUST be squash-merged so the commit message matches `chore: release v`
+       Tell the user: squash merge is DISABLED on this repo (`allow_squash_merge: false`) — merge with
+       `gh pr merge <N> --merge --subject "chore: release vX.Y.Z" --body ""` (or edit the merge-commit
+       message in the GitHub UI before confirming) so `head_commit.message` still starts with the
+       required prefix
 
-  ── normal PR review: CI (backend-tests, frontend-build), Xveyn reviews + squash-merges ──
+  ── normal PR review: CI (backend-tests, frontend-build), Xveyn reviews + merges (merge commit) ──
 
   Merge effect: github.event.head_commit.message starts with "chore: release v"
   → deploy-production.yml's `deploy` job condition is false → entire job skipped
@@ -139,19 +142,28 @@ Phase 2 — /release-stable   (REWRITTEN — thin "promote" step, replaces today
 ### Unchanged (verified, no action needed)
 
 - `.github/workflows/deploy-production.yml` — the existing `chore: release v` skip-filter already covers
-  both the prepare-PR squash-merge and the promote commit; no edit needed.
+  both the prepare-PR merge commit and the promote commit, as long as the merge commit's message is set
+  correctly (see merge-strategy decision above); no edit needed.
 - `.github/workflows/create-release.yml` — still does literal `## \[$VERSION\]` awk-extraction; works
   unchanged once the promote step has finalized the header.
 - `backend/app/services/update/changelog_fallback.py` — its `_SECTION_RE` only matches
   `## [x.y.z] - date`; a `## [Unreleased]` heading (no version/date in that shape) won't match and is
-  simply skipped. **Verification task, not a code change**: add a test case confirming the parser
-  tolerates an `## [Unreleased]` section sitting above the real entries without erroring.
+  simply skipped — **but only if the header carries nothing after `]`**, see edge case below.
+  **Verification task, not a code change**: add a test case confirming the parser tolerates an
+  `## [Unreleased]` section sitting above the real entries without erroring.
+- `scripts/bump_version.py` — already supports an exact-version positional arg (`re.match(r"^\d+\.\d+\.\d+", arg)` branch), so `release-stable.yml` can call `python scripts/bump_version.py <version>` directly; no script change needed for the input-shape switch from `bump_type` to `version`.
+- No markdownlint/CHANGELOG-format CI check exists in the repo (confirmed via search) — an
+  `## [Unreleased]` header sitting in `CHANGELOG.md` between merge and promote won't trip any lint gate.
+- Branch protection on `main` (confirmed via `gh api`): required checks `backend-tests`,
+  `frontend-build`, `enforce_admins: false` — the prepare PR goes through the same gate as any other PR,
+  no special-casing needed or possible.
 
 ## Edge Cases & Error Handling
 
 | Case | Handling |
 |---|---|
-| Prepare PR merged via "Create a merge commit" instead of squash | Commit message becomes `Merge pull request #N from ...`, doesn't match the skip-filter → `deploy-production.yml` runs normally: harmless redeploy of identical code, but creates a **mislabeled** pre-release tag. Mitigated by `/release-prepare` explicitly instructing squash-merge with the exact title; not hard-blocked by CI (out of scope to add a check). |
+| Prepare PR merged without overriding the commit message | Default merge-commit message is `Merge pull request #N from ...`, doesn't match the skip-filter → `deploy-production.yml` runs normally: harmless redeploy of identical code, but creates a **mislabeled** pre-release tag (wrong version number, see "Why the version bump can't move into the prepare PR"). Mitigated by `/release-prepare` explicitly instructing the `gh pr merge --subject "chore: release vX.Y.Z"` form; not hard-blocked by CI (out of scope to add a check). |
+| `## [Unreleased]` written with a trailing `- <text>` (e.g. `## [Unreleased] - TBD`) | Would accidentally match `changelog_fallback.py`'s `_SECTION_RE` (`^##\s*\[(?P<ver>[^\]]+)\]\s*-\s*(?P<date>\S+)`) and leak a bogus "Unreleased" release into the Update page's offline fallback. The prepare command must write the header as exactly `## [Unreleased]` with nothing after the closing bracket. |
 | `## [Unreleased]` missing at promote time | `release-stable.yml` guard fails fast, no tag created. |
 | Two or more `## [Unreleased]` sections (e.g. stale leftover) | `finalize_changelog_section.py` fails loudly rather than guessing which one. |
 | Other feature PRs merge while the release-prep PR is open | Expected, unaffected — each still gets a correctly-numbered pre-release tag since `pyproject.toml` hasn't moved. Release-prep branch may need a rebase only if a doc file it touched (README/CLAUDE.md) also changed elsewhere — handled like any normal merge conflict. |
@@ -187,5 +199,5 @@ Phase 2 — /release-stable   (REWRITTEN — thin "promote" step, replaces today
 4. Write `.claude/commands/release/_release-prepare.md`; rewrite `.claude/commands/release/_release-stable.md`;
    delete `.claude/commands/release/_release.md`.
 5. Update `.claude/rules/production.md` Git Workflow section.
-6. Manual dry run of the full prepare→PR→squash-merge→promote→tag cycle against a disposable version
-   before the next real stable release.
+6. Manual dry run of the full prepare→PR→merge (with overridden commit message)→promote→tag cycle
+   against a disposable version before the next real stable release.
