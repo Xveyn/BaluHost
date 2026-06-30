@@ -50,10 +50,25 @@ export default function PluginDocumentation({ permissions, scopeCatalog }: Plugi
   const formattedVersion = useFormattedVersion('BaluHost');
 
   // Separator-safe scope-description lookup (scope keys contain ':' and '.').
-  const scopeDescs = t('scopeDescriptions', { returnObjects: true }) as Record<
+  // `nsSeparator: false` is required in addition to `returnObjects: true`:
+  // i18next re-parses each nested key against the namespace separator while
+  // building the returned object, so a key like "read:system-info" still
+  // collapses to just "system-info" (or the whole {label, description}
+  // object to a string) unless nsSeparator is disabled for this call (#288).
+  const scopeDescs = t('scopeDescriptions', { returnObjects: true, nsSeparator: false }) as Record<
     string,
     { label: string; description: string }
   >;
+
+  // Separator-safe permission-description lookup (#288): permission keys
+  // contain ':' (e.g. "file:read"), which i18next's nsSeparator otherwise
+  // mis-parses as namespace.key, silently falling back to the EN API copy.
+  // See the scopeDescs comment above for why nsSeparator: false is required
+  // here too, not just returnObjects: true.
+  const permissionDescs = t('permissionDescriptions', {
+    returnObjects: true,
+    nsSeparator: false,
+  }) as Record<string, string>;
 
   const permissionCategories = useMemo(() => {
     return PERMISSION_CATEGORY_KEYS.map((key) => ({
@@ -213,7 +228,7 @@ export default function PluginDocumentation({ permissions, scopeCatalog }: Plugi
                         {perm.dangerous && <AlertTriangle className="h-3 w-3 text-amber-400" />}
                       </div>
                       <p className="text-xs text-slate-500 mt-1">
-                        {t(`permissionDescriptions.${perm.value}`, { defaultValue: perm.description })}
+                        {permissionDescs?.[perm.value] ?? perm.description}
                       </p>
                     </li>
                   ))}
