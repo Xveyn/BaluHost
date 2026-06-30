@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Generate a Keep-a-Changelog section from Conventional Commits.
 
+Local drafting aid only -- /release-prepare uses this to seed a
+hand-curated CHANGELOG section; no CI workflow invokes this script anymore.
+
 Usage:
     python scripts/generate_changelog_section.py \\
         --version 1.32.0 \\

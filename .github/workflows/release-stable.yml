@@ -3,18 +3,17 @@ name: Release Stable
 on:
   workflow_dispatch:
     inputs:
-      bump_type:
-        description: "Semver bump for the new stable release"
-        type: choice
+      version:
+        description: "Exact target version to tag (e.g. 1.39.0) -- the release-prep PR must already be merged (CHANGELOG.md has a single '## [Unreleased]' section)"
+        type: string
         required: true
-        options: [patch, minor, major]
 
 permissions:
   contents: write
 
 jobs:
   release:
-    # Upstream always on; forks opt in via vars (needs DEPLOY_PAT secret) —
+    # Upstream always on; forks opt in via vars (needs DEPLOY_PAT secret) --
     # otherwise skip cleanly instead of failing (#207).
     if: github.repository == 'Xveyn/BaluHost' || vars.ENABLE_RELEASE_STABLE == 'true'
     runs-on: ubuntu-latest
@@ -34,62 +33,52 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: Compute next version
-        id: version
+      - name: Validate version input
         env:
-          BUMP_TYPE: ${{ inputs.bump_type }}
+          NEW_VERSION: ${{ inputs.version }}
         run: |
-          CURRENT=$(grep -oP '^version\s*=\s*"\K[^"]+' backend/pyproject.toml)
-          NEW=$(python scripts/bump_version.py "$BUMP_TYPE" --dry-run | tail -1)
-          echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
-          echo "new=$NEW" >> "$GITHUB_OUTPUT"
-          echo "Bumping $CURRENT -> $NEW"
-
-      - name: Find last stable tag
-        id: last_stable
-        run: |
-          LAST=$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' | grep -Ev -- '-(pre|rc|alpha|beta|unstable)' | sort -V | tail -1 || true)
-          if [ -z "$LAST" ]; then
-            echo "No previous stable tag found; using initial commit"
-            LAST=$(git rev-list --max-parents=0 HEAD)
+          if ! [[ "$NEW_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::version input must be exact semver X.Y.Z (got: $NEW_VERSION)"
+            exit 1
           fi
-          echo "ref=$LAST" >> "$GITHUB_OUTPUT"
-          echo "Last stable: $LAST"
+          CURRENT=$(grep -oP '^version\s*=\s*"\K[^"]+' backend/pyproject.toml)
+          HIGHEST=$(printf '%s\n%s\n' "$CURRENT" "$NEW_VERSION" | sort -V | tail -1)
+          if [ "$HIGHEST" != "$NEW_VERSION" ] || [ "$NEW_VERSION" == "$CURRENT" ]; then
+            echo "::error::version $NEW_VERSION does not sort strictly above current pyproject.toml version $CURRENT"
+            exit 1
+          fi
+          echo "Promoting to v${NEW_VERSION} (current: $CURRENT)"
 
-      - name: Generate CHANGELOG section
-        env:
-          NEW_VERSION: ${{ steps.version.outputs.new }}
-          LAST_REF: ${{ steps.last_stable.outputs.ref }}
+      - name: Guard -- exactly one Unreleased section
         run: |
-          python scripts/generate_changelog_section.py \
-            --version "$NEW_VERSION" \
-            --since "$LAST_REF" \
-            --output /tmp/changelog-section.md
-          echo "--- Generated section ---"
-          cat /tmp/changelog-section.md
-          echo "--- End ---"
-          if ! grep -q '^- ' /tmp/changelog-section.md; then
-            echo "::error::No conventional-commit changes since $LAST_REF -- refusing to create empty release"
+          COUNT=$(grep -c '^## \[Unreleased\]$' CHANGELOG.md || true)
+          if [ "$COUNT" -ne 1 ]; then
+            echo "::error::Expected exactly one '## [Unreleased]' section in CHANGELOG.md, found $COUNT -- merge the release-prep PR first"
             exit 1
           fi
 
-      - name: Insert CHANGELOG section
+      - name: Finalize CHANGELOG section
+        env:
+          NEW_VERSION: ${{ inputs.version }}
         run: |
-          python scripts/insert_changelog_section.py \
-            --section /tmp/changelog-section.md \
+          python scripts/finalize_changelog_section.py \
+            --version "$NEW_VERSION" \
             --target CHANGELOG.md
+          echo "--- Finalized section preview ---"
+          grep -A 20 "^## \[${NEW_VERSION}\]" CHANGELOG.md || true
+          echo "--- End ---"
 
       - name: Bump version files
         env:
-          BUMP_TYPE: ${{ inputs.bump_type }}
-        run: python scripts/bump_version.py "$BUMP_TYPE"
+          NEW_VERSION: ${{ inputs.version }}
+        run: python scripts/bump_version.py "$NEW_VERSION"
 
       - name: Regenerate README stats
         run: python scripts/generate_readme_stats.py --write
 
       - name: Commit + push version bump
         env:
-          NEW_VERSION: ${{ steps.version.outputs.new }}
+          NEW_VERSION: ${{ inputs.version }}
         run: |
           git add backend/pyproject.toml client/package.json CLAUDE.md CHANGELOG.md README.md
           git commit -m "chore: release v${NEW_VERSION}"
@@ -97,7 +86,7 @@ jobs:
 
       - name: Tag + push
         env:
-          NEW_VERSION: ${{ steps.version.outputs.new }}
+          NEW_VERSION: ${{ inputs.version }}
         run: |
           TAG="v${NEW_VERSION}"
           git tag -a "$TAG" -m "Release $TAG"

@@ -1,50 +1,52 @@
-# Release Stable
+# Release Stable (Phase 2: Promote)
 
-Triggert den `release-stable.yml` Workflow auf GitHub. Promotet HEAD von `main` zu einem stabilen Release: Bump + CHANGELOG-Sektion + Stable-Tag + GitHub-Release als „Latest".
+Promotet den bereits gemergten Release-Prep-PR (siehe `/release-prepare`) zu
+einem Stable-Tag: verifiziert, dass `CHANGELOG.md` auf `main` eine
+`## [Unreleased]`-Sektion enthält, triggert `release-stable.yml`, das die
+Sektion finalisiert (`finalize_changelog_section.py`), die Version real
+bumpt und taggt.
 
 ## Voraussetzung
 
-- HEAD von `main` läuft auf der Production-NAS (Pre-Release wurde getestet)
+- Der Release-Prep-PR aus `/release-prepare` ist gemerged (mit angepasster
+  `chore: release vX.Y.Z`-Commit-Message)
 - `gh` CLI ist authentifiziert
 
 ## Workflow
 
-### 1. Bump-Type vorschlagen
+### 1. Zielversion abfragen
 
-Analysiere Commits seit letztem Stable-Tag:
+**FRAGE DEN BENUTZER:** Welche Version soll promotet werden? (z.B. `1.39.0` —
+die in `/release-prepare` Schritt 2 berechnete Zielversion)
+
+### 2. Verifizieren
+
 ```bash
-LAST_STABLE=$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' | grep -Ev -- '-(pre|rc|alpha|beta|unstable)' | sort -V | tail -1)
 git fetch origin main
-git log "$LAST_STABLE"..origin/main --pretty=format:'%s'
+git show origin/main:CHANGELOG.md | grep -c '^## \[Unreleased\]$'
 ```
 
-**Vorschlag basierend auf Commits:**
-- Mindestens ein `feat!:` oder `BREAKING CHANGE:` im Body → `major`
-- Mindestens ein `feat:` → `minor`
-- Sonst → `patch`
+Erwartet: `1`. Bei `0`: Release-Prep-PR wurde noch nicht gemerged — abbrechen,
+Benutzer informieren. Bei `>1`: inkonsistenter Zustand — abbrechen, Benutzer
+informieren (manuell prüfen).
 
-**FRAGE DEN BENUTZER:** Welcher Bump-Type? (Vorschlag anzeigen)
-
-### 2. CHANGELOG-Vorschau lokal generieren
+Zusätzlich: bestätige, dass es einen gemergten Release-Prep-PR mit genau dieser
+Zielversion gibt (ein Tippfehler bei der Versionsabfrage in Schritt 1 würde sonst
+unbemerkt eine falsche Version taggen):
 
 ```bash
-NEW_VERSION=$(python scripts/bump_version.py <bump_type> --dry-run | tail -1)
-python scripts/generate_changelog_section.py \
-  --version "$NEW_VERSION" \
-  --since "$LAST_STABLE" \
-  --output -
+gh pr list --state merged --search "chore: release v<version> in:title" --limit 1
 ```
 
-(Nur Vorschau — der echte CHANGELOG wird im Workflow geschrieben.)
-
-**FRAGE DEN BENUTZER:** Sieht die Sektion korrekt aus?
+Erwartet: genau ein Treffer. Bei `0`: falsche Version eingegeben oder PR-Titel
+weicht ab — mit dem Benutzer abklären, bevor der Workflow getriggert wird.
 
 ### 3. Workflow triggern
 
-**FRAGE DEN BENUTZER:** Trigger ausführen?
+**FRAGE DEN BENUTZER:** Trigger für Version `<version>` ausführen?
 
 ```bash
-gh workflow run release-stable.yml --ref main -f bump_type=<type>
+gh workflow run release-stable.yml --ref main -f version=<version>
 ```
 
 ### 4. Status-Link
@@ -61,5 +63,5 @@ Zeige dem Benutzer Run-URL.
 - Workflow läuft auf `main`, nicht `development`
 - NIEMALS lokal `pyproject.toml` / `package.json` / `CLAUDE.md` bumpen
 - NIEMALS lokal Stable-Tags erstellen oder pushen
-- NIEMALS in `CHANGELOG.md` lokal eine neue Sektion hinzufügen — der Workflow macht das
+- Die CHANGELOG-Sektion wird in Phase 1 (`/release-prepare`) geschrieben, NICHT hier — dieser Schritt finalisiert nur die bereits vorhandene `## [Unreleased]`-Sektion
 - Bei Workflow-Fehler: Run-Logs anzeigen und Benutzer informieren
