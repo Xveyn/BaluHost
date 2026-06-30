@@ -234,7 +234,10 @@ class FileSyncService:
             raise ValueError("Invalid registration token")
         if record.used:
             raise ValueError("Registration token already used")
-        if record.expires_at < datetime.now(timezone.utc):
+        expires_at = record.expires_at
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        if expires_at < datetime.now(timezone.utc):
             raise ValueError("Registration token expired")
         if str(record.user_id) != str(user_id):
             raise ValueError("Registration token does not belong to the current user")

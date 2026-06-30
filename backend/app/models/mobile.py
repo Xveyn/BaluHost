@@ -29,15 +29,15 @@ class MobileDevice(Base):
 
     # Status
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    last_seen: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)  # Last API request from this device
-    last_sync: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)  # Last sync operation (camera/files)
+    last_seen: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)  # Last API request from this device
+    last_sync: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)  # Last sync operation (camera/files)
 
     # Device token expiration (30 days minimum, 6 months maximum)
-    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Timestamps
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     # Relationships
     user = relationship("User", back_populates="mobile_devices")
@@ -52,9 +52,9 @@ class MobileRegistrationToken(Base):
     token: Mapped[str] = mapped_column(String, primary_key=True)
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     device_name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     used: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
 
     # Relationships
     user = relationship("User")
@@ -76,7 +76,7 @@ class CameraBackup(Base):
     max_video_size_mb: Mapped[int] = mapped_column(Integer, default=500, nullable=False)
 
     # Status
-    last_backup: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    last_backup: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     total_photos: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     total_videos: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     pending_uploads: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
@@ -84,8 +84,8 @@ class CameraBackup(Base):
     storage_used_bytes: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
     # Timestamps
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, onupdate=datetime.utcnow, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=datetime.utcnow, nullable=True)
 
     # Relationships
     device = relationship("MobileDevice", back_populates="camera_backups")
@@ -107,13 +107,13 @@ class SyncFolder(Base):
     auto_sync: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     # Status
-    last_sync: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    last_sync: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     status: Mapped[str] = mapped_column(String, default="idle", nullable=False)  # idle, syncing, error
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Timestamps
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, onupdate=datetime.utcnow, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), onupdate=datetime.utcnow, nullable=True)
 
     # Relationships
     device = relationship("MobileDevice", back_populates="sync_folders")
@@ -142,9 +142,9 @@ class UploadQueue(Base):
     max_retries: Mapped[int] = mapped_column(Integer, default=3, nullable=False)
 
     # Timestamps
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
-    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class ExpirationNotification(Base):
@@ -156,7 +156,7 @@ class ExpirationNotification(Base):
 
     # Notification details
     notification_type: Mapped[str] = mapped_column(String, nullable=False)  # "7_days", "3_days", "1_hour"
-    sent_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    sent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
 
     # FCM response
     success: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
@@ -164,7 +164,7 @@ class ExpirationNotification(Base):
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Device expiration context (for audit trail)
-    device_expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    device_expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     # Relationships
     device = relationship("MobileDevice")
