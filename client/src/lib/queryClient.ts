@@ -5,7 +5,8 @@ import { QueryClient } from '@tanstack/react-query';
  *
  * Defaults mirror the previous hand-rolled behavior:
  * - staleTime 0: freshness is driven by per-query refetchInterval, not staleTime.
- * - retry 1: the old code did not retry; keep a dead endpoint from hammering.
+ * - retry 1: one retry on failure (down from TanStack's default of 3) so a
+ *   dead endpoint isn't hammered with repeated attempts.
  * - refetchOnWindowFocus false: a polling LAN dashboard needs no focus refetch.
  */
 export const queryClient = new QueryClient({

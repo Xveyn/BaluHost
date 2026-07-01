@@ -190,9 +190,10 @@ export function useDiskIoMonitoring(
   const history = useQuery({
     queryKey: queryKeys.monitoring.diskIoHistory(historyDuration, source, diskName),
     queryFn: () => getDiskIoHistory(historyDuration, source, diskName),
-    // Poll every 1s until disks are discovered, then back off to pollInterval.
+    // Fast-poll 1s until disks are discovered; back off to pollInterval once
+    // disks appear OR the history endpoint errors (don't hammer a failing endpoint).
     refetchInterval: (query) =>
-      query.state.data?.available_disks?.length ? pollInterval : 1000,
+      query.state.data?.available_disks?.length || query.state.error ? pollInterval : 1000,
     enabled,
   });
 

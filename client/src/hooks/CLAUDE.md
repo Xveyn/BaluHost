@@ -48,6 +48,7 @@ Custom React hooks encapsulating data fetching, polling, and UI logic. Each hook
 
 - Return `{ data, loading, error, refetch }` pattern for data hooks
 - **Data hooks use TanStack Query** (`useQuery`) with keys from `lib/queryKeys.ts` and `refetchInterval` for polling — not hand-rolled `useState`+`setInterval`. `useMonitoring.ts` is the reference; remaining hooks migrate incrementally (#299). Keep the `{ data|current|..., loading, error, refetch }` public shape so consumers are unaffected.
+- Query-backed polling (`refetchInterval`) pauses while the browser tab is hidden and resumes on return (TanStack default; `refetchOnWindowFocus` is off) — intentional for a LAN dashboard, unlike the old always-on `setInterval`.
 - Accept `enabled?: boolean` option to conditionally disable fetching
 - Accept `pollInterval?: number` for configurable refresh rates
 - API calls go through typed functions in `api/` — hooks don't use `apiClient` directly

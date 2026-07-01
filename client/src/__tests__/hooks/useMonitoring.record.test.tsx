@@ -69,6 +69,27 @@ describe('useDiskIoMonitoring', () => {
     expect(api.getDiskIoCurrent).not.toHaveBeenCalled();
     expect(api.getDiskIoHistory).not.toHaveBeenCalled();
   });
+
+  it('backs off to pollInterval (no 1s hammering) when the history endpoint errors', async () => {
+    vi.useFakeTimers();
+    api.getDiskIoCurrent.mockResolvedValue({ disks: {} });
+    api.getDiskIoHistory.mockRejectedValue(new Error('history down'));
+
+    renderHook(() => useDiskIoMonitoring({ pollInterval: 5000 }), {
+      wrapper: createQueryWrapper(),
+    });
+
+    // Flush the initial mount fetch (which rejects; test client has retry:false).
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(api.getDiskIoHistory).toHaveBeenCalledTimes(1);
+
+    // At 1s the errored history query must NOT be re-polled — on error it backs
+    // off to pollInterval (5s), so the call count stays 1.
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+    expect(api.getDiskIoHistory).toHaveBeenCalledTimes(1);
+
+    vi.useRealTimers();
+  });
 });
 
 describe('useProcessMonitoring', () => {
