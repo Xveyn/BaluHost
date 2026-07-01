@@ -105,38 +105,29 @@ export function useMemoryMonitoring(
     enabled = true,
   } = options;
 
-  const [current, setCurrent] = useState<CurrentMemoryResponse | null>(null);
-  const [history, setHistory] = useState<MemorySample[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const current = useQuery({
+    queryKey: queryKeys.monitoring.memoryCurrent(),
+    queryFn: getMemoryCurrent,
+    refetchInterval: pollInterval,
+    enabled,
+  });
+  const history = useQuery({
+    queryKey: queryKeys.monitoring.memoryHistory(historyDuration, source),
+    queryFn: () => getMemoryHistory(historyDuration, source),
+    refetchInterval: pollInterval,
+    enabled,
+  });
 
-  const fetchData = useCallback(async () => {
-    try {
-      const [currentData, historyData] = await Promise.all([
-        getMemoryCurrent(),
-        getMemoryHistory(historyDuration, source),
-      ]);
-      setCurrent(currentData);
-      setHistory(historyData.samples);
-      setError(null);
-      setLastUpdated(new Date());
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch memory data');
-    } finally {
-      setLoading(false);
-    }
-  }, [historyDuration, source]);
-
-  useEffect(() => {
-    if (!enabled) return;
-
-    fetchData();
-    const interval = setInterval(fetchData, pollInterval);
-    return () => clearInterval(interval);
-  }, [fetchData, pollInterval, enabled]);
-
-  return { current, history, loading, error, refetch: fetchData, lastUpdated };
+  return {
+    current: current.data ?? null,
+    history: history.data?.samples ?? [],
+    loading: current.isLoading || history.isLoading,
+    error: firstError('memory', current.error, history.error),
+    refetch: async () => {
+      await Promise.all([current.refetch(), history.refetch()]);
+    },
+    lastUpdated: current.dataUpdatedAt ? new Date(current.dataUpdatedAt) : null,
+  };
 }
 
 // Network Hook
@@ -150,38 +141,29 @@ export function useNetworkMonitoring(
     enabled = true,
   } = options;
 
-  const [current, setCurrent] = useState<CurrentNetworkResponse | null>(null);
-  const [history, setHistory] = useState<NetworkSample[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const current = useQuery({
+    queryKey: queryKeys.monitoring.networkCurrent(),
+    queryFn: getNetworkCurrent,
+    refetchInterval: pollInterval,
+    enabled,
+  });
+  const history = useQuery({
+    queryKey: queryKeys.monitoring.networkHistory(historyDuration, source),
+    queryFn: () => getNetworkHistory(historyDuration, source),
+    refetchInterval: pollInterval,
+    enabled,
+  });
 
-  const fetchData = useCallback(async () => {
-    try {
-      const [currentData, historyData] = await Promise.all([
-        getNetworkCurrent(),
-        getNetworkHistory(historyDuration, source),
-      ]);
-      setCurrent(currentData);
-      setHistory(historyData.samples);
-      setError(null);
-      setLastUpdated(new Date());
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch network data');
-    } finally {
-      setLoading(false);
-    }
-  }, [historyDuration, source]);
-
-  useEffect(() => {
-    if (!enabled) return;
-
-    fetchData();
-    const interval = setInterval(fetchData, pollInterval);
-    return () => clearInterval(interval);
-  }, [fetchData, pollInterval, enabled]);
-
-  return { current, history, loading, error, refetch: fetchData, lastUpdated };
+  return {
+    current: current.data ?? null,
+    history: history.data?.samples ?? [],
+    loading: current.isLoading || history.isLoading,
+    error: firstError('network', current.error, history.error),
+    refetch: async () => {
+      await Promise.all([current.refetch(), history.refetch()]);
+    },
+    lastUpdated: current.dataUpdatedAt ? new Date(current.dataUpdatedAt) : null,
+  };
 }
 
 // Disk I/O Hook
