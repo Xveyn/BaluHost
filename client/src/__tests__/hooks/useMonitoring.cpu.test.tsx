@@ -53,4 +53,18 @@ describe('useCpuMonitoring', () => {
 
     await waitFor(() => expect(result.current.error).toBe('boom'));
   });
+
+  it('does not fetch when enabled is false', async () => {
+    api.getCpuCurrent.mockResolvedValue({ timestamp: 't0', usage_percent: 1 });
+    api.getCpuHistory.mockResolvedValue({ samples: [], sample_count: 0, source: 'memory' });
+
+    const { result } = renderHook(() => useCpuMonitoring({ enabled: false }), {
+      wrapper: createQueryWrapper(),
+    });
+
+    // enabled:false → query never runs: loading is false immediately, no API calls.
+    expect(result.current.loading).toBe(false);
+    expect(api.getCpuCurrent).not.toHaveBeenCalled();
+    expect(api.getCpuHistory).not.toHaveBeenCalled();
+  });
 });
