@@ -5,6 +5,9 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { queryKeys } from '../lib/queryKeys';
+import { getApiErrorMessage } from '../lib/errorHandling';
 import type {
   TimeRange,
   DataSource,
@@ -49,6 +52,12 @@ export interface UseMonitoringResult<TCurrent, THistory> {
   lastUpdated: Date | null;
 }
 
+/** First non-null error from a set of query errors, as a user-facing string. */
+function firstError(label: string, ...errors: unknown[]): string | null {
+  const err = errors.find((e) => e != null);
+  return err ? getApiErrorMessage(err, `Failed to fetch ${label} data`) : null;
+}
+
 // CPU Hook
 export function useCpuMonitoring(
   options: Omit<UseMonitoringOptions, 'metricType'> = {}
@@ -60,38 +69,29 @@ export function useCpuMonitoring(
     enabled = true,
   } = options;
 
-  const [current, setCurrent] = useState<CurrentCpuResponse | null>(null);
-  const [history, setHistory] = useState<CpuSample[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const current = useQuery({
+    queryKey: queryKeys.monitoring.cpuCurrent(),
+    queryFn: getCpuCurrent,
+    refetchInterval: pollInterval,
+    enabled,
+  });
+  const history = useQuery({
+    queryKey: queryKeys.monitoring.cpuHistory(historyDuration, source),
+    queryFn: () => getCpuHistory(historyDuration, source),
+    refetchInterval: pollInterval,
+    enabled,
+  });
 
-  const fetchData = useCallback(async () => {
-    try {
-      const [currentData, historyData] = await Promise.all([
-        getCpuCurrent(),
-        getCpuHistory(historyDuration, source),
-      ]);
-      setCurrent(currentData);
-      setHistory(historyData.samples);
-      setError(null);
-      setLastUpdated(new Date());
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch CPU data');
-    } finally {
-      setLoading(false);
-    }
-  }, [historyDuration, source]);
-
-  useEffect(() => {
-    if (!enabled) return;
-
-    fetchData();
-    const interval = setInterval(fetchData, pollInterval);
-    return () => clearInterval(interval);
-  }, [fetchData, pollInterval, enabled]);
-
-  return { current, history, loading, error, refetch: fetchData, lastUpdated };
+  return {
+    current: current.data ?? null,
+    history: history.data?.samples ?? [],
+    loading: current.isLoading || history.isLoading,
+    error: firstError('CPU', current.error, history.error),
+    refetch: async () => {
+      await Promise.all([current.refetch(), history.refetch()]);
+    },
+    lastUpdated: current.dataUpdatedAt ? new Date(current.dataUpdatedAt) : null,
+  };
 }
 
 // Memory Hook
