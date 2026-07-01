@@ -4,7 +4,9 @@
  * Provides a unified interface for fetching and polling monitoring metrics.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { queryKeys } from '../lib/queryKeys';
+import { getApiErrorMessage } from '../lib/errorHandling';
 import type {
   TimeRange,
   DataSource,
@@ -49,6 +51,12 @@ export interface UseMonitoringResult<TCurrent, THistory> {
   lastUpdated: Date | null;
 }
 
+/** First non-null error from a set of query errors, as a user-facing string. */
+function firstError(label: string, ...errors: unknown[]): string | null {
+  const err = errors.find((e) => e != null);
+  return err ? getApiErrorMessage(err, `Failed to fetch ${label} data`) : null;
+}
+
 // CPU Hook
 export function useCpuMonitoring(
   options: Omit<UseMonitoringOptions, 'metricType'> = {}
@@ -60,38 +68,29 @@ export function useCpuMonitoring(
     enabled = true,
   } = options;
 
-  const [current, setCurrent] = useState<CurrentCpuResponse | null>(null);
-  const [history, setHistory] = useState<CpuSample[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const current = useQuery({
+    queryKey: queryKeys.monitoring.cpuCurrent(),
+    queryFn: getCpuCurrent,
+    refetchInterval: pollInterval,
+    enabled,
+  });
+  const history = useQuery({
+    queryKey: queryKeys.monitoring.cpuHistory(historyDuration, source),
+    queryFn: () => getCpuHistory(historyDuration, source),
+    refetchInterval: pollInterval,
+    enabled,
+  });
 
-  const fetchData = useCallback(async () => {
-    try {
-      const [currentData, historyData] = await Promise.all([
-        getCpuCurrent(),
-        getCpuHistory(historyDuration, source),
-      ]);
-      setCurrent(currentData);
-      setHistory(historyData.samples);
-      setError(null);
-      setLastUpdated(new Date());
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch CPU data');
-    } finally {
-      setLoading(false);
-    }
-  }, [historyDuration, source]);
-
-  useEffect(() => {
-    if (!enabled) return;
-
-    fetchData();
-    const interval = setInterval(fetchData, pollInterval);
-    return () => clearInterval(interval);
-  }, [fetchData, pollInterval, enabled]);
-
-  return { current, history, loading, error, refetch: fetchData, lastUpdated };
+  return {
+    current: current.data ?? null,
+    history: history.data?.samples ?? [],
+    loading: current.isLoading || history.isLoading,
+    error: firstError('CPU', current.error, history.error),
+    refetch: async () => {
+      await Promise.all([current.refetch(), history.refetch()]);
+    },
+    lastUpdated: current.dataUpdatedAt ? new Date(current.dataUpdatedAt) : null,
+  };
 }
 
 // Memory Hook
@@ -105,38 +104,29 @@ export function useMemoryMonitoring(
     enabled = true,
   } = options;
 
-  const [current, setCurrent] = useState<CurrentMemoryResponse | null>(null);
-  const [history, setHistory] = useState<MemorySample[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const current = useQuery({
+    queryKey: queryKeys.monitoring.memoryCurrent(),
+    queryFn: getMemoryCurrent,
+    refetchInterval: pollInterval,
+    enabled,
+  });
+  const history = useQuery({
+    queryKey: queryKeys.monitoring.memoryHistory(historyDuration, source),
+    queryFn: () => getMemoryHistory(historyDuration, source),
+    refetchInterval: pollInterval,
+    enabled,
+  });
 
-  const fetchData = useCallback(async () => {
-    try {
-      const [currentData, historyData] = await Promise.all([
-        getMemoryCurrent(),
-        getMemoryHistory(historyDuration, source),
-      ]);
-      setCurrent(currentData);
-      setHistory(historyData.samples);
-      setError(null);
-      setLastUpdated(new Date());
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch memory data');
-    } finally {
-      setLoading(false);
-    }
-  }, [historyDuration, source]);
-
-  useEffect(() => {
-    if (!enabled) return;
-
-    fetchData();
-    const interval = setInterval(fetchData, pollInterval);
-    return () => clearInterval(interval);
-  }, [fetchData, pollInterval, enabled]);
-
-  return { current, history, loading, error, refetch: fetchData, lastUpdated };
+  return {
+    current: current.data ?? null,
+    history: history.data?.samples ?? [],
+    loading: current.isLoading || history.isLoading,
+    error: firstError('memory', current.error, history.error),
+    refetch: async () => {
+      await Promise.all([current.refetch(), history.refetch()]);
+    },
+    lastUpdated: current.dataUpdatedAt ? new Date(current.dataUpdatedAt) : null,
+  };
 }
 
 // Network Hook
@@ -150,38 +140,29 @@ export function useNetworkMonitoring(
     enabled = true,
   } = options;
 
-  const [current, setCurrent] = useState<CurrentNetworkResponse | null>(null);
-  const [history, setHistory] = useState<NetworkSample[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const current = useQuery({
+    queryKey: queryKeys.monitoring.networkCurrent(),
+    queryFn: getNetworkCurrent,
+    refetchInterval: pollInterval,
+    enabled,
+  });
+  const history = useQuery({
+    queryKey: queryKeys.monitoring.networkHistory(historyDuration, source),
+    queryFn: () => getNetworkHistory(historyDuration, source),
+    refetchInterval: pollInterval,
+    enabled,
+  });
 
-  const fetchData = useCallback(async () => {
-    try {
-      const [currentData, historyData] = await Promise.all([
-        getNetworkCurrent(),
-        getNetworkHistory(historyDuration, source),
-      ]);
-      setCurrent(currentData);
-      setHistory(historyData.samples);
-      setError(null);
-      setLastUpdated(new Date());
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch network data');
-    } finally {
-      setLoading(false);
-    }
-  }, [historyDuration, source]);
-
-  useEffect(() => {
-    if (!enabled) return;
-
-    fetchData();
-    const interval = setInterval(fetchData, pollInterval);
-    return () => clearInterval(interval);
-  }, [fetchData, pollInterval, enabled]);
-
-  return { current, history, loading, error, refetch: fetchData, lastUpdated };
+  return {
+    current: current.data ?? null,
+    history: history.data?.samples ?? [],
+    loading: current.isLoading || history.isLoading,
+    error: firstError('network', current.error, history.error),
+    refetch: async () => {
+      await Promise.all([current.refetch(), history.refetch()]);
+    },
+    lastUpdated: current.dataUpdatedAt ? new Date(current.dataUpdatedAt) : null,
+  };
 }
 
 // Disk I/O Hook
@@ -206,43 +187,35 @@ export function useDiskIoMonitoring(
     enabled = true,
   } = options;
 
-  const [disks, setDisks] = useState<Record<string, DiskIoSample | null>>({});
-  const [history, setHistory] = useState<Record<string, DiskIoSample[]>>({});
-  const [availableDisks, setAvailableDisks] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const history = useQuery({
+    queryKey: queryKeys.monitoring.diskIoHistory(historyDuration, source, diskName),
+    queryFn: () => getDiskIoHistory(historyDuration, source, diskName),
+    // Fast-poll 1s until disks are discovered; back off to pollInterval once
+    // disks appear OR the history endpoint errors (don't hammer a failing endpoint).
+    refetchInterval: (query) =>
+      query.state.data?.available_disks?.length || query.state.error ? pollInterval : 1000,
+    enabled,
+  });
 
-  const fetchData = useCallback(async () => {
-    try {
-      const [currentData, historyData] = await Promise.all([
-        getDiskIoCurrent(),
-        getDiskIoHistory(historyDuration, source, diskName),
-      ]);
-      setDisks(currentData.disks);
-      setHistory(historyData.disks);
-      setAvailableDisks(historyData.available_disks);
-      setError(null);
-      setLastUpdated(new Date());
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch disk I/O data');
-    } finally {
-      setLoading(false);
-    }
-  }, [historyDuration, source, diskName]);
+  const fastPoll = !history.data?.available_disks?.length && !history.error;
+  const current = useQuery({
+    queryKey: queryKeys.monitoring.diskIoCurrent(),
+    queryFn: getDiskIoCurrent,
+    refetchInterval: fastPoll ? 1000 : pollInterval,
+    enabled,
+  });
 
-  // Use shorter poll interval while waiting for first disk data
-  const effectiveInterval = availableDisks.length === 0 && !error ? 1000 : pollInterval;
-
-  useEffect(() => {
-    if (!enabled) return;
-
-    fetchData();
-    const interval = setInterval(fetchData, effectiveInterval);
-    return () => clearInterval(interval);
-  }, [fetchData, effectiveInterval, enabled]);
-
-  return { disks, history, availableDisks, loading, error, refetch: fetchData, lastUpdated };
+  return {
+    disks: current.data?.disks ?? {},
+    history: history.data?.disks ?? {},
+    availableDisks: history.data?.available_disks ?? [],
+    loading: current.isLoading || history.isLoading,
+    error: firstError('disk I/O', current.error, history.error),
+    refetch: async () => {
+      await Promise.all([current.refetch(), history.refetch()]);
+    },
+    lastUpdated: current.dataUpdatedAt ? new Date(current.dataUpdatedAt) : null,
+  };
 }
 
 // Process Hook
@@ -267,40 +240,30 @@ export function useProcessMonitoring(
     enabled = true,
   } = options;
 
-  const [processes, setProcesses] = useState<Record<string, ProcessSample | null>>({});
-  const [history, setHistory] = useState<Record<string, ProcessSample[]>>({});
-  const [crashesDetected, setCrashesDetected] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const current = useQuery({
+    queryKey: queryKeys.monitoring.processesCurrent(),
+    queryFn: getProcessesCurrent,
+    refetchInterval: pollInterval,
+    enabled,
+  });
+  const history = useQuery({
+    queryKey: queryKeys.monitoring.processesHistory(historyDuration, source, processName),
+    queryFn: () => getProcessesHistory(historyDuration, source, processName),
+    refetchInterval: pollInterval,
+    enabled,
+  });
 
-  const fetchData = useCallback(async () => {
-    try {
-      const [currentData, historyData] = await Promise.all([
-        getProcessesCurrent(),
-        getProcessesHistory(historyDuration, source, processName),
-      ]);
-      setProcesses(currentData.processes);
-      setHistory(historyData.processes);
-      setCrashesDetected(historyData.crashes_detected);
-      setError(null);
-      setLastUpdated(new Date());
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch process data');
-    } finally {
-      setLoading(false);
-    }
-  }, [historyDuration, source, processName]);
-
-  useEffect(() => {
-    if (!enabled) return;
-
-    fetchData();
-    const interval = setInterval(fetchData, pollInterval);
-    return () => clearInterval(interval);
-  }, [fetchData, pollInterval, enabled]);
-
-  return { processes, history, crashesDetected, loading, error, refetch: fetchData, lastUpdated };
+  return {
+    processes: current.data?.processes ?? {},
+    history: history.data?.processes ?? {},
+    crashesDetected: history.data?.crashes_detected ?? 0,
+    loading: current.isLoading || history.isLoading,
+    error: firstError('process', current.error, history.error),
+    refetch: async () => {
+      await Promise.all([current.refetch(), history.refetch()]);
+    },
+    lastUpdated: current.dataUpdatedAt ? new Date(current.dataUpdatedAt) : null,
+  };
 }
 
 // Combined monitoring hook for all metrics
