@@ -6,7 +6,7 @@ Custom React hooks encapsulating data fetching, polling, and UI logic. Each hook
 
 | Hook | API module | Purpose |
 |---|---|---|
-| `useMonitoring.ts` | `api/monitoring` | Unified CPU/memory/network/disk polling with configurable interval and history |
+| `useMonitoring.ts` | `api/monitoring` | Unified CPU/memory/network/disk/process data via **TanStack Query** (`useQuery`), configurable `pollInterval` (mapped to `refetchInterval`) + history; public return shape unchanged |
 | `useSystemTelemetry.ts` | `api/system` | System telemetry (CPU, RAM, network) for dashboard widgets |
 | `useFanControl.ts` | `api/fan-control` | Fan config, curves, schedules — full fan management state |
 | `useSchedulers.ts` | `api/schedulers` | Scheduler list, status, history, run-now |
@@ -47,7 +47,7 @@ Custom React hooks encapsulating data fetching, polling, and UI logic. Each hook
 ## Conventions
 
 - Return `{ data, loading, error, refetch }` pattern for data hooks
-- Use `useState` + `useEffect` for polling (with cleanup via `clearInterval`)
+- **Data hooks use TanStack Query** (`useQuery`) with keys from `lib/queryKeys.ts` and `refetchInterval` for polling — not hand-rolled `useState`+`setInterval`. `useMonitoring.ts` is the reference; remaining hooks migrate incrementally (#299). Keep the `{ data|current|..., loading, error, refetch }` public shape so consumers are unaffected.
 - Accept `enabled?: boolean` option to conditionally disable fetching
 - Accept `pollInterval?: number` for configurable refresh rates
 - API calls go through typed functions in `api/` — hooks don't use `apiClient` directly

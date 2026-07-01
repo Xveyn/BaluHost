@@ -7,6 +7,8 @@ Shared utility functions and core infrastructure. No React components — pure T
 | File | Purpose |
 |---|---|
 | `api.ts` | **Core API client**: axios instance (`apiClient`), auth interceptor, 401 handling, `memoizedApiRequest()` with TTL cache, `buildApiUrl()` for dev/prod path resolution, API version check via `X-API-Min-Version` header |
+| `queryClient.ts` | Shared TanStack Query `QueryClient` + app-wide query defaults (`staleTime 0`, `retry 1`, `refetchOnWindowFocus false`). Mounted via `QueryClientProvider` in `main.tsx` |
+| `queryKeys.ts` | Central query-key factory (`queryKeys.<domain>.<entity>()`) — the canonical key namespace for all `useQuery` calls |
 | `errorHandling.ts` | `getApiErrorMessage(err, fallback)` — extracts message from axios/FastAPI errors. `handleApiError(err, fallback)` — shows toast.error |
 | `features.ts` | Build-time feature flags via `__DEVICE_MODE__` (Vite define). `FEATURES.*` object, `isDesktop`/`isPi` booleans. Dead code elimination in minifier |
 | `chunkedUpload.ts` | Resumable chunked file upload client |
@@ -35,3 +37,4 @@ Shared utility functions and core infrastructure. No React components — pure T
 - 401 responses fire `auth:expired` CustomEvent — `AuthContext` listens and logs out
 - `memoizedApiRequest()` uses an in-memory `Map` cache with configurable TTL (default 60s)
 - `FEATURES` object enables tree-shaking: `isDesktop ? import('./HeavyPage') : null` ensures Pi builds exclude desktop-only code
+- **Data fetching uses TanStack Query** (`@tanstack/react-query` v5). Hooks call typed `api/*` functions inside `useQuery`; keys come from `lib/queryKeys.ts`. Migration is incremental per domain (see #299) — new/edited data hooks should use `useQuery`, not hand-rolled `useState`+`setInterval`.
