@@ -31,3 +31,9 @@ describe('queryKeys.monitoring', () => {
     ]);
   });
 });
+
+describe('queryKeys.system', () => {
+  it('builds the telemetry key', () => {
+    expect(queryKeys.system.telemetry()).toEqual(['system', 'telemetry']);
+  });
+});

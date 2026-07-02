@@ -24,4 +24,7 @@ export const queryKeys = {
     processesHistory: (duration: TimeRange, source: DataSource, processName?: string) =>
       ['monitoring', 'processes', 'history', duration, source, processName ?? null] as const,
   },
+  system: {
+    telemetry: () => ['system', 'telemetry'] as const,
+  },
 } as const;
