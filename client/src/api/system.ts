@@ -105,16 +105,6 @@ export async function getStorageBreakdown(): Promise<StorageBreakdownResponse> {
   return data;
 }
 
-/** Storage shape returned by /api/system/storage/aggregated (telemetry). */
-export interface AggregatedStorageInfo {
-  filesystem?: string;
-  total: number;
-  used: number;
-  available: number;
-  usePercent?: string | number;
-  mountPoint?: string;
-}
-
 export interface CpuHistoryPoint {
   timestamp: number;
   usage: number;
@@ -140,8 +130,8 @@ export interface TelemetryHistory {
 }
 
 /** Get aggregated storage totals across all mountpoints (dashboard telemetry). */
-export async function getAggregatedStorage(): Promise<AggregatedStorageInfo> {
-  const { data } = await apiClient.get<AggregatedStorageInfo>(
+export async function getAggregatedStorage(): Promise<StorageInfoResponse> {
+  const { data } = await apiClient.get<StorageInfoResponse>(
     '/api/system/storage/aggregated'
   );
   return data;
