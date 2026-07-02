@@ -31,6 +31,7 @@ export interface SystemInfoResponse {
   memory: MemoryInfo;
   disk: DiskInfo;
   uptime: number;
+  system_uptime?: number;
   dev_mode: boolean;
 }
 
@@ -100,6 +101,46 @@ export interface StorageBreakdownResponse {
 export async function getStorageBreakdown(): Promise<StorageBreakdownResponse> {
   const { data } = await apiClient.get<StorageBreakdownResponse>(
     '/api/system/storage/breakdown'
+  );
+  return data;
+}
+
+export interface CpuHistoryPoint {
+  timestamp: number;
+  usage: number;
+}
+
+export interface MemoryHistoryPoint {
+  timestamp: number;
+  used: number;
+  total: number;
+  percent: number;
+}
+
+export interface NetworkHistoryPoint {
+  timestamp: number;
+  downloadMbps: number;
+  uploadMbps: number;
+}
+
+export interface TelemetryHistory {
+  cpu: CpuHistoryPoint[];
+  memory: MemoryHistoryPoint[];
+  network: NetworkHistoryPoint[];
+}
+
+/** Get aggregated storage totals across all mountpoints (dashboard telemetry). */
+export async function getAggregatedStorage(): Promise<StorageInfoResponse> {
+  const { data } = await apiClient.get<StorageInfoResponse>(
+    '/api/system/storage/aggregated'
+  );
+  return data;
+}
+
+/** Get rolling CPU/memory/network telemetry history (dashboard charts). */
+export async function getTelemetryHistory(): Promise<TelemetryHistory> {
+  const { data } = await apiClient.get<TelemetryHistory>(
+    '/api/system/telemetry/history'
   );
   return data;
 }
