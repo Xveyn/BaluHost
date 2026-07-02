@@ -15,6 +15,7 @@ export const queryClient = new QueryClient({
       staleTime: 0,
       retry: 1,
       refetchOnWindowFocus: false,
+      gcTime: 1000 * 60 * 60 * 24, // >= persister maxAge (24h) for reliable persistence
     },
   },
 });

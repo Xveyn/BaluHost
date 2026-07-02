@@ -1,5 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import { buildApiUrl } from '../lib/api';
+import { queryClient } from '../lib/queryClient';
+import { queryPersister } from '../lib/queryPersister';
 import { impersonateUser as apiImpersonateUser } from '../api/authDev';
 import type { User } from '../types/auth';
 
@@ -104,6 +106,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setImpersonationOrigin(null);
     setToken(null);
     setUser(null);
+    // Drop any cached data for the ended session so a next login on the same
+    // tab can't briefly show it before refetch (the global persister mirrors
+    // the whole query cache to sessionStorage — see lib/queryPersister.ts).
+    queryClient.clear();
+    void queryPersister.removeClient();
   }, []);
 
   const impersonate = useCallback(async (userId: number) => {

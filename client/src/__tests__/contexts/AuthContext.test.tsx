@@ -7,6 +7,7 @@ vi.mock('../../lib/api', () => ({
   buildApiUrl: (path: string) => path,
   apiClient: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() },
   API_BASE_URL: '',
+  API_VERSION: '1',
 }));
 
 import { AuthProvider, useAuth } from '../../contexts/AuthContext';

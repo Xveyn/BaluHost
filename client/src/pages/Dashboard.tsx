@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useSystemTelemetry } from '../hooks/useSystemTelemetry';
 import { useSmartData } from '../hooks/useSmartData';
 import { useGpuPresence } from '../hooks/useGpuPresence';
-import { getRaidStatus, type RaidStatusResponse } from '../api/raid';
+import { useRaidStatus } from '../hooks/useRaidStatus';
 import { getSystemMode } from '../api/system';
 import { getGpuCurrent, type GpuSample } from '../api/monitoring';
 import { useNextMaintenance } from '../hooks/useNextMaintenance';
@@ -43,36 +43,6 @@ interface StorageStats {
   percent: number;
 }
 
-const RAID_CACHE_KEY = 'raid_status_cache';
-const RAID_CACHE_DURATION = 120000; // 2 minutes
-
-function getCachedRaid(): RaidStatusResponse | null {
-  try {
-    const cached = sessionStorage.getItem(RAID_CACHE_KEY);
-    if (cached) {
-      const data = JSON.parse(cached);
-      const age = Date.now() - (data.timestamp || 0);
-      if (age < RAID_CACHE_DURATION) {
-        return data.raid;
-      }
-    }
-  } catch {
-    // Ignore cache read errors
-  }
-  return null;
-}
-
-function setCachedRaid(raid: RaidStatusResponse): void {
-  try {
-    sessionStorage.setItem(RAID_CACHE_KEY, JSON.stringify({
-      raid,
-      timestamp: Date.now()
-    }));
-  } catch {
-    // Ignore cache write errors
-  }
-}
-
 export default function Dashboard() {
   const navigate = useNavigate();
   const { t } = useTranslation('dashboard');
@@ -84,9 +54,7 @@ export default function Dashboard() {
   const handleMemoryClick = () => navigate('/system?tab=memory');
   const handleStorageClick = () => navigate('/system?tab=disk-io');
   const { smartData, loading: smartLoading, error: smartError, refetch: refetchSmartData } = useSmartData();
-  const cachedRaid = getCachedRaid();
-  const [raidData, setRaidData] = useState<RaidStatusResponse | null>(cachedRaid);
-  const [raidLoading, setRaidLoading] = useState(!cachedRaid);
+  const { raidData, raidLoading } = useRaidStatus();
   const [smartMode, setSmartMode] = useState<string | null>(null);
   const [smartModeLoading, setSmartModeLoading] = useState(false);
 
@@ -113,25 +81,6 @@ export default function Dashboard() {
   const { allSchedulers } = useNextMaintenance();
   const { services } = useServicesSummary({ enabled: isAdmin });
   const { activities } = useLiveActivities({ raidData, schedulers: allSchedulers, isAdmin });
-
-  useEffect(() => {
-    const loadRaidData = async () => {
-      try {
-        const data = await getRaidStatus();
-        setRaidData(data);
-        setCachedRaid(data);
-      } catch {
-        // RAID data load failed
-      } finally {
-        setRaidLoading(false);
-      }
-    };
-
-    loadRaidData();
-    const interval = setInterval(loadRaidData, 60000); // Poll every 60 seconds
-
-    return () => clearInterval(interval);
-  }, []);
 
   useEffect(() => {
     const loadSmartMode = async () => {

@@ -7,7 +7,8 @@ Shared utility functions and core infrastructure. No React components — pure T
 | File | Purpose |
 |---|---|
 | `api.ts` | **Core API client**: axios instance (`apiClient`), auth interceptor, 401 handling, `memoizedApiRequest()` with TTL cache, `buildApiUrl()` for dev/prod path resolution, API version check via `X-API-Min-Version` header |
-| `queryClient.ts` | Shared TanStack Query `QueryClient` + app-wide query defaults (`staleTime 0`, `retry 1`, `refetchOnWindowFocus false`). Mounted via `QueryClientProvider` in `main.tsx` |
+| `queryClient.ts` | Shared TanStack Query `QueryClient` + app-wide query defaults (`staleTime 0`, `retry 1`, `refetchOnWindowFocus false`). Mounted via `PersistQueryClientProvider` in `main.tsx` |
+| `queryPersister.ts` | TanStack Query **persister** — mirrors the whole query cache to `sessionStorage` (`baluhost-query-cache`, 24h `maxAge`, `API_VERSION` buster), rehydrated on boot via `PersistQueryClientProvider` in `main.tsx`. App-wide replacement for hand-rolled sessionStorage caches (F5 instant-paint) |
 | `queryKeys.ts` | Central query-key factory (`queryKeys.<domain>.<entity>()`) — the canonical key namespace for all `useQuery` calls |
 | `errorHandling.ts` | `getApiErrorMessage(err, fallback)` — extracts message from axios/FastAPI errors. `handleApiError(err, fallback)` — shows toast.error |
 | `features.ts` | Build-time feature flags via `__DEVICE_MODE__` (Vite define). `FEATURES.*` object, `isDesktop`/`isPi` booleans. Dead code elimination in minifier |
@@ -38,3 +39,4 @@ Shared utility functions and core infrastructure. No React components — pure T
 - `memoizedApiRequest()` uses an in-memory `Map` cache with configurable TTL (default 60s)
 - `FEATURES` object enables tree-shaking: `isDesktop ? import('./HeavyPage') : null` ensures Pi builds exclude desktop-only code
 - **Data fetching uses TanStack Query** (`@tanstack/react-query` v5). Hooks call typed `api/*` functions inside `useQuery`; keys come from `lib/queryKeys.ts`. Migration is incremental per domain (see #299) — new/edited data hooks should use `useQuery`, not hand-rolled `useState`+`setInterval`.
+- **Query cache persists across reloads** via `queryPersister.ts` + `PersistQueryClientProvider` (sessionStorage). New data hooks get F5 instant-paint for free — do not hand-roll sessionStorage caches. `queryClient` `gcTime` is 24h to satisfy the persister's `maxAge`.
