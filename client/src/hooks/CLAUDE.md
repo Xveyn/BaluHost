@@ -7,7 +7,7 @@ Custom React hooks encapsulating data fetching, polling, and UI logic. Each hook
 | Hook | API module | Purpose |
 |---|---|---|
 | `useMonitoring.ts` | `api/monitoring` | Unified CPU/memory/network/disk/process data via **TanStack Query** (`useQuery`), configurable `pollInterval` (mapped to `refetchInterval`) + history; public return shape unchanged |
-| `useSystemTelemetry.ts` | `api/system` | System telemetry (CPU, RAM, network) for dashboard widgets |
+| `useSystemTelemetry.ts` | `api/system` | System info + aggregated storage + telemetry history for the dashboard via **TanStack Query** (`useQuery`, one combined snapshot, `pollInterval`→`refetchInterval`); sessionStorage seeds `initialData` (removal deferred to #299 persister PR); public shape unchanged |
 | `useFanControl.ts` | `api/fan-control` | Fan config, curves, schedules — full fan management state |
 | `useSchedulers.ts` | `api/schedulers` | Scheduler list, status, history, run-now |
 | `useBenchmark.ts` | `api/benchmark` | Disk benchmark state, progress, results |
