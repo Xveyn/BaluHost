@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { queryPersister, persistOptions } from '../../lib/queryPersister';
 import { API_VERSION } from '../../lib/api';
 
@@ -8,20 +8,22 @@ const emptyClient = () => ({
   clientState: { queries: [], mutations: [] },
 });
 
-// createSyncStoragePersister's persistClient is internally throttle-wrapped
-// via a real setTimeout (a macrotask, even with throttleTime: 0) and returns
-// undefined rather than a promise — so `await persistClient(...)` resolves
-// before the write actually lands. Flush past that macrotask before asserting.
-const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
-
+// createSyncStoragePersister's persistClient is throttle-wrapped (default
+// 1000ms, trailing-edge): the write only lands once that timer fires. Fake
+// timers make the flush deterministic instead of racing a real setTimeout.
 beforeEach(() => {
   sessionStorage.clear();
+  vi.useFakeTimers();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe('queryPersister', () => {
   it('persists under the baluhost-query-cache sessionStorage key', async () => {
     await queryPersister.persistClient(emptyClient() as never);
-    await flush();
+    await vi.advanceTimersByTimeAsync(1000);
     expect(sessionStorage.getItem('baluhost-query-cache')).not.toBeNull();
   });
 
@@ -29,14 +31,14 @@ describe('queryPersister', () => {
     const client = emptyClient();
     client.clientState.queries = [{ queryKey: ['x'], state: { data: 42 } }] as never;
     await queryPersister.persistClient(client as never);
-    await flush();
+    await vi.advanceTimersByTimeAsync(1000);
     const restored = await queryPersister.restoreClient();
     expect(restored?.clientState.queries).toHaveLength(1);
   });
 
   it('removeClient clears the entry', async () => {
     await queryPersister.persistClient(emptyClient() as never);
-    await flush();
+    await vi.advanceTimersByTimeAsync(1000);
     await queryPersister.removeClient();
     const restored = await queryPersister.restoreClient();
     expect(restored).toBeUndefined();

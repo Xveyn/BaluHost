@@ -9,11 +9,10 @@ import { API_VERSION } from './api';
 export const queryPersister = createSyncStoragePersister({
   storage: typeof window !== 'undefined' ? window.sessionStorage : undefined,
   key: 'baluhost-query-cache',
-  // Default throttleTime is 1000ms (batches persistClient calls). We write
-  // immediately instead: sessionStorage writes are cheap and a throttled
-  // write can be lost if the tab closes/reloads inside the throttle window,
-  // which would defeat the "survives F5" purpose of this persister.
-  throttleTime: 0,
+  // Default throttleTime (1000ms) applies intentionally: with several
+  // 1-3s-interval polling queries (CPU/memory/network/disk-io/processes),
+  // an unthrottled persister would dehydrate the whole cache and hit
+  // sessionStorage.setItem synchronously on every cache event.
 });
 
 /**
