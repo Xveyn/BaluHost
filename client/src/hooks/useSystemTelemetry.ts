@@ -47,40 +47,6 @@ const parsePercent = (value: string | number | undefined): number => {
   return 0;
 };
 
-const TELEMETRY_CACHE_KEY = 'system_telemetry_cache';
-const TELEMETRY_CACHE_DURATION = 120000; // 2 minutes
-
-function getCachedTelemetry(): TelemetrySnapshot | null {
-  try {
-    const cached = sessionStorage.getItem(TELEMETRY_CACHE_KEY);
-    if (cached) {
-      const data = JSON.parse(cached);
-      const age = Date.now() - (data.timestamp || 0);
-      if (age < TELEMETRY_CACHE_DURATION && data.system && data.storage && data.history) {
-        return { system: data.system, storage: data.storage, history: data.history };
-      }
-    }
-  } catch {
-    // Ignore cache read failures
-  }
-  return null;
-}
-
-function setCachedTelemetry(
-  system: SystemInfoResponse,
-  storage: StorageInfoResponse,
-  history: TelemetryHistory
-): void {
-  try {
-    sessionStorage.setItem(
-      TELEMETRY_CACHE_KEY,
-      JSON.stringify({ system, storage, history, timestamp: Date.now() })
-    );
-  } catch {
-    // Ignore cache write failures
-  }
-}
-
 export const useSystemTelemetry = (pollInterval = 15000): TelemetryState => {
   const { token } = useAuth();
 
@@ -92,13 +58,10 @@ export const useSystemTelemetry = (pollInterval = 15000): TelemetryState => {
         getAggregatedStorage(),
         getTelemetryHistory(),
       ]);
-      setCachedTelemetry(system, storage, history); // keep the F5 instant-paint cache warm
       return { system, storage, history };
     },
     refetchInterval: pollInterval,
     enabled: !!token,
-    // Lazy: only read/parse sessionStorage when the cache actually seeds initial data.
-    initialData: () => getCachedTelemetry() ?? undefined,
   });
 
   const normalisedStorage = useMemo<NormalisedStorageInfo | null>(() => {

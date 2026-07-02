@@ -63,28 +63,6 @@ describe('useSystemTelemetry', () => {
     await waitFor(() => expect(result.current.loading).toBe(false));
   });
 
-  it('paints instantly (loading false) when a fresh sessionStorage cache exists', async () => {
-    sessionStorage.setItem(
-      'system_telemetry_cache',
-      JSON.stringify({
-        system: sampleSystem,
-        storage: sampleStorage,
-        history: sampleHistory,
-        timestamp: Date.now(),
-      })
-    );
-    api.getSystemInfo.mockResolvedValue(sampleSystem);
-    api.getAggregatedStorage.mockResolvedValue(sampleStorage);
-    api.getTelemetryHistory.mockResolvedValue(sampleHistory);
-
-    const { result } = renderHook(() => useSystemTelemetry(999999), {
-      wrapper: createQueryWrapper(),
-    });
-
-    expect(result.current.loading).toBe(false);
-    expect(result.current.system?.cpu.usage).toBe(5);
-  });
-
   it('surfaces an error string when a fetch rejects', async () => {
     api.getSystemInfo.mockRejectedValue(new Error('telemetry boom'));
     api.getAggregatedStorage.mockResolvedValue(sampleStorage);
