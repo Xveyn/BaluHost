@@ -29,7 +29,7 @@
 ## File Structure
 
 - `client/src/lib/queryKeys.ts` — add a `system` domain (Task 1).
-- `client/src/api/system.ts` — add `system_uptime?` to `SystemInfoResponse`; add `AggregatedStorageInfo` + `getAggregatedStorage()`; add `TelemetryHistory` (+ point types) + `getTelemetryHistory()` (Task 1).
+- `client/src/api/system.ts` — add `system_uptime?` to `SystemInfoResponse`; add `getAggregatedStorage()` (returns the existing `StorageInfoResponse`, snake_case, matching the backend `StorageInfo` model); add `TelemetryHistory` (+ point types) + `getTelemetryHistory()` (Task 1).
 - `client/src/__tests__/lib/query-foundation.test.ts` — extend with the `system.telemetry()` key assertion (Task 1).
 - `client/src/__tests__/api/system.telemetry.test.ts` *(new)* — the two new API fns hit the right endpoints (Task 1).
 - `client/src/hooks/useSystemTelemetry.ts` — internal migration to `useQuery` (Task 2).
@@ -48,7 +48,7 @@
 
 **Interfaces:**
 - Produces: `queryKeys.system.telemetry(): readonly ['system','telemetry']`.
-- Produces: `getAggregatedStorage(): Promise<AggregatedStorageInfo>`, `getTelemetryHistory(): Promise<TelemetryHistory>`, and the exported types `AggregatedStorageInfo`, `TelemetryHistory`, `CpuHistoryPoint`, `MemoryHistoryPoint`, `NetworkHistoryPoint`. `SystemInfoResponse` gains optional `system_uptime?: number`.
+- Produces: `getAggregatedStorage(): Promise<StorageInfoResponse>` (reuses the existing `StorageInfoResponse` in `api/system.ts` — the aggregated endpoint returns the same backend `StorageInfo` model, snake_case `use_percent`/`mount_point`), `getTelemetryHistory(): Promise<TelemetryHistory>`, and the exported types `TelemetryHistory`, `CpuHistoryPoint`, `MemoryHistoryPoint`, `NetworkHistoryPoint`. `SystemInfoResponse` gains optional `system_uptime?: number`. No new `StorageInfoResponse` type is introduced (avoids duplicating `StorageInfoResponse`).
 - Consumes (test): `apiClient` from `lib/api` (mocked).
 
 - [ ] **Step 1: Add the `system` domain to the query-key factory**
@@ -85,18 +85,8 @@ In `client/src/api/system.ts`:
 
 (a) Add `system_uptime?: number;` to the existing `SystemInfoResponse` interface (after `uptime: number;`). This is additive — existing `getSystemInfo` consumers are unaffected.
 
-(b) Append these exports at the end of the file (after `getStorageBreakdown`):
+(b) Append these exports at the end of the file (after `getStorageBreakdown`). Note: `getAggregatedStorage` **reuses the existing `StorageInfoResponse`** already declared in this file (the aggregated endpoint returns the same backend `StorageInfo` model — snake_case `use_percent`/`mount_point`, all required). Do NOT introduce a new `StorageInfoResponse` type.
 ```ts
-/** Storage shape returned by /api/system/storage/aggregated (telemetry). */
-export interface AggregatedStorageInfo {
-  filesystem?: string;
-  total: number;
-  used: number;
-  available: number;
-  usePercent?: string | number;
-  mountPoint?: string;
-}
-
 export interface CpuHistoryPoint {
   timestamp: number;
   usage: number;
@@ -122,8 +112,8 @@ export interface TelemetryHistory {
 }
 
 /** Get aggregated storage totals across all mountpoints (dashboard telemetry). */
-export async function getAggregatedStorage(): Promise<AggregatedStorageInfo> {
-  const { data } = await apiClient.get<AggregatedStorageInfo>(
+export async function getAggregatedStorage(): Promise<StorageInfoResponse> {
+  const { data } = await apiClient.get<StorageInfoResponse>(
     '/api/system/storage/aggregated'
   );
   return data;
@@ -232,7 +222,14 @@ const sampleSystem = {
   uptime: 10,
   dev_mode: true,
 };
-const sampleStorage = { total: 200, used: 50, available: 150 };
+const sampleStorage = {
+  filesystem: '/dev/md0',
+  total: 200,
+  used: 50,
+  available: 150,
+  use_percent: '25%',
+  mount_point: '/',
+};
 const sampleHistory = { cpu: [{ timestamp: 1, usage: 5 }], memory: [], network: [] };
 
 beforeEach(() => {
@@ -329,14 +326,14 @@ import {
   getAggregatedStorage,
   getTelemetryHistory,
   type SystemInfoResponse,
-  type AggregatedStorageInfo,
+  type StorageInfoResponse,
   type TelemetryHistory,
   type CpuHistoryPoint,
   type MemoryHistoryPoint,
   type NetworkHistoryPoint,
 } from '../api/system';
 
-interface NormalisedStorageInfo extends AggregatedStorageInfo {
+interface NormalisedStorageInfo extends StorageInfoResponse {
   percent: number;
 }
 
@@ -352,7 +349,7 @@ interface TelemetryState {
 
 interface TelemetrySnapshot {
   system: SystemInfoResponse;
-  storage: AggregatedStorageInfo;
+  storage: StorageInfoResponse;
   history: TelemetryHistory;
 }
 
@@ -389,7 +386,7 @@ function getCachedTelemetry(): TelemetrySnapshot | null {
 
 function setCachedTelemetry(
   system: SystemInfoResponse,
-  storage: AggregatedStorageInfo,
+  storage: StorageInfoResponse,
   history: TelemetryHistory
 ): void {
   try {
@@ -431,7 +428,7 @@ export const useSystemTelemetry = (pollInterval = 15000): TelemetryState => {
     const total = Number(storage.total) || 0;
     const used = Number(storage.used) || 0;
     const available = Number(storage.available) || Math.max(total - used, 0);
-    const percent = total ? (used / total) * 100 : parsePercent(storage.usePercent);
+    const percent = total ? (used / total) * 100 : parsePercent(storage.use_percent);
 
     return {
       ...storage,
@@ -457,7 +454,7 @@ export const useSystemTelemetry = (pollInterval = 15000): TelemetryState => {
 
 export type {
   SystemInfoResponse,
-  AggregatedStorageInfo,
+  StorageInfoResponse,
   NormalisedStorageInfo,
   TelemetryHistory,
   CpuHistoryPoint,

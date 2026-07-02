@@ -55,10 +55,15 @@ Replace the three raw `fetch()` calls with typed `apiClient` functions:
 - **Reuse** existing `getSystemInfo()` for `/api/system/info`. Additively extend its
   `SystemInfoResponse` with `system_uptime?: number` (non-breaking — existing consumers of
   `getSystemInfo`/`getStorageInfo` are unaffected).
-- **Add** `getAggregatedStorage(): Promise<AggregatedStorageInfo>` → `/api/system/storage/aggregated`.
-  `AggregatedStorageInfo` = `{ filesystem?, total, used, available, usePercent?, mountPoint? }`
-  (the telemetry storage shape; distinct from the existing `StorageInfoResponse` which serves
-  the different `/api/system/storage` endpoint — no name collision).
+- **Add** `getAggregatedStorage(): Promise<StorageInfoResponse>` → `/api/system/storage/aggregated`,
+  **reusing the existing `StorageInfoResponse`** already in `api/system.ts`. The aggregated
+  endpoint is declared `response_model=StorageInfo` on the backend, i.e. the same model
+  `getStorageInfo()` returns — snake_case `use_percent`/`mount_point` (all required). Reusing
+  the existing type keeps the client type accurate to the wire and avoids a duplicate.
+  (Correction to the initial draft, which specified a camelCase `AggregatedStorageInfo`
+  mirroring the old hook's inaccurate type — the old hook read `storage.usePercent`, which was
+  always `undefined` at runtime but harmless because that fallback branch only runs when
+  `total === 0`. The migration fixes this to `storage.use_percent`.)
 - **Add** `getTelemetryHistory(): Promise<TelemetryHistory>` → `/api/system/telemetry/history`,
   with `TelemetryHistory` + `CpuHistoryPoint` / `MemoryHistoryPoint` / `NetworkHistoryPoint`
   exported for reuse.
