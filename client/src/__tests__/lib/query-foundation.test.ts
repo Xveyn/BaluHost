@@ -37,3 +37,9 @@ describe('queryKeys.system', () => {
     expect(queryKeys.system.telemetry()).toEqual(['system', 'telemetry']);
   });
 });
+
+describe('queryKeys.raid', () => {
+  it('builds the status key', () => {
+    expect(queryKeys.raid.status()).toEqual(['raid', 'status']);
+  });
+});

@@ -27,4 +27,7 @@ export const queryKeys = {
   system: {
     telemetry: () => ['system', 'telemetry'] as const,
   },
+  raid: {
+    status: () => ['raid', 'status'] as const,
+  },
 } as const;
