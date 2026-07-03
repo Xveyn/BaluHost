@@ -4,7 +4,6 @@ import { getScopeCatalog } from '../../api/plugins';
 
 vi.mock('../../lib/api', () => ({
   apiClient: { get: vi.fn() },
-  memoizedApiRequest: vi.fn(),
 }));
 
 describe('getScopeCatalog', () => {

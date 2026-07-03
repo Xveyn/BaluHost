@@ -9,19 +9,19 @@ import {
 
 vi.mock('../../lib/api', () => ({
   apiClient: {
+    get: vi.fn(),
     post: vi.fn(),
     put: vi.fn(),
   },
-  memoizedApiRequest: vi.fn(),
 }));
 
-import { apiClient, memoizedApiRequest } from '../../lib/api';
+import { apiClient } from '../../lib/api';
 
 describe('files API', () => {
   beforeEach(() => {
+    vi.mocked(apiClient.get).mockReset();
     vi.mocked(apiClient.post).mockReset();
     vi.mocked(apiClient.put).mockReset();
-    vi.mocked(memoizedApiRequest).mockReset();
   });
 
   it('checkFilesExist posts filenames and target path', async () => {
@@ -37,12 +37,13 @@ describe('files API', () => {
     expect(result.duplicates).toHaveLength(1);
   });
 
-  it('getFilePermissions uses memoizedApiRequest', async () => {
-    vi.mocked(memoizedApiRequest).mockResolvedValue({ owner_id: 1, rules: [] });
+  it('getFilePermissions calls GET with the path param (always fresh, no memo cache)', async () => {
+    vi.mocked(apiClient.get).mockResolvedValue({ data: { owner_id: 1, rules: [] } });
 
-    await getFilePermissions('/my/file.txt');
+    const result = await getFilePermissions('/my/file.txt');
 
-    expect(memoizedApiRequest).toHaveBeenCalledWith('/api/files/permissions', { path: '/my/file.txt' });
+    expect(apiClient.get).toHaveBeenCalledWith('/api/files/permissions', { params: { path: '/my/file.txt' } });
+    expect(result).toEqual({ owner_id: 1, rules: [] });
   });
 
   it('setFilePermissions calls PUT /api/files/permissions', async () => {

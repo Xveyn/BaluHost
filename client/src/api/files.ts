@@ -2,7 +2,7 @@
  * API client for file operations (permissions, duplicates, ownership transfer, residency)
  */
 
-import { apiClient, memoizedApiRequest } from '../lib/api';
+import { apiClient } from '../lib/api';
 
 // --- Duplicate Check API ---
 
@@ -27,8 +27,11 @@ export async function checkFilesExist(
 // --- File Permissions API ---
 
 export async function getFilePermissions(path: string) {
-  // Memoized GET: Permissions werden für 60s gecached
-  return memoizedApiRequest(`/api/files/permissions`, { path });
+  // Plain read on purpose: the permission dialog must always show fresh
+  // rules (the old 60s memo cache could serve stale ones) and this
+  // user-scoped data must not be mirrored into the persisted query cache.
+  const res = await apiClient.get(`/api/files/permissions`, { params: { path } });
+  return res.data;
 }
 
 export async function setFilePermissions(data: {
