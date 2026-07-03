@@ -79,23 +79,6 @@ apiClient.interceptors.response.use(
   }
 );
 
-// --- Memoized API Request Utility ---
-type CacheEntry = { data: any; expires: number };
-export const apiCache = new Map<string, CacheEntry>();
-const DEFAULT_TTL = 60 * 1000; // 60 Sekunden
-
-export async function memoizedApiRequest<T = any>(url: string, params?: any, ttl: number = DEFAULT_TTL): Promise<T> {
-  const key = url + JSON.stringify(params || {});
-  const now = Date.now();
-  const cached = apiCache.get(key);
-  if (cached && cached.expires > now) {
-    return cached.data;
-  }
-  const res = await apiClient.get(url, { params });
-  apiCache.set(key, { data: res.data, expires: now + ttl });
-  return res.data;
-}
-
 export function extractErrorMessage(detail: unknown, fallback: string): string {
   if (typeof detail === 'string') return detail;
   if (Array.isArray(detail) && detail.length > 0) {
