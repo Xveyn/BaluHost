@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useQueryClient } from '@tanstack/react-query';
 import { X, Users, Cloud, Loader2, ExternalLink } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { createFileShare, type CreateFileShareRequest } from '../api/shares';
+import { queryKeys } from '../lib/queryKeys';
 import { startCloudExport, checkConnectionScope, getScopeUpgradeUrl } from '../api/cloud-export';
 import { getConnections, type CloudConnection } from '../api/cloud-import';
 
@@ -17,6 +19,7 @@ interface ShareFileModalProps {
 
 const ShareFileModal = ({ fileId, fileName, filePath, users, onClose, onSuccess }: ShareFileModalProps) => {
   const { t } = useTranslation(['shares', 'common']);
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<'internal' | 'cloud'>('internal');
   const [loading, setLoading] = useState(false);
 
@@ -73,6 +76,7 @@ const ShareFileModal = ({ fileId, fileName, filePath, users, onClose, onSuccess 
         ...formData,
         expires_at: formData.expires_at || null,
       });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.shares.all() });
       onSuccess();
     } catch (err: unknown) {
       const detail =

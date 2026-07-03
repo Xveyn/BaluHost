@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useQueryClient } from '@tanstack/react-query';
 import { X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { updateFileShare, type FileShare, type UpdateFileShareRequest } from '../api/shares';
+import { queryKeys } from '../lib/queryKeys';
 
 interface EditFileShareModalProps {
   fileShare: FileShare;
@@ -12,6 +14,7 @@ interface EditFileShareModalProps {
 
 export default function EditFileShareModal({ fileShare, onClose, onSuccess }: EditFileShareModalProps) {
   const { t } = useTranslation(['shares', 'common']);
+  const queryClient = useQueryClient();
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState<UpdateFileShareRequest>({
     can_read: fileShare.can_read,
@@ -30,6 +33,7 @@ export default function EditFileShareModal({ fileShare, onClose, onSuccess }: Ed
         ...formData,
         expires_at: formData.expires_at ? `${formData.expires_at}T23:59:59Z` : null
       });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.shares.all() });
       onSuccess();
     } catch {
       toast.error(t('shares:toast.updateFailed'));
