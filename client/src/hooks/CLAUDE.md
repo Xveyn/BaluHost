@@ -9,6 +9,8 @@ Custom React hooks encapsulating data fetching, polling, and UI logic. Each hook
 | `useMonitoring.ts` | `api/monitoring` | Unified CPU/memory/network/disk/process data via **TanStack Query** (`useQuery`), configurable `pollInterval` (mapped to `refetchInterval`) + history; public return shape unchanged |
 | `useSystemTelemetry.ts` | `api/system` | System info + aggregated storage + telemetry history for the dashboard via **TanStack Query** (`useQuery`, one combined snapshot, `pollInterval`→`refetchInterval`); hand-rolled sessionStorage cache removed, F5 persistence now comes from the app-wide persister (#299); public shape unchanged |
 | `useRaidStatus.ts` | `api/raid` | RAID array status via **TanStack Query** (`useQuery`, 60s poll); F5-persisted via the app-wide persister |
+| `useBackups.ts` | `api/backup` | Backup list via **TanStack Query** (no polling; create/delete mutations invalidate). Returns raw `error` for i18n formatting by the caller |
+| `useFileShares.ts` | `api/shares` | The three shares-domain reads (user shares, shared-with-me, statistics) via **TanStack Query**; user-scoped — cache is cleared on every identity change (AuthContext) |
 | `useFanControl.ts` | `api/fan-control` | Fan config, curves, schedules — full fan management state |
 | `useSchedulers.ts` | `api/schedulers` | Scheduler list, status, history, run-now |
 | `useBenchmark.ts` | `api/benchmark` | Disk benchmark state, progress, results |
@@ -50,6 +52,7 @@ Custom React hooks encapsulating data fetching, polling, and UI logic. Each hook
 - Return `{ data, loading, error, refetch }` pattern for data hooks
 - **Data hooks use TanStack Query** (`useQuery`) with keys from `lib/queryKeys.ts` and `refetchInterval` for polling — not hand-rolled `useState`+`setInterval`. `useMonitoring.ts` is the reference; remaining hooks migrate incrementally (#299). Keep the `{ data|current|..., loading, error, refetch }` public shape so consumers are unaffected.
 - Query-backed polling (`refetchInterval`) pauses while the browser tab is hidden and resumes on return (TanStack default; `refetchOnWindowFocus` is off) — intentional for a LAN dashboard, unlike the old always-on `setInterval`.
+- **Mutations use `useMutation`** with `onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.<domain>.all() })` — reference implementations: `BackupSettings.tsx`, the share modals (`CreateFileShareModal`/`EditFileShareModal`/`ShareFileModal` invalidate themselves so every mount point is covered), `SharesPage.tsx`
 - Accept `enabled?: boolean` option to conditionally disable fetching
 - Accept `pollInterval?: number` for configurable refresh rates
 - API calls go through typed functions in `api/` — hooks don't use `apiClient` directly

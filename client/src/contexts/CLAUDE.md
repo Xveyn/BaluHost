@@ -6,7 +6,7 @@ React Context providers for global state. Wrapped around the app in `App.tsx`.
 
 | File | Purpose | Key values |
 |---|---|---|
-| `AuthContext.tsx` | Authentication state. Validates stored JWT on mount via `/api/auth/me`. Listens for `auth:expired` events (fired by axios 401 interceptor) | `user`, `token`, `login()`, `logout()`, `isAdmin`, `loading` |
+| `AuthContext.tsx` | Authentication state. Validates stored JWT on mount via `/api/auth/me`. Listens for `auth:expired` events (fired by axios 401 interceptor). Clears the TanStack Query cache + persisted blob on EVERY identity change (login, logout, impersonate, endImpersonation, auth-expiry) so user-scoped queries never leak across users (#299) | `user`, `token`, `login()`, `logout()`, `isAdmin`, `loading` |
 | `ThemeContext.tsx` | Theme management. 6 themes: `light`, `dark`, `ocean`, `forest`, `sunset`, `midnight`. Applies CSS variables to `:root` | `theme`, `setTheme()` |
 | `UploadContext.tsx` | File upload state management (progress, queue, cancellation) | Upload queue, progress tracking |
 | `NotificationContext.tsx` | In-app notification state (WebSocket-driven) | Notification list, unread count |

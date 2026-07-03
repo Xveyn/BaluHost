@@ -6,7 +6,6 @@ Typed axios wrappers for backend API communication. One file per feature domain,
 
 All modules import from `lib/api.ts`:
 - `apiClient` — axios instance with auth interceptor (auto-attaches `Bearer` token from localStorage)
-- `memoizedApiRequest<T>(url, params?, ttl?)` — GET with in-memory cache (60s default TTL)
 - `buildApiUrl(path)` — resolves path for dev (Vite proxy) vs production
 - `extractErrorMessage(detail, fallback)` — extracts user-facing message from FastAPI error responses
 
@@ -15,7 +14,7 @@ All modules import from `lib/api.ts`:
 - Export typed interfaces for request/response shapes (mirrors backend Pydantic schemas)
 - Export async functions, not classes — each function maps to one API endpoint
 - Use `apiClient.get/post/put/delete()` for standard calls
-- Use `memoizedApiRequest()` for frequently polled read-only data (e.g., permissions, system info)
+- No client-side memo caching in api/* — read-caching/dedup lives in TanStack Query hooks (`useQuery` + `lib/queryKeys.ts`); mutations invalidate their domain (`invalidateQueries`)
 - Return `res.data` directly (unwrap axios response)
 - No error handling here — callers handle errors via `handleApiError()` from `lib/errorHandling.ts`
 
