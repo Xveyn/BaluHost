@@ -189,6 +189,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         });
       } else {
+        localStorage.removeItem('token');
         setToken(null);
         setUser(null);
         clearQueryCache();

@@ -39,11 +39,13 @@ describe('AuthContext logout', () => {
   });
 
   it('auth:expired (plain, no impersonation) clears the query cache', () => {
+    localStorage.setItem('token', 'expired-token');
     renderHook(() => useAuth(), { wrapper });
     act(() => {
       window.dispatchEvent(new CustomEvent('auth:expired'));
     });
     expect(queryClient.clear).toHaveBeenCalledTimes(1);
     expect(queryPersister.removeClient).toHaveBeenCalledTimes(1);
+    expect(localStorage.getItem('token')).toBeNull();
   });
 });
