@@ -64,14 +64,15 @@ backups: {
   list: () => ['backups', 'list'] as const,
 },
 shares: {
+  all:          () => ['shares'] as const,   // Prefix für domain-weite Invalidierung
   userShares:   () => ['shares', 'user-shares'] as const,
   sharedWithMe: () => ['shares', 'shared-with-me'] as const,
   statistics:   () => ['shares', 'statistics'] as const,
 },
-files: {
-  permissions: (path: string) => ['files', 'permissions', path] as const,
-},
 ```
+
+Keine `files`-Domain: File-Permissions bleiben ein imperativer Plain-Read ohne
+Query-Beteiligung (siehe §3.5).
 
 ### 3.2 `lib/api.ts` — Cleanup
 
@@ -122,69 +123,98 @@ export function useFileShares() {
   const userShares   = useQuery({ queryKey: queryKeys.shares.userShares(),   queryFn: listFileShares });
   const sharedWithMe = useQuery({ queryKey: queryKeys.shares.sharedWithMe(), queryFn: listFilesSharedWithMe });
   const statistics   = useQuery({ queryKey: queryKeys.shares.statistics(),   queryFn: getShareStatistics });
-  return { fileShares: userShares.data ?? [], sharedWithMe: sharedWithMe.data ?? [],
-           statistics: statistics.data ?? null,
-           loading: userShares.isLoading || sharedWithMe.isLoading || statistics.isLoading,
-           error: ..., refetch: ... };
+  return {
+    fileShares:   userShares.data ?? [],
+    sharedWithMe: sharedWithMe.data ?? [],
+    statistics:   statistics.data ?? null,
+    loading: userShares.isLoading || sharedWithMe.isLoading || statistics.isLoading,
+    // SharesPage schluckt Ladefehler heute (Empty-State); erster fehlgeschlagener
+    // Query liefert die Message für optionale Anzeige:
+    error: [userShares, sharedWithMe, statistics].find(q => q.isError)?.error ?? null,
+    refetch: () => Promise.all([userShares.refetch(), sharedWithMe.refetch(), statistics.refetch()]),
+  };
 }
 ```
+
+**Invalidierung lebt in den Modals (zentrale Semantik erhalten):** Der alte
+`apiCache.delete(SHARES_CACHE_KEY)` saß *in* `createFileShare`/`updateFileShare`/
+`deleteFileShare` — damit invalidierte **jede** Mutation-Site automatisch, egal wo gemountet.
+Wichtig, denn es gibt eine Mutation-Site **außerhalb** der SharesPage: `ShareFileModal`
+(gemountet in `FileManager.tsx:900`) ruft ebenfalls `createFileShare`. Diese zentrale
+Semantik bleibt erhalten, indem die Invalidierung in die Modals wandert:
+- `CreateFileShareModal`, `EditFileShareModal`, `ShareFileModal` rufen nach erfolgreicher
+  Mutation selbst `queryClient.invalidateQueries({ queryKey: queryKeys.shares.all() })`
+  (Prefix `['shares']` → alle 3 Reads).
+- Die `onSuccess`-Parent-Callbacks bleiben rein UI (Modal schließen, Toast) — das bisherige
+  `loadData()` darin entfällt für die Shares-Hälfte.
 
 **`SharesPage.tsx`:**
 - Die 3 Shares-Reads aus `loadData()` entfernen → `useFileShares()`.
 - **Cloud-Exports bleiben** (`listCloudExports`/`getCloudExportStatistics`) — in eine kleine
   `loadCloudExports()`-Funktion + eigenen `useEffect` extrahieren (eigener `'cloud-exports'`-Tab,
   eigenes lokales Loading). Nicht Teil dieser PR.
-- `deleteFileShare` → `useMutation` mit `onSuccess: invalidateQueries(shares.*)`
-  (userShares **und** statistics; sharedWithMe unberührt vom eigenen Löschen, aber
-  Invalidierung der ganzen `['shares']`-Domain via Prefix ist zulässig und simpler).
-- Create/Edit-Modals (`CreateFileShareModal`, `EditFileShareModal`): deren `onSuccess`-Callback
-  ruft statt `loadData()` künftig `invalidateQueries(['shares'])`. Die Modals selbst rufen
-  `createFileShare`/`updateFileShare` (unverändert) — Invalidierung erfolgt im Parent-Callback.
+- `deleteFileShare` → `useMutation` mit `onSuccess: invalidateQueries(shares.all)`
+  (Löschen ändert userShares **und** statistics; Prefix-Invalidierung ist simpler und korrekt).
 
-### 3.5 File-Permissions (FileManager — imperativ)
+### 3.5 File-Permissions (FileManager — plain Call, KEINE Query-Beteiligung)
 
-`getFilePermissions` läuft **on-demand im Click-Handler** (`handleEditPermissionsClick`), ist
-also **keine** Render-Query → `useQuery` passt nicht.
+`getFilePermissions` läuft **on-demand im Click-Handler** (`handleEditPermissionsClick`,
+`FileManager.tsx:570`), ist also keine Render-Query — und auch `fetchQuery` wäre hier
+**überengineert**:
+- Der app-weite `gcTime` von 24h (Persister-Anforderung) würde user-scoped Rechte-Daten
+  **pro je geöffnetem Datei-Pfad** 24h in den sessionStorage-Persister spiegeln — Bloat
+  ohne Nutzen.
+- Der Dedup-Gewinn ist ~null (niemand öffnet denselben Permissions-Dialog mehrfach pro
+  Minute mit Performance-Not).
 
-**`api/files.ts`:** `getFilePermissions(path)` → plain `apiClient.get('/api/files/permissions', { params: { path } })`.
+**Entscheidung:** `api/files.ts` → `getFilePermissions(path)` wird plain
+`apiClient.get('/api/files/permissions', { params: { path } })`; der Call-Site in
+`FileManager.tsx` bleibt unverändert (`await getFilePermissions(file.path)`). Kein
+Query-Cache, keine Invalidierung, keine `queryKeys.files`-Domain.
 
-**`FileManager.tsx:570`:**
-```ts
-const perms = await queryClient.fetchQuery({
-  queryKey: queryKeys.files.permissions(file.path),
-  queryFn: () => getFilePermissions(file.path),
-  staleTime: 60_000,   // dedupt schnelle Re-Opens, aber invalidierbar
-});
-```
-Nach `setFilePermissions(...)` (PUT, im Speichern-Handler des Permission-Editors) →
-`queryClient.invalidateQueries({ queryKey: queryKeys.files.permissions(path) })`. **Bonus:**
-behebt die alte Staleness des TTL-Cache (Rechte waren bis zu 60s veraltet).
+**Verhaltensänderung (gewollt):** Der Dialog zeigt jetzt **immer frische** Rechte. Der alte
+TTL-Cache lieferte bis zu 60s veraltete Rechte — nach eigenem PUT *und* bei
+Fremd-Änderungen. Beides ist damit behoben (die `fetchQuery`-Alternative mit
+`staleTime 60s` hätte die Fremd-Änderungs-Staleness behalten).
 
-### 3.6 ⚠️ Impersonation-Cache-Leerung (der #299-Hinweis wird hier real)
+### 3.6 ⚠️ Cache-Leerung bei JEDEM Identitätswechsel (der #299-Hinweis wird hier real)
 
 `listFileShares` ist **user-scoped** (per `current_user`), und der globale Persister spiegelt
 es nach `sessionStorage`. Heute leert **nur `logout()`** den Query-Cache
 (`queryClient.clear(); void queryPersister.removeClient();`, `AuthContext.tsx:112-113`).
-`impersonate()`, `endImpersonation()` und der Impersonation-Zweig des `auth:expired`-Handlers
-tun das **nicht**.
+Sobald user-scoped Queries existieren, muss aber **jeder** Identitätswechsel leeren, sonst
+sieht der neue User kurz die Daten des alten (Instant-Paint aus dem Persister!), bis der
+Refetch greift — ein Korrektheits-/Sicherheitsproblem. Betroffen sind **fünf** Pfade, von
+denen heute keiner leert:
 
-Ohne Fix: Beim Impersonation-Token-Swap bliebe die persistierte Shares-/Permissions-Query des
-*vorherigen* Users kurz sichtbar, bis der Refetch greift — ein Korrektheits-/Sicherheitsproblem
-(ein User sieht kurz die Shares eines anderen). Das ist exakt die Absicherung, die #299 für den
-ersten user-scoped Hook angekündigt hat.
+1. `impersonate()` — nach erfolgreichem `apiImpersonateUser` + Token-Swap.
+2. `endImpersonation()` — nach dem Restore auf den Origin-Token.
+3. Impersonation-Zweig des `auth:expired`-Handlers (`AuthContext.tsx:158-174`) — swappt
+   ebenfalls den Token.
+4. **`login()`** (`AuthContext.tsx:96-100`) — deckt den Leak über den Ablauf-Pfad ab:
+   Token läuft ab → `auth:expired` (Plain-Zweig) setzt nur `token/user = null`, Cache +
+   Persister behalten die Daten → ein *anderer* User loggt sich auf demselben Tab ein →
+   sähe ohne Leerung kurz die Shares des Vorgängers. `login()` ist der Single Choke Point
+   für jede neue Session.
+5. Plain-Zweig des `auth:expired`-Handlers (`AuthContext.tsx:175-178`) — Defense in Depth:
+   räumt den Persister schon beim Sessionende auf, statt die Daten bis zum nächsten
+   `login()` im sessionStorage liegen zu lassen.
 
 **Fix in `AuthContext.tsx`:** die vorhandene Cache-Leerung in einen kleinen internen Helfer
 ziehen …
 ```ts
 const clearQueryCache = () => { queryClient.clear(); void queryPersister.removeClient(); };
 ```
-… und in **allen drei** Token-Swap-Pfaden aufrufen:
-1. `impersonate()` — nach erfolgreichem `apiImpersonateUser` + Token-Swap.
-2. `endImpersonation()` — nach dem Restore auf den Origin-Token.
-3. Der Impersonation-Zweig des `auth:expired`-Handlers (Zeile ~158-174), der ebenfalls den
-   Token wechselt.
+… und in allen fünf Pfaden + `logout()` aufrufen (`logout()` = Refactor ohne
+Verhaltensänderung). Reihenfolge bei den Swap-Pfaden: **erst Token swappen, dann leeren**,
+damit die von `clear()` ausgelösten Refetches bereits den neuen Token tragen.
 
-`logout()` nutzt denselben Helfer (Refactor ohne Verhaltensänderung).
+**Bekannter Trade-off (akzeptiert):** Bei `logout()` unmountet danach ohnehin alles Richtung
+Login-Screen. Bei `impersonate()`/`endImpersonation()` bleibt die App gemountet —
+`queryClient.clear()` reißt allen aktiven Queries (Monitoring-Polls etc.) die Daten weg →
+kurzer app-weiter Loading-Flash beim Identitätswechsel. Korrektheit > Kosmetik; eine
+selektive Invalidierung nur user-scoped Domains wäre fehleranfällig (jede neue user-scoped
+Domain müsste registriert werden) und lohnt bei der Seltenheit von Impersonation nicht.
 
 ---
 
@@ -201,9 +231,9 @@ const clearQueryCache = () => { queryClient.clear(); void queryPersister.removeC
 - **Neu `__tests__/hooks/useBackups.test.ts`** + **`useFileShares.test.ts`** (Vorlage:
   `__tests__/hooks/useActivityFeed.test.ts`) — `QueryClientProvider`-Wrapper, gemockte
   api-Funktion, `loading`/`data`/`error` prüfen.
-- **`__tests__/contexts/AuthContext.impersonation.test.tsx`** (existiert): eine Assertion
-  ergänzen, dass `impersonate`/`endImpersonation` den Query-Cache leeren (z. B. `queryClient.clear`
-  gespäht wird).
+- **`__tests__/contexts/AuthContext.impersonation.test.tsx`** (existiert): Assertions
+  ergänzen, dass `impersonate`/`endImpersonation` **und** `login()` den Query-Cache leeren
+  (z. B. `queryClient.clear` gespäht wird) — deckt alle fünf §3.6-Pfade soweit testbar ab.
 
 **Pre-PR-Gates** (aus Memory): `cd client; npx vitest run` (echte Suite),
 `npx eslint .` (0-Error-Gate), `npm run build` (tsc -b über app/node/TEST).
@@ -228,20 +258,24 @@ const clearQueryCache = () => { queryClient.clear(); void queryPersister.removeC
 
 **Berührte Dateien (Kern):** `lib/api.ts`, `lib/queryKeys.ts`, `api/backup.ts`, `api/shares.ts`,
 `api/files.ts`, `hooks/useBackups.ts` (neu), `hooks/useFileShares.ts` (neu),
-`components/BackupSettings.tsx`, `pages/SharesPage.tsx`, `pages/FileManager.tsx`,
-`components/CreateFileShareModal.tsx` + `EditFileShareModal.tsx` (nur onSuccess-Callback im
-Parent), `contexts/AuthContext.tsx` + 4 CLAUDE.md + 3–5 Tests.
+`components/BackupSettings.tsx`, `pages/SharesPage.tsx`,
+`components/CreateFileShareModal.tsx` + `EditFileShareModal.tsx` + `ShareFileModal.tsx`
+(Invalidierung nach Mutation, §3.4), `contexts/AuthContext.tsx` + 4 CLAUDE.md + 3–5 Tests.
+`pages/FileManager.tsx` bleibt unberührt (nur `api/files.ts` intern geändert, §3.5).
 
 **Risiken:**
 - *Verlust des 60s-TTL-Dedup:* vernachlässigbar — alle Konsumenten laden 1×/Mount oder on-demand;
-  bei `getFilePermissions` ist Frische sogar korrekter.
+  bei `getFilePermissions` ist Frische sogar korrekter (§3.5).
 - *Erstes `useMutation`:* neues Muster, muss beim Review sitzen — dafür ersetzt `isPending`/`onError`
   echten Boilerplate (nicht nur Zeremonie).
-- *Persister spiegelt jetzt Backups/Shares/Permissions:* gewollt (F5-Instant-Paint); Impersonation
-  wird explizit adressiert (§3.6); `logout()` leert bereits.
-- *`BackupPage.tsx` (`/backups`)* rendert vermutlich `BackupSettings` — beim Implementieren
-  verifizieren, dass es keinen zweiten `listBackups`-Konsumenten gibt (git-grep zeigt nur
-  `BackupSettings.tsx`).
+- *Persister spiegelt jetzt Backups/Shares:* gewollt (F5-Instant-Paint); dafür muss die
+  Cache-Leerung bei **jedem** Identitätswechsel sitzen — §3.6 zählt alle fünf Pfade auf.
+  Permissions landen bewusst NICHT im Persister (§3.5).
+- *Loading-Flash bei Impersonation durch `queryClient.clear()`:* akzeptiert, siehe §3.6.
+- *`BackupSettings` ist **zweimal** gemountet* — `BackupPage.tsx` (`/backups`) **und**
+  `SystemControlPage.tsx:197` (Backup-Tab). Mit `useQuery` unproblematisch, sogar ein
+  Vorteil: beide Mounts teilen den Query-Cache (Dedup statt Doppel-Fetch). Verifiziert:
+  `listBackups` wird nur von `BackupSettings.tsx` aufgerufen.
 
 ---
 
