@@ -1,9 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { Download, Trash2, RotateCcw, AlertTriangle, Database, FolderOpen, Settings, CheckCircle, XCircle, Clock, HardDrive } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-	import { listBackups, createBackup, deleteBackup, restoreBackup, downloadBackup } from '../api/backup';
-	import type { Backup, BackupListResponse, CreateBackupRequest, RestoreBackupRequest } from '../api/backup';
-import { apiCache } from '../lib/api';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { createBackup, deleteBackup, restoreBackup, downloadBackup } from '../api/backup';
+import type { Backup, CreateBackupRequest, RestoreBackupRequest } from '../api/backup';
+import { useBackups } from '../hooks/useBackups';
+import { queryKeys } from '../lib/queryKeys';
 import { getApiErrorMessage } from '../lib/errorHandling';
 import { formatBytes } from '../lib/formatters';
 
@@ -14,10 +16,6 @@ export default function BackupSettings() {
 	const [includesFiles, setIncludesFiles] = useState(true);
 	const [includesConfig, setIncludesConfig] = useState(false);
 	const [backupPath, setBackupPath] = useState('');
-	const [backups, setBackups] = useState<Backup[]>([]);
-	const [totalSizeBytes, setTotalSizeBytes] = useState(0);
-	const [loading, setLoading] = useState(true);
-	const [creating, setCreating] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [success, setSuccess] = useState<string | null>(null);
 	const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -25,69 +23,54 @@ export default function BackupSettings() {
 	const [restoreDialogOpen, setRestoreDialogOpen] = useState(false);
 	const [selectedBackup, setSelectedBackup] = useState<Backup | null>(null);
 	const [restoreConfirm, setRestoreConfirm] = useState('');
-	const [deleting, setDeleting] = useState(false);
 	const [restoring, setRestoring] = useState(false);
 
-	useEffect(() => {
-		loadBackups();
-	}, []);
+	const queryClient = useQueryClient();
+	const { backups, loading, error: loadError } = useBackups();
+	const totalSizeBytes = useMemo(
+		() => backups.reduce((acc, b) => acc + b.size_bytes, 0),
+		[backups]
+	);
 
-	async function loadBackups() {
-		setLoading(true);
-		setError(null);
-		try {
-			const response: BackupListResponse = await listBackups();
-			setBackups(response.backups);
-			const totalBytes = response.backups.reduce((acc, b) => acc + b.size_bytes, 0);
-			setTotalSizeBytes(totalBytes);
-		} catch (err: unknown) {
-			setError(getApiErrorMessage(err, t('backup.loadFailed')));
-			setBackups([]);
-		} finally {
-			setLoading(false);
-		}
-	}
-
-	async function handleCreateBackup() {
-		setCreating(true);
-		setError(null);
-		setSuccess(null);
-		try {
-			const request: CreateBackupRequest = {
-				includes_database: includesDatabase,
-				includes_files: includesFiles,
-				includes_config: includesConfig,
-				backup_path: backupPath
-			};
-			await createBackup(request);
+	const createMutation = useMutation({
+		mutationFn: (request: CreateBackupRequest) => createBackup(request),
+		onSuccess: () => {
 			setSuccess(t('backup.createSuccess'));
-			// Clear API cache to force fresh backup list
-			apiCache.clear();
-			await loadBackups();
-		} catch (err: unknown) {
+			void queryClient.invalidateQueries({ queryKey: queryKeys.backups.list() });
+		},
+		onError: (err: unknown) => {
 			setError(getApiErrorMessage(err, t('backup.createFailed')));
-		} finally {
-			setCreating(false);
-		}
-	}
+		},
+	});
 
-	async function handleDeleteBackup() {
-		if (!backupToDelete) return;
-		setDeleting(true);
-		setError(null);
-		try {
-			await deleteBackup(backupToDelete.id);
+	const deleteMutation = useMutation({
+		mutationFn: (backupId: number) => deleteBackup(backupId),
+		onSuccess: () => {
 			setSuccess(t('backup.deleteSuccess'));
-			// Clear API cache to force fresh backup list
-			apiCache.clear();
-			await loadBackups();
+			void queryClient.invalidateQueries({ queryKey: queryKeys.backups.list() });
 			setDeleteDialogOpen(false);
 			setBackupToDelete(null);
-		} catch (err: unknown) {
+		},
+		onError: (err: unknown) => {
 			setError(getApiErrorMessage(err, t('backup.deleteFailed')));
-		} finally {
-			setDeleting(false);
-		}
+		},
+	});
+
+	function handleCreateBackup() {
+		setError(null);
+		setSuccess(null);
+		createMutation.mutate({
+			includes_database: includesDatabase,
+			includes_files: includesFiles,
+			includes_config: includesConfig,
+			backup_path: backupPath,
+		});
+	}
+
+	function handleDeleteBackup() {
+		if (!backupToDelete) return;
+		setError(null);
+		deleteMutation.mutate(backupToDelete.id);
 	}
 
 	async function handleRestoreBackup() {
@@ -159,6 +142,8 @@ export default function BackupSettings() {
 		}
 	}
 
+	const displayError = error ?? (loadError ? getApiErrorMessage(loadError, t('backup.loadFailed')) : null);
+
 	return (
 		<div className="space-y-6 w-full px-0">
 			{/* Header & Formular */}
@@ -174,21 +159,21 @@ export default function BackupSettings() {
 								{/* Removed backup type selection, only checkboxes remain */}
 								<div className="flex items-center gap-6">
 									<label className="flex items-center gap-2 text-sm text-slate-400">
-										<input type="checkbox" checked={includesDatabase} onChange={e => setIncludesDatabase(e.target.checked)} disabled={creating} className="accent-sky-500" />
+										<input type="checkbox" checked={includesDatabase} onChange={e => setIncludesDatabase(e.target.checked)} disabled={createMutation.isPending} className="accent-sky-500" />
 										<Database className="w-4 h-4" /> DB
 									</label>
 									<label className="flex items-center gap-2 text-sm text-slate-400">
-										<input type="checkbox" checked={includesFiles} onChange={e => setIncludesFiles(e.target.checked)} disabled={creating} className="accent-sky-500" />
+										<input type="checkbox" checked={includesFiles} onChange={e => setIncludesFiles(e.target.checked)} disabled={createMutation.isPending} className="accent-sky-500" />
 										<FolderOpen className="w-4 h-4" /> Files
 									</label>
 									<label className="flex items-center gap-2 text-sm text-slate-400">
-										<input type="checkbox" checked={includesConfig} onChange={e => setIncludesConfig(e.target.checked)} disabled={creating} className="accent-sky-500" />
+										<input type="checkbox" checked={includesConfig} onChange={e => setIncludesConfig(e.target.checked)} disabled={createMutation.isPending} className="accent-sky-500" />
 										<Settings className="w-4 h-4" /> Config
 									</label>
 								</div>
 								<div className="flex items-center gap-2 mt-4">
 									<label htmlFor="backupPath" className="text-sm text-slate-400 min-w-[120px]">{t('backup.backupLocation')}:</label>
-									<input id="backupPath" type="text" value={backupPath} onChange={e => setBackupPath(e.target.value)} placeholder={t('backup.backupLocationPlaceholder')} className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500 w-full" disabled={creating} />
+									<input id="backupPath" type="text" value={backupPath} onChange={e => setBackupPath(e.target.value)} placeholder={t('backup.backupLocationPlaceholder')} className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500 w-full" disabled={createMutation.isPending} />
 								</div>
 							</div>
 							{backups && backups.length > 0 && (
@@ -207,17 +192,17 @@ export default function BackupSettings() {
 							)}
 						</div>
 					</div>
-					<button onClick={handleCreateBackup} disabled={creating} className="px-4 py-2 bg-sky-500 hover:bg-sky-600 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-lg flex items-center gap-2 transition-colors">
+					<button onClick={handleCreateBackup} disabled={createMutation.isPending} className="px-4 py-2 bg-sky-500 hover:bg-sky-600 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-lg flex items-center gap-2 transition-colors">
 						<Database className="w-4 h-4" />
-						{creating ? t('backup.creating') : t('backup.createBackup')}
+						{createMutation.isPending ? t('backup.creating') : t('backup.createBackup')}
 					</button>
 				</div>
 			</div>
-			{error && (
+			{displayError && (
 				<div className="rounded-lg bg-red-500/10 border border-red-500/20 p-4">
 					<div className="flex items-center gap-2 text-red-400">
 						<AlertTriangle className="w-5 h-5" />
-						<span>{error}</span>
+						<span>{displayError}</span>
 					</div>
 				</div>
 			)}
@@ -368,8 +353,8 @@ export default function BackupSettings() {
 							</div>
 						</div>
 						<div className="flex justify-end gap-3">
-							<button onClick={() => { setDeleteDialogOpen(false); setBackupToDelete(null); }} disabled={deleting} className="px-4 py-2 text-slate-300 hover:text-slate-100 hover:bg-slate-800 rounded-lg transition-colors">{t('backup.cancel')}</button>
-							<button onClick={handleDeleteBackup} disabled={deleting} className="px-4 py-2 bg-red-500 hover:bg-red-600 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-lg transition-colors">{deleting ? t('backup.deleting') : t('backup.delete')}</button>
+							<button onClick={() => { setDeleteDialogOpen(false); setBackupToDelete(null); }} disabled={deleteMutation.isPending} className="px-4 py-2 text-slate-300 hover:text-slate-100 hover:bg-slate-800 rounded-lg transition-colors">{t('backup.cancel')}</button>
+							<button onClick={handleDeleteBackup} disabled={deleteMutation.isPending} className="px-4 py-2 bg-red-500 hover:bg-red-600 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-lg transition-colors">{deleteMutation.isPending ? t('backup.deleting') : t('backup.delete')}</button>
 						</div>
 					</div>
 				</div>
