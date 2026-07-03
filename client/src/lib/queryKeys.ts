@@ -30,4 +30,14 @@ export const queryKeys = {
   raid: {
     status: () => ['raid', 'status'] as const,
   },
+  backups: {
+    list: () => ['backups', 'list'] as const,
+  },
+  shares: {
+    /** Domain-Prefix — invalidiert alle drei shares-Reads auf einmal. */
+    all: () => ['shares'] as const,
+    userShares: () => ['shares', 'user-shares'] as const,
+    sharedWithMe: () => ['shares', 'shared-with-me'] as const,
+    statistics: () => ['shares', 'statistics'] as const,
+  },
 } as const;

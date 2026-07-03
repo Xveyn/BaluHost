@@ -43,3 +43,18 @@ describe('queryKeys.raid', () => {
     expect(queryKeys.raid.status()).toEqual(['raid', 'status']);
   });
 });
+
+describe('queryKeys.backups', () => {
+  it('builds the list key', () => {
+    expect(queryKeys.backups.list()).toEqual(['backups', 'list']);
+  });
+});
+
+describe('queryKeys.shares', () => {
+  it('builds the domain prefix and entity keys', () => {
+    expect(queryKeys.shares.all()).toEqual(['shares']);
+    expect(queryKeys.shares.userShares()).toEqual(['shares', 'user-shares']);
+    expect(queryKeys.shares.sharedWithMe()).toEqual(['shares', 'shared-with-me']);
+    expect(queryKeys.shares.statistics()).toEqual(['shares', 'statistics']);
+  });
+});

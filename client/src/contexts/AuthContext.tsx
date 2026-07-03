@@ -36,6 +36,17 @@ async function fetchMe(token: string): Promise<User | null> {
   }
 }
 
+/**
+ * Drop all cached queries and the persisted sessionStorage blob.
+ * MUST run on EVERY identity change (login, logout, impersonation swaps,
+ * auth expiry) — user-scoped queries (#299) would otherwise leak across
+ * users via the persister's F5 instant-paint.
+ */
+function clearQueryCache(): void {
+  queryClient.clear();
+  void queryPersister.removeClient();
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
@@ -94,6 +105,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = (userData: User, newToken: string) => {
+    // A previous session on this tab (e.g. ended via auth:expired) may have
+    // left user-scoped data in the cache/persister — never show it to the
+    // next account.
+    clearQueryCache();
     localStorage.setItem('token', newToken);
     setToken(newToken);
     setUser(userData);
@@ -107,10 +122,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(null);
     setUser(null);
     // Drop any cached data for the ended session so a next login on the same
-    // tab can't briefly show it before refetch (the global persister mirrors
-    // the whole query cache to sessionStorage — see lib/queryPersister.ts).
-    queryClient.clear();
-    void queryPersister.removeClient();
+    // tab can't briefly show it before refetch (see clearQueryCache).
+    clearQueryCache();
   }, []);
 
   const impersonate = useCallback(async (userId: number) => {
@@ -128,6 +141,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(result.access_token);
     setUser(result.user);
     setImpersonationOrigin(currentUsername);
+    clearQueryCache();
   }, [user]);
 
   const endImpersonation = useCallback(() => {
@@ -142,6 +156,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('token', originToken);
     setToken(originToken);
     setImpersonationOrigin(null);
+    clearQueryCache();
 
     fetchMe(originToken).then((restoredUser) => {
       if (restoredUser) {
@@ -163,6 +178,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.setItem('token', originToken);
         setToken(originToken);
         setImpersonationOrigin(null);
+        clearQueryCache();
         fetchMe(originToken).then((restoredUser) => {
           if (restoredUser) {
             setUser(restoredUser);
@@ -173,8 +189,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         });
       } else {
+        localStorage.removeItem('token');
         setToken(null);
         setUser(null);
+        clearQueryCache();
       }
     };
     window.addEventListener('auth:expired', handler);

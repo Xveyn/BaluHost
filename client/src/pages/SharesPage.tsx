@@ -2,14 +2,9 @@ import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
 import {
-  listFileShares,
-  listFilesSharedWithMe,
-  getShareStatistics,
-  getShareableUsers,
   deleteFileShare,
+  getShareableUsers,
   type FileShare,
-  type SharedWithMe,
-  type ShareStatistics
 } from '../api/shares';
 import { Users, Share2, Trash2, Edit, Search, Filter, Calendar, Loader2, Folder, File as FileIcon, Cloud, Copy, RefreshCw } from 'lucide-react';
 import {
@@ -27,6 +22,9 @@ import EditFileShareModal from '../components/EditFileShareModal';
 import { useConfirmDialog } from '../hooks/useConfirmDialog';
 import { useSortableTable } from '../hooks/useSortableTable';
 import { SortableHeader } from '../components/ui/SortableHeader';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useFileShares } from '../hooks/useFileShares';
+import { queryKeys } from '../lib/queryKeys';
 
 export default function SharesPage() {
   const { t } = useTranslation(['shares', 'common']);
@@ -36,10 +34,11 @@ export default function SharesPage() {
   const [activeTab, setActiveTab] = useState<'shares' | 'shared-with-me' | 'cloud-exports'>('shares');
   const [cloudExports, setCloudExports] = useState<CloudExportJob[]>([]);
   const [cloudStats, setCloudStats] = useState<CloudExportStats | null>(null);
-  const [fileShares, setFileShares] = useState<FileShare[]>([]);
-  const [sharedWithMe, setSharedWithMe] = useState<SharedWithMe[]>([]);
-  const [statistics, setStatistics] = useState<ShareStatistics | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [cloudLoading, setCloudLoading] = useState(true);
+
+  const queryClient = useQueryClient();
+  const { fileShares, sharedWithMe, statistics, loading: sharesLoading } = useFileShares();
+  const loading = sharesLoading || cloudLoading;
   const [showCreateShareModal, setShowCreateShareModal] = useState(false);
 
   // Edit modals
@@ -51,7 +50,7 @@ export default function SharesPage() {
   const [showFilters, setShowFilters] = useState(false);
 
   useEffect(() => {
-    loadData();
+    loadCloudExports();
     fetchUsers();
   }, []);
 
@@ -64,38 +63,34 @@ export default function SharesPage() {
     }
   };
 
-  const loadData = async () => {
-    setLoading(true);
+  const loadCloudExports = async () => {
+    setCloudLoading(true);
     try {
-      const [stats, shares, shared, cExports, cStats] = await Promise.all([
-        getShareStatistics(),
-        listFileShares(),
-        listFilesSharedWithMe(),
+      const [cExports, cStats] = await Promise.all([
         listCloudExports().catch(() => []),
         getCloudExportStatistics().catch(() => null),
       ]);
-      setStatistics(stats);
-      setFileShares(shares);
-      setSharedWithMe(shared);
       setCloudExports(cExports);
       setCloudStats(cStats);
-    } catch {
-      // Load failure handled by empty state
     } finally {
-      setLoading(false);
+      setCloudLoading(false);
     }
   };
+
+  const deleteShareMutation = useMutation({
+    mutationFn: (shareId: number) => deleteFileShare(shareId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.shares.all() });
+    },
+    onError: () => {
+      toast.error(t('shares:toast.revokeFailed'));
+    },
+  });
 
   const handleDeleteFileShare = async (shareId: number) => {
     const ok = await confirm(t('confirm.revokeShare'), { title: t('confirm.revokeShare'), variant: 'danger', confirmLabel: t('common:actions.revoke', 'Revoke') });
     if (!ok) return;
-
-    try {
-      await deleteFileShare(shareId);
-      await loadData();
-    } catch {
-      toast.error(t('shares:toast.revokeFailed'));
-    }
+    deleteShareMutation.mutate(shareId);
   };
 
   const handleCopyLink = (link: string) => {
@@ -112,7 +107,7 @@ export default function SharesPage() {
     if (!ok) return;
     try {
       await revokeCloudExport(jobId);
-      await loadData();
+      await loadCloudExports();
       toast.success(t('shares:cloudExport.revoked', 'Cloud share revoked'));
     } catch {
       toast.error(t('shares:cloudExport.revokeFailed', 'Failed to revoke cloud share'));
@@ -122,7 +117,7 @@ export default function SharesPage() {
   const handleRetryExport = async (jobId: number) => {
     try {
       await retryCloudExport(jobId);
-      await loadData();
+      await loadCloudExports();
       toast.success(t('shares:cloudExport.retryStarted', 'Retry started'));
     } catch {
       toast.error(t('shares:cloudExport.retryFailed', 'Retry failed'));
@@ -887,20 +882,14 @@ export default function SharesPage() {
         <CreateFileShareModal
           users={users}
           onClose={() => setShowCreateShareModal(false)}
-          onSuccess={() => {
-            setShowCreateShareModal(false);
-            loadData();
-          }}
+          onSuccess={() => setShowCreateShareModal(false)}
         />
       )}
       {editingShare && (
         <EditFileShareModal
           fileShare={editingShare}
           onClose={() => setEditingShare(null)}
-          onSuccess={() => {
-            setEditingShare(null);
-            loadData();
-          }}
+          onSuccess={() => setEditingShare(null)}
         />
       )}
       {dialog}

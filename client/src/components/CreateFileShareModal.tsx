@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   X,
   Folder,
@@ -12,6 +13,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { createFileShare, type CreateFileShareRequest } from '../api/shares';
+import { queryKeys } from '../lib/queryKeys';
 import { apiClient } from '../lib/api';
 import { formatBytes } from '../lib/formatters';
 
@@ -32,6 +34,7 @@ interface CreateFileShareModalProps {
 
 const CreateFileShareModal = ({ fileId, users, onClose, onSuccess }: CreateFileShareModalProps) => {
   const { t } = useTranslation(['shares', 'common']);
+  const queryClient = useQueryClient();
   const [loading, setLoading] = useState(false);
   const [explorerPath, setExplorerPath] = useState('');
   const [explorerFiles, setExplorerFiles] = useState<ExplorerFile[]>([]);
@@ -97,6 +100,9 @@ const CreateFileShareModal = ({ fileId, users, onClose, onSuccess }: CreateFileS
         ...formData,
         expires_at: formData.expires_at || null,
       });
+      // Central invalidation (replaces the old apiCache.delete in the API fn):
+      // works from every mount point, incl. FileManager.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.shares.all() });
       onSuccess();
     } catch (err: unknown) {
       const detail =

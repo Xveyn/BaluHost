@@ -2,7 +2,7 @@
  * API client for file sharing functionality
  */
 
-import { apiClient, apiCache, memoizedApiRequest } from '../lib/api';
+import { apiClient } from '../lib/api';
 
 export interface FileShare {
   id: number;
@@ -86,17 +86,14 @@ export const getShareableUsers = async (): Promise<ShareableUser[]> => {
 // File Shares API
 // ===========================
 
-const SHARES_CACHE_KEY = '/api/shares/user-shares' + JSON.stringify({});
-
 export const createFileShare = async (data: CreateFileShareRequest): Promise<FileShare> => {
   const response = await apiClient.post('/api/shares/user-shares', data);
-  apiCache.delete(SHARES_CACHE_KEY);
   return response.data;
 };
 
 export const listFileShares = async (): Promise<FileShare[]> => {
-  // Memoized: FileShares werden für 60s gecached
-  return memoizedApiRequest<FileShare[]>('/api/shares/user-shares');
+  const response = await apiClient.get('/api/shares/user-shares');
+  return response.data;
 };
 
 export const listFileSharesForFile = async (fileId: number): Promise<FileShare[]> => {
@@ -114,13 +111,11 @@ export const updateFileShare = async (
   data: UpdateFileShareRequest
 ): Promise<FileShare> => {
   const response = await apiClient.patch(`/api/shares/user-shares/${shareId}`, data);
-  apiCache.delete(SHARES_CACHE_KEY);
   return response.data;
 };
 
 export const deleteFileShare = async (shareId: number): Promise<void> => {
   await apiClient.delete(`/api/shares/user-shares/${shareId}`);
-  apiCache.delete(SHARES_CACHE_KEY);
 };
 
 export const getShareStatistics = async (): Promise<ShareStatistics> => {

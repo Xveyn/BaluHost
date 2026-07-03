@@ -11,6 +11,12 @@ vi.mock('../../lib/api', async (orig) => ({
   buildApiUrl: (p: string) => p,
 }));
 
+import { queryClient } from '../../lib/queryClient';
+import { queryPersister } from '../../lib/queryPersister';
+
+vi.spyOn(queryClient, 'clear').mockImplementation(() => {});
+vi.spyOn(queryPersister, 'removeClient').mockResolvedValue(undefined);
+
 import { impersonateUser } from '../../api/authDev';
 
 const adminUser = { id: 1, username: 'admin', role: 'admin' as const };
@@ -60,6 +66,10 @@ describe('AuthContext impersonation', () => {
     expect(ctx.isImpersonating).toBe(true);
     expect(ctx.impersonationOrigin).toBe('admin');
     expect(ctx.user?.username).toBe('alice');
+
+    // Identity change → cached queries of the admin must not leak to alice
+    expect(queryClient.clear).toHaveBeenCalled();
+    expect(queryPersister.removeClient).toHaveBeenCalled();
   });
 
   it('endImpersonation restores the admin token', async () => {
@@ -94,5 +104,8 @@ describe('AuthContext impersonation', () => {
     expect(localStorage.getItem('token')).toBe('admin-token');
     expect(sessionStorage.getItem('impersonation_origin_token')).toBeNull();
     expect(ctx.user?.username).toBe('admin');
+
+    // Both swaps (impersonate + end) clear the cache
+    expect(vi.mocked(queryClient.clear).mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 });
