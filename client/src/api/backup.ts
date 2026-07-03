@@ -2,7 +2,7 @@
  * API client for backup functionality
  */
 
-import { apiClient, memoizedApiRequest, buildApiUrl } from '../lib/api';
+import { apiClient, buildApiUrl } from '../lib/api';
 
 export interface Backup {
   id: number;
@@ -62,16 +62,8 @@ export async function createBackup(request: CreateBackupRequest = {}): Promise<B
  * List all backups
  */
 export async function listBackups(): Promise<BackupListResponse> {
-  // Memoized: Backups werden für 60s gecached
-  return memoizedApiRequest<BackupListResponse>('/api/backups/');
-}
-
-/**
- * Get backup details by ID
- */
-export async function getBackup(backupId: number): Promise<Backup> {
-  // Memoized: Backup-Details werden für 60s gecached
-  return memoizedApiRequest<Backup>(`/api/backups/${backupId}/`);
+  const response = await apiClient.get<BackupListResponse>('/api/backups/');
+  return response.data;
 }
 
 /**
