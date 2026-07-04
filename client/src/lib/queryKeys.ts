@@ -84,9 +84,14 @@ export const queryKeys = {
   },
   fans: {
     status: () => ['fans', 'status'] as const,
+    /** Combined fan status + permission for the fan-control page. */
+    control: () => ['fans', 'control'] as const,
   },
   power: {
     status: () => ['power', 'status'] as const,
+  },
+  statusBar: {
+    state: () => ['status-bar', 'state'] as const,
   },
   adminDb: {
     /** Domain-Prefix. */
