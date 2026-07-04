@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, waitFor, act } from '@testing-library/react';
+import { createQueryWrapper } from '../helpers/queryClient';
 import { useDeviceManagement } from '../../hooks/useDeviceManagement';
 import type { Device } from '../../api/devices';
 
@@ -50,13 +51,16 @@ vi.mock('../../api/mobile', () => ({
 }));
 
 import { getAllDevices, updateMobileDeviceName, updateDesktopDeviceName } from '../../api/devices';
-import { listSyncSchedules } from '../../api/sync';
+import { listSyncSchedules, getBandwidthLimits, getSyncPreflight } from '../../api/sync';
 import { generateMobileToken } from '../../api/mobile';
 
 describe('useDeviceManagement', () => {
   beforeEach(() => {
     vi.mocked(getAllDevices).mockResolvedValue(mockDevices);
     vi.mocked(listSyncSchedules).mockResolvedValue([]);
+    // useQuery rejects an undefined queryFn result — give the other reads data.
+    vi.mocked(getBandwidthLimits).mockResolvedValue({ upload_kbps: null, download_kbps: null } as never);
+    vi.mocked(getSyncPreflight).mockResolvedValue({ sleep_schedule: null } as never);
   });
 
   afterEach(() => {
@@ -64,7 +68,7 @@ describe('useDeviceManagement', () => {
   });
 
   it('loads devices and computes stats', async () => {
-    const { result } = renderHook(() => useDeviceManagement());
+    const { result } = renderHook(() => useDeviceManagement(), { wrapper: createQueryWrapper() });
 
     await waitFor(() => expect(result.current.loading).toBe(false));
 
@@ -81,7 +85,7 @@ describe('useDeviceManagement', () => {
 
   it('handleSaveDeviceName calls correct API for mobile', async () => {
     vi.mocked(updateMobileDeviceName).mockResolvedValue(undefined as any);
-    const { result } = renderHook(() => useDeviceManagement());
+    const { result } = renderHook(() => useDeviceManagement(), { wrapper: createQueryWrapper() });
 
     await waitFor(() => expect(result.current.loading).toBe(false));
 
@@ -96,7 +100,7 @@ describe('useDeviceManagement', () => {
 
   it('handleSaveDeviceName calls correct API for desktop', async () => {
     vi.mocked(updateDesktopDeviceName).mockResolvedValue(undefined as any);
-    const { result } = renderHook(() => useDeviceManagement());
+    const { result } = renderHook(() => useDeviceManagement(), { wrapper: createQueryWrapper() });
 
     await waitFor(() => expect(result.current.loading).toBe(false));
 
@@ -109,7 +113,7 @@ describe('useDeviceManagement', () => {
 
   it('handleSaveDeviceName rejects empty name', async () => {
     const toast = await import('react-hot-toast');
-    const { result } = renderHook(() => useDeviceManagement());
+    const { result } = renderHook(() => useDeviceManagement(), { wrapper: createQueryWrapper() });
 
     await waitFor(() => expect(result.current.loading).toBe(false));
 
@@ -126,7 +130,7 @@ describe('useDeviceManagement', () => {
     const mockToken = { token: 'abc', qr_code: 'data:image/png;base64,...' };
     vi.mocked(generateMobileToken).mockResolvedValue(mockToken as any);
 
-    const { result } = renderHook(() => useDeviceManagement());
+    const { result } = renderHook(() => useDeviceManagement(), { wrapper: createQueryWrapper() });
     await waitFor(() => expect(result.current.loading).toBe(false));
 
     let token: any;
@@ -140,7 +144,7 @@ describe('useDeviceManagement', () => {
 
   it('handleGenerateToken rejects empty name', async () => {
     const toast = await import('react-hot-toast');
-    const { result } = renderHook(() => useDeviceManagement());
+    const { result } = renderHook(() => useDeviceManagement(), { wrapper: createQueryWrapper() });
     await waitFor(() => expect(result.current.loading).toBe(false));
 
     let token: any;
