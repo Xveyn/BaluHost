@@ -23,7 +23,7 @@ Custom React hooks encapsulating data fetching, polling, and UI logic. Each hook
 | `useMobile.ts` | — | **Viewport detection** (`useMobile`/`useTablet` via `matchMedia`) — NOT data fetching despite the name |
 | `useRemoteServers.ts` | `api/remote-servers` | `useServerProfiles` + `useVPNProfiles` — lists via **TanStack Query**, CRUD (+ startServer) via **`useMutation`** with `onSettled: invalidateQueries(<domain>)`. testConnection is a passthrough (no cache effect). User-scoped — cache cleared on identity change |
 | `useActivityFeed.ts` | `api/activity` | Dashboard activity feed (own / admin all-users) via **TanStack Query** (`useQuery`, default 30s poll). Query holds raw API items (persister-safe); view mapping (i18n titles, relative "ago") is derived per render. User-scoped — cache cleared on identity change (AuthContext); `scope`+`limit` are part of the key |
-| `useLiveActivities.ts` | — | Real-time activity via polling. **Not yet on TanStack Query** — still polls fan/power status via `useAsyncData`; migrate together with the fans/power domains + the `useAsyncData` cleanup (#299) |
+| `useLiveActivities.ts` | `api/fan-control`, `api/power-management` | Derives dashboard "live activity" items from schedulers/raid (passed in) + fan/power status via **TanStack Query** (`useQuery`, 30s/15s polls, `enabled: isAdmin`; keys `fans.status()`/`power.status()`). Was the last `useAsyncData` consumer — that generic hook is now removed (#299) |
 | `useDocsIndex.ts` | `api/docs` | Documentation article index via **TanStack Query** (`useQuery`; `lang` in the key → language switch refetches). Re-exports the `DocsGroupInfo`/`DocsArticleInfo` types |
 | `useDocsArticle.ts` | `api/docs` | Single documentation article content via **TanStack Query** (`useQuery`; `slug`+`lang` in the key, `enabled: !!slug`). Re-exports the `DocsArticle` type |
 | `usePluginsSummary.ts` | `api/plugins` | Plugin list summary for dashboard via **TanStack Query** (`useQuery`, default 60s poll). A 403 (non-admin) is treated as an empty list, silently — no error surfaced |
@@ -34,7 +34,6 @@ Custom React hooks encapsulating data fetching, polling, and UI logic. Each hook
 
 | Hook | Purpose |
 |---|---|
-| `useAsyncData.ts` | Generic async data fetcher with loading/error state |
 | `useConfirmDialog.ts` | Confirmation dialog state management |
 | `useSortableTable.ts` | Table sorting state (column, direction) |
 | `useByteUnitMode.ts` | Binary (GiB) vs decimal (GB) byte unit preference |
