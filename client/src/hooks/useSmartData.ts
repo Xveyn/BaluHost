@@ -1,83 +1,30 @@
-import { useEffect, useState } from 'react';
-import { fetchSmartStatus, type SmartStatusResponse } from '../api/smart';
+import { useQuery } from '@tanstack/react-query';
+import { queryKeys } from '../lib/queryKeys';
+import { getApiErrorMessage } from '../lib/errorHandling';
+import { fetchSmartStatus } from '../api/smart';
 
-const CACHE_KEY = 'smart_data_cache';
-const CACHE_TIMESTAMP_KEY = 'smart_data_cache_timestamp';
-const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
-
-function getCachedData(): SmartStatusResponse | null {
-  try {
-    const cached = localStorage.getItem(CACHE_KEY);
-    const timestamp = localStorage.getItem(CACHE_TIMESTAMP_KEY);
-    
-    if (cached && timestamp) {
-      const age = Date.now() - parseInt(timestamp);
-      if (age < CACHE_DURATION) {
-        return JSON.parse(cached);
-      }
-    }
-  } catch {
-    // Ignore cache read failures
-  }
-  return null;
-}
-
-function setCachedData(data: SmartStatusResponse): void {
-  try {
-    localStorage.setItem(CACHE_KEY, JSON.stringify(data));
-    localStorage.setItem(CACHE_TIMESTAMP_KEY, Date.now().toString());
-  } catch {
-    // Ignore cache write failures
-  }
-}
-
+/**
+ * SMART disk health for the dashboard. Query-backed; polls every `pollingInterval`
+ * ms (default 60s). The old hand-rolled localStorage cache is gone — F5 instant
+ * paint now comes from the app-wide query persister (sessionStorage). Public shape
+ * unchanged: { smartData, loading, error, lastUpdated, refetch }.
+ */
 export function useSmartData(pollingInterval = 60000) {
-  const cachedData = getCachedData();
-  const [smartData, setSmartData] = useState<SmartStatusResponse | null>(cachedData);
-  const [loading, setLoading] = useState(!cachedData);
-  const [error, setError] = useState<string | null>(null);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const query = useQuery({
+    queryKey: queryKeys.smart.status(),
+    queryFn: fetchSmartStatus,
+    refetchInterval: pollingInterval,
+  });
 
-  const fetchData = async () => {
-    try {
-      const data = await fetchSmartStatus();
-      setSmartData(data);
-      setCachedData(data);
-      setError(null);
-      setLastUpdated(new Date());
-      setLoading(false);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Fehler beim Laden der SMART-Daten');
-      setLoading(false);
-    }
+  return {
+    smartData: query.data ?? null,
+    loading: query.isLoading,
+    error: query.isError
+      ? getApiErrorMessage(query.error, 'Fehler beim Laden der SMART-Daten')
+      : null,
+    lastUpdated: query.dataUpdatedAt ? new Date(query.dataUpdatedAt) : null,
+    refetch: () => {
+      void query.refetch();
+    },
   };
-
-  useEffect(() => {
-    let mounted = true;
-    let timeoutId: number | undefined;
-
-    const poll = () => {
-      // Only fetch immediately if no cache
-      if (!cachedData || !mounted) {
-        fetchData();
-      }
-      timeoutId = window.setTimeout(poll, pollingInterval);
-    };
-
-    poll();
-
-    return () => {
-      mounted = false;
-      if (timeoutId !== undefined) {
-        clearTimeout(timeoutId);
-      }
-    };
-  }, [pollingInterval]);
-
-  const refetch = () => {
-    setLoading(true);
-    fetchData();
-  };
-
-  return { smartData, loading, error, lastUpdated, refetch };
 }
