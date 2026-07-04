@@ -68,6 +68,15 @@ export const queryKeys = {
     serverProfiles: () => ['remote-servers', 'server-profiles'] as const,
     vpnProfiles: () => ['remote-servers', 'vpn-profiles'] as const,
   },
+  devices: {
+    all: () => ['devices'] as const,
+    list: () => ['devices', 'list'] as const,
+  },
+  sync: {
+    schedules: () => ['sync', 'schedules'] as const,
+    bandwidth: () => ['sync', 'bandwidth'] as const,
+    preflight: () => ['sync', 'preflight'] as const,
+  },
   schedulers: {
     /** Domain-Prefix — invalidiert list + history (Mutations betreffen beide). */
     all: () => ['schedulers'] as const,

@@ -1,8 +1,9 @@
 import { useCallback, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
-import { handleApiError } from '../lib/errorHandling';
-import { useAsyncData } from './useAsyncData';
+import { handleApiError, getApiErrorMessage } from '../lib/errorHandling';
+import { queryKeys } from '../lib/queryKeys';
 import { useConfirmDialog } from './useConfirmDialog';
 import {
   getAllDevices,
@@ -28,25 +29,41 @@ import { generateMobileToken, type MobileRegistrationToken } from '../api/mobile
 export function useDeviceManagement() {
   const { t } = useTranslation(['devices', 'common']);
 
-  const {
-    data: devices,
-    loading,
-    error,
-    refetch: refetchDevices,
-  } = useAsyncData(getAllDevices);
+  // Reads — TanStack Query (no polling). refetch* wrappers keep the () => void
+  // shape the handlers already call after mutations; refetch is stable in v5.
+  const devicesQuery = useQuery({ queryKey: queryKeys.devices.list(), queryFn: getAllDevices });
+  const schedulesQuery = useQuery({ queryKey: queryKeys.sync.schedules(), queryFn: listSyncSchedules });
+  const bandwidthQuery = useQuery({ queryKey: queryKeys.sync.bandwidth(), queryFn: getBandwidthLimits });
+  const preflightQuery = useQuery({ queryKey: queryKeys.sync.preflight(), queryFn: getSyncPreflight });
 
-  const {
-    data: schedules,
-    loading: schedulesLoading,
-    refetch: refetchSchedules,
-  } = useAsyncData(listSyncSchedules);
+  const devices = devicesQuery.data ?? null;
+  const loading = devicesQuery.isLoading;
+  const error = devicesQuery.isError
+    ? getApiErrorMessage(devicesQuery.error, 'An error occurred')
+    : null;
+  const schedules = schedulesQuery.data ?? null;
+  const schedulesLoading = schedulesQuery.isLoading;
+  const bandwidth = bandwidthQuery.data;
+  const preflight = preflightQuery.data;
 
-  const { data: bandwidth, refetch: refetchBandwidth } = useAsyncData(getBandwidthLimits);
-  const { data: preflight } = useAsyncData(getSyncPreflight);
+  // v5 refetch is referentially stable; destructure so the wrappers stay stable
+  // (handlers depend on these) without pulling in the whole query object.
+  const { refetch: refetchDevicesRaw } = devicesQuery;
+  const { refetch: refetchSchedulesRaw } = schedulesQuery;
+  const { refetch: refetchBandwidthRaw } = bandwidthQuery;
+  const refetchDevices = useCallback(() => {
+    void refetchDevicesRaw();
+  }, [refetchDevicesRaw]);
+  const refetchSchedules = useCallback(() => {
+    void refetchSchedulesRaw();
+  }, [refetchSchedulesRaw]);
+  const refetchBandwidth = useCallback(() => {
+    void refetchBandwidthRaw();
+  }, [refetchBandwidthRaw]);
 
   const { confirm, dialog: confirmDialog } = useConfirmDialog();
 
-  const deviceList = devices ?? [];
+  const deviceList = useMemo(() => devices ?? [], [devices]);
   const scheduleList = schedules ?? [];
 
   const mobileDevices = useMemo(() => deviceList.filter((d) => d.type === 'mobile'), [deviceList]);
