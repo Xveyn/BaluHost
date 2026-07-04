@@ -23,8 +23,8 @@ Custom React hooks encapsulating data fetching, polling, and UI logic. Each hook
 | `useRemoteServers.ts` | `api/remote-servers` | Remote server profiles |
 | `useActivityFeed.ts` | `api/activity` | Dashboard activity feed (own / admin all-users) via **TanStack Query** (`useQuery`, default 30s poll). Query holds raw API items (persister-safe); view mapping (i18n titles, relative "ago") is derived per render. User-scoped — cache cleared on identity change (AuthContext); `scope`+`limit` are part of the key |
 | `useLiveActivities.ts` | — | Real-time activity via polling. **Not yet on TanStack Query** — still polls fan/power status via `useAsyncData`; migrate together with the fans/power domains + the `useAsyncData` cleanup (#299) |
-| `useDocsIndex.ts` | `api/docs` | Documentation article index |
-| `useDocsArticle.ts` | `api/docs` | Single documentation article content |
+| `useDocsIndex.ts` | `api/docs` | Documentation article index via **TanStack Query** (`useQuery`; `lang` in the key → language switch refetches). Re-exports the `DocsGroupInfo`/`DocsArticleInfo` types |
+| `useDocsArticle.ts` | `api/docs` | Single documentation article content via **TanStack Query** (`useQuery`; `slug`+`lang` in the key, `enabled: !!slug`). Re-exports the `DocsArticle` type |
 | `usePluginsSummary.ts` | `api/plugins` | Plugin list summary for dashboard via **TanStack Query** (`useQuery`, default 60s poll). A 403 (non-admin) is treated as an empty list, silently — no error surfaced |
 | `useServicesSummary.ts` | `api/service-status` | Service health summary for dashboard via **TanStack Query** (`useQuery`, default 30s poll). Mounted at 3 sites (ServicesPanel, Dashboard, ServiceSummaryWidget) — the shared query key collapses them into one cache entry + one poll |
 | `useOpenApiSchema.ts` | — | OpenAPI schema for API docs page |
