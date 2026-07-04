@@ -59,4 +59,15 @@ export const queryKeys = {
   services: {
     summary: () => ['services', 'summary'] as const,
   },
+  schedulers: {
+    /** Domain-Prefix — invalidiert list + history (Mutations betreffen beide). */
+    all: () => ['schedulers'] as const,
+    list: () => ['schedulers', 'list'] as const,
+    history: (
+      name: string | null,
+      page: number,
+      pageSize: number,
+      statusFilter: string | null,
+    ) => ['schedulers', 'history', name, page, pageSize, statusFilter] as const,
+  },
 } as const;
