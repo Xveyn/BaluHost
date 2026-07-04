@@ -26,9 +26,13 @@ export const queryKeys = {
   },
   system: {
     telemetry: () => ['system', 'telemetry'] as const,
+    info: () => ['system', 'info'] as const,
   },
   raid: {
+    /** Domain-Prefix — invalidiert Status + Disks auf einmal. */
+    all: () => ['raid'] as const,
     status: () => ['raid', 'status'] as const,
+    availableDisks: () => ['raid', 'available-disks'] as const,
   },
   backups: {
     list: () => ['backups', 'list'] as const,

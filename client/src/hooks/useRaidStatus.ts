@@ -7,7 +7,10 @@ export interface UseRaidStatusResult {
   raidData: RaidStatusResponse | null;
   raidLoading: boolean;
   error: string | null;
-  refetch: () => Promise<void>;
+  /** Timestamp of the last successful fetch (from `dataUpdatedAt`), null before the first. */
+  lastUpdated: Date | null;
+  /** Manual refetch; resolves to `true` on success, `false` if the refetch errored. */
+  refetch: () => Promise<boolean>;
 }
 
 /**
@@ -32,8 +35,10 @@ export function useRaidStatus(
     error: query.isError
       ? getApiErrorMessage(query.error, 'Failed to fetch RAID status')
       : null,
+    lastUpdated: query.dataUpdatedAt ? new Date(query.dataUpdatedAt) : null,
     refetch: async () => {
-      await query.refetch();
+      const res = await query.refetch();
+      return !res.isError;
     },
   };
 }
