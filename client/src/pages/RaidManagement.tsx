@@ -1,14 +1,13 @@
-import { type FormEvent, useEffect, useMemo, useState } from 'react';
+import { type FormEvent, useMemo, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import { handleApiError, getApiErrorMessage } from '../lib/errorHandling';
+import { handleApiError } from '../lib/errorHandling';
 import {
   deleteArray,
   finalizeRaidRebuild,
   formatDisk,
-  getAvailableDisks,
-  getRaidStatus,
   markDeviceFailed,
   startRaidRebuild,
   type AvailableDisk,
@@ -16,10 +15,12 @@ import {
   type RaidArray,
   type RaidDevice,
   type RaidOptionsPayload,
-  type RaidSpeedLimits,
   updateRaidOptions,
 } from '../api/raid';
 import { getSystemInfo } from '../api/system';
+import { queryKeys } from '../lib/queryKeys';
+import { useRaidStatus } from '../hooks/useRaidStatus';
+import { useAvailableDisks } from '../hooks/useAvailableDisks';
 import RaidSetupWizard from '../components/RaidSetupWizard';
 import MockDiskWizard from '../components/MockDiskWizard';
 import { useConfirmDialog } from '../hooks/useConfirmDialog';
@@ -31,64 +32,49 @@ export default function RaidManagement() {
   const { t } = useTranslation(['system', 'common']);
   const navigate = useNavigate();
   const { confirm, dialog } = useConfirmDialog();
-  const [arrays, setArrays] = useState<RaidArray[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<boolean>(false);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const [speedLimits, setSpeedLimits] = useState<RaidSpeedLimits | null>(null);
+  const queryClient = useQueryClient();
 
-  // Disk Management States
-  const [availableDisks, setAvailableDisks] = useState<AvailableDisk[]>([]);
+  // Reads — TanStack Query. Status polls every REFRESH_INTERVAL_MS (shared cache
+  // with the dashboard's useRaidStatus); disks + dev-mode fetch once (no poll).
+  const {
+    raidData,
+    raidLoading: loading,
+    error,
+    lastUpdated,
+    refetch: refetchStatus,
+  } = useRaidStatus({ pollInterval: REFRESH_INTERVAL_MS });
+  const { disks: availableDisks } = useAvailableDisks();
+  const { data: systemInfo } = useQuery({
+    queryKey: queryKeys.system.info(),
+    queryFn: getSystemInfo,
+  });
+
+  const arrays = raidData?.arrays ?? [];
+  const speedLimits = raidData?.speed_limits ?? null;
+  const isDevMode = systemInfo?.dev_mode === true;
+
+  const [busy, setBusy] = useState<boolean>(false);
+
+  // Disk Management dialog states
   const [showFormatDialog, setShowFormatDialog] = useState<boolean>(false);
   const [showCreateArrayDialog, setShowCreateArrayDialog] = useState<boolean>(false);
   const [showMockDiskWizard, setShowMockDiskWizard] = useState<boolean>(false);
   const [selectedDisk, setSelectedDisk] = useState<AvailableDisk | null>(null);
-  const [isDevMode, setIsDevMode] = useState<boolean>(false);
 
-  const loadStatus = async (notifySuccess = false) => {
-    try {
-      const status = await getRaidStatus();
-      setArrays(status.arrays ?? []);
-      setSpeedLimits(status.speed_limits ?? null);
-      setError(null);
-      setLastUpdated(new Date());
-      if (notifySuccess) {
-        toast.success(t('system:raid.messages.statusUpdated'));
-      }
-    } catch (err) {
-      const message = getApiErrorMessage(err, t('system:raid.messages.loadError'));
-      setError(message);
-      handleApiError(err, t('system:raid.messages.loadError'));
-    } finally {
-      setLoading(false);
+  // Mutations stay imperative (own the `busy` flag + per-action toast) but route
+  // their reload through the query layer — awaited so buttons stay disabled until
+  // fresh data lands, preserving the previous busy-until-refresh UX.
+  const refreshStatus = () =>
+    queryClient.invalidateQueries({ queryKey: queryKeys.raid.status() });
+  const refreshDisks = () =>
+    queryClient.invalidateQueries({ queryKey: queryKeys.raid.availableDisks() });
+
+  const handleManualRefresh = async () => {
+    const ok = await refetchStatus();
+    if (ok) {
+      toast.success(t('system:raid.messages.statusUpdated'));
     }
   };
-
-  const loadAvailableDisks = async () => {
-    try {
-      const response = await getAvailableDisks();
-      setAvailableDisks(response.disks ?? []);
-    } catch (err) {
-      handleApiError(err, t('system:raid.messages.loadDisksError'));
-    }
-  };
-
-  useEffect(() => {
-    void loadStatus();
-    void loadAvailableDisks();
-
-    // Check if Dev-Mode is active
-    getSystemInfo()
-      .then(data => setIsDevMode(data.dev_mode === true))
-      .catch(() => setIsDevMode(false));
-
-    const intervalId = window.setInterval(() => {
-      void loadStatus();
-    }, REFRESH_INTERVAL_MS);
-
-    return () => window.clearInterval(intervalId);
-  }, []);
 
   const refreshDisabled = useMemo(() => busy || loading, [busy, loading]);
 
@@ -97,7 +83,7 @@ export default function RaidManagement() {
     try {
       const response = await markDeviceFailed(array.name, device?.name);
       toast.success(response.message);
-      await loadStatus();
+      await refreshStatus();
     } catch (err) {
       handleApiError(err, t('system:raid.messages.simulationFailed'));
     } finally {
@@ -110,7 +96,7 @@ export default function RaidManagement() {
     try {
       const response = await startRaidRebuild(array.name, device.name);
       toast.success(response.message);
-      await loadStatus();
+      await refreshStatus();
     } catch (err) {
       handleApiError(err, t('system:raid.messages.rebuildFailed'));
     } finally {
@@ -123,7 +109,7 @@ export default function RaidManagement() {
     try {
       const response = await finalizeRaidRebuild(array.name);
       toast.success(response.message);
-      await loadStatus();
+      await refreshStatus();
     } catch (err) {
       handleApiError(err, t('system:raid.messages.finalizeFailed'));
     } finally {
@@ -139,7 +125,7 @@ export default function RaidManagement() {
         enable_bitmap: !array.bitmap,
       });
       toast.success(response.message);
-      await loadStatus();
+      await refreshStatus();
     } catch (err) {
       handleApiError(err, t('system:raid.messages.bitmapUpdateFailed'));
     } finally {
@@ -155,7 +141,7 @@ export default function RaidManagement() {
         trigger_scrub: true,
       });
       toast.success(response.message);
-      await loadStatus();
+      await refreshStatus();
     } catch (err) {
       handleApiError(err, t('system:raid.messages.scrubFailed'));
     } finally {
@@ -172,7 +158,7 @@ export default function RaidManagement() {
         write_mostly: device.state !== 'write-mostly',
       });
       toast.success(response.message);
-      await loadStatus();
+      await refreshStatus();
     } catch (err) {
       handleApiError(err, t('system:raid.messages.writeMostlyFailed'));
     } finally {
@@ -188,7 +174,7 @@ export default function RaidManagement() {
         remove_device: device.name,
       });
       toast.success(response.message);
-      await loadStatus();
+      await refreshStatus();
     } catch (err) {
       handleApiError(err, t('system:raid.messages.removeDeviceFailed'));
     } finally {
@@ -211,7 +197,7 @@ export default function RaidManagement() {
     try {
       const response = await updateRaidOptions({ array: array.name, add_spare: rawDevice });
       toast.success(response.message);
-      await loadStatus();
+      await refreshStatus();
     } catch (err) {
       handleApiError(err, t('system:raid.messages.addSpareFailed'));
     } finally {
@@ -242,7 +228,7 @@ export default function RaidManagement() {
     try {
       const response = await updateRaidOptions(payload);
       toast.success(response.message);
-      await loadStatus();
+      await refreshStatus();
     } catch (err) {
       handleApiError(err, t('system:raid.messages.speedLimitFailed'));
     } finally {
@@ -272,7 +258,7 @@ export default function RaidManagement() {
       toast.success(response.message);
       setShowFormatDialog(false);
       setSelectedDisk(null);
-      await loadAvailableDisks();
+      await refreshDisks();
     } catch (err) {
       handleApiError(err, t('system:raid.messages.formatFailed'));
     } finally {
@@ -292,8 +278,8 @@ export default function RaidManagement() {
     try {
       const response = await deleteArray({ array: arrayName, force: true });
       toast.success(response.message);
-      await loadStatus();
-      await loadAvailableDisks();
+      await refreshStatus();
+      await refreshDisks();
     } catch (err) {
       handleApiError(err, t('system:raid.messages.deleteFailed'));
     } finally {
@@ -317,7 +303,7 @@ export default function RaidManagement() {
             </span>
           )}
           <button
-            onClick={() => loadStatus(true)}
+            onClick={handleManualRefresh}
             disabled={refreshDisabled}
             className={`rounded-xl border px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium transition touch-manipulation active:scale-95 ${
               refreshDisabled
@@ -390,7 +376,7 @@ export default function RaidManagement() {
         arrays={arrays}
         busy={busy}
         isDevMode={isDevMode}
-        onRefreshDisks={() => void loadAvailableDisks()}
+        onRefreshDisks={() => void refreshDisks()}
         onShowMockWizard={() => setShowMockDiskWizard(true)}
         onShowCreateArray={() => setShowCreateArrayDialog(true)}
         onFormatDisk={(disk) => {
@@ -418,8 +404,8 @@ export default function RaidManagement() {
           availableDisks={availableDisks}
           onClose={() => setShowCreateArrayDialog(false)}
           onSuccess={async () => {
-            await loadStatus();
-            await loadAvailableDisks();
+            await refreshStatus();
+            await refreshDisks();
           }}
         />
       )}
@@ -429,8 +415,8 @@ export default function RaidManagement() {
         <MockDiskWizard
           onClose={() => setShowMockDiskWizard(false)}
           onSuccess={async () => {
-            await loadStatus();
-            await loadAvailableDisks();
+            await refreshStatus();
+            await refreshDisks();
             setShowMockDiskWizard(false);
           }}
         />
