@@ -72,6 +72,11 @@ export const queryKeys = {
     all: () => ['devices'] as const,
     list: () => ['devices', 'list'] as const,
   },
+  mobile: {
+    devices: () => ['mobile', 'devices'] as const,
+    vpnTypes: () => ['mobile', 'vpn-types'] as const,
+    deviceNotifications: (deviceId: string) => ['mobile', 'device-notifications', deviceId] as const,
+  },
   sync: {
     schedules: () => ['sync', 'schedules'] as const,
     bandwidth: () => ['sync', 'bandwidth'] as const,
