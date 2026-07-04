@@ -1,66 +1,71 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useCallback } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as api from '../api/remote-servers';
+import { queryKeys } from '../lib/queryKeys';
+import { getApiErrorMessage } from '../lib/errorHandling';
 
+/**
+ * SSH server profiles — list via TanStack Query, CRUD + start via useMutation
+ * (each onSettled invalidates the server-profiles list). User-scoped: the cache
+ * is cleared on identity change (AuthContext). Public shape unchanged.
+ */
 export function useServerProfiles() {
-  const [profiles, setProfiles] = useState<api.ServerProfile[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
-  const fetchProfiles = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await api.listServerProfiles();
-      setProfiles(data);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to load profiles';
-      setError(message);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const query = useQuery({
+    queryKey: queryKeys.remoteServers.serverProfiles(),
+    queryFn: api.listServerProfiles,
+  });
 
-  const createProfile = useCallback(async (data: api.ServerProfileCreate) => {
-    const newProfile = await api.createServerProfile(data);
-    setProfiles([newProfile, ...profiles]);
-    return newProfile;
-  }, [profiles]);
+  const invalidate = useCallback(
+    () => queryClient.invalidateQueries({ queryKey: queryKeys.remoteServers.serverProfiles() }),
+    [queryClient],
+  );
 
-  const updateProfile = useCallback(async (id: number, data: Partial<api.ServerProfileCreate>) => {
-    const updated = await api.updateServerProfile(id, data);
-    setProfiles(profiles.map(p => p.id === id ? updated : p));
-    return updated;
-  }, [profiles]);
+  const createMutation = useMutation({
+    mutationFn: (data: api.ServerProfileCreate) => api.createServerProfile(data),
+    onSettled: () => invalidate(),
+  });
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Partial<api.ServerProfileCreate> }) =>
+      api.updateServerProfile(id, data),
+    onSettled: () => invalidate(),
+  });
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => api.deleteServerProfile(id),
+    onSettled: () => invalidate(),
+  });
+  const startMutation = useMutation({
+    mutationFn: (id: number) => api.startRemoteServer(id),
+    // Refresh so the server-provided last_used timestamp updates.
+    onSettled: () => invalidate(),
+  });
 
-  const deleteProfile = useCallback(async (id: number) => {
-    await api.deleteServerProfile(id);
-    setProfiles(profiles.filter(p => p.id !== id));
-  }, [profiles]);
-
-  const testConnection = useCallback(async (id: number) => {
-    return await api.testSSHConnection(id);
-  }, []);
-
-  const startServer = useCallback(async (id: number) => {
-    const result = await api.startRemoteServer(id);
-    // Update last_used timestamp
-    const profile = profiles.find(p => p.id === id);
-    if (profile) {
-      profile.last_used = new Date().toISOString();
-      setProfiles([...profiles]);
-    }
-    return result;
-  }, [profiles]);
-
-  useEffect(() => {
-    fetchProfiles();
-  }, [fetchProfiles]);
+  const createProfile = useCallback(
+    (data: api.ServerProfileCreate) => createMutation.mutateAsync(data),
+    [createMutation],
+  );
+  const updateProfile = useCallback(
+    (id: number, data: Partial<api.ServerProfileCreate>) => updateMutation.mutateAsync({ id, data }),
+    [updateMutation],
+  );
+  const deleteProfile = useCallback(
+    (id: number) => deleteMutation.mutateAsync(id),
+    [deleteMutation],
+  );
+  const startServer = useCallback(
+    (id: number) => startMutation.mutateAsync(id),
+    [startMutation],
+  );
+  const testConnection = useCallback((id: number) => api.testSSHConnection(id), []);
 
   return {
-    profiles,
-    loading,
-    error,
-    fetchProfiles,
+    profiles: query.data ?? [],
+    loading: query.isLoading,
+    error: query.isError ? getApiErrorMessage(query.error, 'Failed to load profiles') : null,
+    fetchProfiles: async () => {
+      await query.refetch();
+    },
     createProfile,
     updateProfile,
     deleteProfile,
@@ -69,55 +74,58 @@ export function useServerProfiles() {
   };
 }
 
+/**
+ * VPN profiles — same pattern as useServerProfiles (create/update via FormData,
+ * testConnection is a passthrough with no cache effect).
+ */
 export function useVPNProfiles() {
-  const [profiles, setProfiles] = useState<api.VPNProfile[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
-  const fetchProfiles = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await api.listVPNProfiles();
-      setProfiles(data);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to load VPN profiles';
-      setError(message);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const query = useQuery({
+    queryKey: queryKeys.remoteServers.vpnProfiles(),
+    queryFn: api.listVPNProfiles,
+  });
 
-  const createProfile = useCallback(async (formData: FormData) => {
-    const newProfile = await api.createVPNProfile(formData);
-    setProfiles([newProfile, ...profiles]);
-    return newProfile;
-  }, [profiles]);
+  const invalidate = useCallback(
+    () => queryClient.invalidateQueries({ queryKey: queryKeys.remoteServers.vpnProfiles() }),
+    [queryClient],
+  );
 
-  const updateProfile = useCallback(async (id: number, formData: FormData) => {
-    const updated = await api.updateVPNProfile(id, formData);
-    setProfiles(profiles.map(p => p.id === id ? updated : p));
-    return updated;
-  }, [profiles]);
+  const createMutation = useMutation({
+    mutationFn: (formData: FormData) => api.createVPNProfile(formData),
+    onSettled: () => invalidate(),
+  });
+  const updateMutation = useMutation({
+    mutationFn: ({ id, formData }: { id: number; formData: FormData }) =>
+      api.updateVPNProfile(id, formData),
+    onSettled: () => invalidate(),
+  });
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => api.deleteVPNProfile(id),
+    onSettled: () => invalidate(),
+  });
 
-  const deleteProfile = useCallback(async (id: number) => {
-    await api.deleteVPNProfile(id);
-    setProfiles(profiles.filter(p => p.id !== id));
-  }, [profiles]);
-
-  const testConnection = useCallback(async (id: number) => {
-    return await api.testVPNConnection(id);
-  }, []);
-
-  useEffect(() => {
-    fetchProfiles();
-  }, [fetchProfiles]);
+  const createProfile = useCallback(
+    (formData: FormData) => createMutation.mutateAsync(formData),
+    [createMutation],
+  );
+  const updateProfile = useCallback(
+    (id: number, formData: FormData) => updateMutation.mutateAsync({ id, formData }),
+    [updateMutation],
+  );
+  const deleteProfile = useCallback(
+    (id: number) => deleteMutation.mutateAsync(id),
+    [deleteMutation],
+  );
+  const testConnection = useCallback((id: number) => api.testVPNConnection(id), []);
 
   return {
-    profiles,
-    loading,
-    error,
-    fetchProfiles,
+    profiles: query.data ?? [],
+    loading: query.isLoading,
+    error: query.isError ? getApiErrorMessage(query.error, 'Failed to load VPN profiles') : null,
+    fetchProfiles: async () => {
+      await query.refetch();
+    },
     createProfile,
     updateProfile,
     deleteProfile,
