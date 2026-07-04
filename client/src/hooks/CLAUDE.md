@@ -20,7 +20,7 @@ Custom React hooks encapsulating data fetching, polling, and UI logic. Each hook
 | `useUserManagement.ts` | `api/users` | User list via **TanStack Query** (key includes the active search/role/status/sort → changing filters refetches; search debounced); CRUD (create/update/delete/bulkDelete/toggleActive) via **`useMutation`** with `onSettled: invalidateQueries(users.all())`. Filter/selection/sort/CSV/confirm state stays local. Public shape unchanged |
 | `useDeviceManagement.ts` | `api/devices` | Device list, pairing, removal |
 | `useMobile.ts` | `api/mobile` | Mobile device management |
-| `useRemoteServers.ts` | `api/remote-servers` | Remote server profiles |
+| `useRemoteServers.ts` | `api/remote-servers` | `useServerProfiles` + `useVPNProfiles` — lists via **TanStack Query**, CRUD (+ startServer) via **`useMutation`** with `onSettled: invalidateQueries(<domain>)`. testConnection is a passthrough (no cache effect). User-scoped — cache cleared on identity change |
 | `useActivityFeed.ts` | `api/activity` | Dashboard activity feed (own / admin all-users) via **TanStack Query** (`useQuery`, default 30s poll). Query holds raw API items (persister-safe); view mapping (i18n titles, relative "ago") is derived per render. User-scoped — cache cleared on identity change (AuthContext); `scope`+`limit` are part of the key |
 | `useLiveActivities.ts` | — | Real-time activity via polling. **Not yet on TanStack Query** — still polls fan/power status via `useAsyncData`; migrate together with the fans/power domains + the `useAsyncData` cleanup (#299) |
 | `useDocsIndex.ts` | `api/docs` | Documentation article index via **TanStack Query** (`useQuery`; `lang` in the key → language switch refetches). Re-exports the `DocsGroupInfo`/`DocsArticleInfo` types |
