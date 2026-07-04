@@ -25,8 +25,8 @@ Custom React hooks encapsulating data fetching, polling, and UI logic. Each hook
 | `useLiveActivities.ts` | — | Real-time activity via polling |
 | `useDocsIndex.ts` | `api/docs` | Documentation article index |
 | `useDocsArticle.ts` | `api/docs` | Single documentation article content |
-| `usePluginsSummary.ts` | `api/plugins` | Plugin list summary for dashboard |
-| `useServicesSummary.ts` | `api/service-status` | Service health summary for dashboard |
+| `usePluginsSummary.ts` | `api/plugins` | Plugin list summary for dashboard via **TanStack Query** (`useQuery`, default 60s poll). A 403 (non-admin) is treated as an empty list, silently — no error surfaced |
+| `useServicesSummary.ts` | `api/service-status` | Service health summary for dashboard via **TanStack Query** (`useQuery`, default 30s poll). Mounted at 3 sites (ServicesPanel, Dashboard, ServiceSummaryWidget) — the shared query key collapses them into one cache entry + one poll |
 | `useOpenApiSchema.ts` | — | OpenAPI schema for API docs page |
 
 ## Utility Hooks
