@@ -1,4 +1,6 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useCallback, useRef } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '../lib/queryKeys';
 import { getApiErrorMessage } from '../lib/errorHandling';
 import {
   getSchedulers,
@@ -9,7 +11,6 @@ import {
   updateSchedulerConfig,
 } from '../api/schedulers';
 import type {
-  SchedulerListResponse,
   SchedulerStatus,
   SchedulerHistoryResponse,
   SchedulerExecStatus,
@@ -43,97 +44,89 @@ const FAST_POLL_DURATION = 30_000;
 const FAST_POLL_INTERVAL = 3_000;
 
 /**
- * Hook for managing all schedulers
+ * Hook for managing all schedulers. Reads are TanStack Query backed; the three
+ * mutations (runNow/toggle/updateConfig) go through useMutation and invalidate
+ * the schedulers domain (list + history) on settle. Public shape unchanged.
  */
 export function useSchedulers(options: UseSchedulersOptions = {}): UseSchedulersReturn {
   const { refreshInterval = 30000, enabled = true, pauseRefresh = false } = options;
-  const [data, setData] = useState<SchedulerListResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+  const queryClient = useQueryClient();
+
+  // After a Run Now we poll fast (3s) for 30s so the user sees the execution go
+  // requested → running → completed, then fall back to the normal interval.
   const fastPollUntilRef = useRef<number>(0);
 
-  const loadData = useCallback(async () => {
-    try {
-      const response = await getSchedulers();
-      setData(response);
-      setError(null);
-    } catch (err: unknown) {
-      setError(getApiErrorMessage(err, 'Failed to load schedulers'));
-    }
-  }, []);
+  const query = useQuery({
+    queryKey: queryKeys.schedulers.list(),
+    queryFn: getSchedulers,
+    enabled,
+    refetchInterval: pauseRefresh
+      ? false
+      : () => (Date.now() < fastPollUntilRef.current ? FAST_POLL_INTERVAL : refreshInterval),
+  });
 
-  // Initial load
-  useEffect(() => {
-    if (!enabled || hasLoadedOnce) return;
+  const invalidate = useCallback(
+    () => queryClient.invalidateQueries({ queryKey: queryKeys.schedulers.all() }),
+    [queryClient],
+  );
 
-    setLoading(true);
-    loadData().finally(() => {
-      setLoading(false);
-      setHasLoadedOnce(true);
-    });
-  }, [enabled, hasLoadedOnce, loadData]);
+  const runNowMutation = useMutation({
+    mutationFn: ({ name, force }: { name: string; force: boolean }) => runSchedulerNow(name, force),
+    onSuccess: (response) => {
+      if (response.success) {
+        fastPollUntilRef.current = Date.now() + FAST_POLL_DURATION;
+      }
+    },
+    // Refresh immediately (and await, so callers see fresh data on resolve).
+    onSettled: () => invalidate(),
+  });
 
-  // Auto-refresh (respects fast-poll mode after Run Now)
-  useEffect(() => {
-    if (!enabled || !hasLoadedOnce) return;
-    if (pauseRefresh) return;
+  const toggleMutation = useMutation({
+    mutationFn: ({ name, enabled: toggleEnabled }: { name: string; enabled: boolean }) =>
+      toggleScheduler(name, toggleEnabled),
+    onSettled: () => invalidate(),
+  });
 
-    const tick = () => {
-      const now = Date.now();
-      const isFastPolling = now < fastPollUntilRef.current;
-      const interval = isFastPolling ? FAST_POLL_INTERVAL : refreshInterval;
+  const updateConfigMutation = useMutation({
+    mutationFn: ({ name, config }: { name: string; config: SchedulerConfigUpdate }) =>
+      updateSchedulerConfig(name, config),
+    onSettled: () => invalidate(),
+  });
 
-      if (interval <= 0) return;
+  const runNow = useCallback(
+    (name: string, force = false): Promise<RunNowResponse> =>
+      runNowMutation.mutateAsync({ name, force }),
+    [runNowMutation],
+  );
 
-      loadData();
-      timerId = window.setTimeout(tick, interval);
-    };
+  const toggle = useCallback(
+    (name: string, toggleEnabled: boolean): Promise<SchedulerToggleResponse> =>
+      toggleMutation.mutateAsync({ name, enabled: toggleEnabled }),
+    [toggleMutation],
+  );
 
-    const initialInterval =
-      Date.now() < fastPollUntilRef.current ? FAST_POLL_INTERVAL : refreshInterval;
-    let timerId = window.setTimeout(tick, initialInterval);
-
-    return () => window.clearTimeout(timerId);
-  }, [enabled, hasLoadedOnce, refreshInterval, pauseRefresh, loadData]);
-
-  const runNow = useCallback(async (name: string, force: boolean = false): Promise<RunNowResponse> => {
-    const response = await runSchedulerNow(name, force);
-    // Enable fast polling for 30s so the user sees requested → running → completed
-    if (response.success) {
-      fastPollUntilRef.current = Date.now() + FAST_POLL_DURATION;
-    }
-    // Refresh data immediately
-    await loadData();
-    return response;
-  }, [loadData]);
-
-  const toggle = useCallback(async (name: string, toggleEnabled: boolean): Promise<SchedulerToggleResponse> => {
-    const response = await toggleScheduler(name, toggleEnabled);
-    // Refresh data after toggle
-    await loadData();
-    return response;
-  }, [loadData]);
-
-  const updateConfig = useCallback(async (name: string, config: SchedulerConfigUpdate): Promise<boolean> => {
-    try {
-      await updateSchedulerConfig(name, config);
-      // Refresh data after config update
-      await loadData();
-      return true;
-    } catch {
-      return false;
-    }
-  }, [loadData]);
+  const updateConfig = useCallback(
+    async (name: string, config: SchedulerConfigUpdate): Promise<boolean> => {
+      try {
+        await updateConfigMutation.mutateAsync({ name, config });
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    [updateConfigMutation],
+  );
 
   return {
-    schedulers: data?.schedulers || [],
-    totalRunning: data?.total_running || 0,
-    totalEnabled: data?.total_enabled || 0,
-    workerHealthy: data?.worker_healthy ?? null,
-    loading,
-    error,
-    refetch: loadData,
+    schedulers: query.data?.schedulers ?? [],
+    totalRunning: query.data?.total_running ?? 0,
+    totalEnabled: query.data?.total_enabled ?? 0,
+    workerHealthy: query.data?.worker_healthy ?? null,
+    loading: query.isLoading,
+    error: query.isError ? getApiErrorMessage(query.error, 'Failed to load schedulers') : null,
+    refetch: async () => {
+      await query.refetch();
+    },
     runNow,
     toggle,
     updateConfig,
@@ -155,70 +148,45 @@ interface UseSchedulerHistoryReturn {
   loading: boolean;
   error: string | null;
   refetch: () => Promise<void>;
-  setPage: (page: number) => void;
-  setStatusFilter: (filter: SchedulerExecStatus | undefined) => void;
 }
 
 /**
- * Hook for scheduler execution history
+ * Hook for scheduler execution history. Fully options-driven — page, pageSize,
+ * statusFilter and schedulerName are part of the query key, so changing any of
+ * them refetches. (Previously these seeded internal state once and later option
+ * changes were ignored, so consumer-driven pagination/filtering never refetched.)
  */
 export function useSchedulerHistory(options: UseSchedulerHistoryOptions = {}): UseSchedulerHistoryReturn {
   const {
     schedulerName,
-    page: initialPage = 1,
+    page = 1,
     pageSize = 20,
-    statusFilter: initialStatusFilter,
+    statusFilter,
     refreshInterval = 0,
     enabled = true,
   } = options;
 
-  const [page, setPage] = useState(initialPage);
-  const [statusFilter, setStatusFilter] = useState<SchedulerExecStatus | undefined>(initialStatusFilter);
-  const [history, setHistory] = useState<SchedulerHistoryResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const loadData = useCallback(async () => {
-    try {
-      let response: SchedulerHistoryResponse;
-
-      if (schedulerName) {
-        response = await getSchedulerHistory(schedulerName, page, pageSize, statusFilter);
-      } else {
-        response = await getAllSchedulerHistory(page, pageSize, statusFilter, undefined);
-      }
-
-      setHistory(response);
-      setError(null);
-    } catch (err: unknown) {
-      setError(getApiErrorMessage(err, 'Failed to load history'));
-    }
-  }, [schedulerName, page, pageSize, statusFilter]);
-
-  // Load on mount and when params change
-  useEffect(() => {
-    if (!enabled) return;
-
-    setLoading(true);
-    loadData().finally(() => {
-      setLoading(false);
-    });
-  }, [enabled, loadData]);
-
-  // Auto-refresh if interval set
-  useEffect(() => {
-    if (!enabled || refreshInterval <= 0) return;
-
-    const interval = setInterval(loadData, refreshInterval);
-    return () => clearInterval(interval);
-  }, [enabled, refreshInterval, loadData]);
+  const query = useQuery({
+    queryKey: queryKeys.schedulers.history(
+      schedulerName ?? null,
+      page,
+      pageSize,
+      statusFilter ?? null,
+    ),
+    queryFn: () =>
+      schedulerName
+        ? getSchedulerHistory(schedulerName, page, pageSize, statusFilter)
+        : getAllSchedulerHistory(page, pageSize, statusFilter, undefined),
+    enabled,
+    refetchInterval: refreshInterval > 0 ? refreshInterval : false,
+  });
 
   return {
-    history,
-    loading,
-    error,
-    refetch: loadData,
-    setPage,
-    setStatusFilter,
+    history: query.data ?? null,
+    loading: query.isLoading,
+    error: query.isError ? getApiErrorMessage(query.error, 'Failed to load history') : null,
+    refetch: async () => {
+      await query.refetch();
+    },
   };
 }
