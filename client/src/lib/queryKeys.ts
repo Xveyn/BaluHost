@@ -27,6 +27,7 @@ export const queryKeys = {
   system: {
     telemetry: () => ['system', 'telemetry'] as const,
     info: () => ['system', 'info'] as const,
+    mode: () => ['system', 'mode'] as const,
   },
   raid: {
     /** Domain-Prefix — invalidiert Status + Disks auf einmal. */
@@ -79,6 +80,13 @@ export const queryKeys = {
   },
   smart: {
     status: () => ['smart', 'status'] as const,
+    mode: () => ['smart', 'mode'] as const,
+  },
+  fans: {
+    status: () => ['fans', 'status'] as const,
+  },
+  power: {
+    status: () => ['power', 'status'] as const,
   },
   adminDb: {
     /** Domain-Prefix. */

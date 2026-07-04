@@ -1,7 +1,8 @@
 import { useMemo } from 'react';
-import { useAsyncData } from './useAsyncData';
-import { getFanStatus, type FanStatusResponse } from '../api/fan-control';
-import { getPowerStatus, type PowerStatusResponse } from '../api/power-management';
+import { useQuery } from '@tanstack/react-query';
+import { queryKeys } from '../lib/queryKeys';
+import { getFanStatus } from '../api/fan-control';
+import { getPowerStatus } from '../api/power-management';
 import type { SchedulerStatus } from '../api/schedulers';
 import type { RaidStatusResponse } from '../api/raid';
 
@@ -23,13 +24,17 @@ interface UseLiveActivitiesOptions {
 }
 
 export function useLiveActivities({ raidData, schedulers, isAdmin }: UseLiveActivitiesOptions) {
-  const { data: fanData } = useAsyncData<FanStatusResponse>(getFanStatus, {
-    refreshInterval: 30000,
+  const { data: fanData } = useQuery({
+    queryKey: queryKeys.fans.status(),
+    queryFn: getFanStatus,
+    refetchInterval: 30000,
     enabled: isAdmin,
   });
 
-  const { data: powerData } = useAsyncData<PowerStatusResponse>(getPowerStatus, {
-    refreshInterval: 15000,
+  const { data: powerData } = useQuery({
+    queryKey: queryKeys.power.status(),
+    queryFn: getPowerStatus,
+    refetchInterval: 15000,
     enabled: isAdmin,
   });
 
