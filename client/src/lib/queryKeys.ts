@@ -52,6 +52,10 @@ export const queryKeys = {
     recent: (scope: 'mine' | 'all', limit: number) =>
       ['activity', 'recent', scope, limit] as const,
   },
+  docs: {
+    index: (lang: string) => ['docs', 'index', lang] as const,
+    article: (slug: string, lang: string) => ['docs', 'article', slug, lang] as const,
+  },
   services: {
     summary: () => ['services', 'summary'] as const,
   },
