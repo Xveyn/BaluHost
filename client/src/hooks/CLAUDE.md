@@ -18,7 +18,7 @@ Custom React hooks encapsulating data fetching, polling, and UI logic. Each hook
 | `useSmartData.ts` | `api/smart` | SMART disk health data |
 | `useAdminDb.ts` | `api/admin-db` | Admin database inspection |
 | `useUserManagement.ts` | `api/users` | User list via **TanStack Query** (key includes the active search/role/status/sort → changing filters refetches; search debounced); CRUD (create/update/delete/bulkDelete/toggleActive) via **`useMutation`** with `onSettled: invalidateQueries(users.all())`. Filter/selection/sort/CSV/confirm state stays local. Public shape unchanged |
-| `useDeviceManagement.ts` | `api/devices` | Device list, pairing, removal |
+| `useDeviceManagement.ts` | `api/devices` (+ `api/sync`, `api/mobile`) | Devices/schedules/bandwidth/preflight reads via **TanStack Query** (was the last `useAsyncData` list consumer); the mutation handlers stay imperative and call the `refetch*` wrappers (stable `() => void` around `query.refetch`). Public shape unchanged |
 | `useMobile.ts` | `api/mobile` | Mobile device management |
 | `useRemoteServers.ts` | `api/remote-servers` | `useServerProfiles` + `useVPNProfiles` — lists via **TanStack Query**, CRUD (+ startServer) via **`useMutation`** with `onSettled: invalidateQueries(<domain>)`. testConnection is a passthrough (no cache effect). User-scoped — cache cleared on identity change |
 | `useActivityFeed.ts` | `api/activity` | Dashboard activity feed (own / admin all-users) via **TanStack Query** (`useQuery`, default 30s poll). Query holds raw API items (persister-safe); view mapping (i18n titles, relative "ago") is derived per render. User-scoped — cache cleared on identity change (AuthContext); `scope`+`limit` are part of the key |
