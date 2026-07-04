@@ -42,4 +42,14 @@ describe('useRaidStatus', () => {
     expect(result.current.raidLoading).toBe(false);
     expect(api.getRaidStatus).not.toHaveBeenCalled();
   });
+
+  it('exposes lastUpdated after a successful fetch', async () => {
+    api.getRaidStatus.mockResolvedValue(sample);
+    const { result } = renderHook(() => useRaidStatus({ pollInterval: 999999 }), {
+      wrapper: createQueryWrapper(),
+    });
+    expect(result.current.lastUpdated).toBeNull();
+    await waitFor(() => expect(result.current.raidLoading).toBe(false));
+    expect(result.current.lastUpdated).toBeInstanceOf(Date);
+  });
 });
