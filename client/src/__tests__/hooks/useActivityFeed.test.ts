@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
+import { createQueryWrapper } from '../helpers/queryClient';
 import { useActivityFeed } from '../../hooks/useActivityFeed';
 import type { ActivityListResponse } from '../../api/activity';
 
@@ -48,7 +49,9 @@ describe('useActivityFeed', () => {
   afterEach(() => vi.restoreAllMocks());
 
   it('requests scope=all when allUsers is true and maps action types', async () => {
-    const { result } = renderHook(() => useActivityFeed({ limit: 5, allUsers: true }));
+    const { result } = renderHook(() => useActivityFeed({ limit: 5, allUsers: true }), {
+      wrapper: createQueryWrapper(),
+    });
     await waitFor(() => expect(result.current.loading).toBe(false));
 
     expect(getRecentActivities).toHaveBeenCalledWith({ limit: 5, scope: 'all' });
@@ -71,7 +74,9 @@ describe('useActivityFeed', () => {
       }],
     });
 
-    const { result } = renderHook(() => useActivityFeed({ limit: 5 }));
+    const { result } = renderHook(() => useActivityFeed({ limit: 5 }), {
+      wrapper: createQueryWrapper(),
+    });
     await waitFor(() => expect(result.current.loading).toBe(false));
 
     expect(getRecentActivities).toHaveBeenCalledWith({ limit: 5, scope: 'mine' });
@@ -81,7 +86,9 @@ describe('useActivityFeed', () => {
 
   it('sets error and leaves activities empty when the request fails', async () => {
     vi.mocked(getRecentActivities).mockRejectedValueOnce(new Error('boom'));
-    const { result } = renderHook(() => useActivityFeed({ limit: 5 }));
+    const { result } = renderHook(() => useActivityFeed({ limit: 5 }), {
+      wrapper: createQueryWrapper(),
+    });
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.error).toBe('Failed to load activity feed');
     expect(result.current.activities).toEqual([]);
