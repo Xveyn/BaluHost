@@ -59,6 +59,11 @@ export const queryKeys = {
   services: {
     summary: () => ['services', 'summary'] as const,
   },
+  users: {
+    /** Domain-Prefix — invalidiert alle users-Reads (CRUD-Mutations). */
+    all: () => ['users'] as const,
+    list: (params: Record<string, string | undefined>) => ['users', 'list', params] as const,
+  },
   schedulers: {
     /** Domain-Prefix — invalidiert list + history (Mutations betreffen beide). */
     all: () => ['schedulers'] as const,

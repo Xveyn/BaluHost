@@ -1,7 +1,9 @@
-import { useState, useEffect, useRef, useCallback, type ReactNode } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo, type ReactNode } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
-import { handleApiError } from '../lib/errorHandling';
+import { handleApiError, getApiErrorMessage } from '../lib/errorHandling';
+import { queryKeys } from '../lib/queryKeys';
 import { useConfirmDialog } from './useConfirmDialog';
 import {
   listUsers,
@@ -11,7 +13,8 @@ import {
   bulkDeleteUsers,
   toggleUserActive,
   type UserPublic,
-  type UsersResponse,
+  type CreateUserPayload,
+  type UpdateUserPayload,
 } from '../api/users';
 
 export interface UserFormData {
@@ -32,11 +35,7 @@ interface UserStats {
 export function useUserManagement() {
   const { t } = useTranslation(['admin', 'common']);
 
-  // Data
-  const [users, setUsers] = useState<UserPublic[]>([]);
-  const [stats, setStats] = useState<UserStats>({ total: 0, active: 0, inactive: 0, admins: 0 });
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
@@ -59,39 +58,61 @@ export function useUserManagement() {
     return () => clearTimeout(debounceRef.current);
   }, [searchTerm]);
 
-  // Load users when filters change
-  const loadUsers = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  // Load users — TanStack Query keyed on the active filters/sort, so changing any
+  // of them refetches. Search is debounced above. No polling.
+  const listParams = useMemo(
+    () => ({
+      search: debouncedSearch || undefined,
+      role: roleFilter || undefined,
+      is_active: statusFilter || undefined,
+      sort_by: sortBy || undefined,
+      sort_order: sortBy && sortOrder ? sortOrder : undefined,
+    }),
+    [debouncedSearch, roleFilter, statusFilter, sortBy, sortOrder],
+  );
 
-    try {
-      const data: UsersResponse = await listUsers({
-        search: debouncedSearch || undefined,
-        role: roleFilter || undefined,
-        is_active: statusFilter || undefined,
-        sort_by: sortBy || undefined,
-        sort_order: sortBy && sortOrder ? sortOrder : undefined,
-      });
+  const query = useQuery({
+    queryKey: queryKeys.users.list(listParams),
+    queryFn: () => listUsers(listParams),
+  });
 
-      setUsers(data.users);
-      setStats({
-        total: data.total,
-        active: data.active,
-        inactive: data.inactive,
-        admins: data.admins,
-      });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to load users';
-      setError(message);
-      handleApiError(err, 'Failed to load users');
-    } finally {
-      setLoading(false);
-    }
-  }, [debouncedSearch, roleFilter, statusFilter, sortBy, sortOrder]);
+  const users = useMemo(() => query.data?.users ?? [], [query.data]);
+  const stats: UserStats = {
+    total: query.data?.total ?? 0,
+    active: query.data?.active ?? 0,
+    inactive: query.data?.inactive ?? 0,
+    admins: query.data?.admins ?? 0,
+  };
+  const loading = query.isLoading;
+  const error = query.isError ? getApiErrorMessage(query.error, 'Failed to load users') : null;
 
-  useEffect(() => {
-    loadUsers();
-  }, [loadUsers]);
+  // Mutations invalidate the whole users domain on settle (#373 pattern).
+  const invalidateUsers = useCallback(
+    () => queryClient.invalidateQueries({ queryKey: queryKeys.users.all() }),
+    [queryClient],
+  );
+
+  const createMutation = useMutation({
+    mutationFn: (payload: CreateUserPayload) => createUser(payload),
+    onSettled: () => invalidateUsers(),
+  });
+  const updateMutation = useMutation({
+    mutationFn: ({ userId, payload }: { userId: number; payload: UpdateUserPayload }) =>
+      updateUser(userId, payload),
+    onSettled: () => invalidateUsers(),
+  });
+  const deleteMutation = useMutation({
+    mutationFn: (userId: number) => deleteUser(userId),
+    onSettled: () => invalidateUsers(),
+  });
+  const bulkDeleteMutation = useMutation({
+    mutationFn: (userIds: number[]) => bulkDeleteUsers(userIds),
+    onSettled: () => invalidateUsers(),
+  });
+  const toggleActiveMutation = useMutation({
+    mutationFn: (userId: number) => toggleUserActive(userId),
+    onSettled: () => invalidateUsers(),
+  });
 
   // Sort handler
   const handleSort = useCallback((field: string) => {
@@ -135,43 +156,41 @@ export function useUserManagement() {
       }
 
       try {
-        await createUser({
+        await createMutation.mutateAsync({
           username: form.username,
           password: form.password,
           role: form.role || 'user',
           email: form.email || undefined,
         });
         toast.success(t('users.messages.created'));
-        loadUsers();
         return true;
       } catch (err) {
         handleApiError(err, t('users.messages.createFailed'));
         return false;
       }
     },
-    [t, loadUsers],
+    [t, createMutation],
   );
 
   const handleUpdateUser = useCallback(
     async (userId: number, form: UserFormData, original: UserPublic): Promise<boolean> => {
       try {
-        const updateData: Record<string, unknown> = {};
+        const updateData: UpdateUserPayload = {};
         if (form.username !== original.username) updateData.username = form.username;
         if (form.email !== (original.email ?? '')) updateData.email = form.email || null;
         if (form.role !== original.role) updateData.role = form.role;
         if (form.is_active !== original.is_active) updateData.is_active = form.is_active;
         if (form.password) updateData.password = form.password;
 
-        await updateUser(userId, updateData);
+        await updateMutation.mutateAsync({ userId, payload: updateData });
         toast.success(t('users.messages.updated'));
-        loadUsers();
         return true;
       } catch (err) {
         handleApiError(err, t('users.messages.updateFailed'));
         return false;
       }
     },
-    [t, loadUsers],
+    [t, updateMutation],
   );
 
   const handleDeleteUser = useCallback(
@@ -184,40 +203,37 @@ export function useUserManagement() {
       if (!confirmed) return;
 
       try {
-        await deleteUser(userId);
+        await deleteMutation.mutateAsync(userId);
         toast.success(t('users.messages.deleted'));
-        loadUsers();
       } catch (err) {
         handleApiError(err, t('users.messages.deleteFailed'));
       }
     },
-    [t, confirm, loadUsers],
+    [t, confirm, deleteMutation],
   );
 
   const handleBulkDelete = useCallback(async () => {
     if (selectedUsers.size === 0) return;
 
     try {
-      const result = await bulkDeleteUsers(Array.from(selectedUsers));
+      const result = await bulkDeleteMutation.mutateAsync(Array.from(selectedUsers));
       toast.success(t('users.bulk.deleted', { count: result.deleted }));
       setSelectedUsers(new Set());
-      loadUsers();
     } catch (err) {
       handleApiError(err, t('users.messages.bulkDeleteFailed'));
     }
-  }, [selectedUsers, t, loadUsers]);
+  }, [selectedUsers, t, bulkDeleteMutation]);
 
   const handleToggleActive = useCallback(
     async (userId: number) => {
       try {
-        await toggleUserActive(userId);
+        await toggleActiveMutation.mutateAsync(userId);
         toast.success(t('users.messages.statusUpdated'));
-        loadUsers();
       } catch (err) {
         handleApiError(err, t('users.messages.toggleFailed'));
       }
     },
-    [t, loadUsers],
+    [t, toggleActiveMutation],
   );
 
   const handleExportCSV = useCallback(() => {

@@ -17,7 +17,7 @@ Custom React hooks encapsulating data fetching, polling, and UI logic. Each hook
 | `useBenchmark.ts` | `api/benchmark` | Disk benchmark state, progress, results |
 | `useSmartData.ts` | `api/smart` | SMART disk health data |
 | `useAdminDb.ts` | `api/admin-db` | Admin database inspection |
-| `useUserManagement.ts` | `api/users` | User CRUD operations |
+| `useUserManagement.ts` | `api/users` | User list via **TanStack Query** (key includes the active search/role/status/sort → changing filters refetches; search debounced); CRUD (create/update/delete/bulkDelete/toggleActive) via **`useMutation`** with `onSettled: invalidateQueries(users.all())`. Filter/selection/sort/CSV/confirm state stays local. Public shape unchanged |
 | `useDeviceManagement.ts` | `api/devices` | Device list, pairing, removal |
 | `useMobile.ts` | `api/mobile` | Mobile device management |
 | `useRemoteServers.ts` | `api/remote-servers` | Remote server profiles |
