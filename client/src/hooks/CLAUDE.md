@@ -13,7 +13,7 @@ Custom React hooks encapsulating data fetching, polling, and UI logic. Each hook
 | `useBackups.ts` | `api/backup` | Backup list via **TanStack Query** (no polling; create/delete mutations invalidate). Returns raw `error` for i18n formatting by the caller |
 | `useFileShares.ts` | `api/shares` | The three shares-domain reads (user shares, shared-with-me, statistics) via **TanStack Query**; user-scoped — cache is cleared on every identity change (AuthContext) |
 | `useFanControl.ts` | `api/fan-control` | Fan config, curves, schedules — full fan management state |
-| `useSchedulers.ts` | `api/schedulers` | Scheduler list, status, history, run-now |
+| `useSchedulers.ts` | `api/schedulers` | Scheduler list + history via **TanStack Query**; the three actions (runNow/toggle/updateConfig) via **`useMutation`** with `onSettled: invalidateQueries(schedulers.all())` — the reference for the mutation pattern. runNow keeps the 3s/30s fast-poll (via a function `refetchInterval`). `useSchedulerHistory` is fully options-driven (page/filter in the key → changing them refetches; fixed a latent no-refetch bug) |
 | `useBenchmark.ts` | `api/benchmark` | Disk benchmark state, progress, results |
 | `useSmartData.ts` | `api/smart` | SMART disk health data |
 | `useAdminDb.ts` | `api/admin-db` | Admin database inspection |
