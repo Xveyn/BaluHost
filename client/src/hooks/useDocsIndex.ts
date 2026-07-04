@@ -1,52 +1,31 @@
-import { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { apiClient } from '../lib/api';
+import { getDocsIndex } from '../api/docs';
+import { queryKeys } from '../lib/queryKeys';
+import { getApiErrorMessage } from '../lib/errorHandling';
 
-export interface DocsArticleInfo {
-  slug: string;
-  title: string;
-  icon: string;
-}
+// Re-exported so existing consumers (DocsSidebar, DocsOverview, DocsGroupTab)
+// can keep importing the types from this hook.
+export type { DocsArticleInfo, DocsGroupInfo } from '../api/docs';
 
-export interface DocsGroupInfo {
-  id: string;
-  label: string;
-  icon: string;
-  articles: DocsArticleInfo[];
-}
-
+/**
+ * Documentation index (grouped articles) for the current UI language, via
+ * TanStack Query. `lang` is part of the query key — switching language refetches.
+ */
 export function useDocsIndex() {
   const { i18n } = useTranslation();
   const lang = i18n.language?.split('-')[0] ?? 'de';
 
-  const [groups, setGroups] = useState<DocsGroupInfo[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const query = useQuery({
+    queryKey: queryKeys.docs.index(lang),
+    queryFn: () => getDocsIndex(lang),
+  });
 
-  useEffect(() => {
-    let cancelled = false;
-    setIsLoading(true);
-    setError(null);
-
-    apiClient
-      .get<{ groups: DocsGroupInfo[] }>('/api/docs/index', { params: { lang } })
-      .then((res) => {
-        if (!cancelled) {
-          setGroups(res.data.groups);
-          setIsLoading(false);
-        }
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          setError(err?.response?.data?.detail ?? 'Failed to load documentation index');
-          setIsLoading(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [lang]);
-
-  return { groups, isLoading, error };
+  return {
+    groups: query.data ?? [],
+    isLoading: query.isLoading,
+    error: query.isError
+      ? getApiErrorMessage(query.error, 'Failed to load documentation index')
+      : null,
+  };
 }

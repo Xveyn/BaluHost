@@ -1,53 +1,30 @@
-import { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { apiClient } from '../lib/api';
+import { getDocsArticle } from '../api/docs';
+import { queryKeys } from '../lib/queryKeys';
+import { getApiErrorMessage } from '../lib/errorHandling';
 
-export interface DocsArticle {
-  content: string;
-  title: string;
-  slug: string;
-  group: string;
-}
+// Re-exported so existing consumers (UserManualPage, DocsGroupTab) can keep
+// importing the type from this hook.
+export type { DocsArticle } from '../api/docs';
 
+/**
+ * A single documentation article by slug, via TanStack Query. `slug`/`lang` are
+ * part of the query key; a null slug disables the query (no fetch, article null).
+ */
 export function useDocsArticle(slug: string | null) {
   const { i18n } = useTranslation();
   const lang = i18n.language?.split('-')[0] ?? 'de';
 
-  const [article, setArticle] = useState<DocsArticle | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const query = useQuery({
+    queryKey: queryKeys.docs.article(slug ?? '', lang),
+    queryFn: () => getDocsArticle(slug as string, lang),
+    enabled: !!slug,
+  });
 
-  useEffect(() => {
-    if (!slug) {
-      setArticle(null);
-      setIsLoading(false);
-      setError(null);
-      return;
-    }
-
-    let cancelled = false;
-    setIsLoading(true);
-    setError(null);
-
-    apiClient
-      .get<DocsArticle>(`/api/docs/article/${slug}`, { params: { lang } })
-      .then((res) => {
-        if (!cancelled) {
-          setArticle(res.data);
-          setIsLoading(false);
-        }
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          setError(err?.response?.data?.detail ?? 'Failed to load article');
-          setIsLoading(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [slug, lang]);
-
-  return { article, isLoading, error };
+  return {
+    article: query.data ?? null,
+    isLoading: query.isLoading,
+    error: query.isError ? getApiErrorMessage(query.error, 'Failed to load article') : null,
+  };
 }
