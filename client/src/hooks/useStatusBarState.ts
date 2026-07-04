@@ -1,53 +1,37 @@
-import { useEffect, useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { queryKeys } from '../lib/queryKeys';
 import { getStatusBarState } from '../api/statusBar';
 import type { StatusBarStateResponse } from '../api/statusBar';
 
 const POLL_MS = 10_000;
-const MAX_FAILURES = 3;
 
 export interface UseStatusBarState {
   state: StatusBarStateResponse | null;
   stale: boolean;
 }
 
+/**
+ * Status-bar strip state. Query-backed (#299): `refetchInterval` replaces the old
+ * hand-rolled setInterval, and polling pauses automatically while the tab is hidden
+ * (TanStack's `refetchIntervalInBackground` defaults to false — same intent as the
+ * old `document.hidden` guard).
+ *
+ * Failure handling: TanStack retains the last successful `data` across failed polls,
+ * so the strip keeps its last-known state and we surface `stale` once polls error.
+ * This deliberately replaces the old "hide after 3 consecutive failures" behaviour —
+ * the strip now stays visible-but-stale during an outage rather than disappearing.
+ * `retry: false` keeps one attempt per poll (matching the old single-shot poller).
+ */
 export function useStatusBarState(): UseStatusBarState {
-  const [state, setState] = useState<StatusBarStateResponse | null>(null);
-  const [stale, setStale] = useState(false);
-  const failuresRef = useRef(0);
+  const query = useQuery({
+    queryKey: queryKeys.statusBar.state(),
+    queryFn: getStatusBarState,
+    refetchInterval: POLL_MS,
+    retry: false,
+  });
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function poll() {
-      if (document.hidden) return; // pause when tab not visible
-      try {
-        const data = await getStatusBarState();
-        if (cancelled) return;
-        failuresRef.current = 0;
-        setState(data);
-        setStale(false);
-      } catch {
-        if (cancelled) return;
-        failuresRef.current += 1;
-        if (failuresRef.current >= MAX_FAILURES) {
-          setState(null);
-        } else {
-          setStale(true); // keep last-known state, flag stale
-        }
-      }
-    }
-
-    poll(); // initial fetch
-    const id = setInterval(poll, POLL_MS);
-    const onVisible = () => { if (!document.hidden) poll(); };
-    document.addEventListener('visibilitychange', onVisible);
-
-    return () => {
-      cancelled = true;
-      clearInterval(id);
-      document.removeEventListener('visibilitychange', onVisible);
-    };
-  }, []);
-
-  return { state, stale };
+  return {
+    state: query.data ?? null,
+    stale: query.isError,
+  };
 }

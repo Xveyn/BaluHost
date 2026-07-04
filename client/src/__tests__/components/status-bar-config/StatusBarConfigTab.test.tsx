@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { createTestQueryClient } from '../../helpers/queryClient';
 
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (k: string) => k }) }));
 vi.mock('react-hot-toast', () => ({ default: { success: vi.fn(), error: vi.fn() } }));
@@ -28,7 +30,14 @@ beforeEach(() => {
 });
 
 function renderTab() {
-  return render(<MemoryRouter><StatusBarConfigTab /></MemoryRouter>);
+  // TopbarStatusStrip (live preview) uses useStatusBarState → useQuery, so a
+  // QueryClient must be in scope even though the getStatusBarState call is mocked.
+  const client = createTestQueryClient();
+  return render(
+    <QueryClientProvider client={client}>
+      <MemoryRouter><StatusBarConfigTab /></MemoryRouter>
+    </QueryClientProvider>,
+  );
 }
 
 describe('StatusBarConfigTab', () => {
