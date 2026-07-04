@@ -1,13 +1,15 @@
 import { useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useQuery } from '@tanstack/react-query';
 import { buildApiUrl } from '../../lib/api';
-import { getRaidStatus } from '../../api/raid';
-import { fetchSmartStatus, getSmartMode, toggleSmartMode, runSmartTest } from '../../api/smart';
-import type { RaidStatusResponse, RaidArray, RaidDevice } from '../../api/raid';
-import type { SmartStatusResponse, SmartDevice, SmartAttribute, SmartModeResponse } from '../../api/smart';
+import { queryKeys } from '../../lib/queryKeys';
+import { getSmartMode, toggleSmartMode, runSmartTest } from '../../api/smart';
+import type { RaidArray, RaidDevice } from '../../api/raid';
+import type { SmartDevice, SmartAttribute } from '../../api/smart';
 import type { SchedulerStatus } from '../../api/schedulers';
 import { formatRelativeTime, getStatusColor } from '../../api/schedulers';
-import { useAsyncData } from '../../hooks/useAsyncData';
+import { useRaidStatus } from '../../hooks/useRaidStatus';
+import { useSmartData } from '../../hooks/useSmartData';
 import { inferStatusLevel, getStatusClasses } from '../../lib/statusColors';
 import { formatBytes } from '../../lib/formatters';
 import { HardDrive, Activity, RefreshCw, Loader2, ChevronDown, ChevronUp, Database, Search, CheckCircle2, XCircle } from 'lucide-react';
@@ -119,28 +121,23 @@ export function MaintenancePanel({ addToast, schedulers, onRunNow }: Maintenance
   const [busy, setBusy] = useState(false);
 
   // Dev-mode detection
-  const { data: modeData } = useAsyncData<{ dev_mode: boolean }>(
-    () => fetch(buildApiUrl('/api/system/mode')).then(r => r.json()),
-  );
+  const { data: modeData } = useQuery({
+    queryKey: queryKeys.system.mode(),
+    queryFn: () => fetch(buildApiUrl('/api/system/mode')).then(r => r.json()) as Promise<{ dev_mode: boolean }>,
+  });
   const isDevMode = modeData?.dev_mode === true;
 
-  // RAID status with auto-refresh
-  const { data: raidData, loading: raidLoading } = useAsyncData<RaidStatusResponse>(
-    () => getRaidStatus(),
-    { refreshInterval: 30000 },
-  );
-
-  // SMART status with auto-refresh
-  const { data: smartData, loading: smartLoading } = useAsyncData<SmartStatusResponse>(
-    () => fetchSmartStatus(),
-    { refreshInterval: 30000 },
-  );
+  // RAID + SMART status via the shared domain hooks (same cache key as the RAID
+  // page / dashboard — one poll, not a duplicate). 30s refresh here.
+  const { raidData, raidLoading } = useRaidStatus({ pollInterval: 30000 });
+  const { smartData, loading: smartLoading } = useSmartData(30000);
 
   // SMART mode only in dev mode
-  const { data: smartModeData } = useAsyncData<SmartModeResponse>(
-    () => getSmartMode(),
-    { enabled: isDevMode },
-  );
+  const { data: smartModeData } = useQuery({
+    queryKey: queryKeys.smart.mode(),
+    queryFn: getSmartMode,
+    enabled: isDevMode,
+  });
 
   // Auto-select first device when smart data loads
   const effectiveDevice = selectedDevice ?? smartData?.devices?.[0]?.name ?? null;
