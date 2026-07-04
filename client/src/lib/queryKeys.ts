@@ -64,6 +64,10 @@ export const queryKeys = {
     all: () => ['users'] as const,
     list: (params: Record<string, string | undefined>) => ['users', 'list', params] as const,
   },
+  remoteServers: {
+    serverProfiles: () => ['remote-servers', 'server-profiles'] as const,
+    vpnProfiles: () => ['remote-servers', 'vpn-profiles'] as const,
+  },
   schedulers: {
     /** Domain-Prefix — invalidiert list + history (Mutations betreffen beide). */
     all: () => ['schedulers'] as const,
