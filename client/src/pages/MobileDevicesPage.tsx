@@ -1,80 +1,35 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
 import { Smartphone, Plus, Trash2, RefreshCw, QrCode as QrCodeIcon, Wifi, WifiOff, Calendar, Clock, Bell, User, Eye, EyeOff, Copy } from 'lucide-react';
-import { buildApiUrl } from '../lib/api';
-import { generateMobileToken, getAvailableVpnTypes, getMobileDevices, deleteMobileDevice, getDeviceNotifications, type MobileRegistrationToken, type MobileDevice, type ExpirationNotification } from '../api/mobile';
+import { generateMobileToken, getAvailableVpnTypes, deleteMobileDevice, getDeviceNotifications, type MobileRegistrationToken, type MobileDevice } from '../api/mobile';
+import { queryKeys } from '../lib/queryKeys';
+import { useMobileDevices } from '../hooks/useMobileDevices';
 import { useConfirmDialog } from '../hooks/useConfirmDialog';
 import { useAuth } from '../contexts/AuthContext';
-
-interface UserInfo {
-  id: string;
-  username: string;
-  email: string;
-  role: string;
-}
 
 export default function MobileDevicesPage() {
   const { t } = useTranslation('common');
   const { confirm, dialog } = useConfirmDialog();
-  const { token } = useAuth();
-  const [user, setUser] = useState<UserInfo | null>(null);
-  const [devices, setDevices] = useState<MobileDevice[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshKey, setRefreshKey] = useState(0); // Force re-render trigger
+  const { isAdmin } = useAuth();
+
+  // Reads — TanStack Query. Devices poll every 10s (see useMobileDevices).
+  const { devices, loading, isFetching, refetch: refetchDevices } = useMobileDevices();
+  const { data: availableVpnTypes = [] } = useQuery({
+    queryKey: queryKeys.mobile.vpnTypes(),
+    queryFn: getAvailableVpnTypes,
+  });
+
   const [qrData, setQrData] = useState<MobileRegistrationToken | null>(null);
   const [showQrDialog, setShowQrDialog] = useState(false);
   const [selectedDevice, setSelectedDevice] = useState<MobileDevice | null>(null); // Für existierenden QR-Code
   const [includeVpn, setIncludeVpn] = useState(false);
   const [vpnType, setVpnType] = useState<string>('auto');
-  const [availableVpnTypes, setAvailableVpnTypes] = useState<string[]>([]);
   const [deviceName, setDeviceName] = useState('');
   const [tokenValidityDays, setTokenValidityDays] = useState(90);
   const [generating, setGenerating] = useState(false);
   const [showToken, setShowToken] = useState(false);
-
-  useEffect(() => {
-    // User-Info aus Token laden
-    if (token) {
-      fetch(buildApiUrl('/api/auth/me'), {
-        headers: { 'Authorization': `Bearer ${token}` }
-      })
-        .then(res => res.json())
-        .then(data => setUser(data))
-        .catch(() => {});
-    }
-
-    loadDevices();
-    loadAvailableVpnTypes();
-
-    // Auto-refresh every 10 seconds to detect changes from mobile app
-    const interval = setInterval(() => {
-      loadDevices();
-    }, 10000);
-    
-    return () => clearInterval(interval);
-  }, []);
-
-  const loadDevices = async () => {
-    try {
-      setLoading(true);
-      const data = await getMobileDevices();
-      setDevices(data);
-    } catch {
-      // Silently fail - auto-refresh will retry
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadAvailableVpnTypes = async () => {
-    try {
-      const types = await getAvailableVpnTypes();
-      setAvailableVpnTypes(types);
-    } catch {
-      // Non-critical, fallback to no type selection
-    }
-  };
 
   const handleGenerateToken = async () => {
     if (!deviceName.trim()) {
@@ -107,17 +62,11 @@ export default function MobileDevicesPage() {
     if (!ok) return;
 
     try {
-      // Delete device from backend
       await deleteMobileDevice(deviceId);
-
-      // Force complete refresh
-      setDevices([]);
-      setRefreshKey(prev => prev + 1);
-      await loadDevices();
-      
+      await refetchDevices();
     } catch {
       toast.error(t('mobile.deleteFailed', 'Gerät konnte nicht gelöscht werden'));
-      await loadDevices();
+      await refetchDevices();
     }
   };
 
@@ -295,12 +244,12 @@ export default function MobileDevicesPage() {
             Registrierte Geräte ({devices.length})
           </h3>
           <button
-            onClick={loadDevices}
-            disabled={loading}
+            onClick={() => refetchDevices()}
+            disabled={isFetching}
             className="p-2 text-slate-400 hover:text-white transition-colors touch-manipulation active:scale-95 min-w-[44px] min-h-[44px] flex items-center justify-center"
             title="Aktualisieren"
           >
-            <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-5 h-5 ${isFetching ? 'animate-spin' : ''}`} />
           </button>
         </div>
 
@@ -316,10 +265,10 @@ export default function MobileDevicesPage() {
             <p className="text-sm mt-1">Generiere einen QR-Code, um dein erstes Gerät hinzuzufügen</p>
           </div>
         ) : (
-          <div className="space-y-3" key={refreshKey}>
+          <div className="space-y-3">
             {devices.map((device) => (
               <div
-                key={`${device.id}-${refreshKey}`}
+                key={device.id}
                 className="p-3 sm:p-4 rounded-lg bg-slate-800/40 border border-slate-700/50 hover:border-slate-600/50 transition-colors cursor-pointer touch-manipulation active:scale-[0.99]"
                 onClick={() => handleShowDeviceQr(device)}
                 title="Klicken um QR-Code anzuzeigen"
@@ -329,7 +278,7 @@ export default function MobileDevicesPage() {
                     <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mb-2">
                       <Smartphone className="w-4 h-4 sm:w-5 sm:h-5 text-sky-400 flex-shrink-0" />
                       <h4 className="font-semibold text-sm sm:text-base text-white truncate">{device.device_name}</h4>
-                      {user?.role === 'admin' && device.username && (
+                      {isAdmin && device.username && (
                         <span className="flex items-center gap-1 text-[10px] sm:text-xs text-purple-400 bg-purple-400/10 px-1.5 sm:px-2 py-0.5 rounded-full">
                           <User className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
                           {device.username}
@@ -436,7 +385,7 @@ export default function MobileDevicesPage() {
                   setIncludeVpn(false);
                   setVpnType('auto');
                   setShowToken(false);
-                  if (qrData) loadDevices(); // Nur bei neuem Token neu laden
+                  if (qrData) void refetchDevices(); // Nur bei neuem Token neu laden
                 }}
                 className="text-slate-400 hover:text-white transition-colors p-2 -mr-2 touch-manipulation active:scale-95 min-w-[44px] min-h-[44px] flex items-center justify-center flex-shrink-0"
               >
@@ -535,7 +484,7 @@ export default function MobileDevicesPage() {
                       <Smartphone className="w-4 h-4 text-sky-400" />
                       <span className="text-sky-300 font-medium">Geräte-Informationen</span>
                     </div>
-                    {user?.role === 'admin' && selectedDevice.username && (
+                    {isAdmin && selectedDevice.username && (
                       <div className="flex items-center gap-2">
                         <User className="w-4 h-4 text-purple-400" />
                         <span className="text-slate-300">Benutzer:</span>
@@ -620,28 +569,13 @@ export default function MobileDevicesPage() {
  * Component to display last notification sent to device.
  */
 function NotificationStatus({ deviceId }: { deviceId: string }) {
-  const [lastNotification, setLastNotification] = useState<ExpirationNotification | null>(null);
-  const [loading, setLoading] = useState(false);
+  const { data: notifications = [] } = useQuery({
+    queryKey: queryKeys.mobile.deviceNotifications(deviceId),
+    queryFn: () => getDeviceNotifications(deviceId, 1),
+  });
+  const lastNotification = notifications[0] ?? null;
 
-  useEffect(() => {
-    const loadNotification = async () => {
-      try {
-        setLoading(true);
-        const notifications = await getDeviceNotifications(deviceId, 1);
-        if (notifications.length > 0) {
-          setLastNotification(notifications[0]);
-        }
-      } catch {
-        // Non-critical, silently fail
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadNotification();
-  }, [deviceId]);
-
-  if (loading || !lastNotification) return null;
+  if (!lastNotification) return null;
 
   const notificationLabels: Record<string, string> = {
     '7_days': '7 Tage Warnung',
