@@ -80,6 +80,16 @@ export const queryKeys = {
   smart: {
     status: () => ['smart', 'status'] as const,
   },
+  benchmark: {
+    /** Domain-Prefix — invalidiert disks/profiles/detail/progress/history auf einmal. */
+    all: () => ['benchmark'] as const,
+    disks: () => ['benchmark', 'disks'] as const,
+    profiles: () => ['benchmark', 'profiles'] as const,
+    detail: (id: number | null) => ['benchmark', 'detail', id] as const,
+    progress: (id: number | null) => ['benchmark', 'progress', id] as const,
+    history: (page: number, pageSize: number, diskName: string | null) =>
+      ['benchmark', 'history', page, pageSize, diskName] as const,
+  },
   sync: {
     schedules: () => ['sync', 'schedules'] as const,
     bandwidth: () => ['sync', 'bandwidth'] as const,
