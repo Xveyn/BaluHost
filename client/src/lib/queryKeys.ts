@@ -47,6 +47,11 @@ export const queryKeys = {
   plugins: {
     summary: () => ['plugins', 'summary'] as const,
   },
+  activity: {
+    /** User-scoped feed; scope ('mine'|'all') + limit are part of the key. */
+    recent: (scope: 'mine' | 'all', limit: number) =>
+      ['activity', 'recent', scope, limit] as const,
+  },
   services: {
     summary: () => ['services', 'summary'] as const,
   },

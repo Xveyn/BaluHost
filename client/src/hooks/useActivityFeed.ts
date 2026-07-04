@@ -2,9 +2,11 @@
  * Hook for fetching the dashboard activity feed from the user-scoped
  * /api/activity API. Admins may request all users' activity (scope=all).
  */
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { getRecentActivities, type ActivityItem as ApiActivityItem } from '../api/activity';
+import { queryKeys } from '../lib/queryKeys';
 import { formatBytes } from '../lib/formatters';
 import { getApiErrorMessage } from '../lib/errorHandling';
 
@@ -71,9 +73,17 @@ export function useActivityFeed(options: UseActivityFeedOptions = {}): UseActivi
   const { limit = 5, allUsers = false, refreshInterval = 30000 } = options;
   const { t } = useTranslation('dashboard');
 
-  const [activities, setActivities] = useState<ActivityItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const scope: 'mine' | 'all' = allUsers ? 'all' : 'mine';
+
+  // Query holds the raw API items (JSON-serializable → persister-friendly); the
+  // view mapping (i18n titles, relative "ago") is derived per render below. The
+  // feed is user-scoped — AuthContext clears the query cache on every identity
+  // change, so entries can't leak between users.
+  const query = useQuery({
+    queryKey: queryKeys.activity.recent(scope, limit),
+    queryFn: async () => (await getRecentActivities({ limit, scope })).activities,
+    refetchInterval: refreshInterval > 0 ? refreshInterval : false,
+  });
 
   const toViewItem = useCallback(
     (item: ApiActivityItem): ActivityItem => {
@@ -99,26 +109,17 @@ export function useActivityFeed(options: UseActivityFeedOptions = {}): UseActivi
     [t],
   );
 
-  const loadData = useCallback(async () => {
-    try {
-      const response = await getRecentActivities({ limit, scope: allUsers ? 'all' : 'mine' });
-      setActivities(response.activities.map(toViewItem));
-      setError(null);
-    } catch (err: unknown) {
-      setError(getApiErrorMessage(err, 'Failed to load activity feed'));
-    }
-  }, [limit, allUsers, toViewItem]);
+  const activities = useMemo(
+    () => (query.data ?? []).map(toViewItem),
+    [query.data, toViewItem],
+  );
 
-  useEffect(() => {
-    setLoading(true);
-    loadData().finally(() => setLoading(false));
-  }, [loadData]);
-
-  useEffect(() => {
-    if (refreshInterval <= 0) return;
-    const interval = setInterval(loadData, refreshInterval);
-    return () => clearInterval(interval);
-  }, [refreshInterval, loadData]);
-
-  return { activities, loading, error, refetch: loadData };
+  return {
+    activities,
+    loading: query.isLoading,
+    error: query.isError ? getApiErrorMessage(query.error, 'Failed to load activity feed') : null,
+    refetch: async () => {
+      await query.refetch();
+    },
+  };
 }

@@ -21,8 +21,8 @@ Custom React hooks encapsulating data fetching, polling, and UI logic. Each hook
 | `useDeviceManagement.ts` | `api/devices` | Device list, pairing, removal |
 | `useMobile.ts` | `api/mobile` | Mobile device management |
 | `useRemoteServers.ts` | `api/remote-servers` | Remote server profiles |
-| `useActivityFeed.ts` | `api/activity` | Dashboard activity feed (own / admin all-users) |
-| `useLiveActivities.ts` | — | Real-time activity via polling |
+| `useActivityFeed.ts` | `api/activity` | Dashboard activity feed (own / admin all-users) via **TanStack Query** (`useQuery`, default 30s poll). Query holds raw API items (persister-safe); view mapping (i18n titles, relative "ago") is derived per render. User-scoped — cache cleared on identity change (AuthContext); `scope`+`limit` are part of the key |
+| `useLiveActivities.ts` | — | Real-time activity via polling. **Not yet on TanStack Query** — still polls fan/power status via `useAsyncData`; migrate together with the fans/power domains + the `useAsyncData` cleanup (#299) |
 | `useDocsIndex.ts` | `api/docs` | Documentation article index |
 | `useDocsArticle.ts` | `api/docs` | Single documentation article content |
 | `usePluginsSummary.ts` | `api/plugins` | Plugin list summary for dashboard via **TanStack Query** (`useQuery`, default 60s poll). A 403 (non-admin) is treated as an empty list, silently — no error surfaced |
