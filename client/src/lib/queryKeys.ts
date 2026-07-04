@@ -80,6 +80,13 @@ export const queryKeys = {
   smart: {
     status: () => ['smart', 'status'] as const,
   },
+  adminDb: {
+    /** Domain-Prefix. */
+    all: () => ['admin-db'] as const,
+    tables: () => ['admin-db', 'tables'] as const,
+    tableData: (table: string | null, params: Record<string, unknown>) =>
+      ['admin-db', 'table-data', table, params] as const,
+  },
   benchmark: {
     /** Domain-Prefix — invalidiert disks/profiles/detail/progress/history auf einmal. */
     all: () => ['benchmark'] as const,
