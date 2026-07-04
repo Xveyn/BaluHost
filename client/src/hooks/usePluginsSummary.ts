@@ -1,7 +1,9 @@
 /**
- * Hook for getting plugin status summary (admin only)
+ * Hook for getting plugin status summary (admin only) — TanStack Query backed.
  */
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { queryKeys } from '../lib/queryKeys';
 import { getApiErrorMessage } from '../lib/errorHandling';
 import { listPlugins, type PluginInfo } from '../api/plugins';
 
@@ -25,47 +27,35 @@ interface UsePluginsSummaryReturn {
   refetch: () => Promise<void>;
 }
 
+/**
+ * Non-admins get a 403 from /api/plugins — treat that as "no plugins" silently
+ * (unchanged from the pre-Query behavior) rather than surfacing an error.
+ */
+async function fetchPluginsSafe(): Promise<PluginInfo[]> {
+  try {
+    const response = await listPlugins();
+    return response.plugins;
+  } catch (err: unknown) {
+    const status =
+      err != null && typeof err === 'object' && 'response' in err
+        ? (err as { response?: { status?: number } }).response?.status
+        : undefined;
+    if (status === 403) return [];
+    throw err;
+  }
+}
+
 export function usePluginsSummary(options: UsePluginsSummaryOptions = {}): UsePluginsSummaryReturn {
   const { refreshInterval = 60000, enabled = true } = options;
 
-  const [plugins, setPlugins] = useState<PluginInfo[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const query = useQuery({
+    queryKey: queryKeys.plugins.summary(),
+    queryFn: fetchPluginsSafe,
+    refetchInterval: refreshInterval > 0 ? refreshInterval : false,
+    enabled,
+  });
 
-  const loadData = useCallback(async () => {
-    try {
-      const response = await listPlugins();
-      setPlugins(response.plugins);
-      setError(null);
-    } catch (err: unknown) {
-      // Don't show error if user is not admin (403)
-      const status = err != null && typeof err === 'object' && 'response' in err
-        ? (err as { response?: { status?: number } }).response?.status
-        : undefined;
-      if (status === 403) {
-        setPlugins([]);
-        setError(null);
-        return;
-      }
-      setError(getApiErrorMessage(err, 'Failed to load plugins'));
-    }
-  }, []);
-
-  // Initial load
-  useEffect(() => {
-    if (!enabled) return;
-
-    setLoading(true);
-    loadData().finally(() => setLoading(false));
-  }, [enabled, loadData]);
-
-  // Auto-refresh
-  useEffect(() => {
-    if (!enabled || refreshInterval <= 0) return;
-
-    const interval = setInterval(loadData, refreshInterval);
-    return () => clearInterval(interval);
-  }, [enabled, refreshInterval, loadData]);
+  const plugins = useMemo(() => query.data ?? [], [query.data]);
 
   const summary = useMemo<PluginsSummary>(() => {
     return {
@@ -79,8 +69,10 @@ export function usePluginsSummary(options: UsePluginsSummaryOptions = {}): UsePl
   return {
     summary,
     plugins,
-    loading,
-    error,
-    refetch: loadData,
+    loading: query.isLoading,
+    error: query.isError ? getApiErrorMessage(query.error, 'Failed to load plugins') : null,
+    refetch: async () => {
+      await query.refetch();
+    },
   };
 }

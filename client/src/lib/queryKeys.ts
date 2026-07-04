@@ -44,4 +44,10 @@ export const queryKeys = {
     sharedWithMe: () => ['shares', 'shared-with-me'] as const,
     statistics: () => ['shares', 'statistics'] as const,
   },
+  plugins: {
+    summary: () => ['plugins', 'summary'] as const,
+  },
+  services: {
+    summary: () => ['services', 'summary'] as const,
+  },
 } as const;

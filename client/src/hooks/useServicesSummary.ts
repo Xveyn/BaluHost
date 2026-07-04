@@ -1,7 +1,13 @@
 /**
- * Hook for getting service status summary (all authenticated users)
+ * Hook for getting service status summary — TanStack Query backed.
+ *
+ * Mounted at three sites (ServicesPanel, Dashboard, ServiceSummaryWidget); the
+ * shared query key collapses them into one cache entry + one poll instead of
+ * three independent setInterval loops.
  */
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { queryKeys } from '../lib/queryKeys';
 import { getApiErrorMessage } from '../lib/errorHandling';
 import { getDebugSnapshot, type ServiceStatus, ServiceState } from '../api/service-status';
 
@@ -29,35 +35,14 @@ interface UseServicesSummaryReturn {
 export function useServicesSummary(options: UseServicesSummaryOptions = {}): UseServicesSummaryReturn {
   const { refreshInterval = 30000, enabled = true } = options;
 
-  const [services, setServices] = useState<ServiceStatus[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const query = useQuery({
+    queryKey: queryKeys.services.summary(),
+    queryFn: async () => (await getDebugSnapshot()).services,
+    refetchInterval: refreshInterval > 0 ? refreshInterval : false,
+    enabled,
+  });
 
-  const loadData = useCallback(async () => {
-    try {
-      const response = await getDebugSnapshot();
-      setServices(response.services);
-      setError(null);
-    } catch (err: unknown) {
-      setError(getApiErrorMessage(err, 'Failed to load services'));
-    }
-  }, []);
-
-  // Initial load
-  useEffect(() => {
-    if (!enabled) return;
-
-    setLoading(true);
-    loadData().finally(() => setLoading(false));
-  }, [enabled, loadData]);
-
-  // Auto-refresh
-  useEffect(() => {
-    if (!enabled || refreshInterval <= 0) return;
-
-    const interval = setInterval(loadData, refreshInterval);
-    return () => clearInterval(interval);
-  }, [enabled, refreshInterval, loadData]);
+  const services = useMemo(() => query.data ?? [], [query.data]);
 
   const summary = useMemo<ServicesSummary>(() => {
     return {
@@ -72,8 +57,10 @@ export function useServicesSummary(options: UseServicesSummaryOptions = {}): Use
   return {
     summary,
     services,
-    loading,
-    error,
-    refetch: loadData,
+    loading: query.isLoading,
+    error: query.isError ? getApiErrorMessage(query.error, 'Failed to load services') : null,
+    refetch: async () => {
+      await query.refetch();
+    },
   };
 }
