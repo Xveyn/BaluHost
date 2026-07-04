@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import useAdminDb from '../hooks/useAdminDb'
+import { useAdminTables, useAdminTableData } from '../hooks/useAdminDb'
+import { getAdminTableRows } from '../api/admin-db'
 import AdminDataTable from '../components/AdminDataTable'
 import ColumnFilterPanel from '../components/admin/ColumnFilterPanel'
 import TableSelector from '../components/admin/TableSelector'
@@ -25,8 +26,6 @@ export default function AdminDatabase() {
   const [activeCategory, setActiveCategory] = useState<CategoryType>('browse')
   const [analyticsTab, setAnalyticsTab] = useState<AnalyticsTabType>('stats')
 
-  const [tables, setTables] = useState<string[]>([])
-  const [tableCategories, setTableCategories] = useState<Record<string, string[]>>({})
   const [selected, setSelected] = useState<string | null>(null)
   const [page, setPage] = useState<number>(1)
   const [pageSize, setPageSize] = useState<number>(25)
@@ -54,17 +53,36 @@ export default function AdminDatabase() {
   // Row detail
   const [selectedRow, setSelectedRow] = useState<Record<string, unknown> | null>(null)
 
-  const { fetchTables, fetchTableCategories, fetchSchema, fetchRows } = useAdminDb()
-  const [schema, setSchema] = useState<{ columns?: AdminTableSchemaField[] } | null>(null)
-  const [rows, setRows] = useState<Record<string, unknown>[]>([])
   const [ownerMap, setOwnerMap] = useState<Record<string,string>>({})
   const [ownerLoadInfo, setOwnerLoadInfo] = useState<{status: 'idle'|'loading'|'loaded'|'failed', page_size?: number, count?: number, keys?: string[], error?: string}>({status: 'idle'})
-  const [total, setTotal] = useState<number | null>(null)
-  const [loading, setLoading] = useState<boolean>(false)
-  const [error, setError] = useState<string | null>(null)
+
+  const activeFilterCount = Object.keys(filters).length
+
+  // Table list + categories (loaded once).
+  const tablesQuery = useAdminTables()
+  const tables = tablesQuery.data?.tables ?? []
+  const tableCategories = tablesQuery.data?.categories ?? {}
+
+  // Schema + rows for the selected table — key-driven refetch on any browse param.
+  const tableDataQuery = useAdminTableData(selected, {
+    page,
+    pageSize,
+    q: debouncedSearch || undefined,
+    sortBy: sortBy || undefined,
+    sortOrder: sortBy && sortOrder ? sortOrder : undefined,
+    filters: activeFilterCount > 0 ? filters : undefined,
+  })
+  const schema: { columns?: AdminTableSchemaField[] } | null = tableDataQuery.data?.schema ?? null
+  const rows: Record<string, unknown>[] = tableDataQuery.data?.rows.rows ?? []
+  const total: number | null = tableDataQuery.data?.rows.total ?? null
+  const loading = tableDataQuery.isLoading && selected !== null
+  const error = tableDataQuery.isError
+    ? 'Fehler beim Laden der Tabellendaten'
+    : tablesQuery.isError
+      ? 'Failed to load tables'
+      : null
 
   const totalPages = total ? Math.ceil((total ?? 0) / pageSize) : null
-  const activeFilterCount = Object.keys(filters).length
 
   // Row range display
   const rangeStart = total !== null && total > 0 ? (page - 1) * pageSize + 1 : 0
@@ -88,48 +106,6 @@ export default function AdminDatabase() {
     }, 300)
     return () => { if (searchTimerRef.current) clearTimeout(searchTimerRef.current) }
   }, [globalSearch])
-
-  // Load tables and categories
-  useEffect(() => {
-    let mounted = true
-    setError(null)
-    Promise.all([fetchTables(), fetchTableCategories()])
-      .then(([t, cat]) => {
-        if (!mounted) return
-        setTables(t)
-        setTableCategories(cat.categories || {})
-      })
-      .catch(() => {
-        if (mounted) setError('Failed to load tables')
-      })
-    return () => { mounted = false }
-  }, [])
-
-  // Load rows when selection, page, sort, filter, or search changes
-  useEffect(() => {
-    if (!selected) return
-    let mounted = true
-    setLoading(true)
-    setError(null)
-
-    const sortByParam = sortBy || undefined
-    const sortOrderParam = sortBy && sortOrder ? sortOrder : undefined
-    const filtersParam = activeFilterCount > 0 ? filters : undefined
-    const qParam = debouncedSearch || undefined
-
-    Promise.all([fetchSchema(selected), fetchRows(selected, page, pageSize, undefined, qParam, sortByParam, sortOrderParam, filtersParam)])
-      .then(([s, r]) => {
-        if (!mounted) return
-        setSchema(s)
-        setRows(r.rows)
-        setTotal(r.total ?? null)
-      })
-      .catch(() => {
-        if (mounted) setError('Fehler beim Laden der Tabellendaten')
-      })
-      .finally(() => { if (mounted) setLoading(false) })
-    return () => { mounted = false }
-  }, [selected, page, pageSize, sortBy, sortOrder, filters, debouncedSearch])
 
   const handleTableSelect = (tableName: string) => {
     setSelected(tableName)
@@ -170,7 +146,7 @@ export default function AdminDatabase() {
       let successful = false
       for (const sz of sizes) {
         try {
-          const res = await fetchRows('users', 1, sz)
+          const res = await getAdminTableRows('users', 1, sz)
           if (!isMountedRef.current) return
           const map: Record<string,string> = {}
           for (const u of res.rows || []) {
