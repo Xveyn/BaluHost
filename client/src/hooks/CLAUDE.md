@@ -8,7 +8,8 @@ Custom React hooks encapsulating data fetching, polling, and UI logic. Each hook
 |---|---|---|
 | `useMonitoring.ts` | `api/monitoring` | Unified CPU/memory/network/disk/process data via **TanStack Query** (`useQuery`), configurable `pollInterval` (mapped to `refetchInterval`) + history; public return shape unchanged |
 | `useSystemTelemetry.ts` | `api/system` | System info + aggregated storage + telemetry history for the dashboard via **TanStack Query** (`useQuery`, one combined snapshot, `pollInterval`→`refetchInterval`); hand-rolled sessionStorage cache removed, F5 persistence now comes from the app-wide persister (#299); public shape unchanged |
-| `useRaidStatus.ts` | `api/raid` | RAID array status via **TanStack Query** (`useQuery`, 60s poll); F5-persisted via the app-wide persister |
+| `useRaidStatus.ts` | `api/raid` | RAID array status via **TanStack Query** (`useQuery`; default 60s poll, 8s on the RAID page — shared cache key); F5-persisted via the app-wide persister. Exposes `lastUpdated` + a `refetch` resolving to a success boolean |
+| `useAvailableDisks.ts` | `api/raid` | Unassigned disks for the RAID management page via **TanStack Query** (no polling; format/create/delete mutations invalidate `queryKeys.raid.availableDisks()`). Returns raw `error` |
 | `useBackups.ts` | `api/backup` | Backup list via **TanStack Query** (no polling; create/delete mutations invalidate). Returns raw `error` for i18n formatting by the caller |
 | `useFileShares.ts` | `api/shares` | The three shares-domain reads (user shares, shared-with-me, statistics) via **TanStack Query**; user-scoped — cache is cleared on every identity change (AuthContext) |
 | `useFanControl.ts` | `api/fan-control` | Fan config, curves, schedules — full fan management state |
