@@ -77,6 +77,9 @@ export const queryKeys = {
     vpnTypes: () => ['mobile', 'vpn-types'] as const,
     deviceNotifications: (deviceId: string) => ['mobile', 'device-notifications', deviceId] as const,
   },
+  smart: {
+    status: () => ['smart', 'status'] as const,
+  },
   sync: {
     schedules: () => ['sync', 'schedules'] as const,
     bandwidth: () => ['sync', 'bandwidth'] as const,
