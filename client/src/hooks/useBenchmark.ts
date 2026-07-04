@@ -1,8 +1,17 @@
 /**
- * React hooks for disk benchmarking
+ * React hooks for disk benchmarking.
+ *
+ * Query-backed (TanStack Query, #299): reads use `useQuery`, the three actions
+ * (start/cancel/mark-failed) use `useMutation` invalidating `queryKeys.benchmark.all()`.
+ * `useBenchmarkProgress` keeps its imperative `startPolling`/`stopPolling` surface
+ * but the poll itself is a query `refetchInterval` that auto-stops on a terminal
+ * status — no hand-rolled `setInterval` anymore. All public return shapes are
+ * unchanged, so `BenchmarkPanel` is untouched.
  */
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useCallback } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getApiErrorMessage } from '../lib/errorHandling';
+import { queryKeys } from '../lib/queryKeys';
 import {
   getAvailableDisks,
   getBenchmarkProfiles,
@@ -88,90 +97,58 @@ export interface UseMarkBenchmarkFailedReturn {
  * Hook for getting available disks
  */
 export function useBenchmarkDisks(): UseBenchmarkDisksReturn {
-  const [disks, setDisks] = useState<DiskInfo[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const query = useQuery({
+    queryKey: queryKeys.benchmark.disks(),
+    queryFn: async () => (await getAvailableDisks()).disks,
+  });
 
-  const loadDisks = useCallback(async () => {
-    try {
-      setLoading(true);
-      const response = await getAvailableDisks();
-      setDisks(response.disks);
-      setError(null);
-    } catch (err: unknown) {
-      setError(getApiErrorMessage(err, 'Failed to load disks'));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadDisks();
-  }, [loadDisks]);
-
-  return { disks, loading, error, refetch: loadDisks };
+  return {
+    disks: query.data ?? [],
+    loading: query.isLoading,
+    error: query.isError ? getApiErrorMessage(query.error, 'Failed to load disks') : null,
+    refetch: async () => {
+      await query.refetch();
+    },
+  };
 }
 
 /**
  * Hook for getting benchmark profiles
  */
 export function useBenchmarkProfiles(): UseBenchmarkProfilesReturn {
-  const [profiles, setProfiles] = useState<BenchmarkProfileConfig[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const query = useQuery({
+    queryKey: queryKeys.benchmark.profiles(),
+    queryFn: async () => (await getBenchmarkProfiles()).profiles,
+  });
 
-  const loadProfiles = useCallback(async () => {
-    try {
-      setLoading(true);
-      const response = await getBenchmarkProfiles();
-      setProfiles(response.profiles);
-      setError(null);
-    } catch (err: unknown) {
-      setError(getApiErrorMessage(err, 'Failed to load profiles'));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadProfiles();
-  }, [loadProfiles]);
-
-  return { profiles, loading, error, refetch: loadProfiles };
+  return {
+    profiles: query.data ?? [],
+    loading: query.isLoading,
+    error: query.isError ? getApiErrorMessage(query.error, 'Failed to load profiles') : null,
+    refetch: async () => {
+      await query.refetch();
+    },
+  };
 }
 
 /**
  * Hook for getting a single benchmark by ID
  */
 export function useBenchmark(benchmarkId: number | null): UseBenchmarkReturn {
-  const [benchmark, setBenchmark] = useState<BenchmarkResponse | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const query = useQuery({
+    queryKey: queryKeys.benchmark.detail(benchmarkId),
+    queryFn: () => getBenchmark(benchmarkId as number),
+    enabled: benchmarkId !== null,
+  });
 
-  const loadBenchmark = useCallback(async () => {
-    if (benchmarkId === null) return;
-
-    try {
-      setLoading(true);
-      const response = await getBenchmark(benchmarkId);
-      setBenchmark(response);
-      setError(null);
-    } catch (err: unknown) {
-      setError(getApiErrorMessage(err, 'Failed to load benchmark'));
-    } finally {
-      setLoading(false);
-    }
-  }, [benchmarkId]);
-
-  useEffect(() => {
-    if (benchmarkId !== null) {
-      loadBenchmark();
-    } else {
-      setBenchmark(null);
-    }
-  }, [benchmarkId, loadBenchmark]);
-
-  return { benchmark, loading, error, refetch: loadBenchmark };
+  return {
+    benchmark: query.data ?? null,
+    loading: query.isLoading && benchmarkId !== null,
+    error: query.isError ? getApiErrorMessage(query.error, 'Failed to load benchmark') : null,
+    refetch: async () => {
+      await query.refetch();
+    },
+  };
 }
 
 /**
@@ -183,71 +160,41 @@ export function useBenchmarkProgress(
 ): UseBenchmarkProgressReturn {
   const { pollingInterval = 1000, autoStopOnComplete = true } = options;
 
-  const [progress, setProgress] = useState<BenchmarkProgressResponse | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // `isPolling` is the imperative on/off the panel drives; it gates the query's
+  // `enabled`. The query's function `refetchInterval` auto-stops (returns false)
+  // once the benchmark reaches a terminal status when `autoStopOnComplete` is set.
   const [isPolling, setIsPolling] = useState(false);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const fetchProgress = useCallback(async () => {
-    if (benchmarkId === null) return;
-
-    try {
-      const response = await getBenchmarkProgress(benchmarkId);
-      setProgress(response);
-      setError(null);
-
-      // Auto-stop polling when benchmark is complete
-      if (autoStopOnComplete && isCompleteStatus(response.status)) {
-        setIsPolling(false);
-        if (intervalRef.current) {
-          clearInterval(intervalRef.current);
-          intervalRef.current = null;
-        }
+  const query = useQuery({
+    queryKey: queryKeys.benchmark.progress(benchmarkId),
+    queryFn: () => getBenchmarkProgress(benchmarkId as number),
+    enabled: isPolling && benchmarkId !== null,
+    refetchInterval: (q) => {
+      if (autoStopOnComplete) {
+        const status = q.state.data?.status;
+        if (status && isCompleteStatus(status)) return false;
       }
-    } catch (err: unknown) {
-      setError(getApiErrorMessage(err, 'Failed to load progress'));
-    }
-  }, [benchmarkId, autoStopOnComplete]);
+      return pollingInterval;
+    },
+  });
 
   const startPolling = useCallback(() => {
-    if (benchmarkId === null || isPolling) return;
-
+    if (benchmarkId === null) return;
     setIsPolling(true);
-    setLoading(true);
-
-    // Initial fetch
-    fetchProgress().finally(() => setLoading(false));
-
-    // Start interval
-    intervalRef.current = setInterval(fetchProgress, pollingInterval);
-  }, [benchmarkId, isPolling, fetchProgress, pollingInterval]);
+  }, [benchmarkId]);
 
   const stopPolling = useCallback(() => {
     setIsPolling(false);
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
   }, []);
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-    };
-  }, []);
-
-  // Reset when benchmarkId changes
-  useEffect(() => {
-    stopPolling();
-    setProgress(null);
-    setError(null);
-  }, [benchmarkId, stopPolling]);
-
-  return { progress, loading, error, isPolling, startPolling, stopPolling };
+  return {
+    progress: query.data ?? null,
+    loading: query.isLoading && isPolling,
+    error: query.isError ? getApiErrorMessage(query.error, 'Failed to load progress') : null,
+    isPolling,
+    startPolling,
+    stopPolling,
+  };
 }
 
 /**
@@ -257,40 +204,23 @@ export function useBenchmarkHistory(
   pageSize: number = 10,
   diskName?: string
 ): UseBenchmarkHistoryReturn {
-  const [benchmarks, setBenchmarks] = useState<BenchmarkResponse[]>([]);
-  const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
-  const loadHistory = useCallback(async () => {
-    try {
-      setLoading(true);
-      const response = await getBenchmarkHistory(page, pageSize, diskName);
-      setBenchmarks(response.items);
-      setTotal(response.total);
-      setTotalPages(response.total_pages);
-      setError(null);
-    } catch (err: unknown) {
-      setError(getApiErrorMessage(err, 'Failed to load history'));
-    } finally {
-      setLoading(false);
-    }
-  }, [page, pageSize, diskName]);
-
-  useEffect(() => {
-    loadHistory();
-  }, [loadHistory]);
+  const query = useQuery({
+    queryKey: queryKeys.benchmark.history(page, pageSize, diskName ?? null),
+    queryFn: () => getBenchmarkHistory(page, pageSize, diskName),
+  });
 
   return {
-    benchmarks,
-    total,
+    benchmarks: query.data?.items ?? [],
+    total: query.data?.total ?? 0,
     page,
-    totalPages,
-    loading,
-    error,
-    refetch: loadHistory,
+    totalPages: query.data?.total_pages ?? 1,
+    loading: query.isLoading,
+    error: query.isError ? getApiErrorMessage(query.error, 'Failed to load history') : null,
+    refetch: async () => {
+      await query.refetch();
+    },
     setPage,
   };
 }
@@ -299,72 +229,73 @@ export function useBenchmarkHistory(
  * Hook for starting a benchmark
  */
 export function useStartBenchmark(): UseStartBenchmarkReturn {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [benchmark, setBenchmark] = useState<BenchmarkResponse | null>(null);
+  const queryClient = useQueryClient();
+  const mutation = useMutation({
+    mutationFn: (request: BenchmarkStartRequest) => startBenchmark(request),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.benchmark.all() }),
+  });
 
-  const start = useCallback(async (request: BenchmarkStartRequest) => {
-    try {
-      setLoading(true);
-      setError(null);
-      const response = await startBenchmark(request);
-      setBenchmark(response);
-      return response;
-    } catch (err: unknown) {
-      setError(getApiErrorMessage(err, 'Failed to start benchmark'));
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const start = useCallback(
+    (request: BenchmarkStartRequest) => mutation.mutateAsync(request),
+    [mutation],
+  );
 
-  return { start, loading, error, benchmark };
+  return {
+    start,
+    loading: mutation.isPending,
+    error: mutation.isError ? getApiErrorMessage(mutation.error, 'Failed to start benchmark') : null,
+    benchmark: mutation.data ?? null,
+  };
 }
 
 /**
  * Hook for cancelling a benchmark
  */
 export function useCancelBenchmark(): UseCancelBenchmarkReturn {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const mutation = useMutation({
+    mutationFn: (benchmarkId: number) => cancelBenchmark(benchmarkId),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.benchmark.all() }),
+  });
 
-  const cancel = useCallback(async (benchmarkId: number) => {
-    try {
-      setLoading(true);
-      setError(null);
-      await cancelBenchmark(benchmarkId);
-    } catch (err: unknown) {
-      setError(getApiErrorMessage(err, 'Failed to cancel benchmark'));
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const cancel = useCallback(
+    async (benchmarkId: number) => {
+      await mutation.mutateAsync(benchmarkId);
+    },
+    [mutation],
+  );
 
-  return { cancel, loading, error };
+  return {
+    cancel,
+    loading: mutation.isPending,
+    error: mutation.isError ? getApiErrorMessage(mutation.error, 'Failed to cancel benchmark') : null,
+  };
 }
 
 /**
  * Hook for marking a benchmark as failed (admin only)
  */
 export function useMarkBenchmarkFailed(): UseMarkBenchmarkFailedReturn {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const mutation = useMutation({
+    mutationFn: (benchmarkId: number) => markBenchmarkFailed(benchmarkId),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.benchmark.all() }),
+  });
 
-  const markFailed = useCallback(async (benchmarkId: number) => {
-    try {
-      setLoading(true);
-      setError(null);
-      await markBenchmarkFailed(benchmarkId);
-    } catch (err: unknown) {
-      setError(getApiErrorMessage(err, 'Failed to mark benchmark as failed'));
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const markFailed = useCallback(
+    async (benchmarkId: number) => {
+      await mutation.mutateAsync(benchmarkId);
+    },
+    [mutation],
+  );
 
-  return { markFailed, loading, error };
+  return {
+    markFailed,
+    loading: mutation.isPending,
+    error: mutation.isError
+      ? getApiErrorMessage(mutation.error, 'Failed to mark benchmark as failed')
+      : null,
+  };
 }
 
 // ===== Helper Functions =====
