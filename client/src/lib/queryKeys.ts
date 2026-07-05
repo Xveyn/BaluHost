@@ -111,6 +111,17 @@ export const queryKeys = {
     chart: (deviceId: number | null, window: string) =>
       ['energy', 'chart', deviceId, window] as const,
   },
+  powerTab: {
+    /** SystemMonitor PowerTab: smart-device list + power summary (5s poll). */
+    summary: () => ['power-tab', 'summary'] as const,
+    /** Cumulative energy for the chart; device + resolved period/range in the key. */
+    cumulative: (
+      deviceId: number | null,
+      period: string,
+      start: string | null,
+      end: string | null,
+    ) => ['power-tab', 'cumulative', deviceId, period, start, end] as const,
+  },
   pihole: {
     /** Domain-Prefix. */
     all: () => ['pihole'] as const,

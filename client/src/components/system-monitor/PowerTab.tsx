@@ -2,7 +2,8 @@
  * PowerTab -- Power/energy monitoring tab with smart device integration.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import {
@@ -21,18 +22,18 @@ import { getApiErrorMessage } from '../../lib/errorHandling';
 import { formatTimeForRange, parseUtcTimestamp, localRangeToUtcIso } from '../../lib/dateUtils';
 import type { ChartTimeRange } from '../../lib/dateUtils';
 import { smartDevicesApi } from '../../api/smart-devices';
-import type { SmartDevice, PowerSummary } from '../../api/smart-devices';
 import {
   getEnergyPriceConfig,
   updateEnergyPriceConfig,
   getCumulativeEnergy,
   getCumulativeEnergyTotal,
   type EnergyPriceConfig,
-  type CumulativeEnergyResponse,
 } from '../../api/energy';
 import { StatCard } from '../ui/StatCard';
 import { PluginBadge } from '../ui/PluginBadge';
 import { formatNumber } from '../../lib/formatters';
+import { queryKeys } from '../../lib/queryKeys';
+import { resolveCumulativeArgs } from '../../lib/energyPolling';
 import { usePlugins } from '../../contexts/PluginContext';
 
 type CumulativePeriod = 'today' | 'week' | 'month' | 'custom';
@@ -41,21 +42,16 @@ type ChartMode = 'cumulative' | 'instant';
 export function PowerTab() {
   const { t, i18n } = useTranslation(['system', 'common']);
   const { plugins } = usePlugins();
-  const [devices, setDevices] = useState<SmartDevice[]>([]);
-  const [powerSummary, setPowerSummary] = useState<PowerSummary | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
-  // Energy price config state
+  // Energy price config state (fetched once on mount; edited locally)
   const [priceConfig, setPriceConfig] = useState<EnergyPriceConfig | null>(null);
   const [editingPrice, setEditingPrice] = useState(false);
   const [priceInput, setPriceInput] = useState('');
   const [savingPrice, setSavingPrice] = useState(false);
 
-  // Cumulative energy state
+  // Chart selection state
   const [cumulativePeriod, setCumulativePeriod] = useState<CumulativePeriod>('today');
-  const [cumulativeData, setCumulativeData] = useState<CumulativeEnergyResponse | null>(null);
-  const [cumulativeLoading, setCumulativeLoading] = useState(false);
   const [selectedDeviceId, setSelectedDeviceId] = useState<number | null>(null);
   const [chartMode, setChartMode] = useState<ChartMode>('cumulative');
 
@@ -66,42 +62,54 @@ export function PowerTab() {
   const [draftStart, setDraftStart] = useState('');
   const [draftEnd, setDraftEnd] = useState('');
 
-  // Derive the API args (period vs. custom start/end) for the active selection.
-  // Shared by the polling effect and the price-edit refresh so they never drift.
-  const resolveRangeArgs = useCallback((): {
-    period: 'today' | 'week' | 'month';
-    start?: string;
-    end?: string;
-  } => {
-    const isCustom = cumulativePeriod === 'custom';
-    return {
-      period: (isCustom ? 'today' : cumulativePeriod) as 'today' | 'week' | 'month',
-      start: isCustom ? customStart ?? undefined : undefined,
-      end: isCustom ? customEnd ?? undefined : undefined,
-    };
-  }, [cumulativePeriod, customStart, customEnd]);
-
-  const fetchPower = useCallback(async () => {
-    try {
+  // Devices + power summary — query-backed (#299), 5s poll (per-device live watts
+  // come from the device list). A 404 (no power plugin) is swallowed like before;
+  // the last successful data is retained on any error.
+  const powerQuery = useQuery({
+    queryKey: queryKeys.powerTab.summary(),
+    queryFn: async () => {
       const [listRes, summaryRes] = await Promise.all([
         smartDevicesApi.list(),
         smartDevicesApi.getPowerSummary(),
       ]);
-      // Filter to devices with power_monitor capability
-      const powerDevices = listRes.data.devices.filter(d => d.capabilities?.includes('power_monitor'));
-      setDevices(powerDevices);
-      setPowerSummary(summaryRes.data);
-      setError(null);
-    } catch (err: unknown) {
-      const isAxiosLike = err != null && typeof err === 'object' && 'response' in err;
-      const status = isAxiosLike ? (err as { response?: { status?: number } }).response?.status : undefined;
-      if (status !== 404) {
-        setError(getApiErrorMessage(err, 'Failed to load power data'));
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+      const powerDevices = listRes.data.devices.filter((d) => d.capabilities?.includes('power_monitor'));
+      return { devices: powerDevices, powerSummary: summaryRes.data };
+    },
+    refetchInterval: 5000,
+  });
+  const devices = powerQuery.data?.devices ?? [];
+  const powerSummary = powerQuery.data?.powerSummary ?? null;
+  const loading = powerQuery.isLoading;
+  const errorStatus =
+    powerQuery.error && typeof powerQuery.error === 'object' && 'response' in powerQuery.error
+      ? (powerQuery.error as { response?: { status?: number } }).response?.status
+      : undefined;
+  const error =
+    powerQuery.isError && errorStatus !== 404
+      ? getApiErrorMessage(powerQuery.error, 'Failed to load power data')
+      : null;
+
+  // Cumulative energy — query-backed 60s poll. `resolveCumulativeArgs` (tested)
+  // maps the custom range; a custom period with nothing applied stays disabled.
+  const rangeArgs = resolveCumulativeArgs(cumulativePeriod, customStart, customEnd);
+  const cumulativeReady = !(cumulativePeriod === 'custom' && (!rangeArgs.start || !rangeArgs.end));
+  const cumulativeQuery = useQuery({
+    queryKey: queryKeys.powerTab.cumulative(
+      selectedDeviceId,
+      rangeArgs.period,
+      rangeArgs.start ?? null,
+      rangeArgs.end ?? null,
+    ),
+    queryFn: () =>
+      selectedDeviceId === null
+        ? getCumulativeEnergyTotal(rangeArgs.period, rangeArgs.start, rangeArgs.end)
+        : getCumulativeEnergy(selectedDeviceId, rangeArgs.period, rangeArgs.start, rangeArgs.end),
+    enabled: cumulativeReady,
+    refetchInterval: 60000,
+  });
+  const cumulativeData = cumulativeQuery.data ?? null;
+  // First-load spinner only — the old code re-showed it on every 60s poll.
+  const cumulativeLoading = cumulativeQuery.isLoading;
 
   // Fetch price config on mount
   useEffect(() => {
@@ -116,34 +124,6 @@ export function PowerTab() {
     };
     fetchPriceConfig();
   }, []);
-
-  // Fetch cumulative data with separate interval (60s - matches DB write interval)
-  useEffect(() => {
-    const { period, start, end } = resolveRangeArgs();
-    if (cumulativePeriod === 'custom' && (!start || !end)) {
-      return; // nothing applied yet
-    }
-    const fetchCumulative = async () => {
-      setCumulativeLoading(true);
-      try {
-        const data = selectedDeviceId === null
-          ? await getCumulativeEnergyTotal(period, start, end)
-          : await getCumulativeEnergy(selectedDeviceId, period, start, end);
-        setCumulativeData(data);
-      } catch {
-        // Non-critical: cumulative data will remain null
-      } finally {
-        setCumulativeLoading(false);
-      }
-    };
-
-    // Initial fetch
-    fetchCumulative();
-
-    // Separate interval: 60 seconds (matches DB write interval)
-    const interval = setInterval(fetchCumulative, 60000);
-    return () => clearInterval(interval);
-  }, [selectedDeviceId, cumulativePeriod, resolveRangeArgs]);
 
   const handleSavePrice = async () => {
     const newPrice = parseFloat(priceInput);
@@ -161,24 +141,21 @@ export function PowerTab() {
       setPriceConfig(updated);
       setEditingPrice(false);
       toast.success(t('monitor.power.priceUpdated'));
-      // Refresh cumulative data with new price (respect an active custom range)
-      const { period, start, end } = resolveRangeArgs();
-      const refreshData = selectedDeviceId === null
-        ? getCumulativeEnergyTotal(period, start, end)
-        : getCumulativeEnergy(selectedDeviceId, period, start, end);
-      setCumulativeData(await refreshData);
+      // Refresh cumulative data with the new price (active range key).
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.powerTab.cumulative(
+          selectedDeviceId,
+          rangeArgs.period,
+          rangeArgs.start ?? null,
+          rangeArgs.end ?? null,
+        ),
+      });
     } catch (err: unknown) {
       toast.error(getApiErrorMessage(err, t('monitor.power.saveError')));
     } finally {
       setSavingPrice(false);
     }
   };
-
-  useEffect(() => {
-    fetchPower();
-    const interval = setInterval(fetchPower, 5000);
-    return () => clearInterval(interval);
-  }, [fetchPower]);
 
   const totalCurrentPower = powerSummary?.total_watts ?? 0;
   const powerPluginName = devices.length > 0
