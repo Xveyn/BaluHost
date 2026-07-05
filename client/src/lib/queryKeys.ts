@@ -103,6 +103,14 @@ export const queryKeys = {
     /** Combined GPU-power status + config + capabilities for the power card. */
     overview: () => ['gpu-power', 'overview'] as const,
   },
+  energy: {
+    /** EnergyMonitor dashboard + cost estimates; deviceId + costPerKwh in the key. */
+    dashboard: (deviceId: number | null, costPerKwh: number) =>
+      ['energy', 'dashboard', deviceId, costPerKwh] as const,
+    /** EnergyMonitor chart series; deviceId + time window in the key. */
+    chart: (deviceId: number | null, window: string) =>
+      ['energy', 'chart', deviceId, window] as const,
+  },
   pihole: {
     /** Domain-Prefix. */
     all: () => ['pihole'] as const,
