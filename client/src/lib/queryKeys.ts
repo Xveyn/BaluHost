@@ -95,6 +95,14 @@ export const queryKeys = {
   gpu: {
     current: () => ['gpu', 'current'] as const,
   },
+  pihole: {
+    /** Domain-Prefix. */
+    all: () => ['pihole'] as const,
+    /** Aggregate overview (status + summary + top domains/clients + history). */
+    overview: () => ['pihole', 'overview'] as const,
+    failoverStatus: () => ['pihole', 'failover-status'] as const,
+    collectorStatus: () => ['pihole', 'collector-status'] as const,
+  },
   fans: {
     status: () => ['fans', 'status'] as const,
     /** Combined fan status + permission for the fan-control page. */

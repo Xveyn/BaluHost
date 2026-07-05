@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
 import { Shield, ShieldOff, Clock, Server, ArrowRightLeft } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { useQuery } from '@tanstack/react-query';
 import { formatUptime } from '../../lib/formatters';
-import type { PiholeStatus, FailoverStatus } from '../../api/pihole';
+import type { PiholeStatus } from '../../api/pihole';
 import { getFailoverStatus } from '../../api/pihole';
+import { queryKeys } from '../../lib/queryKeys';
 
 interface PiholeStatusBarProps {
   status: PiholeStatus;
@@ -13,15 +14,12 @@ interface PiholeStatusBarProps {
 
 export default function PiholeStatusBar({ status, onBlockingToggle, loading }: PiholeStatusBarProps) {
   const { t } = useTranslation('pihole');
-  const [failover, setFailover] = useState<FailoverStatus | null>(null);
-
-  useEffect(() => {
-    getFailoverStatus().then(setFailover).catch(() => {});
-    const interval = setInterval(() => {
-      getFailoverStatus().then(setFailover).catch(() => {});
-    }, 30000);
-    return () => clearInterval(interval);
-  }, []);
+  // Query-backed (#299): 30s failover poll; errors keep the last value (null).
+  const { data: failover = null } = useQuery({
+    queryKey: queryKeys.pihole.failoverStatus(),
+    queryFn: getFailoverStatus,
+    refetchInterval: 30000,
+  });
 
   const statusColor =
     status.container_status === 'running'

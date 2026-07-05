@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
 import {
@@ -29,6 +30,8 @@ import {
   type ClientEntry,
   type HistoryEntry,
 } from '../api/pihole';
+import { queryKeys } from '../lib/queryKeys';
+import { getApiErrorMessage } from '../lib/errorHandling';
 import PiholeStatusBar from '../components/pihole/PiholeStatusBar';
 import PiholeSummaryCards from '../components/pihole/PiholeSummaryCards';
 import PiholeQueryTimeline from '../components/pihole/PiholeQueryTimeline';
@@ -76,66 +79,104 @@ const TABS: TabConfig[] = [
   { key: 'container', labelKey: 'tabs.container', icon: <Terminal className="h-4 w-4" /> },
 ];
 
+interface PiholeOverview {
+  status: PiholeStatus;
+  summary: PiholeSummary | null;
+  topPermitted: DomainEntry[];
+  topBlocked: DomainEntry[];
+  topClients: ClientEntry[];
+  history: HistoryEntry[];
+  /** True when status loaded but the statistics fan-out failed. */
+  statsError: boolean;
+  statsErrorMsg: string;
+}
+
+/**
+ * Aggregate overview fetch (#299) — one query replaces the old 30s setInterval.
+ * A statistics-fan-out failure does NOT reject (status still renders); it is
+ * surfaced via `statsError`. A status failure rejects → the query goes to error.
+ */
+async function fetchPiholeOverview(): Promise<PiholeOverview> {
+  const status = await getPiholeStatus();
+  const empty = { summary: null, topPermitted: [], topBlocked: [], topClients: [], history: [] };
+  if (!status.connected) {
+    return { status, ...empty, statsError: false, statsErrorMsg: '' };
+  }
+  try {
+    const [summaryData, domainsData, blockedData, clientsData, historyData] = await Promise.all([
+      getPiholeSummary(),
+      getTopDomains(10),
+      getTopBlocked(10),
+      getTopClients(10),
+      getHistory(),
+    ]);
+    return {
+      status,
+      summary: summaryData,
+      topPermitted: domainsData.top_permitted,
+      topBlocked: blockedData.top_blocked,
+      topClients: clientsData.top_clients,
+      history: historyData.history,
+      statsError: false,
+      statsErrorMsg: '',
+    };
+  } catch (err) {
+    return { status, ...empty, statsError: true, statsErrorMsg: getApiErrorMessage(err, '') };
+  }
+}
+
 export default function PiholePage() {
   const { t } = useTranslation('pihole');
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<Tab>('overview');
-  const [status, setStatus] = useState<PiholeStatus | null>(null);
-  const [summary, setSummary] = useState<PiholeSummary | null>(null);
-  const [topPermitted, setTopPermitted] = useState<DomainEntry[]>([]);
-  const [topBlocked, setTopBlocked] = useState<DomainEntry[]>([]);
-  const [topClients, setTopClients] = useState<ClientEntry[]>([]);
-  const [history, setHistory] = useState<HistoryEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [fetchError, setFetchError] = useState(false);
 
-  const fetchOverview = useCallback(async () => {
-    setLoading(true);
-    try {
-      const statusData = await getPiholeStatus();
-      setStatus(statusData);
-      setFetchError(false);
+  // Query-backed (#299): the single 30s aggregate poll. `isLoading` gates the
+  // first-load skeletons only (the old code flashed them on every poll).
+  const { data, isLoading: loading, isError, error } = useQuery({
+    queryKey: queryKeys.pihole.overview(),
+    queryFn: fetchPiholeOverview,
+    refetchInterval: 30000,
+  });
 
-      if (statusData.connected) {
-        try {
-          const [summaryData, domainsData, blockedData, clientsData, historyData] = await Promise.all([
-            getPiholeSummary(),
-            getTopDomains(10),
-            getTopBlocked(10),
-            getTopClients(10),
-            getHistory(),
-          ]);
-          setSummary(summaryData);
-          setTopPermitted(domainsData.top_permitted);
-          setTopBlocked(blockedData.top_blocked);
-          setTopClients(clientsData.top_clients);
-          setHistory(historyData.history);
-        } catch (err: any) {
-          toast.error(err?.response?.data?.detail || t('states.loadFailedStatistics'));
-        }
-      }
-    } catch (err: any) {
-      setFetchError(true);
-      toast.error(err?.response?.data?.detail || t('states.loadFailedData'));
-    } finally {
-      setLoading(false);
-    }
-  }, [t]);
+  const status = data?.status ?? null;
+  const summary = data?.summary ?? null;
+  const topPermitted = data?.topPermitted ?? [];
+  const topBlocked = data?.topBlocked ?? [];
+  const topClients = data?.topClients ?? [];
+  const history = data?.history ?? [];
+  const fetchError = isError;
 
+  // Toast once per error-onset (not on every poll like the old code). Preserves
+  // the FastAPI detail via getApiErrorMessage.
+  const prevFetchError = useRef(false);
   useEffect(() => {
-    fetchOverview();
-    const interval = setInterval(fetchOverview, 30000);
-    return () => clearInterval(interval);
-  }, [fetchOverview]);
-
-  const handleBlockingToggle = async (enabled: boolean) => {
-    try {
-      await setBlocking(enabled);
-      setStatus((prev) => (prev ? { ...prev, blocking_enabled: enabled } : prev));
-      toast.success(enabled ? t('status.blockingOn') : t('status.blockingOff'));
-    } catch (err: any) {
-      toast.error(err?.response?.data?.detail || t('status.blockingToggleFailed'));
+    if (isError && !prevFetchError.current) {
+      toast.error(getApiErrorMessage(error, t('states.loadFailedData')));
     }
-  };
+    prevFetchError.current = isError;
+  }, [isError, error, t]);
+
+  const statsError = data?.statsError ?? false;
+  const prevStatsError = useRef(false);
+  useEffect(() => {
+    if (statsError && !prevStatsError.current) {
+      toast.error(data?.statsErrorMsg || t('states.loadFailedStatistics'));
+    }
+    prevStatsError.current = statsError;
+  }, [statsError, data?.statsErrorMsg, t]);
+
+  const blockingMutation = useMutation({
+    mutationFn: (enabled: boolean) => setBlocking(enabled),
+    onSuccess: (_res, enabled) => {
+      // Optimistically patch the cached status so the toggle reflects immediately.
+      queryClient.setQueryData<PiholeOverview>(queryKeys.pihole.overview(), (prev) =>
+        prev ? { ...prev, status: { ...prev.status, blocking_enabled: enabled } } : prev,
+      );
+      toast.success(enabled ? t('status.blockingOn') : t('status.blockingOff'));
+    },
+    onError: (err) => toast.error(getApiErrorMessage(err, t('status.blockingToggleFailed'))),
+  });
+  const handleBlockingToggle = (enabled: boolean) => blockingMutation.mutate(enabled);
 
   const unreachableMessage =
     status?.mode === 'docker'
