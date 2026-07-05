@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useQuery } from '@tanstack/react-query';
 import { Eye, EyeOff, Copy } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Modal } from '../ui/Modal';
 import { getTokenStatus } from '../../api/mobile';
 import type { MobileRegistrationToken } from '../../api/mobile';
+import { queryKeys } from '../../lib/queryKeys';
 
 const POLL_INTERVAL_MS = 3000;
 
@@ -16,35 +18,28 @@ interface QrCodeDialogProps {
 export function QrCodeDialog({ data, onClose }: QrCodeDialogProps) {
   const { t } = useTranslation(['devices']);
   const [showToken, setShowToken] = useState(false);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
 
-  // Poll token status while dialog is open
+  // Poll token status while the dialog is open — query-backed (#299): the
+  // `refetchInterval` polls every 3s and stops once the token is used. Polling
+  // errors (expired token / network) are swallowed (query stays pending → keeps
+  // polling), matching the old silent catch.
+  const { data: tokenStatus } = useQuery({
+    queryKey: queryKeys.mobile.tokenStatus(data?.token ?? ''),
+    queryFn: () => getTokenStatus(data!.token),
+    enabled: !!data,
+    refetchInterval: (query) => (query.state.data?.used ? false : POLL_INTERVAL_MS),
+  });
+
+  // Device registered — close dialog and notify (fires once on the used flip).
+  const used = tokenStatus?.used ?? false;
   useEffect(() => {
-    if (!data) return;
-
-    const poll = async () => {
-      try {
-        const { used } = await getTokenStatus(data.token);
-        if (used) {
-          // Device registered — close dialog and notify
-          if (intervalRef.current) clearInterval(intervalRef.current);
-          toast.success(t('qrDialog.deviceRegistered', 'Gerät erfolgreich verbunden!'));
-          setShowToken(false);
-          onCloseRef.current();
-        }
-      } catch {
-        // Silently ignore polling errors (e.g. token expired, network issues)
-      }
-    };
-
-    intervalRef.current = setInterval(poll, POLL_INTERVAL_MS);
-
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
-  }, [data, t]);
+    if (!used) return;
+    toast.success(t('qrDialog.deviceRegistered', 'Gerät erfolgreich verbunden!'));
+    setShowToken(false);
+    onCloseRef.current();
+  }, [used, t]);
 
   const handleClose = () => {
     setShowToken(false);

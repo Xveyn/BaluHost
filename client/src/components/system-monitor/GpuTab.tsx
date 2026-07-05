@@ -1,19 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  getGpuCurrent,
   getGpuHistory,
   type GpuSample,
   type TimeRange,
 } from '../../api/monitoring';
 import { useGpuPresence } from '../../hooks/useGpuPresence';
+import { useGpuCurrent } from '../../hooks/useGpuCurrent';
 import { MetricChart } from '../monitoring';
 
 interface Props {
   timeRange: TimeRange;
 }
-
-const POLL_MS = 3000;
 
 function formatBytes(n: number | null): string {
   if (n == null) return '—';
@@ -43,7 +41,9 @@ export function GpuTab({ timeRange }: Props) {
   const { t } = useTranslation('system');
   const { info } = useGpuPresence();
 
-  const [current, setCurrent] = useState<GpuSample | null>(null);
+  // Current sample: shared `gpu.current` query (#299) — same cache/poll as the
+  // dashboard GPU widget. History stays a per-timeRange one-shot fetch.
+  const current = useGpuCurrent();
   const [history, setHistory] = useState<GpuSample[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
   const [engineView, setEngineView] = useState<'overview' | 'per-engine'>('overview');
@@ -56,19 +56,6 @@ export function GpuTab({ timeRange }: Props) {
         usage: s.usage_percent ?? 0,
       }));
   }, [history]);
-
-  useEffect(() => {
-    let cancelled = false;
-    const tick = async () => {
-      try {
-        const c = await getGpuCurrent();
-        if (!cancelled) setCurrent(c);
-      } catch { /* ignore transient errors */ }
-    };
-    tick();
-    const id = setInterval(tick, POLL_MS);
-    return () => { cancelled = true; clearInterval(id); };
-  }, []);
 
   useEffect(() => {
     let cancelled = false;

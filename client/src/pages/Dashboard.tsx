@@ -5,9 +5,9 @@ import { useAuth } from '../contexts/AuthContext';
 import { useSystemTelemetry } from '../hooks/useSystemTelemetry';
 import { useSmartData } from '../hooks/useSmartData';
 import { useGpuPresence } from '../hooks/useGpuPresence';
+import { useGpuCurrent } from '../hooks/useGpuCurrent';
 import { useRaidStatus } from '../hooks/useRaidStatus';
 import { getSystemMode } from '../api/system';
-import { getGpuCurrent, type GpuSample } from '../api/monitoring';
 import { useNextMaintenance } from '../hooks/useNextMaintenance';
 import { useServicesSummary } from '../hooks/useServicesSummary';
 import { useLiveActivities } from '../hooks/useLiveActivities';
@@ -58,24 +58,9 @@ export default function Dashboard() {
   const [smartMode, setSmartMode] = useState<string | null>(null);
   const [smartModeLoading, setSmartModeLoading] = useState(false);
 
-  // GPU presence + polling
+  // GPU presence + polling — shared `gpu.current` query (#299), gated on presence
   const { present: hasGpu, info: gpuInfo } = useGpuPresence();
-  const [gpuSample, setGpuSample] = useState<GpuSample | null>(null);
-  useEffect(() => {
-    if (!hasGpu) return;
-    let cancelled = false;
-    const tick = async () => {
-      try {
-        const s = await getGpuCurrent();
-        if (!cancelled) setGpuSample(s);
-      } catch {
-        /* keep last value on transient failure */
-      }
-    };
-    tick();
-    const id = setInterval(tick, 3000);
-    return () => { cancelled = true; clearInterval(id); };
-  }, [hasGpu]);
+  const gpuSample = useGpuCurrent(hasGpu);
 
   // Hooks for alert generation
   const { allSchedulers } = useNextMaintenance();

@@ -2,10 +2,13 @@
  * Connected Devices Widget for Dashboard
  * Shows mobile and desktop device counts
  */
-import React, { useState, useEffect, useCallback } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { useQuery } from '@tanstack/react-query';
 import { getAllDevices, type Device } from '../../api/devices';
+import { queryKeys } from '../../lib/queryKeys';
+import { getApiErrorMessage } from '../../lib/errorHandling';
 import { Smartphone, Monitor, Wifi, WifiOff } from 'lucide-react';
 
 interface DeviceSummary {
@@ -22,35 +25,27 @@ interface ConnectedDevicesWidgetProps {
 export const ConnectedDevicesWidget: React.FC<ConnectedDevicesWidgetProps> = ({ className = '' }) => {
   const { t } = useTranslation(['dashboard', 'common']);
   const navigate = useNavigate();
-  const [devices, setDevices] = useState<Device[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // Query-backed (#299): shares the `devices.list()` cache/poll with the
+  // device-management page. A 403 (user lacks the permission) is treated as
+  // "no devices" rather than an error, matching the old hand-rolled catch.
+  const {
+    data: devicesData,
+    isLoading: loading,
+    isError,
+    error: queryError,
+  } = useQuery({
+    queryKey: queryKeys.devices.list(),
+    queryFn: getAllDevices,
+    refetchInterval: 60000,
+  });
 
-  const loadData = useCallback(async () => {
-    try {
-      const response = await getAllDevices();
-      setDevices(response);
-      setError(null);
-    } catch (err: unknown) {
-      // Don't show error for 403 (user may not have permission)
-      const msg = err instanceof Error ? err.message : '';
-      if (msg.includes('403') || msg.includes('Forbidden')) {
-        setDevices([]);
-        setError(null);
-        return;
-      }
-      setError(msg || 'Failed to load devices');
-    }
-  }, []);
-
-  useEffect(() => {
-    setLoading(true);
-    loadData().finally(() => setLoading(false));
-
-    // Refresh every 60 seconds
-    const interval = setInterval(loadData, 60000);
-    return () => clearInterval(interval);
-  }, [loadData]);
+  const errorMessage = getApiErrorMessage(queryError, '');
+  const isForbidden = errorMessage.includes('403') || errorMessage.includes('Forbidden');
+  const error = isError && !isForbidden ? errorMessage || 'Failed to load devices' : null;
+  const devices: Device[] = React.useMemo(
+    () => (error ? [] : devicesData ?? []),
+    [error, devicesData],
+  );
 
   const handleViewDevices = () => {
     navigate('/sync-prototype');

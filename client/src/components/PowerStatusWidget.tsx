@@ -5,15 +5,15 @@
  * Shows current profile, frequency, and active demand count.
  */
 
-import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { useQuery } from '@tanstack/react-query';
 import {
   getPowerStatus,
   PROFILE_INFO,
-  type PowerStatusResponse,
   type PowerProfile,
 } from '../api/power-management';
+import { queryKeys } from '../lib/queryKeys';
 import { formatNumber } from '../lib/formatters';
 
 const REFRESH_INTERVAL_MS = 10000;
@@ -52,27 +52,19 @@ interface PowerStatusWidgetProps {
 
 export default function PowerStatusWidget({ className = '' }: PowerStatusWidgetProps) {
   const { t } = useTranslation('system');
-  const [status, setStatus] = useState<PowerStatusResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // Query-backed (#299): shares the `power.status()` cache/poll with the
+  // dashboard live-activity feed. `refetchInterval` replaces the setInterval.
+  const {
+    data: status = null,
+    isLoading: loading,
+    isError,
+  } = useQuery({
+    queryKey: queryKeys.power.status(),
+    queryFn: getPowerStatus,
+    refetchInterval: REFRESH_INTERVAL_MS,
+  });
 
-  useEffect(() => {
-    const loadStatus = async () => {
-      try {
-        const data = await getPowerStatus();
-        setStatus(data);
-        setError(null);
-      } catch {
-        setError(t('powerStatus.loadFailed'));
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    void loadStatus();
-    const interval = setInterval(() => void loadStatus(), REFRESH_INTERVAL_MS);
-    return () => clearInterval(interval);
-  }, []);
+  const error = isError ? t('powerStatus.loadFailed') : null;
 
   if (loading) {
     return (
