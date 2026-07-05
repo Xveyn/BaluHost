@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Database, RefreshCw, Power, PowerOff } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
@@ -7,62 +8,68 @@ import {
   updateCollectorConfig,
   type QueryCollectorStatus as CollectorStatus,
 } from '../../api/pihole';
+import { queryKeys } from '../../lib/queryKeys';
+import { getApiErrorMessage } from '../../lib/errorHandling';
 
 export default function QueryCollectorStatus() {
   const { t } = useTranslation('pihole');
-  const [status, setStatus] = useState<CollectorStatus | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const queryClient = useQueryClient();
+
+  // Query-backed (#299): 15s status poll. Errors are swallowed (collector may
+  // not be initialized yet) → status stays null and the component renders null.
+  const { data: status = null, isLoading: loading } = useQuery({
+    queryKey: queryKeys.pihole.collectorStatus(),
+    queryFn: getCollectorStatus,
+    refetchInterval: 15000,
+  });
+
   const [pollInterval, setPollInterval] = useState(30);
   const [retentionDays, setRetentionDays] = useState(30);
 
-  const fetchStatus = async () => {
-    try {
-      const data = await getCollectorStatus();
-      setStatus(data);
+  // Seed the editable form from the config ONCE on first load (dirty-guard): the
+  // old code re-synced these fields on every 15s poll, clobbering in-progress
+  // edits. A save re-seeds via the mutation below.
+  const seededRef = useRef(false);
+  useEffect(() => {
+    if (status && !seededRef.current) {
+      seededRef.current = true;
+      setPollInterval(status.poll_interval_seconds);
+      setRetentionDays(status.retention_days);
+    }
+  }, [status]);
+
+  const applyConfig = (data: CollectorStatus) => {
+    queryClient.setQueryData(queryKeys.pihole.collectorStatus(), data);
+  };
+
+  const toggleMutation = useMutation({
+    mutationFn: () => updateCollectorConfig({ is_enabled: !status!.is_enabled }),
+    onSuccess: (data) => {
+      applyConfig(data);
+      toast.success(data.is_enabled ? t('collector.enabledToast') : t('collector.disabledToast'));
+    },
+    onError: (err) => toast.error(getApiErrorMessage(err, t('collector.updateFailed'))),
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: () =>
+      updateCollectorConfig({ poll_interval_seconds: pollInterval, retention_days: retentionDays }),
+    onSuccess: (data) => {
+      applyConfig(data);
       setPollInterval(data.poll_interval_seconds);
       setRetentionDays(data.retention_days);
-    } catch {
-      // Silently fail — collector might not be initialized yet
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchStatus();
-    const interval = setInterval(fetchStatus, 15000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const handleToggle = async () => {
-    if (!status) return;
-    setSaving(true);
-    try {
-      const data = await updateCollectorConfig({ is_enabled: !status.is_enabled });
-      setStatus(data);
-      toast.success(data.is_enabled ? t('collector.enabledToast') : t('collector.disabledToast'));
-    } catch (err: any) {
-      toast.error(err?.response?.data?.detail || t('collector.updateFailed'));
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      const data = await updateCollectorConfig({
-        poll_interval_seconds: pollInterval,
-        retention_days: retentionDays,
-      });
-      setStatus(data);
       toast.success(t('collector.savedToast'));
-    } catch (err: any) {
-      toast.error(err?.response?.data?.detail || t('collector.saveFailed'));
-    } finally {
-      setSaving(false);
-    }
+    },
+    onError: (err) => toast.error(getApiErrorMessage(err, t('collector.saveFailed'))),
+  });
+
+  const saving = toggleMutation.isPending || saveMutation.isPending;
+  const handleToggle = () => {
+    if (!status) return;
+    toggleMutation.mutate();
+  };
+  const handleSave = () => {
+    saveMutation.mutate();
   };
 
   if (loading) {
