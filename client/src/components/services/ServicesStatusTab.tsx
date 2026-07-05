@@ -1,16 +1,11 @@
-import { useState, useEffect, useCallback } from 'react';
-import { getApiErrorMessage } from '../../lib/errorHandling';
 import { RefreshCw, Server, AlertTriangle, CheckCircle, StopCircle, Settings } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import ServiceStatusCard from './ServiceStatusCard';
 import DependencyList from './DependencyList';
 import AppMetrics from './AppMetrics';
-import {
-  getDebugSnapshot,
-  ServiceState,
-  type AdminDebugSnapshot,
-} from '../../api/service-status';
+import { ServiceState } from '../../api/service-status';
+import { useDebugSnapshot } from '../../hooks/useServiceStatus';
 
 interface ServicesStatusTabProps {
   isAdmin?: boolean;
@@ -23,35 +18,13 @@ interface ServicesStatusTabProps {
  */
 export default function ServicesStatusTab({ isAdmin = false }: ServicesStatusTabProps) {
   const { t } = useTranslation(['system', 'common']);
-  const [snapshot, setSnapshot] = useState<AdminDebugSnapshot | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
+  // Query-backed (#299): shares the `services.debugSnapshot()` cache/poll with
+  // the admin ServicesTab; `refetchInterval` replaces the hand-rolled setInterval.
+  const { snapshot, isLoading, isFetching, error, lastUpdated: lastRefresh, refetch } =
+    useDebugSnapshot();
 
-  const fetchData = useCallback(async () => {
-    try {
-      setError(null);
-      const data = await getDebugSnapshot();
-      setSnapshot(data);
-      setLastRefresh(new Date());
-    } catch (err: unknown) {
-      setError(getApiErrorMessage(err, 'Failed to load service status'));
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchData();
-
-    // Refresh every 10 seconds
-    const interval = setInterval(fetchData, 10000);
-    return () => clearInterval(interval);
-  }, [fetchData]);
-
-  const handleRefresh = async () => {
-    setIsLoading(true);
-    await fetchData();
+  const handleRefresh = () => {
+    void refetch();
   };
 
   if (isLoading && !snapshot) {
@@ -107,10 +80,10 @@ export default function ServicesStatusTab({ isAdmin = false }: ServicesStatusTab
         </div>
         <button
           onClick={handleRefresh}
-          disabled={isLoading}
+          disabled={isFetching}
           className="px-4 py-2 flex items-center gap-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors disabled:opacity-50"
         >
-          <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+          <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin' : ''}`} />
           {t('system:services.refresh')}
         </button>
       </div>

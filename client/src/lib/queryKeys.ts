@@ -58,7 +58,11 @@ export const queryKeys = {
     article: (slug: string, lang: string) => ['docs', 'article', slug, lang] as const,
   },
   services: {
+    /** Domain-Prefix — invalidiert summary + debugSnapshot (Control-Mutations betreffen beide). */
+    all: () => ['services'] as const,
     summary: () => ['services', 'summary'] as const,
+    /** Full admin debug snapshot (services + dependencies + metrics), `/api/admin/debug`. */
+    debugSnapshot: () => ['services', 'debug-snapshot'] as const,
   },
   users: {
     /** Domain-Prefix — invalidiert alle users-Reads (CRUD-Mutations). */

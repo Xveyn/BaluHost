@@ -1,19 +1,10 @@
-import { useState, useEffect, useCallback } from 'react';
 import { RefreshCw, Server, AlertTriangle, CheckCircle, StopCircle } from 'lucide-react';
-import toast from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
 import ServiceCard from './ServiceCard';
 import DependencyList from './DependencyList';
 import AppMetrics from './AppMetrics';
-import { getApiErrorMessage } from '../../lib/errorHandling';
-import {
-  getDebugSnapshot,
-  restartService,
-  stopService,
-  startService,
-  ServiceState,
-  type AdminDebugSnapshot,
-} from '../../api/service-status';
+import { ServiceState } from '../../api/service-status';
+import { useDebugSnapshot, useServiceControls } from '../../hooks/useServiceStatus';
 
 interface ServicesTabProps {
   isAdmin: boolean;
@@ -21,86 +12,16 @@ interface ServicesTabProps {
 
 export default function ServicesTab({ isAdmin }: ServicesTabProps) {
   const { t } = useTranslation(['system', 'common']);
-  const [snapshot, setSnapshot] = useState<AdminDebugSnapshot | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
+  // Query-backed (#299): shares the `services.debugSnapshot()` cache/poll with
+  // the read-only ServicesStatusTab (fetch gated on admin). Control actions are
+  // `useMutation`s that invalidate the `services` domain on settle.
+  const { snapshot, isLoading, isFetching, error, lastUpdated: lastRefresh, refetch } =
+    useDebugSnapshot({ enabled: isAdmin });
+  const { restart: handleRestartService, stop: handleStopService, start: handleStartService } =
+    useServiceControls();
 
-  const fetchData = useCallback(async () => {
-    if (!isAdmin) {
-      setError(t('system:services.adminRequired'));
-      setIsLoading(false);
-      return;
-    }
-
-    try {
-      setError(null);
-      const data = await getDebugSnapshot();
-      setSnapshot(data);
-      setLastRefresh(new Date());
-    } catch (err: unknown) {
-      setError(getApiErrorMessage(err, 'Failed to load service status'));
-    } finally {
-      setIsLoading(false);
-    }
-  }, [isAdmin]);
-
-  useEffect(() => {
-    fetchData();
-
-    // Refresh every 10 seconds
-    const interval = setInterval(fetchData, 10000);
-    return () => clearInterval(interval);
-  }, [fetchData]);
-
-  const handleRefresh = async () => {
-    setIsLoading(true);
-    await fetchData();
-  };
-
-  const handleRestartService = async (serviceName: string) => {
-    try {
-      const result = await restartService(serviceName);
-      if (result.success) {
-        toast.success(t('system:services.toast.restartSuccess', { name: serviceName }));
-      } else {
-        toast.error(result.message || t('system:services.toast.restartFailed', { name: serviceName }));
-      }
-      // Refresh data after restart
-      await fetchData();
-    } catch (err: unknown) {
-      toast.error(getApiErrorMessage(err, t('system:services.toast.restartFailed', { name: serviceName })));
-    }
-  };
-
-  const handleStopService = async (serviceName: string) => {
-    try {
-      const result = await stopService(serviceName);
-      if (result.success) {
-        toast.success(t('system:services.toast.stopSuccess', { name: serviceName }));
-      } else {
-        toast.error(result.message || t('system:services.toast.stopFailed', { name: serviceName }));
-      }
-      // Refresh data after stop
-      await fetchData();
-    } catch (err: unknown) {
-      toast.error(getApiErrorMessage(err, t('system:services.toast.stopFailed', { name: serviceName })));
-    }
-  };
-
-  const handleStartService = async (serviceName: string) => {
-    try {
-      const result = await startService(serviceName);
-      if (result.success) {
-        toast.success(t('system:services.toast.startSuccess', { name: serviceName }));
-      } else {
-        toast.error(result.message || t('system:services.toast.startFailed', { name: serviceName }));
-      }
-      // Refresh data after start
-      await fetchData();
-    } catch (err: unknown) {
-      toast.error(getApiErrorMessage(err, t('system:services.toast.startFailed', { name: serviceName })));
-    }
+  const handleRefresh = () => {
+    void refetch();
   };
 
   if (!isAdmin) {
@@ -167,10 +88,10 @@ export default function ServicesTab({ isAdmin }: ServicesTabProps) {
         </div>
         <button
           onClick={handleRefresh}
-          disabled={isLoading}
+          disabled={isFetching}
           className="px-4 py-2 flex items-center gap-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors disabled:opacity-50"
         >
-          <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+          <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin' : ''}`} />
           {t('system:services.refresh')}
         </button>
       </div>
