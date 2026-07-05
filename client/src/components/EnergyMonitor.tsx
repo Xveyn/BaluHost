@@ -5,7 +5,8 @@
  * downtime tracking, and cost estimates.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import {
   Zap,
@@ -26,173 +27,113 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
-import toast from 'react-hot-toast';
 import {
   getEnergyDashboard,
   getEnergyCost,
   getHourlySamples,
 } from '../api/energy';
-import type { EnergyDashboard, EnergyCostEstimate } from '../api/energy';
+import type { EnergyCostEstimate } from '../api/energy';
 import { smartDevicesApi } from '../api/smart-devices';
-import type { SmartDevice } from '../api/smart-devices';
 import { formatTimeForRange } from '../lib/dateUtils';
 import type { ChartTimeRange } from '../lib/dateUtils';
 import { formatNumber } from '../lib/formatters';
+import { queryKeys } from '../lib/queryKeys';
+import { energyChartRefreshInterval, type EnergyTimeWindow } from '../lib/energyPolling';
 
-type TimeWindow = '10min' | '1hour' | '24hours' | '7days';
+type TimeWindow = EnergyTimeWindow;
+type ChartPoint = { time: string; watts: number; fullTimestamp: string };
+
+const windowToRange: Record<TimeWindow, ChartTimeRange> = {
+  '10min': '10m',
+  '1hour': '1h',
+  '24hours': '24h',
+  '7days': '7d',
+};
+
+/** Fetch + map the chart series for a window (extracted from the old effect). */
+export async function loadEnergyChart(
+  deviceId: number,
+  timeWindow: TimeWindow,
+  lang: string,
+): Promise<ChartPoint[]> {
+  const chartRange = windowToRange[timeWindow];
+  if (timeWindow === '10min') {
+    const historyRes = await smartDevicesApi.getHistory(deviceId, 'power_monitor', 1);
+    return (historyRes.data ?? []).map((entry: { timestamp: string; value: unknown }) => {
+      const val = entry.value as { current_power?: number } | null;
+      return {
+        time: formatTimeForRange(entry.timestamp, chartRange, lang),
+        watts: val?.current_power ?? 0,
+        fullTimestamp: entry.timestamp,
+      };
+    });
+  }
+  const hours = timeWindow === '1hour' ? 1 : timeWindow === '24hours' ? 24 : 168;
+  const samples = await getHourlySamples(deviceId, hours);
+  return samples.map((sample) => ({
+    time: formatTimeForRange(sample.timestamp, chartRange, lang),
+    watts: sample.avg_watts,
+    fullTimestamp: sample.timestamp,
+  }));
+}
 
 const EnergyMonitor: React.FC = () => {
   const { t, i18n } = useTranslation('system');
 
-  // Map TimeWindow to ChartTimeRange
-  const windowToRange: Record<TimeWindow, ChartTimeRange> = {
-    '10min': '10m',
-    '1hour': '1h',
-    '24hours': '24h',
-    '7days': '7d',
-  };
-  const [devices, setDevices] = useState<SmartDevice[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<number | null>(null);
-  const [dashboard, setDashboard] = useState<EnergyDashboard | null>(null);
-  const [costs, setCosts] = useState<{
+  const [costPerKwh, setCostPerKwh] = useState(0.40);
+  const [timeWindow, setTimeWindow] = useState<TimeWindow>('10min');
+
+  // Devices — shares the `smartDevices.list()` cache; filtered to power monitors.
+  const devicesQuery = useQuery({
+    queryKey: queryKeys.smartDevices.list(),
+    queryFn: () => smartDevicesApi.list().then((r) => r.data),
+  });
+  const devices = useMemo(
+    () => (devicesQuery.data?.devices ?? []).filter((d) => d.capabilities?.includes('power_monitor')),
+    [devicesQuery.data],
+  );
+  const loading = devicesQuery.isLoading;
+
+  // Auto-select the first power-monitoring device once they load.
+  useEffect(() => {
+    if (devices.length > 0 && selectedDeviceId == null) {
+      setSelectedDeviceId(devices[0].id);
+    }
+  }, [devices, selectedDeviceId]);
+
+  // Dashboard + cost estimates — 30s poll; key carries device + price so a price
+  // change refetches. Query-backed (#299) — replaces the setInterval.
+  const dashboardQuery = useQuery({
+    queryKey: queryKeys.energy.dashboard(selectedDeviceId, costPerKwh),
+    queryFn: async () => {
+      const dashboard = await getEnergyDashboard(selectedDeviceId!);
+      const [today, week, month] = await Promise.all([
+        getEnergyCost(selectedDeviceId!, 'today', costPerKwh),
+        getEnergyCost(selectedDeviceId!, 'week', costPerKwh),
+        getEnergyCost(selectedDeviceId!, 'month', costPerKwh),
+      ]);
+      return { dashboard, costs: { today, week, month } };
+    },
+    enabled: selectedDeviceId != null,
+    refetchInterval: 30000,
+  });
+  const dashboard = dashboardQuery.data?.dashboard ?? null;
+  const costs: {
     today: EnergyCostEstimate | null;
     week: EnergyCostEstimate | null;
     month: EnergyCostEstimate | null;
-  }>({ today: null, week: null, month: null });
-  const [loading, setLoading] = useState(true);
-  const [costPerKwh, setCostPerKwh] = useState(0.40);
-  const [timeWindow, setTimeWindow] = useState<TimeWindow>('10min');
-  const [chartData, setChartData] = useState<Array<{ time: string; watts: number; fullTimestamp: string }>>([]);
+  } = dashboardQuery.data?.costs ?? { today: null, week: null, month: null };
 
-  // Load devices
-  useEffect(() => {
-    const loadDevices = async () => {
-      try {
-        const res = await smartDevicesApi.list();
-        // Filter to only devices with power_monitor capability
-        const deviceList = res.data.devices.filter(d => d.capabilities?.includes('power_monitor'));
-        setDevices(deviceList);
-
-        // Auto-select first device
-        if (deviceList.length > 0 && !selectedDeviceId) {
-          setSelectedDeviceId(deviceList[0].id);
-        }
-      } catch {
-        toast.error('Failed to load devices');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadDevices();
-  }, []);
-
-  // Load dashboard data when device is selected
-  useEffect(() => {
-    if (!selectedDeviceId) return;
-
-    const loadDashboard = async () => {
-      setLoading(true);
-      try {
-        const data = await getEnergyDashboard(selectedDeviceId);
-        setDashboard(data);
-
-        // Load cost estimates
-        const [todayCost, weekCost, monthCost] = await Promise.all([
-          getEnergyCost(selectedDeviceId, 'today', costPerKwh),
-          getEnergyCost(selectedDeviceId, 'week', costPerKwh),
-          getEnergyCost(selectedDeviceId, 'month', costPerKwh),
-        ]);
-
-        setCosts({ today: todayCost, week: weekCost, month: monthCost });
-      } catch {
-        toast.error('Failed to load energy data');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadDashboard();
-
-    // Refresh every 30 seconds
-    const interval = setInterval(loadDashboard, 30000);
-    return () => clearInterval(interval);
-  }, [selectedDeviceId, costPerKwh]);
-
-  // Load chart data based on time window
-  useEffect(() => {
-    if (!selectedDeviceId) return;
-
-    const loadChartData = async () => {
-      try {
-        let data: Array<{ time: string; watts: number; fullTimestamp: string }> = [];
-
-        const chartRange = windowToRange[timeWindow];
-
-        switch (timeWindow) {
-          case '10min': {
-            // Use recent history from smart device API
-            const historyRes = await smartDevicesApi.getHistory(selectedDeviceId, 'power_monitor', 1);
-            if (historyRes.data && historyRes.data.length > 0) {
-              data = historyRes.data.map((entry: { timestamp: string; value: unknown }) => {
-                const val = entry.value as { current_power?: number } | null;
-                return {
-                  time: formatTimeForRange(entry.timestamp, chartRange, i18n.language),
-                  watts: val?.current_power ?? 0,
-                  fullTimestamp: entry.timestamp,
-                };
-              });
-            }
-            break;
-          }
-
-          case '1hour': {
-            // Use hourly samples from DB (last hour)
-            const hourSamples = await getHourlySamples(selectedDeviceId, 1);
-            data = hourSamples.map(sample => ({
-              time: formatTimeForRange(sample.timestamp, chartRange, i18n.language),
-              watts: sample.avg_watts,
-              fullTimestamp: sample.timestamp
-            }));
-            break;
-          }
-
-          case '24hours': {
-            // Use hourly samples from DB (last 24 hours)
-            const daySamples = await getHourlySamples(selectedDeviceId, 24);
-            data = daySamples.map(sample => ({
-              time: formatTimeForRange(sample.timestamp, chartRange, i18n.language),
-              watts: sample.avg_watts,
-              fullTimestamp: sample.timestamp
-            }));
-            break;
-          }
-
-          case '7days': {
-            // Use hourly samples from DB (last 7 days = 168 hours)
-            const weekSamples = await getHourlySamples(selectedDeviceId, 168);
-            data = weekSamples.map(sample => ({
-              time: formatTimeForRange(sample.timestamp, chartRange, i18n.language),
-              watts: sample.avg_watts,
-              fullTimestamp: sample.timestamp
-            }));
-            break;
-          }
-        }
-
-        setChartData(data);
-      } catch {
-        // Non-critical: chart will show empty state
-      }
-    };
-
-    loadChartData();
-
-    // Refresh interval based on time window
-    const refreshInterval = timeWindow === '10min' ? 5000 : 30000; // 5s for live, 30s for historical
-    const interval = setInterval(loadChartData, refreshInterval);
-    return () => clearInterval(interval);
-  }, [selectedDeviceId, timeWindow]);
+  // Chart series — adaptive poll (5s live / 30s historical) via the tested
+  // `energyChartRefreshInterval`. Errors keep the last series (empty on first).
+  const chartQuery = useQuery({
+    queryKey: queryKeys.energy.chart(selectedDeviceId, timeWindow),
+    queryFn: () => loadEnergyChart(selectedDeviceId!, timeWindow, i18n.language),
+    enabled: selectedDeviceId != null,
+    refetchInterval: energyChartRefreshInterval(timeWindow),
+  });
+  const chartData = chartQuery.data ?? [];
 
   if (loading && devices.length === 0) {
     return (
