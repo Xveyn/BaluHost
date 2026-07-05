@@ -1,9 +1,11 @@
-import { useEffect, useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useQuery } from '@tanstack/react-query'
 import { getDatabaseStats } from '../../api/monitoring'
-import type { DatabaseStatsResponse, MetricDatabaseStats } from '../../api/monitoring'
+import type { MetricDatabaseStats } from '../../api/monitoring'
 import { Database, HardDrive, Activity, RefreshCw } from 'lucide-react'
 import { METRIC_CONFIG, DEFAULT_METRIC_CONFIG } from './metricConfig'
+import { queryKeys } from '../../lib/queryKeys'
+import { getApiErrorMessage } from '../../lib/errorHandling'
 import { formatBytes } from '../../lib/formatters'
 import { StatCard } from '../ui/StatCard'
 import { ProgressBar } from '../ui/ProgressBar'
@@ -145,43 +147,36 @@ interface DatabaseStatsCardsProps {
 
 export default function DatabaseStatsCards({ autoRefresh = true, refreshInterval = 30000 }: DatabaseStatsCardsProps) {
   const { t, i18n } = useTranslation(['admin', 'common'])
-  const [stats, setStats] = useState<DatabaseStatsResponse | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [lastUpdate, setLastUpdate] = useState<Date | null>(null)
+  // Query-backed (#299): `refetchInterval` replaces the hand-rolled setInterval,
+  // the manual refresh button uses `refetch`, and F5 instant-paint comes from
+  // the app-wide persister. `dataUpdatedAt` supplies the "last updated" stamp.
+  const {
+    data: stats = null,
+    isLoading,
+    isError,
+    error,
+    isFetching,
+    dataUpdatedAt,
+    refetch,
+  } = useQuery({
+    queryKey: queryKeys.adminDb.stats(),
+    queryFn: getDatabaseStats,
+    refetchInterval: autoRefresh && refreshInterval > 0 ? refreshInterval : false,
+  })
 
-  const fetchStats = useCallback(async () => {
-    try {
-      setError(null)
-      const data = await getDatabaseStats()
-      setStats(data)
-      setLastUpdate(new Date())
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to load database stats')
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+  const errorMessage = isError ? getApiErrorMessage(error, 'Failed to load database stats') : null
+  const lastUpdate = stats && dataUpdatedAt ? new Date(dataUpdatedAt) : null
 
-  useEffect(() => {
-    fetchStats()
-
-    if (autoRefresh) {
-      const interval = setInterval(fetchStats, refreshInterval)
-      return () => clearInterval(interval)
-    }
-  }, [fetchStats, autoRefresh, refreshInterval])
-
-  if (loading && !stats) {
+  if (isLoading && !stats) {
     return <StatsCardsSkeleton />
   }
 
-  if (error && !stats) {
+  if (errorMessage && !stats) {
     return (
       <div className="bg-gradient-to-r from-red-500/10 to-red-600/5 border border-red-500/30 rounded-xl px-5 py-4 backdrop-blur-sm">
-        <p className="text-red-400 text-sm font-medium">{error}</p>
+        <p className="text-red-400 text-sm font-medium">{errorMessage}</p>
         <button
-          onClick={fetchStats}
+          onClick={() => refetch()}
           className="mt-3 inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-red-500/20 text-red-300 hover:bg-red-500/30 transition-colors text-sm"
         >
           <RefreshCw className="w-4 h-4" />
@@ -214,11 +209,11 @@ export default function DatabaseStatsCards({ autoRefresh = true, refreshInterval
           )}
         </div>
         <button
-          onClick={fetchStats}
-          disabled={loading}
+          onClick={() => refetch()}
+          disabled={isFetching}
           className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-700/40 text-slate-300 hover:bg-slate-700/60 hover:text-white transition-colors text-sm border border-slate-600/50"
         >
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin' : ''}`} />
           {t('common:refresh')}
         </button>
       </div>

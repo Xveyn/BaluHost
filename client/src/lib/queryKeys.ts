@@ -77,10 +77,19 @@ export const queryKeys = {
     devices: () => ['mobile', 'devices'] as const,
     vpnTypes: () => ['mobile', 'vpn-types'] as const,
     deviceNotifications: (deviceId: string) => ['mobile', 'device-notifications', deviceId] as const,
+    /** Registration-token status (poll-until-used); token is part of the key. */
+    tokenStatus: (token: string) => ['mobile', 'token-status', token] as const,
   },
   smart: {
     status: () => ['smart', 'status'] as const,
     mode: () => ['smart', 'mode'] as const,
+  },
+  /** Smart plugs / Tapo devices (`api/smart-devices`), distinct from `smart` (disk health). */
+  smartDevices: {
+    list: () => ['smart-devices', 'list'] as const,
+  },
+  gpu: {
+    current: () => ['gpu', 'current'] as const,
   },
   fans: {
     status: () => ['fans', 'status'] as const,
@@ -96,6 +105,7 @@ export const queryKeys = {
   adminDb: {
     /** Domain-Prefix. */
     all: () => ['admin-db'] as const,
+    stats: () => ['admin-db', 'stats'] as const,
     tables: () => ['admin-db', 'tables'] as const,
     tableData: (table: string | null, params: Record<string, unknown>) =>
       ['admin-db', 'table-data', table, params] as const,

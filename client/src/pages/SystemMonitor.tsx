@@ -6,7 +6,7 @@
  * - Sub-tabs within each category
  */
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Cpu, ArrowLeftRight, Settings, FileText, Terminal, Clock } from 'lucide-react';
@@ -25,9 +25,11 @@ import { NetworkTab } from '../components/system-monitor/NetworkTab';
 import { DiskIoTab } from '../components/system-monitor/DiskIoTab';
 import { PowerTab } from '../components/system-monitor/PowerTab';
 import { UptimeTab } from '../components/system-monitor/UptimeTab';
+import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../contexts/AuthContext';
 import { useGpuPresence } from '../hooks/useGpuPresence';
 import { smartDevicesApi } from '../api/smart-devices';
+import { queryKeys } from '../lib/queryKeys';
 
 type TabType = 'cpu' | 'gpu' | 'memory' | 'network' | 'disk-io' | 'power' | 'uptime' | 'services' | 'health' | 'backend-logs' | 'logs' | 'activity';
 type CategoryType = 'hardware' | 'io' | 'system' | 'logs';
@@ -199,23 +201,19 @@ export default function SystemMonitor() {
   const { user, isAdmin } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const [timeRange, setTimeRange] = useState<TimeRange>('1h');
-  const [hasPowerMonitoring, setHasPowerMonitoring] = useState(false);
   const { present: hasGpu } = useGpuPresence();
 
-  // Check if any active smart device has power_monitor capability
-  useEffect(() => {
-    const check = () => {
-      smartDevicesApi.list().then(res => {
-        const has = (res.data.devices ?? []).some(
-          (d: any) => d.is_active && d.capabilities?.includes('power_monitor')
-        );
-        setHasPowerMonitoring(has);
-      }).catch(() => setHasPowerMonitoring(false));
-    };
-    check();
-    const interval = setInterval(check, 30000);
-    return () => clearInterval(interval);
-  }, []);
+  // Check if any active smart device has power_monitor capability — query-backed
+  // (#299): `refetchInterval` replaces the setInterval; an error resolves to
+  // "no power monitoring" (the old `.catch(() => false)`).
+  const { data: smartDevices } = useQuery({
+    queryKey: queryKeys.smartDevices.list(),
+    queryFn: () => smartDevicesApi.list().then(res => res.data),
+    refetchInterval: 30000,
+  });
+  const hasPowerMonitoring = (smartDevices?.devices ?? []).some(
+    (d) => d.is_active && d.capabilities?.includes('power_monitor'),
+  );
 
   // Dynamic categories: hide 'power' tab when no power-monitoring plugin is active
   const categories = useMemo(() => {
