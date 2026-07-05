@@ -95,6 +95,14 @@ export const queryKeys = {
   gpu: {
     current: () => ['gpu', 'current'] as const,
   },
+  sleep: {
+    status: () => ['sleep', 'status'] as const,
+    fritzBox: () => ['sleep', 'fritzbox'] as const,
+  },
+  gpuPower: {
+    /** Combined GPU-power status + config + capabilities for the power card. */
+    overview: () => ['gpu-power', 'overview'] as const,
+  },
   pihole: {
     /** Domain-Prefix. */
     all: () => ['pihole'] as const,

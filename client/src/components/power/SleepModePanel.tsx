@@ -5,21 +5,19 @@
  * for entering/exiting soft sleep and triggering suspend/WoL.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
 import { Moon, Sun, Power, Wifi, Activity, Cpu, HardDrive, Upload, Globe, Shield, Coffee } from 'lucide-react';
 import { useConfirmDialog } from '../../hooks/useConfirmDialog';
+import { useSleepStatus } from '../../hooks/useSleepStatus';
 import {
-  getSleepStatus,
   enterSoftSleep,
   exitSoftSleep,
   enterSuspend,
   sendWol,
   SLEEP_STATE_INFO,
-  type SleepStatusResponse,
 } from '../../api/sleep';
-import { getFritzBoxConfig, type FritzBoxConfig } from '../../api/fritzbox';
 
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -49,39 +47,11 @@ export function SleepModePanel({ onRefresh }: SleepModePanelProps) {
     if (isTomorrow) return t('sleep.coreUptime.tomorrow', { time });
     return t('sleep.coreUptime.dateTime', { date: d.toLocaleDateString(), time });
   };
-  const [status, setStatus] = useState<SleepStatusResponse | null>(null);
-  const [loading, setLoading] = useState(true);
+  // Query-backed (#299): adaptive poll (5s awake / 30s sleeping) + once-only
+  // Fritz!Box config, all in useSleepStatus. Mutations below call `refetch`.
+  const { status, loading, fbConfig, refetch } = useSleepStatus();
   const [busy, setBusy] = useState(false);
-  const [fbConfig, setFbConfig] = useState<FritzBoxConfig | null>(null);
   const { confirm, dialog } = useConfirmDialog();
-
-  const fetchStatus = useCallback(async () => {
-    try {
-      const data = await getSleepStatus();
-      setStatus(data);
-      // Fetch Fritz!Box config (once on initial load)
-      if (!fbConfig) {
-        try {
-          const fb = await getFritzBoxConfig();
-          setFbConfig(fb);
-        } catch {
-          // Fritz!Box not configured — ignore
-        }
-      }
-    } catch {
-      // Silent fail for polling
-    } finally {
-      setLoading(false);
-    }
-  }, [fbConfig]);
-
-  useEffect(() => {
-    fetchStatus();
-    // Poll: 5s when awake, 30s when sleeping (to avoid auto-wake)
-    const isSleeping = status?.current_state === 'soft_sleep';
-    const interval = setInterval(fetchStatus, isSleeping ? 30000 : 5000);
-    return () => clearInterval(interval);
-  }, [fetchStatus, status?.current_state]);
 
   const handleEnterSleep = async () => {
     if (busy) return;
@@ -96,7 +66,7 @@ export function SleepModePanel({ onRefresh }: SleepModePanelProps) {
     try {
       await enterSoftSleep();
       toast.success('Entered soft sleep mode');
-      await fetchStatus();
+      await refetch();
       onRefresh?.();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to enter sleep');
@@ -111,7 +81,7 @@ export function SleepModePanel({ onRefresh }: SleepModePanelProps) {
     try {
       await exitSoftSleep();
       toast.success('System waking up');
-      await fetchStatus();
+      await refetch();
       onRefresh?.();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to wake');

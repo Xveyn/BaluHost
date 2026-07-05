@@ -1,14 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import toast from 'react-hot-toast';
 import { Cpu } from 'lucide-react';
 import { AdminBadge } from '../ui/AdminBadge';
-import { gpuPowerApi } from '../../api/gpuPower';
-import type {
-  GpuPowerCapabilities,
-  GpuPowerConfig,
-  GpuPowerStatus,
-} from '../../types/gpuPower';
+import type { GpuPowerStatus } from '../../types/gpuPower';
+import { useGpuPower } from '../../hooks/useGpuPower';
 import { GpuPowerThresholds } from './GpuPowerThresholds';
 import { GpuPowerHardware } from './GpuPowerHardware';
 
@@ -20,65 +14,8 @@ const STATE_TONE: Record<GpuPowerStatus['current_state'], string> = {
 
 export function GpuPowerCard({ isAdmin }: { isAdmin: boolean }) {
   const { t } = useTranslation(['system', 'common']);
-  const [status, setStatus] = useState<GpuPowerStatus | null>(null);
-  const [config, setConfig] = useState<GpuPowerConfig | null>(null);
-  const [caps, setCaps] = useState<GpuPowerCapabilities | null>(null);
-  const [draft, setDraft] = useState<GpuPowerConfig | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      try {
-        const [s, c, k] = await Promise.all([
-          gpuPowerApi.getStatus(),
-          gpuPowerApi.getConfig(),
-          gpuPowerApi.getCapabilities(),
-        ]);
-        if (cancelled) return;
-        setStatus(s);
-        setConfig(c);
-        setCaps(k);
-        setDraft((prev) => prev ?? c);
-        setLoadError(null);
-      } catch (err: unknown) {
-        if (!cancelled) {
-          const msg = err instanceof Error ? err.message : String(err);
-          setLoadError(msg);
-        }
-      }
-    };
-    void load();
-    const id = window.setInterval(() => void load(), 5000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(id);
-    };
-  }, []);
-
-  const dirty = useMemo(
-    () => Boolean(draft && config && JSON.stringify(draft) !== JSON.stringify(config)),
-    [draft, config],
-  );
-
-  const onSave = async () => {
-    if (!draft) return;
-    setSaving(true);
-    try {
-      const saved = await gpuPowerApi.putConfig(draft);
-      setConfig(saved);
-      setDraft(saved);
-      toast.success(t('system:power.gpu.messages.saved'));
-    } catch (err: unknown) {
-      const axiosErr = err as { response?: { data?: { detail?: string } } };
-      const detail = axiosErr?.response?.data?.detail
-        || (err instanceof Error ? err.message : String(err));
-      toast.error(`${t('system:power.gpu.messages.saveFailed')}: ${detail}`);
-    } finally {
-      setSaving(false);
-    }
-  };
+  // Query-backed (#299) — 5s poll, draft-guarded editor, save-as-mutation.
+  const { status, config, caps, draft, setDraft, dirty, loadError, saving, save } = useGpuPower();
 
   if (loadError && !status) {
     return (
@@ -207,7 +144,7 @@ export function GpuPowerCard({ isAdmin }: { isAdmin: boolean }) {
             <div className="flex flex-wrap items-center gap-2 pt-2">
               <button
                 type="button"
-                onClick={() => void onSave()}
+                onClick={() => void save()}
                 disabled={!dirty || saving}
                 className="rounded-lg bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 disabled:opacity-40 disabled:cursor-not-allowed px-3 sm:px-4 py-2 text-xs sm:text-sm transition-colors touch-manipulation active:scale-95 min-h-[40px]"
               >
@@ -215,7 +152,7 @@ export function GpuPowerCard({ isAdmin }: { isAdmin: boolean }) {
               </button>
               <button
                 type="button"
-                onClick={() => setDraft(config)}
+                onClick={() => config && setDraft(config)}
                 disabled={!dirty || saving}
                 className="rounded-lg bg-slate-700 text-slate-300 hover:bg-slate-600 disabled:opacity-40 disabled:cursor-not-allowed px-3 sm:px-4 py-2 text-xs sm:text-sm transition-colors touch-manipulation active:scale-95 min-h-[40px]"
               >
