@@ -3,6 +3,7 @@
  */
 
 import { apiClient } from '../lib/api';
+import type { ApiFileItem, StorageMountpoint } from '../components/file-manager/types';
 
 // --- Duplicate Check API ---
 
@@ -115,5 +116,37 @@ export async function enforceResidency(
 
 export async function getUserRootUsage(): Promise<UserRootUsage> {
   const res = await apiClient.get('/api/files/user/root-usage');
+  return res.data;
+}
+
+// --- Browser-core (list, mountpoints, folder CRUD, download) ---
+
+export async function getMountpoints(): Promise<{ mountpoints: StorageMountpoint[] }> {
+  const res = await apiClient.get('/api/files/mountpoints');
+  return res.data;
+}
+
+export async function listFiles(fullPath: string): Promise<{ files: ApiFileItem[] }> {
+  const res = await apiClient.get('/api/files/list', { params: { path: fullPath } });
+  return res.data;
+}
+
+export async function createFolder(params: { path: string; name: string }): Promise<unknown> {
+  const res = await apiClient.post('/api/files/folder', params);
+  return res.data;
+}
+
+export async function deleteFile(path: string): Promise<unknown> {
+  const res = await apiClient.delete(`/api/files/${encodeURIComponent(path)}`);
+  return res.data;
+}
+
+export async function renameFile(params: { old_path: string; new_name: string }): Promise<unknown> {
+  const res = await apiClient.put('/api/files/rename', params);
+  return res.data;
+}
+
+export async function downloadFileBlob(path: string): Promise<Blob> {
+  const res = await apiClient.get(`/api/files/download/${encodeURIComponent(path)}`, { responseType: 'blob' });
   return res.data;
 }

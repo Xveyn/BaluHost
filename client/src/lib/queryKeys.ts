@@ -40,6 +40,12 @@ export const queryKeys = {
   backups: {
     list: () => ['backups', 'list'] as const,
   },
+  files: {
+    all: () => ['files'] as const,
+    mountpoints: () => ['files', 'mountpoints'] as const,
+    /** Directory listing; the resolved backend full path is part of the key. */
+    list: (fullPath: string) => ['files', 'list', fullPath] as const,
+  },
   cloudImport: {
     connections: () => ['cloud-import', 'connections'] as const,
     /** Import jobs; polled while any job is running/pending (see useCloudImportData). */
