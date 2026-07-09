@@ -1,12 +1,13 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Cloud, Plus, Download, RefreshCw, Loader2, XCircle, CheckCircle2,
   Clock, AlertCircle, FolderDown,
 } from 'lucide-react';
 import {
-  getConnections, deleteConnection, getJobs, cancelJob,
+  deleteConnection, cancelJob,
   type CloudConnection, type CloudImportJob,
 } from '../api/cloud-import';
+import { useCloudImportData } from '../hooks/useCloudImportData';
 import { formatBytes } from '../lib/formatters';
 import { CloudProviderCard } from '../components/cloud/CloudProviderCard';
 import { CloudFileBrowser } from '../components/cloud/CloudFileBrowser';
@@ -26,30 +27,17 @@ const STATUS_CONFIG: Record<string, { icon: React.ReactNode; color: string; labe
 export default function CloudImportPage() {
   const { confirm, dialog } = useConfirmDialog();
 
+  // Data — query-backed (#299); jobs auto-poll (3s) only while one is running/pending.
+  const { connections, jobs, loading, refetch: loadData } = useCloudImportData();
+
   // State
-  const [connections, setConnections] = useState<CloudConnection[]>([]);
   const [selectedConnectionId, setSelectedConnectionId] = useState<number | null>(null);
-  const [jobs, setJobs] = useState<CloudImportJob[]>([]);
-  const [loading, setLoading] = useState(true);
   const [showWizard, setShowWizard] = useState(false);
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set());
 
-  const loadData = useCallback(async () => {
-    try {
-      const [conns, jobList] = await Promise.all([getConnections(), getJobs()]);
-      setConnections(conns);
-      setJobs(jobList);
-    } catch {
-      // Load failure handled by empty state
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
+  // OAuth redirect result (once on mount) — data itself loads via the query above.
   useEffect(() => {
-    loadData();
-
     const params = new URLSearchParams(window.location.search);
     if (params.get('oauth') === 'success') {
       toast.success('Cloud provider connected successfully');
@@ -58,24 +46,7 @@ export default function CloudImportPage() {
       toast.error(`OAuth failed: ${params.get('oauth_error')}`);
       window.history.replaceState({}, '', '/cloud-import');
     }
-  }, [loadData]);
-
-  // Poll running jobs
-  useEffect(() => {
-    const hasRunning = jobs.some(j => j.status === 'running' || j.status === 'pending');
-    if (!hasRunning) return;
-
-    const timer = setInterval(async () => {
-      try {
-        const jobList = await getJobs();
-        setJobs(jobList);
-      } catch {
-        // ignore
-      }
-    }, 3000);
-
-    return () => clearInterval(timer);
-  }, [jobs]);
+  }, []);
 
   const handleDeleteConnection = async (conn: CloudConnection) => {
     const confirmed = await confirm(

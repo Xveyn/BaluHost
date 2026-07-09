@@ -3,7 +3,7 @@
  * Steps: migrate → verify → cleanup.
  */
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import {
   ArrowRightLeft,
   Play,
@@ -23,17 +23,13 @@ import { useTranslation } from 'react-i18next';
 import { getApiErrorMessage } from '../../lib/errorHandling';
 import { formatBytes } from '../../lib/formatters';
 import { useConfirmDialog } from '../../hooks/useConfirmDialog';
-import { getStorageInfo } from '../../api/vcl';
-import type { VCLStorageInfo } from '../../types/vcl';
 import {
   startVCLMigration,
   startVCLVerify,
   startVCLCleanup,
-  getMigrationJobs,
-  getMigrationJob,
   cancelMigrationJob,
 } from '../../api/migration';
-import type { MigrationJobResponse } from '../../api/migration';
+import { useMigrationData } from '../../hooks/useMigrationData';
 import SystemDirPicker from './SystemDirPicker';
 
 const STATUS_COLORS: Record<string, string> = {
@@ -56,9 +52,10 @@ export default function MigrationPanel() {
   const { t } = useTranslation();
   const { confirm, dialog } = useConfirmDialog();
 
-  // VCL Storage info
-  const [storageInfo, setStorageInfo] = useState<VCLStorageInfo | null>(null);
-  const [loading, setLoading] = useState(true);
+  // Data — query-backed (#299): storage + job history + tracked active-job
+  // progress (polls until terminal, then refreshes the history) replace the
+  // imperative startPolling/stopPolling + setInterval.
+  const { storageInfo, jobs, activeJob, loading, trackJob } = useMigrationData();
 
   // Form
   const [sourcePath, setSourcePath] = useState('');
@@ -69,71 +66,11 @@ export default function MigrationPanel() {
   // Browse picker
   const [browseTarget, setBrowseTarget] = useState<'source' | 'dest' | null>(null);
 
-  // Active job tracking
-  const [activeJob, setActiveJob] = useState<MigrationJobResponse | null>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  // Job history
-  const [jobs, setJobs] = useState<MigrationJobResponse[]>([]);
-
-  const loadData = useCallback(async () => {
-    try {
-      setLoading(true);
-      const [info, jobList] = await Promise.all([
-        getStorageInfo(),
-        getMigrationJobs(),
-      ]);
-      setStorageInfo(info);
-      setJobs(jobList);
-
-      // Pre-fill paths from storage info
-      if (info.storage_path && !sourcePath) {
-        setSourcePath(info.storage_path);
-      }
-      if (!destPath) {
-        setDestPath('/mnt/cache-vcl/vcl');
-      }
-
-      // Check for active job
-      const running = jobList.find((j) => j.status === 'running' || j.status === 'pending');
-      if (running) {
-        setActiveJob(running);
-        startPolling(running.id);
-      }
-    } catch {
-      // Non-critical — panel still renders
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
+  // Pre-fill paths from storage info once it loads (only while still empty).
   useEffect(() => {
-    loadData();
-    return () => stopPolling();
-  }, [loadData]);
-
-  const startPolling = (jobId: number) => {
-    stopPolling();
-    pollRef.current = setInterval(async () => {
-      try {
-        const job = await getMigrationJob(jobId);
-        setActiveJob(job);
-        if (job.status !== 'running' && job.status !== 'pending') {
-          stopPolling();
-          loadData();
-        }
-      } catch {
-        stopPolling();
-      }
-    }, 3000);
-  };
-
-  const stopPolling = () => {
-    if (pollRef.current) {
-      clearInterval(pollRef.current);
-      pollRef.current = null;
-    }
-  };
+    if (storageInfo?.storage_path && !sourcePath) setSourcePath(storageInfo.storage_path);
+    if (!destPath) setDestPath('/mnt/cache-vcl/vcl');
+  }, [storageInfo, sourcePath, destPath]);
 
   const handleStartMigration = async () => {
     if (!sourcePath || !destPath) return;
@@ -144,8 +81,7 @@ export default function MigrationPanel() {
         dest_path: destPath,
         dry_run: dryRun,
       });
-      setActiveJob(job);
-      startPolling(job.id);
+      trackJob(job);
       toast.success(dryRun
         ? t('ssdCache.migration.dryRunStarted', 'Dry-run started')
         : t('ssdCache.migration.migrationStarted', 'Migration started')
@@ -162,8 +98,7 @@ export default function MigrationPanel() {
     try {
       setActionLoading(true);
       const job = await startVCLVerify({ dest_path: destPath });
-      setActiveJob(job);
-      startPolling(job.id);
+      trackJob(job);
       toast.success(t('ssdCache.migration.verifyStarted', 'Verification started'));
     } catch (err: unknown) {
       toast.error(getApiErrorMessage(err, t('ssdCache.migration.verifyFailed', 'Failed to start verification')));
@@ -189,8 +124,7 @@ export default function MigrationPanel() {
         source_path: sourcePath,
         dry_run: dryRun,
       });
-      setActiveJob(job);
-      startPolling(job.id);
+      trackJob(job);
       toast.success(dryRun
         ? t('ssdCache.migration.dryRunStarted', 'Dry-run started')
         : t('ssdCache.migration.cleanupStarted', 'Cleanup started')
