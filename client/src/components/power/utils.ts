@@ -2,7 +2,7 @@
  * Shared helper functions for power management components.
  */
 
-import type { ServicePowerProperty } from '../../api/power-management';
+import type { AutoScalingConfig, ServicePowerProperty } from '../../api/power-management';
 
 // Format timestamp for display
 export const formatTimestamp = (ts: string): string => {
@@ -62,3 +62,21 @@ export const getPresetIcon = (presetName: string): string => {
   if (presetName.includes('Balanced')) return '⚖️';
   return '⚙️';
 };
+
+/**
+ * Validates auto-scaling CPU thresholds: surge > medium > low, each in [0,100],
+ * cooldown >= 0. Pure — extracted from PowerManagement's save handler.
+ */
+export function isValidAutoScaling(
+  cfg: Pick<AutoScalingConfig, 'cpu_surge_threshold' | 'cpu_medium_threshold' | 'cpu_low_threshold' | 'cooldown_seconds'>,
+): boolean {
+  const inRange = (n: number) => n >= 0 && n <= 100;
+  return (
+    cfg.cpu_surge_threshold > cfg.cpu_medium_threshold &&
+    cfg.cpu_medium_threshold > cfg.cpu_low_threshold &&
+    inRange(cfg.cpu_surge_threshold) &&
+    inRange(cfg.cpu_medium_threshold) &&
+    inRange(cfg.cpu_low_threshold) &&
+    cfg.cooldown_seconds >= 0
+  );
+}
