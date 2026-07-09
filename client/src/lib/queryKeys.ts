@@ -139,6 +139,8 @@ export const queryKeys = {
   },
   power: {
     status: () => ['power', 'status'] as const,
+    /** PowerManagement page: combined status+presets+demands+intensities+history+auto-scaling+dynamic (5s poll). */
+    management: () => ['power', 'management'] as const,
   },
   statusBar: {
     state: () => ['status-bar', 'state'] as const,
