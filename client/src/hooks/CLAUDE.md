@@ -36,6 +36,7 @@ Custom React hooks encapsulating data fetching, polling, and UI logic. Each hook
 | `useNetworkStatus.ts` | `api/monitoring` | Current network I/O for `NetworkWidget` via **TanStack Query** (`useQuery`, default 3s poll via `refreshInterval`→`refetchInterval`, `queryKeys.monitoring.networkCurrent()` key). Shares that key with `useNetworkMonitoring` → the two former pollers of the same endpoint collapse to one cache entry + one poll (#299). Public shape unchanged (`{ status, loading, error, refetch }`); `formatNetworkSpeed` helper co-located |
 | `useUptimeData.ts` | `api/monitoring` | Uptime current + history for the SystemMonitor `UptimeTab` via **TanStack Query** (`useQuery`, default 10s poll, `monitoring.uptimeCurrent()` / `uptimeHistory(range)` keys). Replaced the tab's hand-rolled `setInterval`; returns `{ current, history, sleepEvents, error }` (keeps last value on transient errors — TanStack default). The tab's 1s live-counter tick stays in the component (animation, not a fetch) |
 | `useOpenApiSchema.ts` | — | OpenAPI schema for API docs page |
+| `useFileBrowser.ts` | `api/files` | Browsing core for `FileManager` via **TanStack Query**: mountpoints + directory listing (`files.list(fullPath)` key), navigation (`selectMountpoint`/`navigateToFolder`/`goBack`/`goHome`), derived `storageInfo`, and create/delete/rename mutations that `refresh()` (invalidate the listing). Replaces the page's hand-rolled `sessionStorage` file cache (F2/#301, PR-1) |
 
 ## Utility Hooks
 

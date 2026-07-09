@@ -10,7 +10,6 @@ import {
   Loader2,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { apiClient } from '../lib/api';
 import { getFilePermissions, getUserRootUsage, setFilePermissions } from '../api/files';
 import { getShareableUsers } from '../api/shares';
 import { VersionHistoryModal } from '../components/vcl/VersionHistoryModal';
@@ -26,7 +25,8 @@ import { DeleteDialog } from '../components/file-manager/DeleteDialog';
 import { RenameDialog } from '../components/file-manager/RenameDialog';
 import { useUpload } from '../contexts/UploadContext';
 import ShareFileModal from '../components/ShareFileModal';
-import type { StorageInfo, StorageMountpoint, FileItem, ApiFileItem, PermissionRule } from '../components/file-manager/types';
+import { useFileBrowser } from '../hooks/useFileBrowser';
+import type { FileItem, PermissionRule } from '../components/file-manager/types';
 
 export default function FileManager() {
   const { user } = useAuth();
@@ -81,9 +81,12 @@ export default function FileManager() {
 
   // User cache for owner names
   const [userCache, setUserCache] = useState<Record<string, string>>({});
-  const [files, setFiles] = useState<FileItem[]>([]);
-  const [currentPath, setCurrentPath] = useState('');
-  const [loading, setLoading] = useState(false);
+  const {
+    mountpoints, selectedMountpoint, selectMountpoint,
+    currentPath, getFullPath, navigateToFolder, goBack, goHome,
+    files, loading, storageInfo,
+    createFolder, deleteFile, renameFile, downloadFile, refresh,
+  } = useFileBrowser();
   const { startUpload, isUploading, onUploadsComplete } = useUpload();
   const [showNewFolderDialog, setShowNewFolderDialog] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
@@ -94,9 +97,6 @@ export default function FileManager() {
   const [newFileName, setNewFileName] = useState('');
   const [dragActive, setDragActive] = useState(false);
   const [viewingFile, setViewingFile] = useState<FileItem | null>(null);
-  const [storageInfo, setStorageInfo] = useState<StorageInfo | null>(null);
-  const [mountpoints, setMountpoints] = useState<StorageMountpoint[]>([]);
-  const [selectedMountpoint, setSelectedMountpoint] = useState<StorageMountpoint | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
 
@@ -114,14 +114,7 @@ export default function FileManager() {
   } | null>(null);
   const [userRootUsageBytes, setUserRootUsageBytes] = useState<number | null>(null);
 
-  const getErrorMessage = (error: unknown): string => {
-    if (!error || typeof error !== 'object') return 'Unknown error';
-    const obj = error as Record<string, unknown>;
-    return String(obj.error ?? obj.detail ?? 'Unknown error');
-  };
-
   useEffect(() => {
-    loadMountpoints();
     loadVclQuota();
     loadUserRootUsage();
   }, []);
@@ -129,21 +122,11 @@ export default function FileManager() {
   // Reload files + storage when uploads complete
   useEffect(() => {
     return onUploadsComplete(() => {
-      sessionStorage.removeItem(`files_cache_${currentPath}`);
-      sessionStorage.removeItem('storage_info_cache');
-      loadFiles(currentPath, false);
-      loadStorageInfo();
+      refresh();
       loadVclQuota();
       loadUserRootUsage();
     });
-  }, [currentPath, onUploadsComplete]);
-
-  useEffect(() => {
-    if (selectedMountpoint) {
-      loadFiles(currentPath);
-      loadStorageInfo();
-    }
-  }, [currentPath, selectedMountpoint]);
+  }, [onUploadsComplete, refresh]);
 
   // Load VCL Quota
   const loadVclQuota = async () => {
@@ -268,99 +251,6 @@ export default function FileManager() {
 
   if (!user) return null;
 
-  const loadMountpoints = async () => {
-    try {
-      const { data } = await apiClient.get('/api/files/mountpoints');
-      setMountpoints(data.mountpoints || []);
-
-      const defaultMp = data.mountpoints.find((mp: StorageMountpoint) => mp.is_default)
-                       || data.mountpoints[0];
-      if (defaultMp) {
-        setSelectedMountpoint(defaultMp);
-        setCurrentPath('');
-      }
-    } catch {
-      toast.error('Failed to load storage devices');
-    }
-  };
-
-  const loadStorageInfo = async () => {
-    if (!selectedMountpoint) return;
-
-    const info = {
-      totalBytes: selectedMountpoint.size_bytes,
-      usedBytes: selectedMountpoint.used_bytes,
-      availableBytes: selectedMountpoint.available_bytes
-    };
-    setStorageInfo(info);
-  };
-
-  const getFullPath = (relativePath: string = currentPath): string => {
-    if (!selectedMountpoint) return relativePath;
-
-    if (selectedMountpoint.type === 'dev-storage') {
-      return relativePath;
-    }
-
-    const cleanRelativePath = relativePath.startsWith('/') ? relativePath.slice(1) : relativePath;
-    return cleanRelativePath ? `${selectedMountpoint.path}/${cleanRelativePath}` : selectedMountpoint.path;
-  };
-
-  const loadFiles = async (path: string, useCache = true) => {
-    if (!selectedMountpoint) return;
-
-    const fullPath = getFullPath(path);
-
-    if (useCache) {
-      const cacheKey = `files_cache_${fullPath}`;
-      const cachedData = sessionStorage.getItem(cacheKey);
-      if (cachedData) {
-        try {
-          const cached = JSON.parse(cachedData);
-          setFiles(cached.files);
-        } catch {
-          // ignore cache parse errors
-        }
-      }
-    }
-
-    setLoading(true);
-
-    try {
-      const { data } = await apiClient.get('/api/files/list', { params: { path: fullPath } });
-      if (Array.isArray(data.files)) {
-        const mappedFiles: FileItem[] = (data.files as ApiFileItem[]).map((file) => ({
-          name: file.name,
-          path: file.path,
-          size: file.size,
-          type: file.type,
-          modifiedAt: file.modified_at ?? file.mtime ?? new Date().toISOString(),
-          ownerId: file.ownerId ?? file.owner_id,
-          ownerName: file.ownerName ?? file.owner_name,
-          file_id: file.file_id,
-          syncInfo: file.sync_info?.map(si => ({
-            deviceName: si.device_name,
-            platform: si.platform as 'windows' | 'mac' | 'linux',
-            syncDirection: si.sync_direction as 'bidirectional' | 'push' | 'pull',
-            lastReportedAt: si.last_reported_at,
-          })),
-          canRead: file.can_read ?? undefined,
-          canWrite: file.can_write ?? undefined,
-          canDelete: file.can_delete ?? undefined,
-        }));
-        setFiles(mappedFiles);
-
-        const cacheKey = `files_cache_${fullPath}`;
-        sessionStorage.setItem(cacheKey, JSON.stringify({ files: mappedFiles, timestamp: Date.now() }));
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to load files';
-      toast.error(msg);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const fileList = e.target.files;
     if (!fileList) return;
@@ -375,98 +265,15 @@ export default function FileManager() {
     e.target.value = '';
   };
 
-  const handleDownload = async (file: FileItem) => {
-    if (file.type === 'directory') return;
-
-    try {
-      const { data: blob } = await apiClient.get(`/api/files/download/${encodeURIComponent(file.path)}`, {
-        responseType: 'blob',
-      });
-      const downloadUrl = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = downloadUrl;
-      a.download = file.name;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      window.URL.revokeObjectURL(downloadUrl);
-    } catch {
-      toast.error(t('fileManager:messages.downloadError', 'Download failed'));
-    }
-  };
-
-  const handleCreateFolder = async () => {
-    if (!newFolderName.trim()) {
-      toast.error(t('fileManager:messages.enterFolderName', 'Please enter a folder name'));
-      return;
-    }
-
-    try {
-      await apiClient.post('/api/files/folder', {
-        path: getFullPath(),
-        name: newFolderName,
-      });
-      toast.success(t('fileManager:messages.folderCreated', 'Folder created successfully'));
-      setShowNewFolderDialog(false);
-      setNewFolderName('');
-      sessionStorage.removeItem(`files_cache_${currentPath}`);
-      loadFiles(currentPath, false);
-    } catch (err: unknown) {
-      const detail = (err as { response?: { data?: unknown } })?.response?.data;
-      toast.error(`${t('fileManager:messages.folderError', 'Failed to create folder')}: ${getErrorMessage(detail ?? err)}`);
-    }
-  };
-
   const confirmDelete = (file: FileItem) => {
     setFileToDelete(file);
     setShowDeleteDialog(true);
-  };
-
-  const handleDelete = async () => {
-    if (!fileToDelete) return;
-
-    try {
-      await apiClient.delete(`/api/files/${encodeURIComponent(fileToDelete.path)}`);
-      toast.success(t('fileManager:messages.deleteSuccess'));
-      setShowDeleteDialog(false);
-      setFileToDelete(null);
-      sessionStorage.removeItem(`files_cache_${currentPath}`);
-      sessionStorage.removeItem('storage_info_cache');
-      loadFiles(currentPath, false);
-      loadStorageInfo();
-    } catch (err: unknown) {
-      const detail = (err as { response?: { data?: unknown } })?.response?.data;
-      toast.error(`${t('fileManager:messages.deleteError')}: ${getErrorMessage(detail ?? err)}`);
-    }
   };
 
   const startRename = (file: FileItem) => {
     setFileToRename(file);
     setNewFileName(file.name);
     setShowRenameDialog(true);
-  };
-
-  const handleRename = async () => {
-    if (!fileToRename || !newFileName.trim()) {
-      toast.error(t('fileManager:messages.enterFileName', 'Please enter a valid file name'));
-      return;
-    }
-
-    try {
-      await apiClient.put('/api/files/rename', {
-        old_path: fileToRename.path,
-        new_name: newFileName,
-      });
-      toast.success(t('fileManager:messages.renameSuccess'));
-      setShowRenameDialog(false);
-      setFileToRename(null);
-      setNewFileName('');
-      sessionStorage.removeItem(`files_cache_${currentPath}`);
-      loadFiles(currentPath, false);
-    } catch (err: unknown) {
-      const detail = (err as { response?: { data?: unknown } })?.response?.data;
-      toast.error(`${t('fileManager:messages.renameError')}: ${getErrorMessage(detail ?? err)}`);
-    }
   };
 
   const handleDrag = (e: React.DragEvent) => {
@@ -542,25 +349,6 @@ export default function FileManager() {
 
   const handleViewFile = (file: FileItem) => {
     setViewingFile(file);
-  };
-
-  const navigateToFolder = (folderPath: string) => {
-    if (selectedMountpoint && selectedMountpoint.type !== 'dev-storage') {
-      const mountpointPrefix = selectedMountpoint.path;
-      if (folderPath.startsWith(mountpointPrefix)) {
-        const relativePath = folderPath.slice(mountpointPrefix.length).replace(/^\//, '');
-        setCurrentPath(relativePath);
-        return;
-      }
-    }
-    setCurrentPath(folderPath);
-  };
-
-  const goBack = () => {
-    const parts = currentPath.split('/').filter(Boolean);
-    parts.pop();
-    const parentPath = parts.join('/');
-    setCurrentPath(parentPath);
   };
 
   const handleEditPermissionsClick = async (file: FileItem) => {
@@ -742,17 +530,14 @@ export default function FileManager() {
       <StorageSelector
         mountpoints={mountpoints}
         selectedMountpoint={selectedMountpoint}
-        onSelect={(mp) => {
-          setSelectedMountpoint(mp);
-          setCurrentPath('');
-        }}
+        onSelect={selectMountpoint}
       />
 
       {/* Breadcrumb Navigation */}
       <div className="card border-slate-800/60 bg-slate-900/55">
         <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs sm:text-sm text-slate-400">
           <button
-            onClick={() => setCurrentPath('')}
+            onClick={goHome}
             className="rounded-full border border-slate-700/70 bg-slate-950/70 px-2.5 sm:px-3 py-1.5 text-[10px] sm:text-xs font-medium uppercase tracking-[0.15em] sm:tracking-[0.2em] text-slate-300 transition hover:border-slate-600 hover:text-white touch-manipulation active:scale-95"
           >
             {t('fileManager:labels.home', 'Home')}
@@ -790,7 +575,7 @@ export default function FileManager() {
           isCurrentUserOwnerOrAdmin={isCurrentUserOwnerOrAdmin}
           onNavigate={navigateToFolder}
           onView={handleViewFile}
-          onDownload={handleDownload}
+          onDownload={downloadFile}
           onRename={startRename}
           onDelete={confirmDelete}
           onVersionHistory={handleVersionHistory}
@@ -812,7 +597,7 @@ export default function FileManager() {
         <NewFolderDialog
           folderName={newFolderName}
           onFolderNameChange={setNewFolderName}
-          onCreate={handleCreateFolder}
+          onCreate={async () => { if (await createFolder(newFolderName)) { setShowNewFolderDialog(false); setNewFolderName(''); } }}
           onClose={() => { setShowNewFolderDialog(false); setNewFolderName(''); }}
         />
       )}
@@ -821,7 +606,7 @@ export default function FileManager() {
       {showDeleteDialog && fileToDelete && (
         <DeleteDialog
           file={fileToDelete}
-          onConfirm={handleDelete}
+          onConfirm={async () => { if (fileToDelete && await deleteFile(fileToDelete)) { setShowDeleteDialog(false); setFileToDelete(null); } }}
           onClose={() => { setShowDeleteDialog(false); setFileToDelete(null); }}
         />
       )}
@@ -832,7 +617,7 @@ export default function FileManager() {
           file={fileToRename}
           newName={newFileName}
           onNameChange={setNewFileName}
-          onRename={handleRename}
+          onRename={async () => { if (fileToRename && await renameFile(fileToRename, newFileName)) { setShowRenameDialog(false); setFileToRename(null); setNewFileName(''); } }}
           onClose={() => { setShowRenameDialog(false); setFileToRename(null); setNewFileName(''); }}
         />
       )}
@@ -852,7 +637,7 @@ export default function FileManager() {
             setVersionHistoryFile(null);
           }}
           onVersionRestored={() => {
-            loadFiles(currentPath, false);
+            refresh();
           }}
         />
       )}
@@ -890,7 +675,7 @@ export default function FileManager() {
             }));
             setShowOwnershipModal(false);
             setFileToTransfer(null);
-            loadFiles(currentPath, false);
+            refresh();
           }}
         />
       )}
