@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
 import {
@@ -10,10 +10,9 @@ import {
   Loader2,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { getFilePermissions, getUserRootUsage, setFilePermissions } from '../api/files';
+import { getFilePermissions, setFilePermissions } from '../api/files';
 import { getShareableUsers } from '../api/shares';
 import { VersionHistoryModal } from '../components/vcl/VersionHistoryModal';
-import { vclApi, addTrackingRule, removeTrackingRule, getTrackingRules, checkFileTracking } from '../api/vcl';
 import { formatBytes, formatNumber } from '../lib/formatters';
 import { FileViewer } from '../components/file-manager/FileViewer';
 import { StorageSelector } from '../components/file-manager/StorageSelector';
@@ -26,6 +25,9 @@ import { RenameDialog } from '../components/file-manager/RenameDialog';
 import { useUpload } from '../contexts/UploadContext';
 import ShareFileModal from '../components/ShareFileModal';
 import { useFileBrowser } from '../hooks/useFileBrowser';
+import { useVclFileInfo } from '../hooks/useVclFileInfo';
+import { useFileUpload } from '../hooks/useFileUpload';
+import { buildOwnerNameCache } from '../components/file-manager/utils';
 import type { FileItem, PermissionRule } from '../components/file-manager/types';
 
 export default function FileManager() {
@@ -79,15 +81,21 @@ export default function FileManager() {
     setFileToEditPermissions(null);
   }
 
-  // User cache for owner names
-  const [userCache, setUserCache] = useState<Record<string, string>>({});
   const {
     mountpoints, selectedMountpoint, selectMountpoint,
     currentPath, getFullPath, navigateToFolder, goBack, goHome,
     files, loading, storageInfo,
     createFolder, deleteFile, renameFile, downloadFile, refresh,
   } = useFileBrowser();
-  const { startUpload, isUploading, onUploadsComplete } = useUpload();
+  const {
+    vclQuota, userRootUsageBytes, versionCounts, trackingStatus, vclMode,
+    toggleTracking, refreshVcl,
+  } = useVclFileInfo(files);
+  const {
+    dragActive, isUploading, handleUpload, handleFolderUpload, handleDrag, handleDrop,
+  } = useFileUpload({ getFullPath, availableBytes: storageInfo?.availableBytes });
+  const userCache = useMemo(() => buildOwnerNameCache(files), [files]);
+  const { onUploadsComplete } = useUpload();
   const [showNewFolderDialog, setShowNewFolderDialog] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -95,7 +103,6 @@ export default function FileManager() {
   const [showRenameDialog, setShowRenameDialog] = useState(false);
   const [fileToRename, setFileToRename] = useState<FileItem | null>(null);
   const [newFileName, setNewFileName] = useState('');
-  const [dragActive, setDragActive] = useState(false);
   const [viewingFile, setViewingFile] = useState<FileItem | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
@@ -103,167 +110,16 @@ export default function FileManager() {
   // VCL State
   const [showVersionHistory, setShowVersionHistory] = useState(false);
   const [versionHistoryFile, setVersionHistoryFile] = useState<FileItem | null>(null);
-  const [versionCounts, setVersionCounts] = useState<Record<number, number>>({});
-  const [trackingStatus, setTrackingStatus] = useState<Record<number, boolean>>({});
-  const [vclMode, setVclMode] = useState<'automatic' | 'manual'>('automatic');
-  const [vclQuota, setVclQuota] = useState<{
-    usagePercent: number;
-    warning: 'warning' | 'critical' | null;
-    current: number;
-    max: number;
-  } | null>(null);
-  const [userRootUsageBytes, setUserRootUsageBytes] = useState<number | null>(null);
-
-  useEffect(() => {
-    loadVclQuota();
-    loadUserRootUsage();
-  }, []);
 
   // Reload files + storage when uploads complete
   useEffect(() => {
     return onUploadsComplete(() => {
       refresh();
-      loadVclQuota();
-      loadUserRootUsage();
+      refreshVcl();
     });
-  }, [onUploadsComplete, refresh]);
-
-  // Load VCL Quota
-  const loadVclQuota = async () => {
-    try {
-      const quota = await vclApi.getUserQuota();
-      let warningLevel: 'warning' | 'critical' | null = null;
-      if (quota.usage_percent >= 95) {
-        warningLevel = 'critical';
-      } else if (quota.usage_percent >= 80) {
-        warningLevel = 'warning';
-      }
-
-      setVclQuota({
-        usagePercent: quota.usage_percent,
-        warning: warningLevel,
-        current: quota.current_usage_bytes,
-        max: quota.max_size_bytes,
-      });
-
-      if (warningLevel === 'critical') {
-        toast.error(
-          `VCL Storage Critical: ${formatNumber(quota.usage_percent, 1)}% used (${formatBytes(quota.current_usage_bytes)} / ${formatBytes(quota.max_size_bytes)})`,
-          { duration: 8000 }
-        );
-      } else if (warningLevel === 'warning') {
-        toast(
-          `VCL Storage Warning: ${formatNumber(quota.usage_percent, 1)}% used (${formatBytes(quota.current_usage_bytes)} / ${formatBytes(quota.max_size_bytes)})`,
-          { duration: 6000, icon: '\u26a0\ufe0f' }
-        );
-      }
-    } catch {
-      // Silently ignore quota errors
-    }
-  };
-
-  const loadUserRootUsage = async () => {
-    try {
-      const usage = await getUserRootUsage();
-      setUserRootUsageBytes(usage.user_root_used_bytes);
-    } catch {
-      // Silently ignore root usage errors
-    }
-  };
-
-  // Load version counts for all files with file_id
-  useEffect(() => {
-    const loadVersionCounts = async () => {
-      const fileIds = files
-        .filter(f => f.type === 'file' && f.file_id)
-        .map(f => f.file_id!);
-
-      if (fileIds.length === 0) return;
-
-      try {
-        const counts: Record<number, number> = {};
-        await Promise.all(
-          fileIds.map(async (fileId) => {
-            try {
-              const response = await vclApi.getFileVersions(fileId);
-              counts[fileId] = response.total;
-            } catch {
-              // Ignore errors for individual files
-            }
-          })
-        );
-        setVersionCounts(counts);
-      } catch {
-        // Ignore
-      }
-    };
-
-    loadVersionCounts();
-  }, [files]);
-
-  // Load VCL mode and tracking status
-  useEffect(() => {
-    const loadTrackingInfo = async () => {
-      try {
-        const rules = await getTrackingRules();
-        setVclMode(rules.mode as 'automatic' | 'manual');
-
-        // Build tracking status for files with explicit rules
-        const status: Record<number, boolean> = {};
-        for (const rule of rules.rules) {
-          if (rule.file_id) {
-            status[rule.file_id] = rule.action === 'track';
-          }
-        }
-
-        // For files with file_ids, check individual status via bulk approach
-        const fileIds = files.filter(f => f.file_id).map(f => f.file_id!);
-        if (fileIds.length > 0 && fileIds.length <= 50) {
-          await Promise.all(
-            fileIds.map(async (fid) => {
-              if (status[fid] !== undefined) return;
-              try {
-                const check = await checkFileTracking(fid);
-                status[fid] = check.is_tracked;
-              } catch { /* ignore */ }
-            })
-          );
-        }
-
-        setTrackingStatus(status);
-      } catch {
-        // Silently ignore
-      }
-    };
-    if (files.length > 0) loadTrackingInfo();
-  }, [files]);
-
-  // Build owner name cache from backend-provided owner_name field
-  useEffect(() => {
-    const cache: Record<string, string> = {};
-    for (const f of files) {
-      if (f.ownerId != null && f.ownerName && f.ownerName !== 'null') {
-        cache[f.ownerId] = f.ownerName;
-      }
-    }
-    setUserCache(cache);
-  }, [files]);
+  }, [onUploadsComplete, refresh, refreshVcl]);
 
   if (!user) return null;
-
-  const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const fileList = e.target.files;
-    if (!fileList) return;
-    startUpload(fileList, getFullPath(), storageInfo?.availableBytes);
-    e.target.value = '';
-  };
-
-  const handleFolderUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const fileList = e.target.files;
-    if (!fileList) return;
-    startUpload(fileList, getFullPath(), storageInfo?.availableBytes);
-    e.target.value = '';
-  };
 
   const confirmDelete = (file: FileItem) => {
     setFileToDelete(file);
@@ -274,77 +130,6 @@ export default function FileManager() {
     setFileToRename(file);
     setNewFileName(file.name);
     setShowRenameDialog(true);
-  };
-
-  const handleDrag = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.type === 'dragenter' || e.type === 'dragover') {
-      setDragActive(true);
-    } else if (e.type === 'dragleave') {
-      setDragActive(false);
-    }
-  };
-
-  const traverseFileTree = async (item: FileSystemEntry, path = ''): Promise<File[]> => {
-    const files: File[] = [];
-
-    if (item.isFile) {
-      return new Promise((resolve) => {
-        (item as FileSystemFileEntry).file((file: File) => {
-          const newFile = new File([file], path + file.name, { type: file.type });
-          Object.defineProperty(newFile, 'webkitRelativePath', {
-            value: path + file.name,
-            writable: false
-          });
-          resolve([newFile]);
-        });
-      });
-    } else if (item.isDirectory) {
-      const dirReader = (item as FileSystemDirectoryEntry).createReader();
-      return new Promise((resolve) => {
-        const readEntries = () => {
-          dirReader.readEntries(async (entries: FileSystemEntry[]) => {
-            if (entries.length === 0) {
-              resolve(files);
-            } else {
-              for (const entry of entries) {
-                const subFiles = await traverseFileTree(entry, path + item.name + '/');
-                files.push(...subFiles);
-              }
-              readEntries();
-            }
-          });
-        };
-        readEntries();
-      });
-    }
-    return files;
-  };
-
-  const handleDrop = async (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragActive(false);
-
-    const items = e.dataTransfer.items;
-    if (!items) return;
-
-    const allFiles: File[] = [];
-
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i].webkitGetAsEntry();
-      if (item) {
-        const files = await traverseFileTree(item);
-        allFiles.push(...files);
-      }
-    }
-
-    if (allFiles.length > 0) {
-      const dt = new DataTransfer();
-      allFiles.forEach(file => dt.items.add(file));
-      startUpload(dt.files, getFullPath(), storageInfo?.availableBytes);
-    }
   };
 
   const handleViewFile = (file: FileItem) => {
@@ -384,47 +169,6 @@ export default function FileManager() {
   const handleVersionHistory = (file: FileItem) => {
     setVersionHistoryFile(file);
     setShowVersionHistory(true);
-  };
-
-  const handleToggleTracking = async (file: FileItem) => {
-    if (!file.file_id) return;
-    const isCurrentlyTracked = trackingStatus[file.file_id] ?? (vclMode !== 'manual');
-    try {
-      if (isCurrentlyTracked) {
-        // In automatic mode: add exclude rule. In manual mode: remove track rule.
-        if (vclMode === 'manual') {
-          // Find and remove the track rule for this file
-          const rules = await getTrackingRules();
-          const rule = rules.rules.find(r => r.file_id === file.file_id && r.action === 'track');
-          if (rule) await removeTrackingRule(rule.id);
-        } else {
-          await addTrackingRule({
-            file_id: file.file_id,
-            action: 'exclude',
-            is_directory: file.type === 'directory',
-          });
-        }
-        setTrackingStatus(prev => ({ ...prev, [file.file_id!]: false }));
-        toast.success(`VCL disabled for ${file.name}`);
-      } else {
-        // In automatic mode: remove exclude rule. In manual mode: add track rule.
-        if (vclMode === 'automatic') {
-          const rules = await getTrackingRules();
-          const rule = rules.rules.find(r => r.file_id === file.file_id && r.action === 'exclude');
-          if (rule) await removeTrackingRule(rule.id);
-        } else {
-          await addTrackingRule({
-            file_id: file.file_id,
-            action: 'track',
-            is_directory: file.type === 'directory',
-          });
-        }
-        setTrackingStatus(prev => ({ ...prev, [file.file_id!]: true }));
-        toast.success(`VCL enabled for ${file.name}`);
-      }
-    } catch {
-      toast.error('Failed to update tracking');
-    }
   };
 
   const handleTransferOwnershipClick = (file: FileItem) => {
@@ -579,7 +323,7 @@ export default function FileManager() {
           onRename={startRename}
           onDelete={confirmDelete}
           onVersionHistory={handleVersionHistory}
-          onToggleTracking={handleToggleTracking}
+          onToggleTracking={toggleTracking}
           trackingStatus={trackingStatus}
           vclMode={vclMode}
           onShare={handleShareFile}

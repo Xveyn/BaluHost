@@ -37,6 +37,8 @@ Custom React hooks encapsulating data fetching, polling, and UI logic. Each hook
 | `useUptimeData.ts` | `api/monitoring` | Uptime current + history for the SystemMonitor `UptimeTab` via **TanStack Query** (`useQuery`, default 10s poll, `monitoring.uptimeCurrent()` / `uptimeHistory(range)` keys). Replaced the tab's hand-rolled `setInterval`; returns `{ current, history, sleepEvents, error }` (keeps last value on transient errors — TanStack default). The tab's 1s live-counter tick stays in the component (animation, not a fetch) |
 | `useOpenApiSchema.ts` | — | OpenAPI schema for API docs page |
 | `useFileBrowser.ts` | `api/files` | Browsing core for `FileManager` via **TanStack Query**: mountpoints + directory listing (`files.list(fullPath)` key), navigation (`selectMountpoint`/`navigateToFolder`/`goBack`/`goHome`), derived `storageInfo`, and create/delete/rename mutations that `refresh()` (invalidate the listing). Replaces the page's hand-rolled `sessionStorage` file cache (F2/#301, PR-1) |
+| `useVclFileInfo.ts` | `api/vcl`, `api/files` | VCL slice for FileManager (F2/#301 PR-2) — quota + user-root-usage via **TanStack Query** (`vcl.quota()`/`files.userRootUsage()` keys), version-counts + tracking fan-outs deliberately kept effect-based; `toggleTracking` optimistic; `refreshVcl` invalidates both keys |
+| `useFileUpload.ts` | `contexts/UploadContext` | Drag/drop + upload handlers for FileManager (F2/#301 PR-2) — owns `dragActive`, wraps `useUpload().startUpload`; `traverseFileTree` internal |
 
 ## Utility Hooks
 
