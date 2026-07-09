@@ -334,8 +334,12 @@ describe('useFileBrowser', () => {
 
   it('does not list before a mountpoint is selected', async () => {
     vi.mocked(filesApi.getMountpoints).mockResolvedValue({ mountpoints: [] } as never);
-    renderHook(() => useFileBrowser(), { wrapper: createQueryWrapper() });
+    const { result } = renderHook(() => useFileBrowser(), { wrapper: createQueryWrapper() });
+    // Wait until mountpoints have actually resolved (empty) — proves the empty
+    // result does not select a mountpoint and therefore never lists.
+    await waitFor(() => expect(filesApi.getMountpoints).toHaveBeenCalled());
     await act(async () => { await Promise.resolve(); });
+    expect(result.current.selectedMountpoint).toBeNull();
     expect(filesApi.listFiles).not.toHaveBeenCalled();
   });
 
@@ -404,6 +408,13 @@ import {
 import { getFullPath, mapApiFileItem, parentPath, toRelativePath } from '../components/file-manager/utils';
 import type { FileItem, StorageInfo, StorageMountpoint } from '../components/file-manager/types';
 
+// Stable empty-array references. IMPORTANT: the page has effects keyed on `files`
+// (e.g. the owner-name cache in FileManager.tsx). Returning a fresh `[]` on every
+// render while the query has no data yet would re-fire those effects every render
+// (setUserCache → re-render → new [] → …), an infinite loop. Keep these stable.
+const EMPTY_FILES: FileItem[] = [];
+const EMPTY_MOUNTPOINTS: StorageMountpoint[] = [];
+
 const getErrorMessage = (error: unknown): string => {
   if (!error || typeof error !== 'object') return 'Unknown error';
   const obj = error as Record<string, unknown>;
@@ -469,7 +480,7 @@ export function useFileBrowser(): UseFileBrowserResult {
     enabled: !!selectedMountpoint,
   });
 
-  const files = filesQuery.data ?? [];
+  const files = filesQuery.data ?? EMPTY_FILES;
   const loading = filesQuery.isFetching;
 
   const storageInfo: StorageInfo | null = selectedMountpoint
@@ -570,7 +581,7 @@ export function useFileBrowser(): UseFileBrowserResult {
   );
 
   return {
-    mountpoints: mountpointsQuery.data?.mountpoints ?? [],
+    mountpoints: mountpointsQuery.data?.mountpoints ?? EMPTY_MOUNTPOINTS,
     selectedMountpoint,
     selectMountpoint,
     currentPath,
