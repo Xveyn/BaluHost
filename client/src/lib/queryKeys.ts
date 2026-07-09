@@ -23,6 +23,8 @@ export const queryKeys = {
     processesCurrent: () => ['monitoring', 'processes', 'current'] as const,
     processesHistory: (duration: TimeRange, source: DataSource, processName?: string) =>
       ['monitoring', 'processes', 'history', duration, source, processName ?? null] as const,
+    uptimeCurrent: () => ['monitoring', 'uptime', 'current'] as const,
+    uptimeHistory: (duration: TimeRange) => ['monitoring', 'uptime', 'history', duration] as const,
   },
   system: {
     telemetry: () => ['system', 'telemetry'] as const,
