@@ -48,3 +48,21 @@ export function parentPath(currentPath: string): string {
   parts.pop();
   return parts.join('/');
 }
+
+/** VCL quota warning level: >=95 critical, >=80 warning, else null. */
+export function vclWarningLevel(usagePercent: number): 'warning' | 'critical' | null {
+  if (usagePercent >= 95) return 'critical';
+  if (usagePercent >= 80) return 'warning';
+  return null;
+}
+
+/** Derives the ownerId->ownerName cache from the backend-provided owner_name field. */
+export function buildOwnerNameCache(files: FileItem[]): Record<string, string> {
+  const cache: Record<string, string> = {};
+  for (const f of files) {
+    if (f.ownerId != null && f.ownerName && f.ownerName !== 'null') {
+      cache[f.ownerId] = f.ownerName;
+    }
+  }
+  return cache;
+}

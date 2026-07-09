@@ -45,6 +45,10 @@ export const queryKeys = {
     mountpoints: () => ['files', 'mountpoints'] as const,
     /** Directory listing; the resolved backend full path is part of the key. */
     list: (fullPath: string) => ['files', 'list', fullPath] as const,
+    userRootUsage: () => ['files', 'user-root-usage'] as const,
+  },
+  vcl: {
+    quota: () => ['vcl', 'quota'] as const,
   },
   cloudImport: {
     connections: () => ['cloud-import', 'connections'] as const,

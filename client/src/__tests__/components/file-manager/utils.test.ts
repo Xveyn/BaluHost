@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { mapApiFileItem, getFullPath, toRelativePath, parentPath } from '../../../components/file-manager/utils';
-import type { ApiFileItem, StorageMountpoint } from '../../../components/file-manager/types';
+import { mapApiFileItem, getFullPath, toRelativePath, parentPath, vclWarningLevel, buildOwnerNameCache } from '../../../components/file-manager/utils';
+import type { ApiFileItem, StorageMountpoint, FileItem } from '../../../components/file-manager/types';
 
 const raid: StorageMountpoint = {
   id: 'a', name: 'Main', type: 'raid', path: '/mnt/main',
@@ -66,5 +66,38 @@ describe('parentPath', () => {
   it('returns empty for a single segment or empty input', () => {
     expect(parentPath('a')).toBe('');
     expect(parentPath('')).toBe('');
+  });
+});
+
+describe('vclWarningLevel', () => {
+  it('returns critical at or above 95%', () => {
+    expect(vclWarningLevel(95)).toBe('critical');
+    expect(vclWarningLevel(99.9)).toBe('critical');
+  });
+  it('returns warning in [80, 95)', () => {
+    expect(vclWarningLevel(80)).toBe('warning');
+    expect(vclWarningLevel(94.9)).toBe('warning');
+  });
+  it('returns null below 80%', () => {
+    expect(vclWarningLevel(79.9)).toBeNull();
+    expect(vclWarningLevel(0)).toBeNull();
+  });
+});
+
+describe('buildOwnerNameCache', () => {
+  const f = (over: Partial<FileItem>): FileItem => ({
+    name: 'x', path: 'x', size: 0, type: 'file', modifiedAt: 't', ...over,
+  });
+  it('maps ownerId -> ownerName for valid entries', () => {
+    const cache = buildOwnerNameCache([f({ ownerId: 7, ownerName: 'bob' }), f({ ownerId: 9, ownerName: 'ann' })]);
+    expect(cache).toEqual({ '7': 'bob', '9': 'ann' });
+  });
+  it('skips missing / "null" / absent owner names', () => {
+    const cache = buildOwnerNameCache([
+      f({ ownerId: 1, ownerName: undefined }),
+      f({ ownerId: 2, ownerName: 'null' }),
+      f({ ownerName: 'noid' }),
+    ]);
+    expect(cache).toEqual({});
   });
 });
