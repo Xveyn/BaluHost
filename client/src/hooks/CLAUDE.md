@@ -32,6 +32,7 @@ Custom React hooks encapsulating data fetching, polling, and UI logic. Each hook
 | `useSleepStatus.ts` | `api/sleep`, `api/fritzbox` | Sleep-mode status via **TanStack Query** (`useQuery`) with an **adaptive** `refetchInterval` — the pure `sleepPollInterval(state)` returns 30s in `soft_sleep` (so the poll can't auto-wake the box) / 5s otherwise (#299). Fritz!Box config is a separate once-only query (`staleTime: Infinity`, `retry: false` → unconfigured = `null`, no spam). Consumer: `SleepModePanel` (mutations stay imperative, call `refetch`) |
 | `useGpuPower.ts` | `api/gpuPower` | GPU-power status + config + capabilities via **TanStack Query** (`useQuery`, 5s poll, combined `gpuPower.overview()` key). `draft` is the editable config copy, **seeded once** (`prev ?? config`) so a background poll never wipes an in-progress edit (draft-guard); `config` still tracks the server so `dirty` is accurate. Save = **`useMutation`** (`putConfig`) that re-seeds the draft. Consumer: `GpuPowerCard` |
 | `useGpuCurrent.ts` | `api/monitoring` | Current GPU sample via **TanStack Query** (`useQuery`, 3s poll, `gpu.current()` key). Mounted by `GpuTab` + `Dashboard` — the shared key collapses the two former `setInterval` pollers into one cache entry + one poll (#299). Returns `GpuSample \| null`; `enabled` arg gates polling on GPU presence. Keeps the last value on transient errors (TanStack default) |
+| `useNetworkStatus.ts` | `api/monitoring` | Current network I/O for `NetworkWidget` via **TanStack Query** (`useQuery`, default 3s poll via `refreshInterval`→`refetchInterval`, `queryKeys.monitoring.networkCurrent()` key). Shares that key with `useNetworkMonitoring` → the two former pollers of the same endpoint collapse to one cache entry + one poll (#299). Public shape unchanged (`{ status, loading, error, refetch }`); `formatNetworkSpeed` helper co-located |
 | `useOpenApiSchema.ts` | — | OpenAPI schema for API docs page |
 
 ## Utility Hooks
@@ -42,7 +43,6 @@ Custom React hooks encapsulating data fetching, polling, and UI logic. Each hook
 | `useSortableTable.ts` | Table sorting state (column, direction) |
 | `useByteUnitMode.ts` | Binary (GiB) vs decimal (GB) byte unit preference |
 | `useIdleTimeout.ts` | Auto-logout after inactivity period |
-| `useNetworkStatus.ts` | Online/offline detection |
 | `useNotificationSocket.ts` | WebSocket connection for real-time notifications |
 | `useNextMaintenance.ts` | Next scheduled maintenance window |
 | `usePresenceHeartbeat.ts` | Presence heartbeat to `/api/system/sleep/presence` while tab visible (blocks auto true-suspend, #214); fire-and-forget, mounted once in `AppRoutes` (auth-gated via `enabled`); paused while the idle-logout warning is visible (#222) |

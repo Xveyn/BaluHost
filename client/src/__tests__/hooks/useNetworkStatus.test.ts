@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, waitFor, act } from '@testing-library/react';
-import { useNetworkStatus } from '../../hooks/useNetworkStatus';
+import { createQueryWrapper } from '../helpers/queryClient';
 
 const mockResponse = {
   timestamp: '2026-02-07T12:00:00Z',
@@ -14,6 +14,8 @@ vi.mock('../../api/monitoring', () => ({
 }));
 
 import { getNetworkCurrent } from '../../api/monitoring';
+import { useNetworkStatus } from '../../hooks/useNetworkStatus';
+import { useNetworkMonitoring } from '../../hooks/useMonitoring';
 
 describe('useNetworkStatus', () => {
   beforeEach(() => {
@@ -26,9 +28,9 @@ describe('useNetworkStatus', () => {
   });
 
   it('fetches and returns network status', async () => {
-    const { result } = renderHook(() =>
-      useNetworkStatus({ refreshInterval: 0 })
-    );
+    const { result } = renderHook(() => useNetworkStatus({ refreshInterval: 0 }), {
+      wrapper: createQueryWrapper(),
+    });
 
     expect(result.current.loading).toBe(true);
 
@@ -46,9 +48,9 @@ describe('useNetworkStatus', () => {
   it('handles errors', async () => {
     vi.mocked(getNetworkCurrent).mockRejectedValue(new Error('API down'));
 
-    const { result } = renderHook(() =>
-      useNetworkStatus({ refreshInterval: 0 })
-    );
+    const { result } = renderHook(() => useNetworkStatus({ refreshInterval: 0 }), {
+      wrapper: createQueryWrapper(),
+    });
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false);
@@ -59,9 +61,9 @@ describe('useNetworkStatus', () => {
   });
 
   it('does not fetch when enabled=false', async () => {
-    const { result } = renderHook(() =>
-      useNetworkStatus({ enabled: false, refreshInterval: 0 })
-    );
+    const { result } = renderHook(() => useNetworkStatus({ enabled: false, refreshInterval: 0 }), {
+      wrapper: createQueryWrapper(),
+    });
 
     // Give time for effects
     await new Promise((r) => setTimeout(r, 50));
@@ -73,9 +75,9 @@ describe('useNetworkStatus', () => {
   it('auto-refreshes with interval', async () => {
     vi.useFakeTimers();
 
-    renderHook(() =>
-      useNetworkStatus({ refreshInterval: 3000 })
-    );
+    renderHook(() => useNetworkStatus({ refreshInterval: 3000 }), {
+      wrapper: createQueryWrapper(),
+    });
 
     // Initial call
     await act(async () => {
@@ -93,9 +95,9 @@ describe('useNetworkStatus', () => {
   });
 
   it('refetch() works', async () => {
-    const { result } = renderHook(() =>
-      useNetworkStatus({ refreshInterval: 0 })
-    );
+    const { result } = renderHook(() => useNetworkStatus({ refreshInterval: 0 }), {
+      wrapper: createQueryWrapper(),
+    });
 
     await waitFor(() => {
       expect(result.current.loading).toBe(false);
@@ -108,5 +110,25 @@ describe('useNetworkStatus', () => {
     });
 
     expect(getNetworkCurrent).toHaveBeenCalledTimes(2);
+  });
+
+  it('shares the monitoring networkCurrent query — one fetch feeds both hooks', async () => {
+    // useNetworkStatus and useNetworkMonitoring hit the same endpoint. After the
+    // TanStack migration they share queryKeys.monitoring.networkCurrent(), so
+    // mounting both under one client must trigger only a single network fetch.
+    const { result } = renderHook(
+      () => ({
+        widget: useNetworkStatus({ refreshInterval: 0 }),
+        monitoring: useNetworkMonitoring({ pollInterval: 0, enabled: true }),
+      }),
+      { wrapper: createQueryWrapper() }
+    );
+
+    await waitFor(() => {
+      expect(result.current.widget.status).not.toBeNull();
+      expect(result.current.monitoring.current).not.toBeNull();
+    });
+
+    expect(getNetworkCurrent).toHaveBeenCalledTimes(1);
   });
 });
