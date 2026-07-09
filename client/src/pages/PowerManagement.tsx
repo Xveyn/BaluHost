@@ -10,11 +10,11 @@
  * - Custom preset editor
  */
 
-import { useEffect, useState, useCallback } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
 import { AlertTriangle } from 'lucide-react';
-import { handleApiError, getApiErrorMessage } from '../lib/errorHandling';
+import { handleApiError } from '../lib/errorHandling';
 import { Spinner } from '../components/ui/Spinner';
 import { StatCard } from '../components/ui/StatCard';
 import { AdminBadge } from '../components/ui/AdminBadge';
@@ -29,36 +29,23 @@ import { GpuPowerCard } from '../components/power/GpuPowerCard';
 import { AuthorityPanel } from '../components/power/AuthorityPanel';
 import { BoostRulesEditor } from '../components/power/BoostRulesEditor';
 import { getPresetIcon } from '../components/power/utils';
+import { usePowerManagementData } from '../hooks/usePowerManagementData';
 import {
-  getPowerStatus,
-  getPowerDemands,
   unregisterPowerDemand,
-  getPowerMgmtHistory,
-  getAutoScalingConfig,
   updateAutoScalingConfig,
   switchPowerBackend,
-  getServiceIntensities,
   PROFILE_INFO,
-  getDynamicModeConfig,
-  listPresets,
   activatePreset,
   createPreset,
   updatePreset,
   deletePreset,
   formatClockSpeed,
   PROPERTY_INFO,
-  type PowerStatusResponse,
-  type PowerDemandInfo,
-  type PowerHistoryEntry,
   type AutoScalingConfig,
   type ServicePowerProperty,
-  type ServiceIntensityInfo,
   type PowerPreset,
   type CreatePresetRequest,
-  type DynamicModeConfigResponse,
 } from '../api/power-management';
-
-const REFRESH_INTERVAL_MS = 5000;
 
 interface PowerManagementProps {
   isAdmin: boolean;
@@ -67,60 +54,31 @@ interface PowerManagementProps {
 // Main component
 export default function PowerManagement({ isAdmin }: PowerManagementProps) {
   const { t } = useTranslation(['system', 'common']);
-  const [status, setStatus] = useState<PowerStatusResponse | null>(null);
-  const [presets, setPresets] = useState<PowerPreset[]>([]);
-  const [demands, setDemands] = useState<PowerDemandInfo[]>([]);
-  const [intensities, setIntensities] = useState<ServiceIntensityInfo[]>([]);
-  const [history, setHistory] = useState<PowerHistoryEntry[]>([]);
-  const [autoScaling, setAutoScaling] = useState<AutoScalingConfig | null>(null);
-  const [loading, setLoading] = useState(true);
+  // Query-backed (#299): one combined 5s poll (Promise.all over 7 endpoints)
+  // replaces the hand-rolled setInterval. Mutations below call refetch().
+  const {
+    status,
+    presets,
+    demands,
+    intensities,
+    history,
+    autoScaling,
+    dynamicConfig,
+    loading,
+    error,
+    lastUpdated,
+    refetch,
+  } = usePowerManagementData();
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const [dynamicConfig, setDynamicConfig] = useState<DynamicModeConfigResponse | null>(null);
   const [editorPreset, setEditorPreset] = useState<PowerPreset | null | 'new'>(null);
   const [editingAutoScaling, setEditingAutoScaling] = useState(false);
   const [editAutoScaling, setEditAutoScaling] = useState<AutoScalingConfig | null>(null);
 
-  const loadData = useCallback(async (showSuccess = false) => {
-    try {
-      const [statusRes, presetsRes, demandsRes, intensitiesRes, historyRes, autoScalingRes, dynamicRes] = await Promise.all([
-        getPowerStatus(),
-        listPresets(),
-        getPowerDemands(),
-        getServiceIntensities(),
-        getPowerMgmtHistory(50),
-        getAutoScalingConfig(),
-        getDynamicModeConfig(),
-      ]);
-
-      setStatus(statusRes);
-      setPresets(presetsRes.presets);
-      setDemands(demandsRes);
-      setIntensities(intensitiesRes.services);
-      setHistory(historyRes.entries);
-      setAutoScaling(autoScalingRes.config);
-      setDynamicConfig(dynamicRes);
-      setError(null);
-      setLastUpdated(new Date());
-
-      if (showSuccess) {
-        toast.success(t('system:power.toasts.statusUpdated'));
-      }
-    } catch (err) {
-      const message = getApiErrorMessage(err, t('system:power.toasts.loadFailed'));
-      setError(message);
-      handleApiError(err, t('system:power.toasts.loadFailed'));
-    } finally {
-      setLoading(false);
+  const handleRefresh = async () => {
+    if (await refetch()) {
+      toast.success(t('system:power.toasts.statusUpdated'));
     }
-  }, [t]);
-
-  useEffect(() => {
-    void loadData();
-    const interval = setInterval(() => void loadData(), REFRESH_INTERVAL_MS);
-    return () => clearInterval(interval);
-  }, [loadData]);
+  };
 
   const handlePresetSelect = async (presetId: number) => {
     if (busy) return;
@@ -129,7 +87,7 @@ export default function PowerManagement({ isAdmin }: PowerManagementProps) {
     try {
       const result = await activatePreset(presetId);
       toast.success(result.message);
-      await loadData();
+      await refetch();
     } catch (err) {
       handleApiError(err, t('system:power.toasts.presetActivateFailed'));
     } finally {
@@ -144,7 +102,7 @@ export default function PowerManagement({ isAdmin }: PowerManagementProps) {
     try {
       await unregisterPowerDemand({ source });
       toast.success(t('system:power.toasts.demandRemoved'));
-      await loadData();
+      await refetch();
     } catch (err) {
       handleApiError(err, t('system:power.toasts.demandRemoveFailed'));
     } finally {
@@ -159,7 +117,7 @@ export default function PowerManagement({ isAdmin }: PowerManagementProps) {
     try {
       const newConfig = { ...autoScaling, enabled: !autoScaling.enabled };
       await updateAutoScalingConfig(newConfig);
-      setAutoScaling(newConfig);
+      await refetch();
       toast.success(newConfig.enabled ? t('system:power.toasts.autoScalingEnabled') : t('system:power.toasts.autoScalingDisabled'));
     } catch (err) {
       handleApiError(err, t('system:power.toasts.settingChangeFailed'));
@@ -199,7 +157,7 @@ export default function PowerManagement({ isAdmin }: PowerManagementProps) {
     setBusy(true);
     try {
       await updateAutoScalingConfig(editAutoScaling);
-      setAutoScaling(editAutoScaling);
+      await refetch();
       setEditingAutoScaling(false);
       setEditAutoScaling(null);
       toast.success(t('system:power.autoScaling.thresholdsSaved'));
@@ -219,7 +177,7 @@ export default function PowerManagement({ isAdmin }: PowerManagementProps) {
     try {
       const result = await switchPowerBackend(useLinux);
       toast.success(result.message);
-      await loadData();
+      await refetch();
     } catch (err) {
       handleApiError(err, t('system:power.toasts.backendSwitchFailed'));
     } finally {
@@ -238,7 +196,7 @@ export default function PowerManagement({ isAdmin }: PowerManagementProps) {
         toast.success(t('system:power.toasts.presetUpdated'));
       }
       setEditorPreset(null);
-      await loadData();
+      await refetch();
     } catch (err) {
       handleApiError(err, t('system:power.toasts.saveFailed'));
     } finally {
@@ -254,7 +212,7 @@ export default function PowerManagement({ isAdmin }: PowerManagementProps) {
       await deletePreset(editorPreset.id);
       toast.success(t('system:power.toasts.presetDeleted'));
       setEditorPreset(null);
-      await loadData();
+      await refetch();
     } catch (err) {
       handleApiError(err, t('system:power.toasts.deleteFailed'));
     } finally {
@@ -276,7 +234,7 @@ export default function PowerManagement({ isAdmin }: PowerManagementProps) {
         <p className="font-medium">{t('system:power.errors.loadingTitle')}</p>
         <p className="mt-1 text-sm">{error}</p>
         <button
-          onClick={() => loadData(true)}
+          onClick={handleRefresh}
           className="mt-4 rounded bg-red-500/20 px-4 py-2 hover:bg-red-500/30"
         >
           {t('system:power.errors.retryButton')}
@@ -328,7 +286,7 @@ export default function PowerManagement({ isAdmin }: PowerManagementProps) {
             </button>
           )}
           <button
-            onClick={() => loadData(true)}
+            onClick={handleRefresh}
             disabled={busy}
             className="rounded-lg border border-slate-700 bg-slate-800 px-3 sm:px-4 py-2 text-xs sm:text-sm text-white hover:bg-slate-700 touch-manipulation active:scale-95 min-h-[36px]"
           >
@@ -392,7 +350,7 @@ export default function PowerManagement({ isAdmin }: PowerManagementProps) {
           isAdmin={isAdmin}
           busy={busy}
           onBusyChange={setBusy}
-          onRefresh={() => void loadData()}
+          onRefresh={() => void refetch()}
         />
       )}
 
