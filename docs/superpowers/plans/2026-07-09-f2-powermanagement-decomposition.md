@@ -10,11 +10,12 @@
 
 ## Global Constraints
 
-- **No behavior, UX, or layout change.** Rendered output must be identical. The auto-scaling **enable/disable toggle button** stays in the preset-selection card (do NOT move it).
+- **No behavior, UX, or layout change.** Rendered DOM must be identical. In particular: do NOT add wrapper `<div>`s to reach elements in tests (`StatCard` does not forward `data-testid` — its props are fixed `label, value, unit, subValue, color, icon`; wrapping a card would change the grid layout). Assert via text or via a component's *own* root `data-testid`.
+- The auto-scaling **enable/disable toggle button** lives in the preset-selection card and stays there (`handleToggleAutoScaling` stays in the page). Only the auto-scaling **config card** (`:456-580`) moves.
 - New components live in `client/src/components/power/` and use `useTranslation(['system','common'])` **internally** (no `t` prop) — matching `DynamicModeSection`/`OsAutoSuspendCard`.
-- Component tests go in `client/src/__tests__/components/power/`, following the `OsAutoSuspendCard.test.tsx` pattern: `vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (k) => k }) }))`, `vi.mock` for api + `react-hot-toast`, assert via `data-testid`.
-- Verification gate (Task 5): full `npx vitest run` green (currently 603), `npx eslint .` 0 errors, `npm run build` green.
-- Windows shell: chain with `;`, never `&&` (see project CLAUDE.md).
+- Component tests go in `client/src/__tests__/components/power/`, following `OsAutoSuspendCard.test.tsx`: explicit `import { describe, expect, it, vi, beforeEach } from 'vitest'`; `vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (k: string) => k }) }))`; `vi.mock` for api + `react-hot-toast`; query the component's own `data-testid` via `container.querySelector('[data-testid="…"]')`.
+- **Verification gate (Task 5):** `npx vitest run` all green (currently 603 + the new tests), `npx eslint .` 0 errors, `npm run build` (tsc -b + vite) green.
+- Windows shell: chain with `;`, never `&&`.
 
 ---
 
@@ -25,7 +26,7 @@
 - Test: `client/src/__tests__/components/power/isValidAutoScaling.test.ts`
 
 **Interfaces:**
-- Produces: `isValidAutoScaling(cfg: Pick<AutoScalingConfig, 'cpu_surge_threshold' | 'cpu_medium_threshold' | 'cpu_low_threshold' | 'cooldown_seconds'>): boolean` — `true` when `surge > medium > low`, each threshold in `[0,100]`, and `cooldown_seconds >= 0`. (Negation of the inline guard in `PowerManagement.tsx` `handleSaveAutoScaling`.)
+- Produces: `isValidAutoScaling(cfg: Pick<AutoScalingConfig, 'cpu_surge_threshold' | 'cpu_medium_threshold' | 'cpu_low_threshold' | 'cooldown_seconds'>): boolean` — `true` when `surge > medium > low`, each threshold in `[0,100]`, and `cooldown_seconds >= 0`. It is the exact negation of the inline guard in `PowerManagement.tsx:145-155`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -79,11 +80,9 @@ Expected: FAIL — `isValidAutoScaling` is not exported from `utils.ts`.
 
 - [ ] **Step 3: Append the implementation to `utils.ts`**
 
-Add at the end of `client/src/components/power/utils.ts` (add `AutoScalingConfig` to the existing `import type { ... } from '../../api/power-management'`):
+`client/src/components/power/utils.ts` already imports several types from `../../api/power-management`. Add `AutoScalingConfig` to that existing `import type { … }` line (do not add a second import statement), then append:
 
 ```ts
-import type { AutoScalingConfig } from '../../api/power-management';
-
 /**
  * Validates auto-scaling CPU thresholds: surge > medium > low, each in [0,100],
  * cooldown >= 0. Pure — extracted from PowerManagement's save handler.
@@ -103,6 +102,8 @@ export function isValidAutoScaling(
 }
 ```
 
+> If `utils.ts` has no existing `import type … from '../../api/power-management'` line, add `import type { AutoScalingConfig } from '../../api/power-management';` at the top.
+
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `cd client ; npx vitest run src/__tests__/components/power/isValidAutoScaling.test.ts`
@@ -119,14 +120,15 @@ git commit -m "refactor(power): extract pure isValidAutoScaling helper (#301)"
 
 ### Task 2: `PowerStatusCards` component
 
-Extracts the four top `StatCard`s (source: `PowerManagement.tsx:299-345`, the block after `{/* Status Cards */}` up to `{/* Dynamic Mode Section */}`).
+Extracts the four top `StatCard`s. **Source:** `PowerManagement.tsx:300-344` — the `<div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">…</div>` block right after `{/* Status Cards */}`, up to (not including) `{/* Dynamic Mode Section */}`.
 
 **Files:**
 - Create: `client/src/components/power/PowerStatusCards.tsx`
 - Test: `client/src/__tests__/components/power/PowerStatusCards.test.tsx`
 
 **Interfaces:**
-- Produces: `PowerStatusCards` (default or named export — use **named**) with props
+- Consumes: nothing from other tasks.
+- Produces: named export `PowerStatusCards` with props
   `{ status: PowerStatusResponse | null; activePreset?: PowerPreset; currentProperty?: ServicePowerProperty; demands: PowerDemandInfo[]; lastUpdated: Date | null }`.
 
 - [ ] **Step 1: Write the failing test**
@@ -134,30 +136,39 @@ Extracts the four top `StatCard`s (source: `PowerManagement.tsx:299-345`, the bl
 Create `client/src/__tests__/components/power/PowerStatusCards.test.tsx`:
 
 ```tsx
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (k: string) => k }) }));
 
 import { PowerStatusCards } from '../../../components/power/PowerStatusCards';
+import type { PowerDemandInfo } from '../../../api/power-management';
+
+const demands = [
+  { source: 'a', level: 'low' },
+  { source: 'b', level: 'medium' },
+] as unknown as PowerDemandInfo[];
 
 describe('PowerStatusCards', () => {
-  it('renders the active demands count', () => {
+  it('renders all four stat cards including the active-demands count', () => {
     render(
       <PowerStatusCards
         status={{ current_frequency_mhz: 3400 } as never}
-        activePreset={{ id: 1, name: 'Balanced', description: 'd' } as never}
+        activePreset={{ id: 1, name: 'Balanced', description: 'desc' } as never}
         currentProperty="low"
-        demands={[{ source: 'a', level: 'low' }, { source: 'b', level: 'medium' }] as never}
+        demands={demands}
         lastUpdated={new Date(0)}
       />,
     );
-    expect(screen.getByTestId('power-stat-active-demands').textContent).toContain('2');
+    expect(screen.getByText('system:power.statusCards.activePreset')).toBeTruthy();
+    expect(screen.getByText('system:power.statusCards.currentProperty')).toBeTruthy();
+    expect(screen.getByText('system:power.statusCards.cpuFrequency')).toBeTruthy();
+    expect(screen.getByText('system:power.statusCards.activeDemands')).toBeTruthy();
+    // active-demands StatCard value is `demands.length`
+    expect(screen.getByText('2')).toBeTruthy();
   });
 });
 ```
-
-> Note: add `import { vi } from 'vitest';` to the import line if the runner needs it explicitly (match the sibling `OsAutoSuspendCard.test.tsx`, which relies on global `vi`).
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -166,14 +177,22 @@ Expected: FAIL — cannot resolve `../../../components/power/PowerStatusCards`.
 
 - [ ] **Step 3: Create the component**
 
-Create `client/src/components/power/PowerStatusCards.tsx`:
-- Imports: `useTranslation` from `react-i18next`; `StatCard` from `../ui/StatCard`; `getPresetIcon` from `./utils`; `PROFILE_INFO, PROPERTY_INFO, formatClockSpeed, type PowerStatusResponse, type PowerDemandInfo, type ServicePowerProperty, type PowerPreset` from `../../api/power-management`.
-- Signature: `export function PowerStatusCards({ status, activePreset, currentProperty, demands, lastUpdated }: PowerStatusCardsProps) { const { t } = useTranslation(['system','common']); return (<div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4"> …four StatCards… </div>); }`
-- **Move the four `<StatCard …/>` elements verbatim from `PowerManagement.tsx:300-345`** (everything between the opening `<div className="grid …lg:grid-cols-4">` and its closing `</div>`). No expression changes — `status`, `activePreset`, `currentProperty`, `demands`, `lastUpdated`, `t`, `PROPERTY_INFO`, `PROFILE_INFO`, `formatClockSpeed`, `getPresetIcon` are all in scope via props/imports.
-- Add `data-testid="power-stat-active-demands"` to the **fourth** `StatCard` (active demands) by wrapping its `value={demands.length}` — pass `data-testid` if `StatCard` forwards it; otherwise wrap the card in a `<div data-testid="power-stat-active-demands">`. Verify by reading `components/ui/StatCard.tsx` whether it spreads extra props; if not, use the wrapping `<div>`.
-
-Define the props interface at the top:
-
+Create `client/src/components/power/PowerStatusCards.tsx`. Imports:
+```tsx
+import { useTranslation } from 'react-i18next';
+import { StatCard } from '../ui/StatCard';
+import { getPresetIcon } from './utils';
+import {
+  PROFILE_INFO,
+  PROPERTY_INFO,
+  formatClockSpeed,
+  type PowerStatusResponse,
+  type PowerDemandInfo,
+  type ServicePowerProperty,
+  type PowerPreset,
+} from '../../api/power-management';
+```
+Signature + props:
 ```tsx
 interface PowerStatusCardsProps {
   status: PowerStatusResponse | null;
@@ -182,12 +201,24 @@ interface PowerStatusCardsProps {
   demands: PowerDemandInfo[];
   lastUpdated: Date | null;
 }
+
+export function PowerStatusCards({
+  status, activePreset, currentProperty, demands, lastUpdated,
+}: PowerStatusCardsProps) {
+  const { t } = useTranslation(['system', 'common']);
+  return (
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      {/* the four <StatCard …/> elements, moved verbatim from PowerManagement.tsx:301-343 */}
+    </div>
+  );
+}
 ```
+**Move the four `<StatCard …/>` elements verbatim** from `PowerManagement.tsx:301-343` into the returned `<div>`. No expression edits — `status`, `activePreset`, `currentProperty`, `demands`, `lastUpdated`, `t`, `PROPERTY_INFO`, `PROFILE_INFO`, `formatClockSpeed`, `getPresetIcon` are all in scope via props/imports. Do NOT add any `data-testid` (the test asserts on text).
 
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `cd client ; npx vitest run src/__tests__/components/power/PowerStatusCards.test.tsx`
-Expected: PASS.
+Expected: PASS (1 test).
 
 - [ ] **Step 5: Commit**
 
@@ -200,22 +231,22 @@ git commit -m "refactor(power): extract PowerStatusCards (#301)"
 
 ### Task 3: `PermissionStatusCard` component
 
-Extracts the permission warning banner + status grid (source: `PowerManagement.tsx:582-661`, `{/* Permission Warning Banner */}` through the end of `{/* Permission Status (Linux backend only) */}`).
+Extracts the permission warning banner + the 4-tile status grid. **Source:** `PowerManagement.tsx:582-660` — the `{/* Permission Warning Banner */}` block (`:582-604`) and the `{/* Permission Status (Linux backend only) */}` block (`:606-660`).
 
 **Files:**
 - Create: `client/src/components/power/PermissionStatusCard.tsx`
 - Test: `client/src/__tests__/components/power/PermissionStatusCard.test.tsx`
 
 **Interfaces:**
-- Produces: `PermissionStatusCard` (named export) with props `{ status: PowerStatusResponse | null }`. Renders `null` unless `status?.is_using_linux_backend && status.permission_status`.
+- Produces: named export `PermissionStatusCard` with props `{ status: PowerStatusResponse | null }`. Returns `null` unless `status?.is_using_linux_backend && status.permission_status`.
 
 - [ ] **Step 1: Write the failing test**
 
 Create `client/src/__tests__/components/power/PermissionStatusCard.test.tsx`:
 
 ```tsx
-import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
+import { render } from '@testing-library/react';
 
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (k: string) => k }) }));
 
@@ -236,13 +267,13 @@ describe('PermissionStatusCard', () => {
   });
 
   it('shows the warning banner when write access is missing', () => {
-    render(<PermissionStatusCard status={linuxStatus(false)} />);
-    expect(screen.getByTestId('power-permission-warning')).toBeTruthy();
+    const { container } = render(<PermissionStatusCard status={linuxStatus(false)} />);
+    expect(container.querySelector('[data-testid="power-permission-warning"]')).not.toBeNull();
   });
 
   it('hides the warning banner when write access is present', () => {
-    render(<PermissionStatusCard status={linuxStatus(true)} />);
-    expect(screen.queryByTestId('power-permission-warning')).toBeNull();
+    const { container } = render(<PermissionStatusCard status={linuxStatus(true)} />);
+    expect(container.querySelector('[data-testid="power-permission-warning"]')).toBeNull();
   });
 });
 ```
@@ -255,10 +286,11 @@ Expected: FAIL — cannot resolve the module.
 - [ ] **Step 3: Create the component**
 
 Create `client/src/components/power/PermissionStatusCard.tsx`:
-- Imports: `useTranslation` from `react-i18next`; `AlertTriangle` from `lucide-react`; `type PowerStatusResponse` from `../../api/power-management`.
-- Signature:
-
 ```tsx
+import { useTranslation } from 'react-i18next';
+import { AlertTriangle } from 'lucide-react';
+import type { PowerStatusResponse } from '../../api/power-management';
+
 interface PermissionStatusCardProps {
   status: PowerStatusResponse | null;
 }
@@ -266,16 +298,18 @@ interface PermissionStatusCardProps {
 export function PermissionStatusCard({ status }: PermissionStatusCardProps) {
   const { t } = useTranslation(['system', 'common']);
   if (!status?.is_using_linux_backend || !status.permission_status) return null;
-  const perm = status.permission_status;
   return (
     <>
-      {/* warning banner + status grid (moved) */}
+      {/* Permission Warning Banner — moved from PowerManagement.tsx:583-604 */}
+      {/* Permission Status grid — moved from PowerManagement.tsx:607-659 */}
     </>
   );
 }
 ```
-- **Move the two JSX blocks verbatim** from `PowerManagement.tsx:582-661`: the `{/* Permission Warning Banner */}` block (`status?.is_using_linux_backend && status.permission_status && !status.permission_status.has_write_access && (…)`) and the `{/* Permission Status (Linux backend only) */}` block. Inside the component the outer `status?.is_using_linux_backend && status.permission_status &&` guards are already handled by the early return, so keep only the inner `!status.permission_status.has_write_access &&` guard on the banner (reference `perm` / `status` — both in scope).
-- On the outer `<div>` of the warning banner, add `data-testid="power-permission-warning"`.
+- **Move the warning-banner block** (`PowerManagement.tsx:583-603`, the inner `<div className="mb-4 rounded-xl border border-amber-500/30 …">…</div>`) into the fragment, wrapped so it only shows when write access is missing:
+  `{!status.permission_status.has_write_access && ( <div data-testid="power-permission-warning" className="mb-4 rounded-xl …"> … </div> )}`
+  — i.e. add `data-testid="power-permission-warning"` to that banner's root `<div>` and keep only the `!…has_write_access` guard (the `is_using_linux_backend && permission_status` guards are handled by the early return).
+- **Move the status-grid block** (`PowerManagement.tsx:608-659`, the `<div className="card border-slate-700/50 p-4 sm:p-6"> … </div>`) into the fragment verbatim. All `status.permission_status.*` references stay in scope.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -293,17 +327,17 @@ git commit -m "refactor(power): extract PermissionStatusCard (#301)"
 
 ### Task 4: `AutoScalingSection` component
 
-Extracts the auto-scaling **config card** (source: `PowerManagement.tsx:456-581`, `{/* Auto-Scaling Config (Admin only) */}` block) plus the edit state and the `handleStartEditAutoScaling` / `handleCancelEditAutoScaling` / `handleSaveAutoScaling` handlers. Uses `isValidAutoScaling` from Task 1.
+Extracts the auto-scaling **config card**. **Source:** `PowerManagement.tsx:456-580` (the `{isAdmin && autoScaling && ( <div className="card …"> … </div> )}` block) plus the edit state (`editingAutoScaling`, `editAutoScaling`) and the handlers `handleStartEditAutoScaling` (`:129-134`), `handleCancelEditAutoScaling` (`:136-139`), `handleSaveAutoScaling` (`:141-169`). Validation via `isValidAutoScaling` (Task 1).
 
 **Files:**
 - Create: `client/src/components/power/AutoScalingSection.tsx`
 - Test: `client/src/__tests__/components/power/AutoScalingSection.test.tsx`
 
 **Interfaces:**
-- Consumes: `isValidAutoScaling` (Task 1).
-- Produces: `AutoScalingSection` (named export) with props
+- Consumes: `isValidAutoScaling` (Task 1); `updateAutoScalingConfig` (api).
+- Produces: named export `AutoScalingSection` with props
   `{ autoScaling: AutoScalingConfig; dimmed: boolean; busy: boolean; onBusyChange: (b: boolean) => void; onRefresh: () => void }`.
-  (`isAdmin` gating stays in the page — page renders the section only when `isAdmin && autoScaling`.)
+  (`isAdmin` gating stays in the page — the page renders the section only when `isAdmin && autoScaling`.)
 
 - [ ] **Step 1: Write the failing test**
 
@@ -329,7 +363,7 @@ const cfg = {
   cooldown_seconds: 15, use_cpu_monitoring: true,
 } as never;
 
-function renderSection(overrides = {}) {
+function renderSection() {
   const onRefresh = vi.fn();
   const onBusyChange = vi.fn();
   render(
@@ -339,7 +373,6 @@ function renderSection(overrides = {}) {
       busy={false}
       onBusyChange={onBusyChange}
       onRefresh={onRefresh}
-      {...overrides}
     />,
   );
   return { onRefresh, onBusyChange };
@@ -348,16 +381,16 @@ function renderSection(overrides = {}) {
 describe('AutoScalingSection', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('renders the current thresholds in display mode', () => {
-    renderSection();
-    expect(screen.getByTestId('auto-scaling-section')).toBeTruthy();
+  it('renders the config card in display mode', () => {
+    const { container } = renderSection();
+    expect(container.querySelector('[data-testid="auto-scaling-section"]')).not.toBeNull();
   });
 
   it('blocks save on an invalid threshold ordering (no API call)', async () => {
     (updateAutoScalingConfig as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
     renderSection();
     fireEvent.click(screen.getByTestId('auto-scaling-edit'));
-    // Set surge below medium → invalid
+    // surge (10) below medium (60) → invalid ordering
     fireEvent.change(screen.getByTestId('auto-scaling-input-surge'), { target: { value: '10' } });
     fireEvent.click(screen.getByTestId('auto-scaling-save'));
     await waitFor(() => {});
@@ -375,6 +408,8 @@ describe('AutoScalingSection', () => {
 });
 ```
 
+> `screen.getByTestId` is used here (React Testing Library resolves it against the document body); the `PermissionStatusCard` test uses `container.querySelector` — both work. Do not depend on `@testing-library/jest-dom` matchers (`.toBeInTheDocument()`); this suite uses plain `.toBeTruthy()`/`.not.toBeNull()`.
+
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `cd client ; npx vitest run src/__tests__/components/power/AutoScalingSection.test.tsx`
@@ -383,40 +418,81 @@ Expected: FAIL — cannot resolve `AutoScalingSection`.
 - [ ] **Step 3: Create the component**
 
 Create `client/src/components/power/AutoScalingSection.tsx`:
-- Imports: `useState` (react); `useTranslation` (react-i18next); `toast` (react-hot-toast); `AdminBadge` from `../ui/AdminBadge`; `updateAutoScalingConfig, type AutoScalingConfig` from `../../api/power-management`; `handleApiError` from `../../lib/errorHandling`; `isValidAutoScaling` from `./utils`.
-- Props interface as in Interfaces above.
-- Internal state: `const [editing, setEditing] = useState(false); const [draft, setDraft] = useState<AutoScalingConfig | null>(null);` (renamed from `editingAutoScaling`/`editAutoScaling`).
-- Handlers (moved from the page, `setBusy`→`onBusyChange`, `refetch`→`onRefresh`, `autoScaling` is the prop, validation via `isValidAutoScaling`):
-
 ```tsx
-const startEdit = () => setDraft({ ...autoScaling });
-const cancelEdit = () => { setEditing(false); setDraft(null); };
-const save = async () => {
-  if (!draft || busy) return;
-  if (!isValidAutoScaling(draft)) {
-    toast.error(t('system:power.autoScaling.validationError'));
-    return;
-  }
-  onBusyChange(true);
-  try {
-    await updateAutoScalingConfig(draft);
-    onRefresh();
+import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import toast from 'react-hot-toast';
+import { AdminBadge } from '../ui/AdminBadge';
+import { handleApiError } from '../../lib/errorHandling';
+import { updateAutoScalingConfig, type AutoScalingConfig } from '../../api/power-management';
+import { isValidAutoScaling } from './utils';
+
+interface AutoScalingSectionProps {
+  autoScaling: AutoScalingConfig;
+  dimmed: boolean;
+  busy: boolean;
+  onBusyChange: (b: boolean) => void;
+  onRefresh: () => void;
+}
+
+export function AutoScalingSection({
+  autoScaling, dimmed, busy, onBusyChange, onRefresh,
+}: AutoScalingSectionProps) {
+  const { t } = useTranslation(['system', 'common']);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState<AutoScalingConfig | null>(null);
+
+  const startEdit = () => {
+    setDraft({ ...autoScaling });
+    setEditing(true);
+  };
+  const cancelEdit = () => {
     setEditing(false);
     setDraft(null);
-    toast.success(t('system:power.autoScaling.thresholdsSaved'));
-  } catch (err) {
-    handleApiError(err, t('system:power.autoScaling.thresholdsSaveFailed'));
-  } finally {
-    onBusyChange(false);
-  }
-};
-```
-> Note: entering edit mode is `onClick={() => { startEdit(); setEditing(true); }}` on the edit button, matching the old `handleStartEditAutoScaling` (which set both) — keep that combined behavior.
+  };
+  const save = async () => {
+    if (!draft || busy) return;
+    if (!isValidAutoScaling(draft)) {
+      toast.error(t('system:power.autoScaling.validationError'));
+      return;
+    }
+    onBusyChange(true);
+    try {
+      await updateAutoScalingConfig(draft);
+      onRefresh();
+      setEditing(false);
+      setDraft(null);
+      toast.success(t('system:power.autoScaling.thresholdsSaved'));
+    } catch (err) {
+      handleApiError(err, t('system:power.autoScaling.thresholdsSaveFailed'));
+    } finally {
+      onBusyChange(false);
+    }
+  };
 
-- Return: move the `{/* Auto-Scaling Config (Admin only) */}` card JSX from `PowerManagement.tsx:456-581`, but:
-  - Drop the outer `{isAdmin && autoScaling && (` wrapper (page gates it). The root element is the `<div className={\`card border-slate-700/50 p-4 sm:p-6 ${'{'}dimmed ? 'opacity-50 pointer-events-none' : ''{'}'}\`}>` — replace the old `status?.dynamic_mode_enabled` expression with the `dimmed` prop. Add `data-testid="auto-scaling-section"`.
-  - Rename references: `editingAutoScaling` → `editing`, `editAutoScaling` → `draft`, `setEditAutoScaling` → `setDraft`, `handleStartEditAutoScaling` → the combined `() => { startEdit(); setEditing(true); }`, `handleCancelEditAutoScaling` → `cancelEdit`, `handleSaveAutoScaling` → `save`, `autoScaling.` → `autoScaling.` (prop, unchanged), `busy` → `busy` (prop).
-  - Add `data-testid` to: the edit button (`auto-scaling-edit`), the save button (`auto-scaling-save`), and the surge `<input>` (`auto-scaling-input-surge`).
+  return (
+    <div
+      data-testid="auto-scaling-section"
+      className={`card border-slate-700/50 p-4 sm:p-6 ${dimmed ? 'opacity-50 pointer-events-none' : ''}`}
+    >
+      {/* header (title + AdminBadge + edit / cancel+save buttons) and body
+          (edit inputs vs display), moved verbatim from PowerManagement.tsx:459-578 */}
+    </div>
+  );
+}
+```
+Move the **inner** card content from `PowerManagement.tsx:459-578` (everything inside the `<div className="card …">`, i.e. the header `<div className="mb-3 …">…</div>` and the `{editingAutoScaling && editAutoScaling ? (…) : (…)}` body) into this component's `<div>`, applying exactly these renames — nothing else changes:
+- `editingAutoScaling` → `editing`
+- `editAutoScaling` → `draft` (display reads like `draft.cpu_surge_threshold`; the four `setEditAutoScaling({ ...editAutoScaling, … })` onChange calls → `setDraft({ ...draft!, … })`)
+- `handleStartEditAutoScaling` → `startEdit`
+- `handleCancelEditAutoScaling` → `cancelEdit`
+- `handleSaveAutoScaling` → `save`
+- `autoScaling.*` (display-mode reads at `:562/566/570/574/575`) stay as `autoScaling.*` (the prop)
+- `busy` stays `busy` (the prop)
+
+Add three `data-testid`s during the move: `auto-scaling-edit` on the edit button (`:465-474`), `auto-scaling-save` on the save button (`:484-490`), and `auto-scaling-input-surge` on the surge `<input>` (`:501-508`).
+
+> **Draft typing:** the onChange handlers run only inside the `editing && draft` branch, where `draft` is non-null, so `setDraft({ ...draft!, cpu_surge_threshold: Number(e.target.value) })` is safe. tsc in Task 5 confirms.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -436,6 +512,7 @@ git commit -m "refactor(power): extract AutoScalingSection (#301)"
 
 **Files:**
 - Modify: `client/src/pages/PowerManagement.tsx`
+- Modify: `client/src/components/CLAUDE.md`
 
 **Interfaces:**
 - Consumes: `PowerStatusCards` (Task 2), `PermissionStatusCard` (Task 3), `AutoScalingSection` (Task 4).
@@ -444,13 +521,13 @@ git commit -m "refactor(power): extract AutoScalingSection (#301)"
 
 In `client/src/pages/PowerManagement.tsx`:
 
-1. Add imports near the other `components/power/*` imports:
+1. Add imports alongside the other `components/power/*` imports:
 ```tsx
 import { PowerStatusCards } from '../components/power/PowerStatusCards';
 import { PermissionStatusCard } from '../components/power/PermissionStatusCard';
 import { AutoScalingSection } from '../components/power/AutoScalingSection';
 ```
-2. Replace the `{/* Status Cards */}` block (`:299-345`) with:
+2. Replace the Status-Cards block (`:299-344`, the comment + its `<div className="grid …lg:grid-cols-4">…</div>`) with:
 ```tsx
       {/* Status Cards */}
       <PowerStatusCards
@@ -461,7 +538,7 @@ import { AutoScalingSection } from '../components/power/AutoScalingSection';
         lastUpdated={lastUpdated}
       />
 ```
-3. Replace the whole `{/* Auto-Scaling Config (Admin only) */}` block (`:456-581`) with:
+3. Replace the Auto-Scaling block (`:456-580`, the whole `{isAdmin && autoScaling && ( … )}`) with:
 ```tsx
       {/* Auto-Scaling Config (Admin only) */}
       {isAdmin && autoScaling && (
@@ -474,39 +551,39 @@ import { AutoScalingSection } from '../components/power/AutoScalingSection';
         />
       )}
 ```
-4. Replace the `{/* Permission Warning Banner */}` + `{/* Permission Status (Linux backend only) */}` blocks (`:582-661`) with:
+4. Replace the two permission blocks (`:582-660`) with:
 ```tsx
       {/* Permission panels (Linux backend only) */}
       <PermissionStatusCard status={status} />
 ```
-5. Remove the now-unused page state and handlers: `editingAutoScaling`, `editAutoScaling` (`useState`), `handleStartEditAutoScaling`, `handleCancelEditAutoScaling`, `handleSaveAutoScaling`.
-6. Remove now-unused imports from `PowerManagement.tsx`: `updateAutoScalingConfig` **only if** no longer referenced (it is still used by `handleToggleAutoScaling` — **keep it**), `AlertTriangle` (moved to PermissionStatusCard — remove), `StatCard` (moved — remove), `formatClockSpeed`/`getPresetIcon`/`PROPERTY_INFO`/`PROFILE_INFO` (moved to PowerStatusCards — remove **only if** not used elsewhere in the file; `PROPERTY_INFO`/`PROFILE_INFO`/`getPresetIcon`/`formatClockSpeed` were used only by the status cards — remove). Let eslint/tsc confirm (Steps 3-4).
+5. Remove the now-unused state and handlers from the page: the `editingAutoScaling` and `editAutoScaling` `useState` lines (`:74-75`), and `handleStartEditAutoScaling` (`:129-134`), `handleCancelEditAutoScaling` (`:136-139`), `handleSaveAutoScaling` (`:141-169`).
+6. Remove now-unused imports (Steps 3-4 flag any still referenced): `AlertTriangle` (moved to PermissionStatusCard), `StatCard` (moved to PowerStatusCards), and from `../api/power-management` the symbols now used only by PowerStatusCards — `PROFILE_INFO`, `PROPERTY_INFO`, `formatClockSpeed` — plus `getPresetIcon` (from `../components/power/utils`). **Keep** `updateAutoScalingConfig` (still used by `handleToggleAutoScaling` at `:119`), `AdminBadge` (still used in the preset card / header), `ServicePowerProperty` (still used at `:247`), and the `AutoScalingConfig` type (still referenced by `editAutoScaling`? — those state lines are removed; if `AutoScalingConfig` is no longer referenced anywhere in the file after removal, drop it too — tsc will flag).
 
-> `handleToggleAutoScaling` and the auto-scaling **toggle button** in the preset card stay untouched.
+> `handleToggleAutoScaling` (`:113-127`), the auto-scaling toggle button in the preset card, and the preset editor modal stay untouched.
 
-- [ ] **Step 2: Confirm line count dropped**
+- [ ] **Step 2: Confirm the line count dropped**
 
-Run: `cd client ; (Get-Content src/pages/PowerManagement.tsx | Measure-Object -Line).Lines`  *(PowerShell)*
-Expected: under 500 (target ~380–420).
+Run (PowerShell): `cd client ; (Get-Content src/pages/PowerManagement.tsx | Measure-Object -Line).Lines`
+Expected: under 500 (target ~380-420).
 
-- [ ] **Step 3: eslint the touched files**
-
-Run: `cd client ; npx eslint src/pages/PowerManagement.tsx src/components/power/PowerStatusCards.tsx src/components/power/PermissionStatusCard.tsx src/components/power/AutoScalingSection.tsx src/components/power/utils.ts`
-Expected: no output (0 errors). Fix any unused-import / unused-var errors by removing the dead imports/handlers flagged.
-
-- [ ] **Step 4: Build (typecheck)**
+- [ ] **Step 3: Typecheck + build**
 
 Run: `cd client ; npm run build`
-Expected: `✓ built` twice (tsc -b + vite), no `error TS`.
+Expected: `✓ built` (tsc -b then vite), no `error TS`. Fix any unused-import/var errors by removing the dead imports/handlers flagged in Step 1.6.
 
-- [ ] **Step 5: Full suite**
+- [ ] **Step 4: Full lint gate**
+
+Run: `cd client ; npx eslint .`
+Expected: no output (0 errors — the CI gate is 0-error).
+
+- [ ] **Step 5: Full test suite**
 
 Run: `cd client ; npx vitest run`
-Expected: all green — 603 prior + the new power tests (isValidAutoScaling 6, PowerStatusCards 1, PermissionStatusCard 3, AutoScalingSection 3). No regressions.
+Expected: all green — the prior 603 + the new power tests (isValidAutoScaling 6, PowerStatusCards 1, PermissionStatusCard 3, AutoScalingSection 3). No regressions.
 
 - [ ] **Step 6: Update `components/CLAUDE.md`**
 
-In `client/src/components/CLAUDE.md`, under the `power/` feature-dir note (or the top-level component list), add one line noting the three new power subcomponents extracted from `PowerManagement` (F2/#301). Keep it terse.
+In `client/src/components/CLAUDE.md`, the Feature Subdirectories `power/` row reads "Power profile management". Add a terse note that `PowerManagement` composes `PowerStatusCards`, `PermissionStatusCard`, and `AutoScalingSection` (extracted for F2/#301). Keep it to one line.
 
 - [ ] **Step 7: Commit**
 
@@ -519,6 +596,7 @@ git commit -m "refactor(power): compose PowerManagement from extracted subcompon
 
 ## Notes for the implementer
 
-- Before Task 2 Step 3, read `client/src/components/ui/StatCard.tsx` to confirm whether it forwards arbitrary props (for the `data-testid`); if not, wrap the target card in a `<div data-testid=…>`.
-- The JSX being moved is long but must be **relocated verbatim** — do not "improve" markup, class names, or i18n keys. Any diff beyond variable-name renames (`editingAutoScaling→editing`, `editAutoScaling→draft`) and the `dimmed`/`onRefresh`/`onBusyChange` wiring is out of scope.
-- After each task, the app must still compile; only Task 5 wires the page, so Tasks 2–4 add unused components (that is expected and fine — they are covered by their own tests).
+- The JSX being moved is long but must be **relocated verbatim** — do not "improve" markup, class names, or i18n keys. The only permitted diffs are the variable renames in Task 4 (`editingAutoScaling→editing`, `editAutoScaling→draft`, handler names), the `dimmed`/`onRefresh`/`onBusyChange` wiring, and the added `data-testid`s named in each task. `StatCard` gets no testid (Task 2).
+- Tasks 2-4 add components that are not yet imported anywhere; that is expected — they are covered by their own tests. Only Task 5 wires them into the page.
+- After Task 5, `PowerManagement.tsx` should still render identically; the gate (build + `eslint .` + full vitest) is the proof.
+- Line numbers in this plan are from `PowerManagement.tsx` at 632 lines (spec HEAD). If earlier edits shift them, match on the quoted comment markers / JSX instead.
