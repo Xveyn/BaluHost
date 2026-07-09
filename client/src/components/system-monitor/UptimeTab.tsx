@@ -2,16 +2,11 @@
  * UptimeTab -- Uptime monitoring tab with live counters, status bars, and incident history.
  */
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AlertTriangle, CheckCircle, Moon } from 'lucide-react';
-import type { TimeRange, SleepEvent } from '../../api/monitoring';
-import {
-  getUptimeCurrent,
-  getUptimeHistory,
-  type CurrentUptimeResponse,
-  type UptimeSample,
-} from '../../api/monitoring';
+import type { TimeRange } from '../../api/monitoring';
+import { useUptimeData } from '../../hooks/useUptimeData';
 import { StatCard } from '../ui/StatCard';
 import { UptimeStatusBar } from './UptimeStatusBar';
 import { formatUptime } from '../../lib/formatters';
@@ -32,37 +27,12 @@ function formatDateTime(iso: string): string {
 
 export function UptimeTab({ timeRange }: { timeRange: TimeRange }) {
   const { t } = useTranslation(['system', 'common']);
-  const [current, setCurrent] = useState<CurrentUptimeResponse | null>(null);
-  const [history, setHistory] = useState<UptimeSample[]>([]);
-  const [sleepEvents, setSleepEvents] = useState<SleepEvent[]>([]);
-  const [error, setError] = useState<string | null>(null);
+  // Query-backed (#299): current + history share one 10s poll. The client-side
+  // 1s tick below is a live-counter animation, not a data fetch — it stays.
+  const { current, history, sleepEvents, error } = useUptimeData(timeRange);
 
   // Tick counter for live update between polls
   const [tick, setTick] = useState(0);
-
-  const fetchData = useCallback(async () => {
-    try {
-      const [currentData, historyData] = await Promise.all([
-        getUptimeCurrent(),
-        getUptimeHistory(timeRange),
-      ]);
-      setCurrent(currentData);
-      setHistory(historyData.samples);
-      setSleepEvents(historyData.sleep_events ?? []);
-      setError(null);
-    } catch (err) {
-      if (!current) {
-        setError(err instanceof Error ? err.message : 'Failed to load uptime data');
-      }
-    }
-  }, [timeRange]);
-
-  // Initial fetch + polling
-  useEffect(() => {
-    fetchData();
-    const interval = setInterval(fetchData, 10000);
-    return () => clearInterval(interval);
-  }, [fetchData]);
 
   // Client-side 1s tick for live counter
   useEffect(() => {

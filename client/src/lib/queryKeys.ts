@@ -23,6 +23,8 @@ export const queryKeys = {
     processesCurrent: () => ['monitoring', 'processes', 'current'] as const,
     processesHistory: (duration: TimeRange, source: DataSource, processName?: string) =>
       ['monitoring', 'processes', 'history', duration, source, processName ?? null] as const,
+    uptimeCurrent: () => ['monitoring', 'uptime', 'current'] as const,
+    uptimeHistory: (duration: TimeRange) => ['monitoring', 'uptime', 'history', duration] as const,
   },
   system: {
     telemetry: () => ['system', 'telemetry'] as const,
@@ -149,6 +151,8 @@ export const queryKeys = {
   },
   power: {
     status: () => ['power', 'status'] as const,
+    /** PowerManagement page: combined status+presets+demands+intensities+history+auto-scaling+dynamic (5s poll). */
+    management: () => ['power', 'management'] as const,
   },
   statusBar: {
     state: () => ['status-bar', 'state'] as const,
@@ -175,6 +179,13 @@ export const queryKeys = {
     schedules: () => ['sync', 'schedules'] as const,
     bandwidth: () => ['sync', 'bandwidth'] as const,
     preflight: () => ['sync', 'preflight'] as const,
+  },
+  pi: {
+    /** BaluPi dashboard reads (Pi build only); each endpoint polled independently. */
+    handshake: () => ['pi', 'handshake'] as const,
+    energyCurrent: () => ['pi', 'energy-current'] as const,
+    system: () => ['pi', 'system'] as const,
+    snapshot: () => ['pi', 'snapshot'] as const,
   },
   schedulers: {
     /** Domain-Prefix — invalidiert list + history (Mutations betreffen beide). */
