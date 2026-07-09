@@ -1,9 +1,11 @@
 /**
  * Hook for getting current network I/O status
  */
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { queryKeys } from '../lib/queryKeys';
 import { getApiErrorMessage } from '../lib/errorHandling';
-import { getNetworkCurrent, type CurrentNetworkResponse, type InterfaceType } from '../api/monitoring';
+import { getNetworkCurrent, type InterfaceType } from '../api/monitoring';
 import { formatNumber } from '../lib/formatters';
 
 export interface NetworkStatus {
@@ -28,36 +30,17 @@ interface UseNetworkStatusReturn {
 export function useNetworkStatus(options: UseNetworkStatusOptions = {}): UseNetworkStatusReturn {
   const { refreshInterval = 3000, enabled = true } = options;
 
-  const [data, setData] = useState<CurrentNetworkResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // Shares queryKeys.monitoring.networkCurrent() with useNetworkMonitoring, so
+  // mounting both (dashboard widget + system-monitor tab) collapses to a single
+  // poll of the same endpoint.
+  const query = useQuery({
+    queryKey: queryKeys.monitoring.networkCurrent(),
+    queryFn: getNetworkCurrent,
+    refetchInterval: refreshInterval > 0 ? refreshInterval : false,
+    enabled,
+  });
 
-  const loadData = useCallback(async () => {
-    try {
-      const response = await getNetworkCurrent();
-      setData(response);
-      setError(null);
-    } catch (err: unknown) {
-      setError(getApiErrorMessage(err, 'Failed to load network status'));
-    }
-  }, []);
-
-  // Initial load
-  useEffect(() => {
-    if (!enabled) return;
-
-    setLoading(true);
-    loadData().finally(() => setLoading(false));
-  }, [enabled, loadData]);
-
-  // Auto-refresh
-  useEffect(() => {
-    if (!enabled || refreshInterval <= 0) return;
-
-    const interval = setInterval(loadData, refreshInterval);
-    return () => clearInterval(interval);
-  }, [enabled, refreshInterval, loadData]);
-
+  const data = query.data;
   const status = useMemo<NetworkStatus | null>(() => {
     if (!data) return null;
 
@@ -71,9 +54,11 @@ export function useNetworkStatus(options: UseNetworkStatusOptions = {}): UseNetw
 
   return {
     status,
-    loading,
-    error,
-    refetch: loadData,
+    loading: query.isLoading,
+    error: query.error ? getApiErrorMessage(query.error, 'Failed to load network status') : null,
+    refetch: async () => {
+      await query.refetch();
+    },
   };
 }
 
