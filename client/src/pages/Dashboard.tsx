@@ -1,4 +1,4 @@
-import { useMemo, useEffect, useState } from 'react';
+import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext';
@@ -7,7 +7,7 @@ import { useSmartData } from '../hooks/useSmartData';
 import { useGpuPresence } from '../hooks/useGpuPresence';
 import { useGpuCurrent } from '../hooks/useGpuCurrent';
 import { useRaidStatus } from '../hooks/useRaidStatus';
-import { getSystemMode } from '../api/system';
+import { useSmartMode } from '../hooks/useSmartMode';
 import { useNextMaintenance } from '../hooks/useNextMaintenance';
 import { useServicesSummary } from '../hooks/useServicesSummary';
 import { useLiveActivities } from '../hooks/useLiveActivities';
@@ -53,10 +53,12 @@ export default function Dashboard() {
   const handleCpuClick = () => navigate('/system?tab=cpu');
   const handleMemoryClick = () => navigate('/system?tab=memory');
   const handleStorageClick = () => navigate('/system?tab=disk-io');
-  const { smartData, loading: smartLoading, error: smartError, refetch: refetchSmartData } = useSmartData();
+  const { smartData, loading: smartLoading, error: smartError } = useSmartData();
   const { raidData, raidLoading } = useRaidStatus();
-  const [smartMode, setSmartMode] = useState<string | null>(null);
-  const [smartModeLoading, setSmartModeLoading] = useState(false);
+  // Dev-only SMART data source toggle (mock↔real) — query-backed (#299): shares
+  // the system/smart mode cache with MaintenancePanel; toggle refreshes the
+  // SMART disk data via smart.status() invalidation.
+  const { smartMode, toggle: handleToggleSmartMode, isToggling: smartModeLoading } = useSmartMode();
 
   // GPU presence + polling — shared `gpu.current` query (#299), gated on presence
   const { present: hasGpu, info: gpuInfo } = useGpuPresence();
@@ -66,37 +68,6 @@ export default function Dashboard() {
   const { allSchedulers } = useNextMaintenance();
   const { services } = useServicesSummary({ enabled: isAdmin });
   const { activities } = useLiveActivities({ raidData, schedulers: allSchedulers, isAdmin });
-
-  useEffect(() => {
-    const loadSmartMode = async () => {
-      try {
-        const modeData = await getSystemMode();
-        if (!modeData?.dev_mode) return;
-
-        const { getSmartMode } = await import('../api/smart');
-        const response = await getSmartMode();
-        setSmartMode(response.mode);
-      } catch {
-        // SMART mode toggle not available
-      }
-    };
-
-    loadSmartMode();
-  }, []);
-
-  const handleToggleSmartMode = async () => {
-    setSmartModeLoading(true);
-    try {
-      const { toggleSmartMode } = await import('../api/smart');
-      const response = await toggleSmartMode();
-      setSmartMode(response.mode);
-      refetchSmartData();
-    } catch {
-      // Failed to toggle SMART mode
-    } finally {
-      setSmartModeLoading(false);
-    }
-  };
 
   const systemStats = useMemo<SystemStats>(() => {
     const cpuUsage = Math.max(0, Math.min(systemInfo?.cpu.usage ?? 0, 100));

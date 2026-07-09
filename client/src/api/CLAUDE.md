@@ -53,6 +53,7 @@ All modules import from `lib/api.ts`:
 | `nfs.ts` | `/api/nfs` | NFS share management |
 | `plugins-marketplace.ts` | `/api/plugins` | Plugin marketplace listing and install (external market) |
 | `docs.ts` | `/api/docs` | User-manual index + article content (language-scoped); consumed by useDocsIndex/useDocsArticle |
+| `pi.ts` | `/api/handshake`, `/api/energy`, `/api/system`, `/api/nas` | BaluPi dashboard reads (handshake status/snapshot, Pi energy-current, Pi system-status) + Wake-on-LAN; consumed by `usePiDashboardData` (Pi build only) |
 
 ## Adding a New API Module
 
