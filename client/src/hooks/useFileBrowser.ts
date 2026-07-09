@@ -89,6 +89,14 @@ export function useFileBrowser(): UseFileBrowserResult {
   const files = filesQuery.data ?? EMPTY_FILES;
   const loading = filesQuery.isFetching;
 
+  // Preserve the original loadFiles() error toast. File listing is user-initiated
+  // navigation, so a failed listing must surface (not silently keep the last value).
+  useEffect(() => {
+    if (filesQuery.isError) {
+      toast.error(filesQuery.error instanceof Error ? filesQuery.error.message : 'Failed to load files');
+    }
+  }, [filesQuery.isError, filesQuery.error]);
+
   const storageInfo: StorageInfo | null = selectedMountpoint
     ? {
         totalBytes: selectedMountpoint.size_bytes,

@@ -14,6 +14,7 @@ vi.mock('../../api/files', () => ({
 }));
 
 import * as filesApi from '../../api/files';
+import toast from 'react-hot-toast';
 import { useFileBrowser } from '../../hooks/useFileBrowser';
 
 const mp = { id: 'a', name: 'Main', type: 'raid', path: '/mnt/main', size_bytes: 100, used_bytes: 40, available_bytes: 60, status: 'ok', is_default: true };
@@ -29,6 +30,13 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe('useFileBrowser', () => {
+  it('surfaces a toast when the directory listing fails', async () => {
+    vi.mocked(filesApi.listFiles).mockRejectedValue(new Error('boom'));
+    const { result } = renderHook(() => useFileBrowser(), { wrapper: createQueryWrapper() });
+    await waitFor(() => expect(result.current.selectedMountpoint?.id).toBe('a'));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('boom'));
+  });
+
   it('auto-selects the default mountpoint and lists its root', async () => {
     const { result } = renderHook(() => useFileBrowser(), { wrapper: createQueryWrapper() });
     await waitFor(() => expect(result.current.selectedMountpoint?.id).toBe('a'));
