@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
 import {
   Power,
   Zap,
@@ -15,84 +15,9 @@ import {
   WifiOff,
   RefreshCw,
 } from 'lucide-react';
-import { apiClient } from '../lib/api';
+import { usePiDashboardData } from '../hooks/usePiDashboardData';
+import { sendNasWol } from '../api/pi';
 import { formatBytes, formatUptime } from '../lib/formatters';
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-interface HandshakeStatus {
-  nas_state: string;
-  since: string | null;
-  last_snapshot: string | null;
-  inbox_size_mb: number;
-  inbox_files: number;
-}
-
-interface EnergyDevice {
-  device_id: string;
-  name: string;
-  power_w: number;
-  voltage_v: number;
-  current_a: number;
-}
-
-interface EnergyCurrent {
-  devices: EnergyDevice[];
-  total_power_w: number;
-}
-
-interface PiSystem {
-  cpu_percent: number;
-  memory_percent: number;
-  memory_used_mb: number;
-  memory_total_mb: number;
-  temperature_c: number | null;
-  uptime_seconds: number;
-  hostname: string;
-}
-
-interface SnapshotData {
-  version: number;
-  generated_at: string;
-  baluhost_version: string;
-  system: {
-    hostname: string;
-    uptime_seconds: number;
-    cpu_model: string;
-    ram_total_gb: number;
-  };
-  storage: {
-    arrays: Array<{
-      name: string;
-      level: string;
-      state: string;
-      size_bytes: number;
-      devices: string[];
-    }>;
-    total_bytes: number;
-    used_bytes: number;
-  };
-  smart_health: Record<string, {
-    status: string;
-    temperature_c: number | null;
-    power_on_hours: number | null;
-  }>;
-  services: {
-    vpn: { active_clients: number };
-    shares: { active_shares: number };
-    backups: { last_backup: string | null; status: string };
-  };
-  users: {
-    total: number;
-    list: Array<{ username: string; role: string }>;
-  };
-  files_summary: {
-    total_files: number;
-    total_size_bytes: number;
-  };
-}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -122,43 +47,17 @@ function timeAgo(iso: string | null): string {
 // ---------------------------------------------------------------------------
 
 export default function PiDashboard() {
-  const [handshake, setHandshake] = useState<HandshakeStatus | null>(null);
-  const [energy, setEnergy] = useState<EnergyCurrent | null>(null);
-  const [piSystem, setPiSystem] = useState<PiSystem | null>(null);
-  const [snapshot, setSnapshot] = useState<SnapshotData | null>(null);
+  // Query-backed (#299): four independent polls (30s) replace the hand-rolled
+  // setInterval + Promise.allSettled; `refetch` drives the manual refresh button.
+  const { handshake, energy, piSystem, snapshot, refreshing, refetch } = usePiDashboardData();
   const [wolLoading, setWolLoading] = useState(false);
   const [wolResult, setWolResult] = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
-
-  const fetchAll = useCallback(async () => {
-    setRefreshing(true);
-    try {
-      const [hs, en, sys, snap] = await Promise.allSettled([
-        apiClient.get<HandshakeStatus>('/api/handshake/status'),
-        apiClient.get<EnergyCurrent>('/api/energy/current'),
-        apiClient.get<PiSystem>('/api/system/status'),
-        apiClient.get<SnapshotData>('/api/handshake/snapshot'),
-      ]);
-      if (hs.status === 'fulfilled') setHandshake(hs.value.data);
-      if (en.status === 'fulfilled') setEnergy(en.value.data);
-      if (sys.status === 'fulfilled') setPiSystem(sys.value.data);
-      if (snap.status === 'fulfilled') setSnapshot(snap.value.data);
-    } finally {
-      setRefreshing(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchAll();
-    const interval = setInterval(fetchAll, 30000);
-    return () => clearInterval(interval);
-  }, [fetchAll]);
 
   const handleWol = async () => {
     setWolLoading(true);
     setWolResult(null);
     try {
-      await apiClient.post('/api/nas/wol');
+      await sendNasWol();
       setWolResult('WoL packet sent');
     } catch {
       setWolResult('Failed to send WoL');
@@ -187,7 +86,7 @@ export default function PiDashboard() {
           </div>
         </div>
         <button
-          onClick={fetchAll}
+          onClick={refetch}
           disabled={refreshing}
           className="flex items-center gap-1.5 rounded-md border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-xs text-slate-400 transition hover:border-slate-600 hover:text-slate-300 disabled:opacity-50"
         >

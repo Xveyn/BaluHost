@@ -166,6 +166,13 @@ export const queryKeys = {
     bandwidth: () => ['sync', 'bandwidth'] as const,
     preflight: () => ['sync', 'preflight'] as const,
   },
+  pi: {
+    /** BaluPi dashboard reads (Pi build only); each endpoint polled independently. */
+    handshake: () => ['pi', 'handshake'] as const,
+    energyCurrent: () => ['pi', 'energy-current'] as const,
+    system: () => ['pi', 'system'] as const,
+    snapshot: () => ['pi', 'snapshot'] as const,
+  },
   schedulers: {
     /** Domain-Prefix — invalidiert list + history (Mutations betreffen beide). */
     all: () => ['schedulers'] as const,
