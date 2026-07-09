@@ -38,6 +38,18 @@ export const queryKeys = {
   backups: {
     list: () => ['backups', 'list'] as const,
   },
+  cloudImport: {
+    connections: () => ['cloud-import', 'connections'] as const,
+    /** Import jobs; polled while any job is running/pending (see useCloudImportData). */
+    jobs: () => ['cloud-import', 'jobs'] as const,
+  },
+  migration: {
+    /** VCL→SSD migration panel: storage info + job history + the tracked active job. */
+    storage: () => ['migration', 'storage'] as const,
+    jobs: () => ['migration', 'jobs'] as const,
+    /** Active job progress; polled while running/pending (id in the key). */
+    job: (id: number | null) => ['migration', 'job', id] as const,
+  },
   shares: {
     /** Domain-Prefix — invalidiert alle drei shares-Reads auf einmal. */
     all: () => ['shares'] as const,
