@@ -104,15 +104,13 @@ export default function PluginsPage() {
       {/* Plugins Tab */}
       {activeTab === 'plugins' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 space-y-4">
-            <PluginList
-              plugins={plugins}
-              selectedName={selectedPlugin?.name ?? null}
-              actionLoading={actionLoading}
-              onSelect={loadPluginDetails}
-              onToggle={handleTogglePlugin}
-            />
-          </div>
+          <PluginList
+            plugins={plugins}
+            selectedName={selectedPlugin?.name ?? null}
+            actionLoading={actionLoading}
+            onSelect={loadPluginDetails}
+            onToggle={handleTogglePlugin}
+          />
           <PluginDetailsSidebar
             plugin={selectedPlugin}
             detailsLoading={detailsLoading}
