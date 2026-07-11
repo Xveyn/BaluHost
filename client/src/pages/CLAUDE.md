@@ -29,7 +29,7 @@ Pages are conditionally included based on `__DEVICE_MODE__` build flag:
 | `AdminHealth.tsx` | `/admin/health` | Admin | Service health dashboard |
 | `SchedulerDashboard.tsx` | `/schedulers` | Admin | Background scheduler status and history |
 | `DevicesPage.tsx` | `/devices` | Yes | Desktop/mobile device management |
-| `MobileDevicesPage.tsx` | `/mobile` | Admin | Mobile device registration |
+| `MobileDevicesPage.tsx` | `/mobile` | Admin | Mobile device registration — composes `components/mobile-devices/*` (register card, device list/card, notification status, QR code dialog), state in `useMobileRegistration` (extracted F2/#301) |
 | `PluginsPage.tsx` | `/plugins` | Admin | Plugin install, toggle, configure — composes `components/plugins/plugin-management/*` (tab nav, list, details sidebar, permission/scope grant modals), state/actions in `usePluginManagement` (extracted F2/#301) |
 | `SmartDevicesPage.tsx` | `/smart-devices` | Admin | Smart device (Tapo) management |
 | `PiholePage.tsx` | `/pihole` | Admin | Pi-hole DNS management |
