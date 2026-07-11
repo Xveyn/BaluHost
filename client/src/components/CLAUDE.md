@@ -66,7 +66,7 @@ Reusable, generic building blocks. No business logic, no API calls.
 | `updates/` | Self-update UI |
 | `user-management/` | User CRUD, 2FA management |
 | `setup/` | Setup wizard step components |
-| `vcl/` | File versioning UI |
+| `vcl/` | File versioning UI — `VCLSettings` (admin) composes `vcl-settings/*`: `VclMessageBanners`, `VclStorageInfoCard`, `VclStatsGrid`, `VclStorageDetailsCard`, `VclMaintenanceCard`, `VclReconciliationCard`, `VclUserQuotasTable`, `VclEditUserModal` (+ `usageBarColor` helper), all re-exported via `vcl-settings/index.ts`; state/handlers in `hooks/useVclSettings.ts` (extracted F2/#301) |
 | `webdav/` | WebDAV server control |
 | `balupi/` | BaluPi-specific compact UI components |
 | `nfs/` | NFS share management components |
