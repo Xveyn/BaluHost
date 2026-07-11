@@ -56,13 +56,36 @@ jobs:
           # themselves still gate. `-o addopts=` drops the pyproject addopts
           # (term-missing + html) so CI prints the concise skip-covered table;
           # `term:skip-covered` hides 100%-covered files to keep the log short.
+          # `--cov-report=json` writes backend/coverage.json (bind-mounted, so it
+          # survives the container) for the job-summary step below.
           podman run --rm \
             --network=bridge \
             -v "${{ github.workspace }}:/work:Z" \
             -w /work/backend \
             -e NAS_MODE=dev \
             "$TEST_IMAGE" \
-            bash -c "set -euo pipefail; pip install --no-cache-dir -e '.[dev]' && python -m ruff check . && python -m pytest -q --timeout=120 -n auto -o addopts= --cov=app --cov-report=term:skip-covered"
+            bash -c "set -euo pipefail; pip install --no-cache-dir -e '.[dev]' && python -m ruff check . && python -m pytest -q --timeout=120 -n auto -o addopts= --cov=app --cov-report=term:skip-covered --cov-report=json"
+
+      - name: Backend coverage → job summary
+        if: always()
+        env:
+          TEST_IMAGE: docker.io/library/python:3.11-slim
+        run: |
+          set -euo pipefail
+          if [ ! -f backend/coverage.json ]; then
+            echo "no backend/coverage.json — skipping coverage summary"
+            exit 0
+          fi
+          # Parse the totals inside the same pinned image (stdlib json only; no
+          # pip install, no untrusted code) and append a markdown block to the
+          # run summary. Numeric coercion (%d/%f) prevents any markdown injection
+          # from a crafted coverage.json.
+          podman run --rm \
+            -v "${{ github.workspace }}:/work:Z" \
+            -w /work/backend \
+            "$TEST_IMAGE" \
+            python -c 'import json; d=json.load(open("coverage.json"))["totals"]; print("## Backend coverage (app)\n\n| Metric | Coverage |\n|---|---|\n| lines | %.0f%% (%d/%d) |" % (d["percent_covered"], d["covered_lines"], d["num_statements"]))' \
+            >> "$GITHUB_STEP_SUMMARY"
 
   frontend-build:
     runs-on: ubuntu-latest
@@ -94,3 +117,20 @@ jobs:
         # (see vite.config.ts `test.coverage`). The unit tests themselves still
         # gate the build; a low coverage number does not fail CI.
         run: npm run test:coverage
+
+      - name: Frontend coverage → job summary
+        if: always()
+        working-directory: client
+        # Reads the json-summary written by the coverage run and appends a
+        # markdown block to the run summary. Best-effort: no-op if the file is
+        # missing (e.g. tests failed before coverage was written).
+        run: |
+          node -e '
+            const fs = require("fs");
+            const p = "coverage/coverage-summary.json";
+            if (!fs.existsSync(p)) process.exit(0);
+            const t = JSON.parse(fs.readFileSync(p, "utf8")).total;
+            const row = (k) => `| ${k} | ${t[k].pct}% (${t[k].covered}/${t[k].total}) |`;
+            const md = ["## Frontend coverage (client)", "", "| Metric | Coverage |", "|---|---|", row("lines"), row("statements"), row("functions"), row("branches"), ""].join("\n");
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, md + "\n");
+          '
