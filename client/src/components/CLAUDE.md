@@ -61,7 +61,7 @@ Reusable, generic building blocks. No business logic, no API calls.
 | `settings/` | Settings page sections |
 | `shares/` | Share management — `SharesPage` composes `SharesStatCards`, `SharesTabBar`, `SharesToolbar`, `MySharesTable`, `SharedWithMeTable`, `CloudExportsTable` (+ `PermissionBadges`/`FileNameCell`/`CloudStatusBadge` primitives), extracted F2/#301-style |
 | `smart-devices/` | Smart device status and control |
-| `ssd-cache/` | SSD file cache management |
+| `ssd-cache/` | SSD file cache management — `SsdFileCacheTab` composes `file-cache/*`: `CacheViewTabs`, `CacheArraySelector`, `CacheStatsGrid`, `CacheHealthCard`, `CacheConfigCard`, `CacheActionsCard`, `CacheEntriesTable` (+ `cacheUsageBarColor` helper), re-exported via `file-cache/index.ts`; state/effects/handlers in `hooks/useSsdFileCache.ts` (extracted F2/#301) |
 | `system-monitor/` | System monitor detail views — `PowerTab` composes `power-tab/*`: `PowerSummaryCards`, `PowerDeviceCard`, `EnergyPriceEditor`, `ChartDeviceTabs`, `ChartModePeriodControls`, `CustomRangePicker`, `EnergyChartSummary`, `EnergyChart` (+ `CumulativeEnergyChart`/`InstantPowerChart`), `PowerStates`, and the `parseDevicePower` pure helper — extracted F2/#301 |
 | `updates/` | Self-update UI |
 | `user-management/` | User CRUD, 2FA management |
