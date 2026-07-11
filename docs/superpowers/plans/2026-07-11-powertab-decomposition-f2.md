@@ -367,7 +367,7 @@ describe('PowerStates', () => {
 
 **Note:** markup verbatim (239–272); `const { watts, voltage, currentA, energyToday } = parseDevicePower(device);` replaces the inline `pm` block. `-` fallbacks and `formatNumber` precisions (1/1/3/2) verbatim. Online badge from `device.is_online`.
 
-- [ ] **Step 1: failing test** — device with `state.power_monitor = { watts: 12.5, voltage: 230, current: 0.05, energy_today_kwh: 1.2 }`; assert name, online badge text, `12.5`, `230`, `0.050`, `1.20`. A second device with `state: null` → four `-`. Mock i18n.
+- [ ] **Step 1: failing test** — device with `state.power_monitor = { watts: 12.5, voltage: 230, current: 0.05, energy_today_kwh: 1.2 }`; assert name, online badge text, `12.5`, `230`, `0.050`, `1.20`. A second device (separate render) with `state: null` → `expect(screen.getAllByText('-')).toHaveLength(4)`. Mock i18n.
 - [ ] **Step 2: fail** → FAIL.
 - [ ] **Step 3: implement** (verbatim).
 - [ ] **Step 4: pass** → PASS.
@@ -443,7 +443,13 @@ describe('PowerStates', () => {
     customRange: React.ReactNode;
   }
   ```
-  Mode toggle (367–379) + period buttons `today/week/month` (384–396) verbatim; renders `{customRange}` where the custom picker sits (397). Period buttons call `onPeriodChange`.
+  This component **is** the whole right-hand controls cluster — the outer
+  `<div className="flex gap-1 sm:gap-2 flex-wrap">` (365) containing, in order:
+  the mode toggle (367–379), the vertical divider `<div className="w-px
+  bg-slate-700 mx-1 self-stretch" />` (381) **verbatim — do not drop it**, the
+  period buttons `today/week/month` (384–396), then `{customRange}` in the slot
+  where the custom `<div className="relative">` picker sat (397). Period buttons
+  call `onPeriodChange`; mode buttons call `onModeChange`.
 
 - [ ] **Step 1: failing test** (`ChartControls.test.tsx`, mock i18n + `react-hot-toast` + `../../../lib/dateUtils`'s `localRangeToUtcIso` → returns `{ startIso: 'S', endIso: 'E' }`):
   - `ChartModePeriodControls`: renders mode + period buttons; clicking `week` fires `onPeriodChange('week')`; clicking `instant` fires `onModeChange('instant')`; `customRange` node renders.
@@ -497,7 +503,10 @@ describe('PowerStates', () => {
 
 **Note:** `import type { ChartTimeRange }` and `formatTimeForRange`/`parseUtcTimestamp` from `../../../lib/dateUtils`; `formatNumber` from `../../../lib/formatters`; recharts imports as in the original.
 
-- [ ] **Step 1: failing test** (mock recharts per Global Constraints; mock i18n) — `EnergyChart` with `cumulativeLoading: true` → spinner present (no chart); with `cumulativeData: { …, data_points: [] }` → `getByText('monitor.noDataForPeriod')`; with one data point + `chartMode:'cumulative'` → renders without throwing (recharts mocked). Keep assertions coarse (recharts is stubbed).
+- [ ] **Step 1: failing test** (mock recharts per Global Constraints; mock i18n) — the spinner has no text/role (T7 forbids class assertions), so key the states off the empty-state text:
+  - `cumulativeLoading: true` (data null) → `expect(screen.queryByText('monitor.noDataForPeriod')).toBeNull()` (loading ≠ empty), render does not throw.
+  - `cumulativeData: { …, data_points: [] }`, not loading → `getByText('monitor.noDataForPeriod')`.
+  - one data point + `chartMode: 'cumulative'`, not loading → `queryByText('monitor.noDataForPeriod')` is null and render does not throw (recharts stubbed — do not assert chart internals).
 - [ ] **Step 2: fail** → FAIL.
 - [ ] **Step 3: implement** the three files (charts verbatim, `EnergyChart` selects by mode).
 - [ ] **Step 4: pass** → PASS.
@@ -523,7 +532,7 @@ describe('PowerStates', () => {
   }));
   ```
   Early returns: `if (data.loading) return <PowerLoading/>;` `if (data.error) return <PowerError error={data.error}/>;` `if (data.devices.length === 0) return <PowerEmptyState/>;`
-  Then composes: `PowerSummaryCards` (`onlineCount = data.devices.filter(d=>d.is_online).length`, `deviceCount = data.devices.length`), `data.devices.map(d => <PowerDeviceCard key={d.id} device={d}/>)`, and the chart card: `ChartDeviceTabs`, header (`chartMode` title + `PluginBadge pluginName={data.powerPluginName}` + `{price.priceConfig && <EnergyPriceEditor .../>}`), `ChartModePeriodControls` with `customRange={<CustomRangePicker active={cumulativePeriod==='custom'} onApply={(s,e)=>{ setCustomStart(s); setCustomEnd(e); setCumulativePeriod('custom'); }}/>}`, `{data.cumulativeData && <EnergyChartSummary chartMode={chartMode} cumulativeData={data.cumulativeData}/>}`, `<EnergyChart chartMode={chartMode} cumulativeData={data.cumulativeData} cumulativeLoading={data.cumulativeLoading} cumulativePeriod={cumulativePeriod} language={i18n.language}/>`.
+  Then composes: `PowerSummaryCards` (`onlineCount = data.devices.filter(d=>d.is_online).length`, `deviceCount = data.devices.length`), `data.devices.map(d => <PowerDeviceCard key={d.id} device={d}/>)`, and the chart card (`<div className="card …">`): `ChartDeviceTabs`, then the header row **verbatim wrapper** `<div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">` (308) containing BOTH sides — **left** `<div className="flex items-center gap-3 flex-wrap">` with the `chartMode` title (`t('monitor.power.cumulativeConsumptionCosts')` vs `instantPowerConsumption`) + `<PluginBadge pluginName={data.powerPluginName} size="sm" className="ml-2" />` + `{price.priceConfig && <EnergyPriceEditor .../>}`, and **right** `<ChartModePeriodControls … customRange={<CustomRangePicker active={cumulativePeriod==='custom'} onApply={(s,e)=>{ setCustomStart(s); setCustomEnd(e); setCumulativePeriod('custom'); }}/>} />`. Then `{data.cumulativeData && <EnergyChartSummary chartMode={chartMode} cumulativeData={data.cumulativeData}/>}` and `<EnergyChart chartMode={chartMode} cumulativeData={data.cumulativeData} cumulativeLoading={data.cumulativeLoading} cumulativePeriod={cumulativePeriod} language={i18n.language}/>`. Keep the section-order and the `space-y-4 sm:space-y-6 min-w-0` outer wrapper (205) verbatim.
   - `EnergyPriceEditor` wiring: `editing={price.editingPrice}`, `priceInput={price.priceInput}`, `saving={price.savingPrice}`, `onEdit={() => price.setEditingPrice(true)}`, `onInputChange={price.setPriceInput}`, `onSave={price.savePrice}`, `onCancel={() => { price.setEditingPrice(false); price.setPriceInput(price.priceConfig!.cost_per_kwh.toString()); }}`.
   - Keep the outer card wrappers, header title branch (`t('monitor.power.cumulativeConsumptionCosts')` vs `instantPowerConsumption`), `useTranslation(['system','common'])`, `i18n.language`.
 
