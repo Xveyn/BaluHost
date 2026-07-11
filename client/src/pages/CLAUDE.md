@@ -22,7 +22,7 @@ Pages are conditionally included based on `__DEVICE_MODE__` build flag:
 | `SleepMode.tsx` | `/sleep` | Admin | Sleep mode configuration, idle detection |
 | `UserManagement.tsx` | `/users` | Admin | User CRUD, roles, 2FA management |
 | `SettingsPage.tsx` | `/settings` | Yes | User settings (theme, language, byte units, sync, backup) |
-| `SharesPage.tsx` | `/shares` | Yes | File share management |
+| `SharesPage.tsx` | `/shares` | Yes | File share management — composes `components/shares/*` (tables/toolbar/stat-cards, extracted F2) |
 | `VpnPage.tsx` | `/vpn` | Admin | VPN client management |
 | `Logging.tsx` | `/logging` | Admin | Audit log viewer |
 | `AdminDatabase.tsx` | `/admin-db` | Admin | Database table inspector |
