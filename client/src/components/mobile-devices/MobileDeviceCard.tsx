@@ -16,7 +16,6 @@ export function MobileDeviceCard({ device, isAdmin, onShowQr, onDelete }: Mobile
 
   return (
     <div
-      key={device.id}
       className="p-3 sm:p-4 rounded-lg bg-slate-800/40 border border-slate-700/50 hover:border-slate-600/50 transition-colors cursor-pointer touch-manipulation active:scale-[0.99]"
       onClick={() => onShowQr(device)}
       title="Klicken um QR-Code anzuzeigen"
