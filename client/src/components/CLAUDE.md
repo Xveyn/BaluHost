@@ -41,7 +41,7 @@ Reusable, generic building blocks. No business logic, no API calls.
 | `admin/` | Admin-specific panels and tools |
 | `benchmark/` | Disk benchmark UI |
 | `cloud/` | Cloud import/export components |
-| `dashboard/` | Dashboard widgets and `panels/` for plugin panels |
+| `dashboard/` | Dashboard widgets and `panels/` for plugin panels — `QuickStatCard`/`statIcons` (quick-stat tile + shared icon set), `SmartHealthPanel` composing `SmartDeviceCard` per SMART device, `RaidSummaryCard`, `SystemHealthCard` (health-checklist card), `computeSmartDeviceUsage` pure helper (SMART device used-bytes/percent derivation) — extracted from Dashboard.tsx (F2/#301) |
 | `device-management/` | Device management (desktop, mobile) |
 | `env-config/` | Runtime environment variable editor |
 | `fan-control/` | Fan curves, schedules, profiles |
