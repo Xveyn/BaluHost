@@ -13,7 +13,8 @@ of presentational components under a new
 
 **Non-goals:** no change to API calls, endpoints, the copy (this file uses
 mostly hard-coded English strings — they stay verbatim; do NOT introduce i18n,
-that is scope creep), Tailwind styling, toast messages, `useConfirmDialog`
+that is scope creep — the i18n gap is tracked separately in the collective
+issue #406), Tailwind styling, toast messages, `useConfirmDialog`
 wording, pagination size (20), or any computed value. The component keeps its
 path (`components/ssd-cache/SsdFileCacheTab.tsx`, **default export**
 `SsdFileCacheTab`, prop `initialArray?: string`) so consumers and the
