@@ -59,6 +59,7 @@ Reusable, generic building blocks. No business logic, no API calls.
 | `scheduler/` | Scheduler status and history |
 | `services/` | Background service status cards |
 | `settings/` | Settings page sections |
+| `shares/` | Share management — `SharesPage` composes `SharesStatCards`, `SharesTabBar`, `SharesToolbar`, `MySharesTable`, `SharedWithMeTable`, `CloudExportsTable` (+ `PermissionBadges`/`FileNameCell`/`CloudStatusBadge` primitives), extracted F2/#301-style |
 | `smart-devices/` | Smart device status and control |
 | `ssd-cache/` | SSD file cache management |
 | `system-monitor/` | System monitor detail views |
