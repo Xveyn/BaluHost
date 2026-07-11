@@ -39,6 +39,8 @@ Custom React hooks encapsulating data fetching, polling, and UI logic. Each hook
 | `useFileBrowser.ts` | `api/files` | Browsing core for `FileManager` via **TanStack Query**: mountpoints + directory listing (`files.list(fullPath)` key), navigation (`selectMountpoint`/`navigateToFolder`/`goBack`/`goHome`), derived `storageInfo`, and create/delete/rename mutations that `refresh()` (invalidate the listing). Replaces the page's hand-rolled `sessionStorage` file cache (F2/#301, PR-1) |
 | `useVclFileInfo.ts` | `api/vcl`, `api/files` | VCL slice for FileManager (F2/#301 PR-2) — quota + user-root-usage via **TanStack Query** (`vcl.quota()`/`files.userRootUsage()` keys), version-counts + tracking fan-outs deliberately kept effect-based; `toggleTracking` optimistic; `refreshVcl` invalidates both keys |
 | `useFileUpload.ts` | `contexts/UploadContext` | Drag/drop + upload handlers for FileManager (F2/#301 PR-2) — owns `dragActive`, wraps `useUpload().startUpload`; `traverseFileTree` internal |
+| `useSleepConfigForm.ts` | — | Consolidates SleepConfigPanel's 20 sleep-config form fields into one object + update/syncFromResponse/toPayload (SleepConfigUpdate). No TanStack (user-triggered config). |
+| `useFritzBoxForm.ts` | `api/fritzbox` | Fritz!Box form object + config + toPayload (password only if set, mac||undefined) + test() (connection test + toast). No TanStack. |
 
 ## Utility Hooks
 

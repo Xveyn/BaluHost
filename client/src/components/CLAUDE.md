@@ -51,7 +51,7 @@ Reusable, generic building blocks. No business logic, no API calls.
 | `monitoring/` | System monitoring charts and cards |
 | `pihole/` | Pi-hole DNS dashboard, `ad-discovery/` |
 | `plugins/` | Plugin management UI |
-| `power/` | Power profile management — `PowerManagement` page composes `PowerStatusCards`, `PermissionStatusCard`, `AutoScalingSection` (extracted F2/#301) |
+| `power/` | Power profile management — `PowerManagement` page composes `PowerStatusCards`, `PermissionStatusCard`, `AutoScalingSection` (extracted F2/#301); `SleepConfigPanel` composes ./sleep-config/* (8 section cards + SleepFormControls), form state in useSleepConfigForm/useFritzBoxForm (extracted F2) |
 | `raid/` | RAID status, disk details |
 | `rate-limits/` | Rate limit configuration UI |
 | `RemoteServers/` | Remote server profile management |
