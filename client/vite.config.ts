@@ -62,6 +62,22 @@ export default defineConfig(({ mode }) => {
     globals: true,
     setupFiles: ['./src/__tests__/setup.ts'],
     include: ['src/__tests__/**/*.test.{ts,tsx}'],
+    coverage: {
+      // Measurement only — no thresholds yet (coverage is intentionally low
+      // while the untested surface is being decomposed under #301). Enforced
+      // targets can be added later via `thresholds`.
+      provider: 'v8',
+      reporter: ['text-summary', 'json-summary'],
+      reportsDirectory: './coverage',
+      include: ['src/**/*.{ts,tsx}'],
+      exclude: [
+        'src/**/*.test.{ts,tsx}',
+        'src/__tests__/**',
+        'src/**/*.d.ts',
+        'src/main.tsx',
+        'src/vite-env.d.ts',
+      ],
+    },
   },
   server: {
     host: '0.0.0.0',  // Expose to network

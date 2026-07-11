@@ -83,6 +83,9 @@ jobs:
         working-directory: client
         run: npm run build
 
-      - name: Run unit tests
+      - name: Run unit tests (with coverage)
         working-directory: client
-        run: npx vitest run
+        # Coverage is measured and printed only — no thresholds enforced yet
+        # (see vite.config.ts `test.coverage`). The unit tests themselves still
+        # gate the build; a low coverage number does not fail CI.
+        run: npm run test:coverage
