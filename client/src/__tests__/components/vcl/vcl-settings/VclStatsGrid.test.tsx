@@ -12,9 +12,12 @@ const overview = (over: Partial<AdminVCLOverview> = {}): AdminVCLOverview => ({
 });
 
 describe('VclStatsGrid', () => {
-  it('renders the total-versions count and the active-users count', () => {
+  it('renders the four stat labels and the active-users count', () => {
     render(<VclStatsGrid overview={overview()} totalSavings={300} savingsPercent={30} />);
-    expect(screen.getByText('1,234')).toBeInTheDocument();
-    expect(screen.getByText('7')).toBeInTheDocument();
+    // locale-independent assertions (avoid Number.toLocaleString separator, which
+    // differs de-DE vs en-US across dev machines / CI)
+    expect(screen.getByText('vcl.stats.totalVersions')).toBeInTheDocument();
+    expect(screen.getByText('vcl.stats.activeUsers')).toBeInTheDocument();
+    expect(screen.getByText('7')).toBeInTheDocument(); // total_users, plain number
   });
 });
