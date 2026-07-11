@@ -43,6 +43,8 @@ Custom React hooks encapsulating data fetching, polling, and UI logic. Each hook
 | `useFileUpload.ts` | `contexts/UploadContext` | Drag/drop + upload handlers for FileManager (F2/#301 PR-2) — owns `dragActive`, wraps `useUpload().startUpload`; `traverseFileTree` internal |
 | `useSleepConfigForm.ts` | — | Consolidates SleepConfigPanel's 20 sleep-config form fields into one object + update/syncFromResponse/toPayload (SleepConfigUpdate). No TanStack (user-triggered config). |
 | `useFritzBoxForm.ts` | `api/fritzbox` | Fritz!Box form object + config + toPayload (password only if set, mac||undefined) + test() (connection test + toast). No TanStack. |
+| `usePowerTabData.ts` | `api/smart-devices`, `api/energy` | Power devices/summary + cumulative energy for `PowerTab` via **TanStack Query**: combined `powerTab.summary()` key (5s poll, swallows a 404 when no power plugin, retains last data on error) plus a `powerTab.cumulative()` query gated by `resolveCumulativeArgs`/`cumulativeReady` (custom range needs both dates), 60s poll. Extracted verbatim from `PowerTab.tsx` (F2/#301) |
+| `useEnergyPrice.ts` | `api/energy` | Energy-price editor state (config/editing/input/saving) + save for `PowerTab`'s `EnergyPriceEditor`; fetches once on mount (imperative, no TanStack), validates 0.01–10.0, takes an `onSaved` callback so the caller can refresh the cumulative-energy query after a price change (F2/#301) |
 
 ## Utility Hooks
 

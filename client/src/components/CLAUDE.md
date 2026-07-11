@@ -62,7 +62,7 @@ Reusable, generic building blocks. No business logic, no API calls.
 | `shares/` | Share management — `SharesPage` composes `SharesStatCards`, `SharesTabBar`, `SharesToolbar`, `MySharesTable`, `SharedWithMeTable`, `CloudExportsTable` (+ `PermissionBadges`/`FileNameCell`/`CloudStatusBadge` primitives), extracted F2/#301-style |
 | `smart-devices/` | Smart device status and control |
 | `ssd-cache/` | SSD file cache management |
-| `system-monitor/` | System monitor detail views |
+| `system-monitor/` | System monitor detail views — `PowerTab` composes `power-tab/*`: `PowerSummaryCards`, `PowerDeviceCard`, `EnergyPriceEditor`, `ChartDeviceTabs`, `ChartModePeriodControls`, `CustomRangePicker`, `EnergyChartSummary`, `EnergyChart` (+ `CumulativeEnergyChart`/`InstantPowerChart`), `PowerStates`, and the `parseDevicePower` pure helper — extracted F2/#301 |
 | `updates/` | Self-update UI |
 | `user-management/` | User CRUD, 2FA management |
 | `setup/` | Setup wizard step components |
