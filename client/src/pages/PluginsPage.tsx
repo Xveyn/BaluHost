@@ -3,188 +3,51 @@
  *
  * Admin-only page for managing installed plugins.
  */
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { safeExternalUrl } from '../lib/safeUrl';
-import { usePlugins } from '../contexts/PluginContext';
-import type {
-  PluginDetail,
-  PluginInfo,
-  PermissionInfo,
-  ScopeInfo,
-} from '../api/plugins';
-import {
-  getPluginDetails,
-  getScopeCatalog,
-  listPermissions,
-  togglePlugin,
-  toggleDashboardPanel,
-  uninstallPlugin,
-} from '../api/plugins';
-import { AlertTriangle, Check, X, Plug, Shield, Settings, Trash2, ExternalLink, BookOpen, LayoutDashboard, Store } from 'lucide-react';
-import { resolvePluginString } from '../lib/pluginI18n';
+import { AlertTriangle } from 'lucide-react';
 import PluginDocumentation from '../components/plugins/PluginDocumentation';
-import { PluginSettingsSection } from '../components/plugins/PluginSettingsSection';
 import MarketplaceTab from '../components/plugins/MarketplaceTab';
-import { LocalOnlyAction } from '../components/LocalOnlyAction';
-import { useConfirmDialog } from '../hooks/useConfirmDialog';
-
-type TabType = 'plugins' | 'marketplace' | 'documentation';
-
-const TABS = [
-  { id: 'plugins' as TabType, labelKey: 'tabs.installed', icon: Plug },
-  { id: 'marketplace' as TabType, labelKey: 'tabs.marketplace', icon: Store },
-  { id: 'documentation' as TabType, labelKey: 'tabs.documentation', icon: BookOpen },
-];
+import { usePluginManagement } from '../hooks/usePluginManagement';
+import type { TabType } from '../components/plugins/plugin-management';
+import {
+  PluginTabNav,
+  PluginList,
+  PluginDetailsSidebar,
+  PermissionGrantModal,
+  ScopeGrantModal,
+} from '../components/plugins/plugin-management';
 
 export default function PluginsPage() {
   const { t } = useTranslation(['plugins', 'common']);
-  const { confirm, dialog } = useConfirmDialog();
-  const { plugins, isLoading, error, refreshPlugins } = usePlugins();
-  const [selectedPlugin, setSelectedPlugin] = useState<PluginDetail | null>(null);
-  const [allPermissions, setAllPermissions] = useState<PermissionInfo[]>([]);
-  const [detailsLoading, setDetailsLoading] = useState(false);
-  const [actionLoading, setActionLoading] = useState(false);
-  const [actionError, setActionError] = useState<string | null>(null);
-  const [showPermissionModal, setShowPermissionModal] = useState(false);
-  const [selectedPermissions, setSelectedPermissions] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<TabType>('plugins');
-  const [scopeCatalog, setScopeCatalog] = useState<ScopeInfo[]>([]);
-  const [showScopeModal, setShowScopeModal] = useState(false);
-  const [selectedScopes, setSelectedScopes] = useState<string[]>([]);
-
-  // Load all permissions on mount
-  useEffect(() => {
-    listPermissions()
-      .then((res) => setAllPermissions(res.permissions))
-      .catch(console.error);
-  }, []);
-
-  // Load scope catalog on mount (for external plugin scope-picker)
-  useEffect(() => {
-    getScopeCatalog()
-      .then((res) => setScopeCatalog(res.scopes))
-      .catch(console.error);
-  }, []);
-
-  const loadPluginDetails = async (name: string): Promise<PluginDetail | null> => {
-    setDetailsLoading(true);
-    setActionError(null);
-    try {
-      const details = await getPluginDetails(name);
-      setSelectedPlugin(details);
-      return details;
-    } catch {
-      setActionError(t('errors.loadDetailsFailed'));
-      return null;
-    } finally {
-      setDetailsLoading(false);
-    }
-  };
-
-  const handleTogglePlugin = async (plugin: PluginInfo) => {
-    if (plugin.is_enabled) {
-      // Disable plugin
-      setActionLoading(true);
-      setActionError(null);
-      try {
-        await togglePlugin(plugin.name, { enabled: false });
-        await refreshPlugins();
-        if (selectedPlugin?.name === plugin.name) {
-          await loadPluginDetails(plugin.name);
-        }
-      } catch {
-        setActionError(t('errors.disableFailed'));
-      } finally {
-        setActionLoading(false);
-      }
-    } else {
-      // Enable: load details to learn tier + requested scopes
-      const details = await loadPluginDetails(plugin.name);
-      if (!details) return;
-      if (details.is_external) {
-        setSelectedScopes(
-          (details.requested_api_scopes ?? []).filter((s) =>
-            scopeCatalog.some((c) => c.key === s),
-          ),
-        );
-        setShowScopeModal(true);
-      } else {
-        setSelectedPermissions(plugin.required_permissions);
-        setShowPermissionModal(true);
-      }
-    }
-  };
-
-  const handleEnableWithPermissions = async () => {
-    if (!selectedPlugin) return;
-
-    setActionLoading(true);
-    setActionError(null);
-    setShowPermissionModal(false);
-
-    try {
-      await togglePlugin(selectedPlugin.name, {
-        enabled: true,
-        grant_permissions: selectedPermissions,
-      });
-      await refreshPlugins();
-      await loadPluginDetails(selectedPlugin.name);
-    } catch {
-      setActionError(t('errors.enableFailed'));
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleEnableWithScopes = async () => {
-    if (!selectedPlugin) return;
-    setActionLoading(true);
-    setActionError(null);
-    setShowScopeModal(false);
-    try {
-      await togglePlugin(selectedPlugin.name, {
-        enabled: true,
-        grant_api_scopes: selectedScopes,
-      });
-      await refreshPlugins();
-      await loadPluginDetails(selectedPlugin.name);
-    } catch {
-      setActionError(t('errors.enableFailed'));
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleUninstall = async (name: string) => {
-    const ok = await confirm(t('confirm.uninstall', { name }), { title: t('buttons.uninstall'), variant: 'danger', confirmLabel: t('buttons.uninstall') });
-    if (!ok) return;
-
-    setActionLoading(true);
-    setActionError(null);
-    try {
-      await uninstallPlugin(name);
-      await refreshPlugins();
-      if (selectedPlugin?.name === name) {
-        setSelectedPlugin(null);
-      }
-    } catch {
-      setActionError(t('errors.uninstallFailed'));
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const getCategoryColor = (category: string) => {
-    const colors: Record<string, string> = {
-      monitoring: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-      storage: 'bg-green-500/20 text-green-400 border-green-500/30',
-      network: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
-      security: 'bg-red-500/20 text-red-400 border-red-500/30',
-      general: 'bg-slate-500/20 text-slate-400 border-slate-500/30',
-    };
-    return colors[category] || colors.general;
-  };
+  const {
+    plugins,
+    isLoading,
+    error,
+    refreshPlugins,
+    allPermissions,
+    scopeCatalog,
+    selectedPlugin,
+    detailsLoading,
+    actionLoading,
+    actionError,
+    loadPluginDetails,
+    handleTogglePlugin,
+    handleEnableWithPermissions,
+    handleEnableWithScopes,
+    handleUninstall,
+    handleToggleDashboardPanel,
+    showPermissionModal,
+    setShowPermissionModal,
+    selectedPermissions,
+    togglePermission,
+    showScopeModal,
+    setShowScopeModal,
+    selectedScopes,
+    toggleScope,
+    dialog,
+  } = usePluginManagement();
 
   if (isLoading) {
     return (
@@ -215,22 +78,7 @@ export default function PluginsPage() {
       </div>
 
       {/* Tab Navigation */}
-      <div className="flex gap-2 border-b border-slate-800 pb-3 overflow-x-auto scrollbar-none">
-        {TABS.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center gap-2 rounded-lg px-3 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-sm font-medium transition-all whitespace-nowrap touch-manipulation active:scale-95 ${
-              activeTab === tab.id
-                ? 'bg-blue-500/20 text-blue-400 border border-blue-500/40'
-                : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-300 border border-transparent'
-            }`}
-          >
-            <tab.icon className="w-4 h-4" />
-            {t(tab.labelKey)}
-          </button>
-        ))}
-      </div>
+      <PluginTabNav activeTab={activeTab} onSelect={setActiveTab} />
 
       {error && (
         <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400">
@@ -255,435 +103,51 @@ export default function PluginsPage() {
 
       {/* Plugins Tab */}
       {activeTab === 'plugins' && (
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Plugin List */}
-        <div className="lg:col-span-2 space-y-4">
-          {plugins.length === 0 ? (
-            <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-8 text-center">
-              <Plug className="h-12 w-12 mx-auto text-slate-600 mb-4" />
-              <h3 className="text-lg font-medium text-slate-300 mb-2">{t('empty.noPlugins')}</h3>
-              <p className="text-sm text-slate-500">
-                {t('empty.noPluginsDesc')}
-              </p>
-            </div>
-          ) : (
-            plugins.map((plugin) => (
-              <div
-                key={plugin.name}
-                onClick={() => loadPluginDetails(plugin.name)}
-                className={`rounded-xl border p-4 cursor-pointer transition-all ${
-                  selectedPlugin?.name === plugin.name
-                    ? 'border-blue-500 bg-slate-900/80'
-                    : 'border-slate-800 bg-slate-900/50 hover:border-slate-700'
-                }`}
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className={`p-2 rounded-lg ${plugin.is_enabled ? 'bg-green-500/20' : 'bg-slate-800'}`}>
-                      <Plug className={`h-5 w-5 ${plugin.is_enabled ? 'text-green-400' : 'text-slate-500'}`} />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-medium text-white">{resolvePluginString(plugin.translations, 'display_name', plugin.display_name)}</h3>
-                        <span className="text-xs text-slate-500">v{plugin.version}</span>
-                        {plugin.is_enabled && (
-                          <span className="px-2 py-0.5 text-xs rounded-full bg-green-500/20 text-green-400 border border-green-500/30">
-                            {t('status.active')}
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-sm text-slate-400 mt-0.5">{resolvePluginString(plugin.translations, 'description', plugin.description)}</p>
-                      <div className="flex items-center gap-2 mt-2">
-                        <span className={`px-2 py-0.5 text-xs rounded-full border ${getCategoryColor(plugin.category)}`}>
-                          {plugin.category}
-                        </span>
-                        {plugin.has_ui && (
-                          <span className="px-2 py-0.5 text-xs rounded-full bg-purple-500/20 text-purple-400 border border-purple-500/30">
-                            {t('ui')}
-                          </span>
-                        )}
-                        {plugin.dangerous_permissions.length > 0 && (
-                          <span className="px-2 py-0.5 text-xs rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center gap-1">
-                            <Shield className="h-3 w-3" />
-                            {t('permissions.requiresReview')}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleTogglePlugin(plugin);
-                    }}
-                    disabled={actionLoading}
-                    className={`rounded-lg px-3 py-1.5 text-xs sm:text-sm font-medium transition-all touch-manipulation active:scale-95 ${
-                      plugin.is_enabled
-                        ? 'bg-slate-800 text-slate-300 hover:bg-red-500/20 hover:text-red-400 hover:border-red-500/30'
-                        : 'bg-blue-500/20 text-blue-400 hover:bg-blue-500/30'
-                    } border border-slate-700`}
-                  >
-                    {plugin.is_enabled ? t('buttons.disable') : t('buttons.enable')}
-                  </button>
-                </div>
-                {plugin.error && (
-                  <div className="mt-3 p-2 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-400">
-                    Error: {plugin.error}
-                  </div>
-                )}
-              </div>
-            ))
-          )}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 space-y-4">
+            <PluginList
+              plugins={plugins}
+              selectedName={selectedPlugin?.name ?? null}
+              actionLoading={actionLoading}
+              onSelect={loadPluginDetails}
+              onToggle={handleTogglePlugin}
+            />
+          </div>
+          <PluginDetailsSidebar
+            plugin={selectedPlugin}
+            detailsLoading={detailsLoading}
+            actionLoading={actionLoading}
+            onToggleDashboardPanel={handleToggleDashboardPanel}
+            onConfigure={() => setShowPermissionModal(true)}
+            onUninstall={handleUninstall}
+          />
         </div>
-
-        {/* Plugin Details Sidebar */}
-        <div className="space-y-4">
-          {detailsLoading ? (
-            <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
-              <div className="animate-pulse space-y-4">
-                <div className="h-6 bg-slate-800 rounded w-3/4" />
-                <div className="h-4 bg-slate-800 rounded w-1/2" />
-                <div className="h-20 bg-slate-800 rounded" />
-              </div>
-            </div>
-          ) : selectedPlugin ? (
-            <>
-              {/* Details Card */}
-              <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
-                <h3 className="text-lg font-medium text-white mb-4">
-                  {resolvePluginString(selectedPlugin.translations, 'display_name', selectedPlugin.display_name)}
-                </h3>
-                <dl className="space-y-3 text-sm">
-                  <div className="flex justify-between">
-                    <dt className="text-slate-500">{t('details.version')}</dt>
-                    <dd className="text-white">{selectedPlugin.version}</dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt className="text-slate-500">{t('details.author')}</dt>
-                    <dd className="text-white">{selectedPlugin.author}</dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt className="text-slate-500">{t('details.category')}</dt>
-                    <dd className="text-white capitalize">{selectedPlugin.category}</dd>
-                  </div>
-                  {safeExternalUrl(selectedPlugin.homepage) && (
-                    <div className="flex justify-between">
-                      <dt className="text-slate-500">{t('details.homepage')}</dt>
-                      <dd>
-                        <a
-                          href={safeExternalUrl(selectedPlugin.homepage)!}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-400 hover:underline flex items-center gap-1"
-                        >
-                          {t('details.link')} <ExternalLink className="h-3 w-3" />
-                        </a>
-                      </dd>
-                    </div>
-                  )}
-                  <div className="flex justify-between">
-                    <dt className="text-slate-500">{t('details.status')}</dt>
-                    <dd className={selectedPlugin.is_enabled ? 'text-green-400' : 'text-slate-400'}>
-                      {selectedPlugin.is_enabled ? t('status.enabled') : t('status.disabled')}
-                    </dd>
-                  </div>
-                  {selectedPlugin.installed_at && (
-                    <div className="flex justify-between">
-                      <dt className="text-slate-500">{t('details.installed')}</dt>
-                      <dd className="text-white">
-                        {new Date(selectedPlugin.installed_at).toLocaleDateString()}
-                      </dd>
-                    </div>
-                  )}
-                </dl>
-              </div>
-
-              {/* Permissions Card */}
-              <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
-                <h4 className="text-sm font-medium text-white mb-3 flex items-center gap-2">
-                  <Shield className="h-4 w-4" />
-                  {t('permissions.title')}
-                </h4>
-                {selectedPlugin.required_permissions.length === 0 ? (
-                  <p className="text-sm text-slate-500">{t('permissions.noPermissions')}</p>
-                ) : (
-                  <ul className="space-y-2">
-                    {selectedPlugin.required_permissions.map((perm) => {
-                      const isDangerous = selectedPlugin.dangerous_permissions.includes(perm);
-                      const isGranted = selectedPlugin.granted_permissions.includes(perm);
-                      return (
-                        <li
-                          key={perm}
-                          className={`flex items-center justify-between text-sm p-2 rounded-lg ${
-                            isDangerous
-                              ? 'bg-amber-500/10 border border-amber-500/20'
-                              : 'bg-slate-800/50'
-                          }`}
-                        >
-                          <span className={isDangerous ? 'text-amber-400' : 'text-slate-300'}>
-                            {perm}
-                          </span>
-                          {isGranted ? (
-                            <Check className="h-4 w-4 text-green-400" />
-                          ) : (
-                            <X className="h-4 w-4 text-slate-500" />
-                          )}
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
-              </div>
-
-              {/* Dashboard Panel Card */}
-              {selectedPlugin.has_dashboard_panel && selectedPlugin.is_enabled && (
-                <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
-                  <h4 className="text-sm font-medium text-white mb-3 flex items-center gap-2">
-                    <LayoutDashboard className="h-4 w-4" />
-                    {t('dashboardPanel.title')}
-                  </h4>
-                  <p className="text-xs text-slate-500 mb-4">
-                    {t('dashboardPanel.description')}
-                  </p>
-                  <div className="flex items-center justify-between">
-                    <span className={`text-sm ${selectedPlugin.dashboard_panel_enabled ? 'text-green-400' : 'text-slate-500'}`}>
-                      {selectedPlugin.dashboard_panel_enabled ? t('dashboardPanel.active') : t('dashboardPanel.inactive')}
-                    </span>
-                    <button
-                      onClick={async () => {
-                        setActionLoading(true);
-                        setActionError(null);
-                        try {
-                          await toggleDashboardPanel(selectedPlugin.name, !selectedPlugin.dashboard_panel_enabled);
-                          await loadPluginDetails(selectedPlugin.name);
-                        } catch {
-                          setActionError(t('dashboardPanel.enableFailed'));
-                        } finally {
-                          setActionLoading(false);
-                        }
-                      }}
-                      disabled={actionLoading}
-                      className={`rounded-lg px-3 py-1.5 text-xs sm:text-sm font-medium transition-all touch-manipulation active:scale-95 border ${
-                        selectedPlugin.dashboard_panel_enabled
-                          ? 'border-slate-700 bg-slate-800 text-slate-300 hover:bg-red-500/20 hover:text-red-400 hover:border-red-500/30'
-                          : 'border-green-500/30 bg-green-500/20 text-green-400 hover:bg-green-500/30'
-                      } disabled:opacity-50 disabled:cursor-not-allowed`}
-                    >
-                      {selectedPlugin.dashboard_panel_enabled ? t('buttons.disablePanel') : t('buttons.enablePanel')}
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Plugin Settings Section */}
-              {selectedPlugin?.config_schema && selectedPlugin.is_enabled && (
-                <PluginSettingsSection
-                  pluginName={selectedPlugin.name}
-                  configSchema={selectedPlugin.config_schema}
-                  config={selectedPlugin.config ?? {}}
-                  translations={selectedPlugin.translations ?? undefined}
-                />
-              )}
-
-              {/* Actions Card */}
-              <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6 space-y-3">
-                <button
-                  onClick={() => setShowPermissionModal(true)}
-                  disabled={!selectedPlugin.is_enabled}
-                  className="w-full px-4 py-2 text-sm font-medium rounded-lg border border-slate-700 text-slate-300 hover:border-slate-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all touch-manipulation active:scale-95"
-                >
-                  <Settings className="h-4 w-4" />
-                  {t('buttons.configure')}
-                </button>
-                <LocalOnlyAction>
-                  <button
-                    onClick={() => handleUninstall(selectedPlugin.name)}
-                    disabled={actionLoading || selectedPlugin.is_enabled}
-                    className="w-full px-4 py-2 text-sm font-medium rounded-lg border border-red-500/30 text-red-400 hover:bg-red-500/10 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all touch-manipulation active:scale-95"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                    {t('buttons.uninstall')}
-                  </button>
-                </LocalOnlyAction>
-                {selectedPlugin.is_enabled && (
-                  <p className="text-xs text-slate-500 text-center">
-                    {t('confirm.disableFirst')}
-                  </p>
-                )}
-              </div>
-            </>
-          ) : (
-            <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6 text-center">
-              <Settings className="h-8 w-8 mx-auto text-slate-600 mb-3" />
-              <p className="text-sm text-slate-500">
-                {t('empty.selectPlugin')}
-              </p>
-            </div>
-          )}
-        </div>
-      </div>
       )}
 
       {/* Permission Grant Modal */}
       {showPermissionModal && selectedPlugin && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 w-full max-w-md mx-4 shadow-2xl">
-            <h3 className="text-lg font-medium text-white mb-2">
-              {t('modal.enableTitle', { name: selectedPlugin.display_name })}
-            </h3>
-            <p className="text-sm text-slate-400 mb-4">
-              {t('modal.enableDesc')}
-            </p>
-            <div className="space-y-2 mb-6 max-h-64 overflow-y-auto">
-              {selectedPlugin.required_permissions.map((perm) => {
-                const permInfo = allPermissions.find((p) => p.value === perm);
-                const isChecked = selectedPermissions.includes(perm);
-                return (
-                  <label
-                    key={perm}
-                    className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer transition ${
-                      permInfo?.dangerous
-                        ? 'bg-amber-500/10 border border-amber-500/20'
-                        : 'bg-slate-800/50 border border-slate-700'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={isChecked}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelectedPermissions([...selectedPermissions, perm]);
-                        } else {
-                          setSelectedPermissions(selectedPermissions.filter((p) => p !== perm));
-                        }
-                      }}
-                      className="mt-1 rounded border-slate-600 text-blue-500 focus:ring-blue-500 focus:ring-offset-slate-900"
-                    />
-                    <div>
-                      <div className={`text-sm font-medium ${permInfo?.dangerous ? 'text-amber-400' : 'text-white'}`}>
-                        {perm}
-                        {permInfo?.dangerous && (
-                          <span className="ml-2 text-xs text-amber-500">({t('permissions.dangerous')})</span>
-                        )}
-                      </div>
-                      {permInfo && (
-                        <p className="text-xs text-slate-500 mt-0.5">{permInfo.description}</p>
-                      )}
-                    </div>
-                  </label>
-                );
-              })}
-            </div>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowPermissionModal(false)}
-                className="flex-1 px-4 py-2 text-sm font-medium rounded-lg border border-slate-700 text-slate-300 hover:border-slate-600 transition-all touch-manipulation active:scale-95"
-              >
-                {t('buttons.cancel')}
-              </button>
-              <button
-                onClick={handleEnableWithPermissions}
-                disabled={!selectedPlugin.required_permissions.every((p) => selectedPermissions.includes(p))}
-                className="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all touch-manipulation active:scale-95"
-              >
-                {t('buttons.enablePlugin')}
-              </button>
-            </div>
-          </div>
-        </div>
+        <PermissionGrantModal
+          plugin={selectedPlugin}
+          allPermissions={allPermissions}
+          selectedPermissions={selectedPermissions}
+          onTogglePermission={togglePermission}
+          onCancel={() => setShowPermissionModal(false)}
+          onConfirm={handleEnableWithPermissions}
+        />
       )}
+
       {/* Scope Grant Modal (external plugins only) */}
-      {showScopeModal && selectedPlugin && (() => {
-        const descs = t('scopeDescriptions', { returnObjects: true }) as Record<
-          string,
-          { label: string; description: string }
-        >;
-        const requested = (selectedPlugin.requested_api_scopes ?? []).filter((s) =>
-          scopeCatalog.some((c) => c.key === s),
-        );
-        const byTier = (tier: 'frontend' | 'backend') =>
-          requested
-            .map((key) => scopeCatalog.find((c) => c.key === key)!)
-            .filter((c) => c.tier === tier);
-        const renderScope = (scope: ScopeInfo) => {
-          const isChecked = selectedScopes.includes(scope.key);
-          const meta = descs?.[scope.key];
-          return (
-            <label
-              key={scope.key}
-              className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer transition ${
-                scope.dangerous
-                  ? 'bg-amber-500/10 border border-amber-500/20'
-                  : 'bg-slate-800/50 border border-slate-700'
-              }`}
-            >
-              <input
-                type="checkbox"
-                checked={isChecked}
-                onChange={(e) => {
-                  if (e.target.checked) {
-                    setSelectedScopes([...selectedScopes, scope.key]);
-                  } else {
-                    setSelectedScopes(selectedScopes.filter((s) => s !== scope.key));
-                  }
-                }}
-                className="mt-1 rounded border-slate-600 text-blue-500 focus:ring-blue-500 focus:ring-offset-slate-900"
-              />
-              <div>
-                <div className={`text-sm font-medium ${scope.dangerous ? 'text-amber-400' : 'text-white'}`}>
-                  {meta?.label ?? scope.key}
-                  {scope.dangerous && (
-                    <span className="ml-2 text-xs text-amber-500">({t('picker.dangerous')})</span>
-                  )}
-                </div>
-                {meta?.description && (
-                  <p className="text-xs text-slate-500 mt-0.5">{meta.description}</p>
-                )}
-              </div>
-            </label>
-          );
-        };
-        return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 w-full max-w-md mx-4 shadow-2xl">
-              <h3 className="text-lg font-medium text-white mb-2">
-                {t('picker.title', { name: selectedPlugin.display_name })}
-              </h3>
-              <p className="text-sm text-slate-400 mb-4">{t('picker.desc')}</p>
-              {requested.length === 0 ? (
-                <p className="text-sm text-slate-500 mb-6">{t('picker.noScopes')}</p>
-              ) : (
-                <div className="space-y-4 mb-6 max-h-72 overflow-y-auto">
-                  {(['frontend', 'backend'] as const).map((tier) =>
-                    byTier(tier).length === 0 ? null : (
-                      <div key={tier} className="space-y-2">
-                        <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                          {t(`scopeTiers.${tier}`)}
-                        </div>
-                        {byTier(tier).map(renderScope)}
-                      </div>
-                    ),
-                  )}
-                </div>
-              )}
-              <div className="flex gap-3">
-                <button
-                  onClick={() => setShowScopeModal(false)}
-                  className="flex-1 px-4 py-2 text-sm font-medium rounded-lg border border-slate-700 text-slate-300 hover:border-slate-600 transition-all touch-manipulation active:scale-95"
-                >
-                  {t('buttons.cancel')}
-                </button>
-                <button
-                  onClick={handleEnableWithScopes}
-                  className="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all touch-manipulation active:scale-95"
-                >
-                  {t('picker.grant')}
-                </button>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
+      {showScopeModal && selectedPlugin && (
+        <ScopeGrantModal
+          plugin={selectedPlugin}
+          scopeCatalog={scopeCatalog}
+          selectedScopes={selectedScopes}
+          onToggleScope={toggleScope}
+          onCancel={() => setShowScopeModal(false)}
+          onConfirm={handleEnableWithScopes}
+        />
+      )}
+
       {dialog}
     </div>
   );
