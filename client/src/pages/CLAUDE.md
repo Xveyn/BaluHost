@@ -44,7 +44,6 @@ Pages are conditionally included based on `__DEVICE_MODE__` build flag:
 | `NotificationPreferencesPage.tsx` | `/notifications/preferences` | Yes | Per-category notification preference settings |
 | `RemoteServersPage.tsx` | `/remote-servers` | Yes | Remote server profile management |
 | `SetupWizard.tsx` | `/setup` | No | Initial server setup wizard (runs before first login) |
-| `SyncPrototype.tsx` | `/sync` | Yes | Sync prototype / desktop sync coordination page |
 
 ## Conventions
 

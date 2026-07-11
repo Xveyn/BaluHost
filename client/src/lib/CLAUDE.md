@@ -25,7 +25,6 @@ Shared utility functions and core infrastructure. No React components — pure T
 | `adminDbFormatters.ts` | Admin database value formatters |
 | `openapi-transform.ts` | OpenAPI schema transformation for API docs page |
 | `pluginI18n.ts` | Plugin translation resolution helper |
-| `mockSyncApi.ts` | Mock sync API for development |
 | `safeUrl.ts` | Safe URL construction/validation helpers |
 | `sleep-utils.ts` | Sleep mode utilities (idle detection helpers) |
 | `twoFactorCode.ts` | TOTP two-factor code formatting and validation |
