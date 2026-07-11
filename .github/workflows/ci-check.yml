@@ -46,18 +46,23 @@ jobs:
           done
           echo "Identity OK: $(whoami) uid=$(id -u) groups=$(id -nG)"
 
-      - name: Lint + backend tests in rootless Podman container
+      - name: Lint + backend tests (with coverage) in rootless Podman container
         env:
           TEST_IMAGE: docker.io/library/python:3.11-slim
         run: |
           set -euo pipefail
+          # Coverage is measured and printed only — no threshold enforced yet
+          # (matches the frontend job; a low number does not fail CI). The tests
+          # themselves still gate. `-o addopts=` drops the pyproject addopts
+          # (term-missing + html) so CI prints the concise skip-covered table;
+          # `term:skip-covered` hides 100%-covered files to keep the log short.
           podman run --rm \
             --network=bridge \
             -v "${{ github.workspace }}:/work:Z" \
             -w /work/backend \
             -e NAS_MODE=dev \
             "$TEST_IMAGE" \
-            bash -c "set -euo pipefail; pip install --no-cache-dir -e '.[dev]' && python -m ruff check . && python -m pytest -q --timeout=120 -n auto --no-cov"
+            bash -c "set -euo pipefail; pip install --no-cache-dir -e '.[dev]' && python -m ruff check . && python -m pytest -q --timeout=120 -n auto -o addopts= --cov=app --cov-report=term:skip-covered"
 
   frontend-build:
     runs-on: ubuntu-latest
