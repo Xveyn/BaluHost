@@ -51,6 +51,7 @@ Thumbs.db
 coverage/
 htmlcov/
 .coverage
+coverage.json
 
 # Local data
 storage/

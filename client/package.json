@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "test": "vitest",
+    "test:coverage": "vitest run --coverage",
     "build:runtime": "vite build --config vite.runtime.config.ts",
     "prebuild": "npm run build:runtime",
     "build": "tsc -b && vite build",
@@ -57,6 +58,7 @@
     "@types/react": "^18.2.21",
     "@types/react-dom": "^18.2.7",
     "@vitejs/plugin-react-swc": "^4.2.2",
+    "@vitest/coverage-v8": "^4.1.10",
     "autoprefixer": "^10.4.20",
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^7.0.1",
