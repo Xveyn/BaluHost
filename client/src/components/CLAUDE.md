@@ -48,6 +48,7 @@ Reusable, generic building blocks. No business logic, no API calls.
 | `file-manager/` | File browser, context menus, preview |
 | `firebase/` | Firebase push notification config |
 | `manual/` | User manual article viewer |
+| `mobile-devices/` | Mobile device registration — `MobileDevicesPage` composes `mobile-devices/*`: `RegisterDeviceCard`, `MobileDevicesList`/`MobileDeviceCard`, `NotificationStatus`, `QrCodeDialog` (→ `NewTokenQrView` / `ExistingDeviceInfoView`) + `mobileDeviceDates` helper; state/handlers in `hooks/useMobileRegistration` (extracted F2/#301) |
 | `monitoring/` | System monitoring charts and cards |
 | `pihole/` | Pi-hole DNS dashboard, `ad-discovery/` |
 | `plugins/` | Plugin management UI — `plugin-management/` holds the `PluginsPage` decomposition: `PluginTabNav`, `PluginList`/`PluginListCard`, `PluginDetailsSidebar` (composing `PluginDetailsCard`/`PluginPermissionsCard`/`PluginDashboardPanelCard`/`PluginActionsCard`), `PermissionGrantModal`, `ScopeGrantModal`, `getCategoryColor` helper — re-exported via `plugin-management/index.ts`; state/actions in `hooks/usePluginManagement.ts` (extracted F2/#301) |
