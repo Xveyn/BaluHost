@@ -1,4 +1,4 @@
-import { EnergyPriceConfig } from '../../../api/energy';
+import type { EnergyPriceConfig } from '../../../api/energy';
 import { formatNumber } from '../../../lib/formatters';
 
 interface EnergyPriceEditorProps {
