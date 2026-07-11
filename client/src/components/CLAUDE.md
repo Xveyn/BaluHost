@@ -50,7 +50,7 @@ Reusable, generic building blocks. No business logic, no API calls.
 | `manual/` | User manual article viewer |
 | `monitoring/` | System monitoring charts and cards |
 | `pihole/` | Pi-hole DNS dashboard, `ad-discovery/` |
-| `plugins/` | Plugin management UI |
+| `plugins/` | Plugin management UI — `plugin-management/` holds the `PluginsPage` decomposition: `PluginTabNav`, `PluginList`/`PluginListCard`, `PluginDetailsSidebar` (composing `PluginDetailsCard`/`PluginPermissionsCard`/`PluginDashboardPanelCard`/`PluginActionsCard`), `PermissionGrantModal`, `ScopeGrantModal`, `getCategoryColor` helper — re-exported via `plugin-management/index.ts`; state/actions in `hooks/usePluginManagement.ts` (extracted F2/#301) |
 | `power/` | Power profile management — `PowerManagement` page composes `PowerStatusCards`, `PermissionStatusCard`, `AutoScalingSection` (extracted F2/#301); `SleepConfigPanel` composes ./sleep-config/* (8 section cards + SleepFormControls), form state in useSleepConfigForm/useFritzBoxForm (extracted F2) |
 | `raid/` | RAID status, disk details |
 | `rate-limits/` | Rate limit configuration UI |

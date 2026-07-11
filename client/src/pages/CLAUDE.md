@@ -30,7 +30,7 @@ Pages are conditionally included based on `__DEVICE_MODE__` build flag:
 | `SchedulerDashboard.tsx` | `/schedulers` | Admin | Background scheduler status and history |
 | `DevicesPage.tsx` | `/devices` | Yes | Desktop/mobile device management |
 | `MobileDevicesPage.tsx` | `/mobile` | Admin | Mobile device registration |
-| `PluginsPage.tsx` | `/plugins` | Admin | Plugin install, toggle, configure |
+| `PluginsPage.tsx` | `/plugins` | Admin | Plugin install, toggle, configure — composes `components/plugins/plugin-management/*` (tab nav, list, details sidebar, permission/scope grant modals), state/actions in `usePluginManagement` (extracted F2/#301) |
 | `SmartDevicesPage.tsx` | `/smart-devices` | Admin | Smart device (Tapo) management |
 | `PiholePage.tsx` | `/pihole` | Admin | Pi-hole DNS management |
 | `CloudImportPage.tsx` | `/cloud` | Yes | Cloud import (Google Drive, Dropbox, etc.) |
