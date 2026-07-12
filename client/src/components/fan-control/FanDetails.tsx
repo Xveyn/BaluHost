@@ -1,19 +1,21 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { TrendingUp, Table, LineChart as LineChartIcon, Zap, Volume2, Gauge, Info, ChevronDown } from 'lucide-react';
-import toast from 'react-hot-toast';
-import { useTranslation } from 'react-i18next';
+import { TrendingUp } from 'lucide-react';
 import type { FanInfo, FanCurvePoint, FanCurveProfile } from '../../api/fan-control';
-import { CURVE_PRESETS, updateFanConfig } from '../../api/fan-control';
-import { handleApiError } from '../../lib/errorHandling';
-import FanCurveChart from './FanCurveChart';
 import CurveTypeSelector from './CurveTypeSelector';
-import type { CurveType } from './CurveTypeSelector';
 import CurveEditorFlat from './CurveEditorFlat';
 import CurveEditorTarget from './CurveEditorTarget';
 import CurveEditorMix from './CurveEditorMix';
 import CurveEditorSync from './CurveEditorSync';
 import AdvancedFanSettings from './AdvancedFanSettings';
 import GpuManualModeToggle from './GpuManualModeToggle';
+import FanCurveChart from './FanCurveChart';
+import { useTranslation } from 'react-i18next';
+import { useFanCurveEditor } from '../../hooks/useFanCurveEditor';
+import {
+  FanPresetProfileButtons,
+  FanCurveGraphControls,
+  FanCurveTableEditor,
+  FanStatsGrid,
+} from './fan-details';
 
 interface FanDetailsProps {
   fan: FanInfo;
@@ -28,236 +30,9 @@ interface FanDetailsProps {
 
 export default function FanDetails({ fan, onCurveUpdate, isReadOnly, onEditingChange, onConfigUpdate, profiles, onApplyProfile, allFans }: FanDetailsProps) {
   const { t } = useTranslation(['system', 'common']);
-  const [curvePoints, setCurvePoints] = useState<FanCurvePoint[]>(fan.curve_points);
-  const [viewMode, setViewMode] = useState<'chart' | 'table'>('chart');
-  const [hysteresis, setHysteresis] = useState<number>(fan.hysteresis_celsius ?? 3.0);
-  const [isUpdatingHysteresis, setIsUpdatingHysteresis] = useState(false);
-  const [curveType, setCurveType] = useState<CurveType>((fan.curve_type as CurveType) ?? 'graph');
-  const [localGpuManualEnabled, setLocalGpuManualEnabled] = useState(false);
-
-  // Sync curveType from server when fan changes
-  useEffect(() => {
-    setCurveType((fan.curve_type as CurveType) ?? 'graph');
-  }, [fan.fan_id, fan.curve_type]);
-
-  // Tracks whether the user has manually edited the curve (prevents auto-refresh overwrites)
-  const userEditedRef = useRef(false);
-
-  // Editing is always enabled when not read-only (FanControl-style)
-  const canEdit = !isReadOnly;
-
-  // Check if curve has been modified (compare with original)
-  const hasUnsavedChanges = useMemo(() => {
-    if (curvePoints.length !== fan.curve_points.length) return true;
-    const sortedCurrent = [...curvePoints].sort((a, b) => a.temp - b.temp);
-    const sortedOriginal = [...fan.curve_points].sort((a, b) => a.temp - b.temp);
-    return sortedCurrent.some((p, i) =>
-      p.temp !== sortedOriginal[i].temp || p.pwm !== sortedOriginal[i].pwm
-    );
-  }, [curvePoints, fan.curve_points]);
-
-  // Sync curve points from server — but only when user hasn't manually edited
-  useEffect(() => {
-    if (!userEditedRef.current) {
-      setCurvePoints(fan.curve_points);
-    }
-  }, [fan.fan_id, fan.curve_points]);
-
-  // Reset userEditedRef when switching to a different fan
-  useEffect(() => {
-    userEditedRef.current = false;
-    setCurvePoints(fan.curve_points);
-  }, [fan.fan_id]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    setHysteresis(fan.hysteresis_celsius ?? 3.0);
-  }, [fan.fan_id, fan.hysteresis_celsius]);
-
-  // Notify parent when there are unsaved changes (to pause auto-refresh)
-  useEffect(() => {
-    onEditingChange?.(hasUnsavedChanges);
-  }, [hasUnsavedChanges, onEditingChange]);
-
-  // --- Curve type change handlers ---
-
-  const handleCurveTypeChange = async (v: CurveType) => {
-    if (isReadOnly) return;
-    setCurveType(v);
-    try {
-      await updateFanConfig(fan.fan_id, { curve_type: v });
-      onConfigUpdate?.();
-    } catch (error: unknown) {
-      handleApiError(error, t('system:fanControl.messages.curveFailed'));
-      setCurveType((fan.curve_type as CurveType) ?? 'graph');
-    }
-  };
-
-  const handleFlatChange = async (v: number) => {
-    if (isReadOnly) return;
-    try {
-      await updateFanConfig(fan.fan_id, { flat_pwm_percent: v });
-      onConfigUpdate?.();
-    } catch (error: unknown) {
-      handleApiError(error, t('system:fanControl.messages.curveFailed'));
-    }
-  };
-
-  const handleTargetChange = async ({ targetTemp, targetPwm }: { targetTemp: number; targetPwm: number }) => {
-    if (isReadOnly) return;
-    try {
-      await updateFanConfig(fan.fan_id, { target_temp_celsius: targetTemp, target_pwm_percent: targetPwm });
-      onConfigUpdate?.();
-    } catch (error: unknown) {
-      handleApiError(error, t('system:fanControl.messages.curveFailed'));
-    }
-  };
-
-  const handleMixChange = async ({ curveAId, curveBId, fn }: { curveAId: number | null; curveBId: number | null; fn: 'max' | 'sum' }) => {
-    if (isReadOnly) return;
-    try {
-      await updateFanConfig(fan.fan_id, { mix_curve_a_id: curveAId, mix_curve_b_id: curveBId, mix_function: fn });
-      onConfigUpdate?.();
-    } catch (error: unknown) {
-      handleApiError(error, t('system:fanControl.messages.curveFailed'));
-    }
-  };
-
-  const handleSyncChange = async (v: string | null) => {
-    if (isReadOnly) return;
-    try {
-      await updateFanConfig(fan.fan_id, { sync_fan_id: v });
-      onConfigUpdate?.();
-    } catch (error: unknown) {
-      handleApiError(error, t('system:fanControl.messages.curveFailed'));
-    }
-  };
-
-  const validateCurvePoints = (points: FanCurvePoint[]): { valid: boolean; error?: string } => {
-    if (points.length < 2) {
-      return { valid: false, error: t('system:fanControl.validation.minPoints') };
-    }
-
-    // Check ascending temperatures
-    const sorted = [...points].sort((a, b) => a.temp - b.temp);
-    for (let i = 0; i < sorted.length - 1; i++) {
-      if (sorted[i].temp >= sorted[i + 1].temp) {
-        return { valid: false, error: t('system:fanControl.validation.ascendingTemp') };
-      }
-    }
-
-    // Check PWM range
-    for (const point of points) {
-      if (point.pwm < fan.min_pwm_percent || point.pwm > fan.max_pwm_percent) {
-        return {
-          valid: false,
-          error: t('system:fanControl.validation.pwmRange', { min: fan.min_pwm_percent, max: fan.max_pwm_percent })
-        };
-      }
-    }
-
-    return { valid: true };
-  };
-
-  const handleSaveCurve = () => {
-    const validation = validateCurvePoints(curvePoints);
-    if (!validation.valid) {
-      toast.error(validation.error || t('system:fanControl.validation.invalidCurve'));
-      return;
-    }
-
-    userEditedRef.current = false;
-    onCurveUpdate(fan.fan_id, curvePoints);
-  };
-
-  const handleDiscardChanges = () => {
-    userEditedRef.current = false;
-    setCurvePoints(fan.curve_points);
-  };
-
-  const handleAddPoint = () => {
-    userEditedRef.current = true;
-    const lastPoint = curvePoints[curvePoints.length - 1];
-    const newTemp = lastPoint ? lastPoint.temp + 10 : 40;
-    const newPWM = lastPoint ? Math.min(lastPoint.pwm + 10, 100) : 50;
-    setCurvePoints([...curvePoints, { temp: newTemp, pwm: newPWM }]);
-  };
-
-  const handleRemovePoint = (index: number) => {
-    if (curvePoints.length > 2) {
-      userEditedRef.current = true;
-      setCurvePoints(curvePoints.filter((_, i) => i !== index));
-    }
-  };
-
-  const handleUpdatePoint = (index: number, field: 'temp' | 'pwm', value: number) => {
-    userEditedRef.current = true;
-    const updated = [...curvePoints];
-    updated[index] = { ...updated[index], [field]: value };
-    setCurvePoints(updated);
-  };
-
-  const [showMoreProfiles, setShowMoreProfiles] = useState(false);
-
-  const handleApplyPreset = (preset: keyof typeof CURVE_PRESETS) => {
-    const presetPoints = CURVE_PRESETS[preset];
-    if (presetPoints) {
-      userEditedRef.current = true;
-      setCurvePoints([...presetPoints]);
-      toast.success(t('system:fanControl.curve.presetApplied', { preset }));
-    }
-  };
-
-  const handleApplyProfileCurve = (profile: FanCurveProfile) => {
-    if (onApplyProfile) {
-      onApplyProfile(profile);
-    } else {
-      userEditedRef.current = true;
-      setCurvePoints([...profile.curve_points]);
-      toast.success(t('system:fanControl.curve.presetApplied', { preset: profile.name }));
-    }
-    setShowMoreProfiles(false);
-  };
-
-  const systemProfiles = profiles?.filter(p => p.is_system) ?? [];
-  const userProfiles = profiles?.filter(p => !p.is_system) ?? [];
-
-  // Wrapper for FanCurveChart's onPointsChange — marks as user-edited
-  const handleChartPointsChange = useCallback((points: FanCurvePoint[]) => {
-    userEditedRef.current = true;
-    setCurvePoints(points);
-  }, []);
-
-  const handleHysteresisChange = async (value: number) => {
-    setHysteresis(value);
-  };
-
-  const handleHysteresisSave = async () => {
-    if (isReadOnly) return;
-
-    setIsUpdatingHysteresis(true);
-    try {
-      await updateFanConfig(fan.fan_id, { hysteresis_celsius: hysteresis });
-      toast.success(t('system:fanControl.messages.hysteresisSet', { value: hysteresis }));
-      onConfigUpdate?.();
-    } catch {
-      toast.error(t('system:fanControl.messages.hysteresisFailed'));
-      setHysteresis(fan.hysteresis_celsius ?? 3.0);
-    } finally {
-      setIsUpdatingHysteresis(false);
-    }
-  };
-
-  const hysteresisChanged = hysteresis !== (fan.hysteresis_celsius ?? 3.0);
-
-  const handleAdvancedChange = async (patch: Partial<FanInfo>) => {
-    if (isReadOnly) return;
-    try {
-      await updateFanConfig(fan.fan_id, patch as Parameters<typeof updateFanConfig>[1]);
-      onConfigUpdate?.();
-    } catch (error: unknown) {
-      handleApiError(error, t('system:fanControl.messages.curveFailed'));
-    }
-  };
+  const editor = useFanCurveEditor(fan, {
+    isReadOnly, onCurveUpdate, onConfigUpdate, onEditingChange, onApplyProfile, profiles,
+  });
 
   return (
     <div className="card">
@@ -267,276 +42,99 @@ export default function FanDetails({ fan, onCurveUpdate, isReadOnly, onEditingCh
           {fan.name} - {t('system:fanControl.curve.title')}
         </h2>
 
-        {/* Preset / Profile Buttons */}
-        {!isReadOnly && (
-          <div className="flex gap-2 flex-wrap items-center">
-            {/* System profiles (or fallback to hardcoded presets) */}
-            {systemProfiles.length > 0 ? (
-              systemProfiles.map(p => {
-                const icons: Record<string, typeof Volume2> = { silent: Volume2, balanced: Gauge, performance: Zap };
-                const Icon = icons[p.name] ?? Gauge;
-                return (
-                  <button
-                    key={p.id}
-                    onClick={() => handleApplyProfileCurve(p)}
-                    className="px-3 py-1.5 bg-slate-700 text-slate-300 rounded-lg hover:bg-slate-600 text-sm flex items-center gap-1.5 transition-colors"
-                    title={p.description ?? ''}
-                  >
-                    <Icon className="w-4 h-4" />
-                    {p.name.charAt(0).toUpperCase() + p.name.slice(1)}
-                  </button>
-                );
-              })
-            ) : (
-              <>
-                <button
-                  onClick={() => handleApplyPreset('silent')}
-                  className="px-3 py-1.5 bg-slate-700 text-slate-300 rounded-lg hover:bg-slate-600 text-sm flex items-center gap-1.5 transition-colors"
-                  title={t('system:fanControl.presets.silentDesc')}
-                >
-                  <Volume2 className="w-4 h-4" />
-                  {t('system:fanControl.presets.silent')}
-                </button>
-                <button
-                  onClick={() => handleApplyPreset('balanced')}
-                  className="px-3 py-1.5 bg-slate-700 text-slate-300 rounded-lg hover:bg-slate-600 text-sm flex items-center gap-1.5 transition-colors"
-                  title={t('system:fanControl.presets.balancedDesc')}
-                >
-                  <Gauge className="w-4 h-4" />
-                  {t('system:fanControl.presets.balanced')}
-                </button>
-                <button
-                  onClick={() => handleApplyPreset('performance')}
-                  className="px-3 py-1.5 bg-slate-700 text-slate-300 rounded-lg hover:bg-slate-600 text-sm flex items-center gap-1.5 transition-colors"
-                  title={t('system:fanControl.presets.performanceDesc')}
-                >
-                  <Zap className="w-4 h-4" />
-                  {t('system:fanControl.presets.performance')}
-                </button>
-              </>
-            )}
-
-            {/* User profiles dropdown */}
-            {userProfiles.length > 0 && (
-              <div className="relative">
-                <button
-                  onClick={() => setShowMoreProfiles(!showMoreProfiles)}
-                  className="px-3 py-1.5 bg-slate-700 text-slate-300 rounded-lg hover:bg-slate-600 text-sm flex items-center gap-1.5 transition-colors"
-                >
-                  {t('system:fanControl.profiles.more')}
-                  <ChevronDown className={`w-3 h-3 transition-transform ${showMoreProfiles ? 'rotate-180' : ''}`} />
-                </button>
-                {showMoreProfiles && (
-                  <div className="absolute right-0 top-full mt-1 z-10 bg-slate-800 border border-slate-700 rounded-lg shadow-xl py-1 min-w-[160px]">
-                    {userProfiles.map(p => (
-                      <button
-                        key={p.id}
-                        onClick={() => handleApplyProfileCurve(p)}
-                        className="w-full text-left px-3 py-2 text-sm text-slate-300 hover:bg-slate-700 transition-colors"
-                      >
-                        {p.name}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
+        <FanPresetProfileButtons
+          isReadOnly={isReadOnly}
+          systemProfiles={editor.systemProfiles}
+          userProfiles={editor.userProfiles}
+          showMoreProfiles={editor.showMoreProfiles}
+          onToggleMore={() => editor.setShowMoreProfiles(!editor.showMoreProfiles)}
+          onApplyPreset={editor.handleApplyPreset}
+          onApplyProfile={editor.handleApplyProfileCurve}
+        />
       </div>
 
       {/* Curve Editor */}
       <div className="mb-4">
-        {/* Curve Type Selector */}
         <div className="mb-4">
-          <CurveTypeSelector value={curveType} onChange={handleCurveTypeChange} disabled={isReadOnly} />
+          <CurveTypeSelector value={editor.curveType} onChange={editor.handleCurveTypeChange} disabled={isReadOnly} />
         </div>
 
         {/* Graph curve: original chart + table editor */}
-        {curveType === 'graph' && (
+        {editor.curveType === 'graph' && (
           <>
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-              <p className="text-sm text-slate-400">
-                {t('system:fanControl.curve.configureInfo')}
-              </p>
-              <div className="flex gap-2 items-center">
-                {/* View Mode Toggle */}
-                <div className="flex gap-1 bg-slate-800 rounded-lg p-1">
-                  <button
-                    onClick={() => setViewMode('chart')}
-                    className={`px-3 py-1 text-xs rounded-md transition-colors flex items-center gap-1 ${
-                      viewMode === 'chart'
-                        ? 'bg-sky-500 text-white shadow-lg shadow-sky-500/30'
-                        : 'text-slate-400 hover:text-slate-300'
-                    }`}
-                  >
-                    <LineChartIcon className="w-3 h-3" />
-                    {t('system:fanControl.curve.chart')}
-                  </button>
-                  <button
-                    onClick={() => setViewMode('table')}
-                    className={`px-3 py-1 text-xs rounded-md transition-colors flex items-center gap-1 ${
-                      viewMode === 'table'
-                        ? 'bg-sky-500 text-white shadow-lg shadow-sky-500/30'
-                        : 'text-slate-400 hover:text-slate-300'
-                    }`}
-                  >
-                    <Table className="w-3 h-3" />
-                    {t('system:fanControl.curve.table')}
-                  </button>
-                </div>
+            <FanCurveGraphControls
+              viewMode={editor.viewMode}
+              onViewModeChange={editor.setViewMode}
+              hasUnsavedChanges={editor.hasUnsavedChanges}
+              isReadOnly={isReadOnly}
+              onSave={editor.handleSaveCurve}
+              onDiscard={editor.handleDiscardChanges}
+            />
 
-                {/* Save/Discard Buttons - only shown when there are unsaved changes */}
-                {hasUnsavedChanges && !isReadOnly && (
-                  <div className="flex gap-2">
-                    <button
-                      onClick={handleDiscardChanges}
-                      className="px-4 py-2 bg-slate-700 text-slate-300 rounded-lg hover:bg-slate-600 text-sm"
-                    >
-                      {t('system:fanControl.curve.discard')}
-                    </button>
-                    <button
-                      onClick={handleSaveCurve}
-                      className="px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 shadow-lg shadow-emerald-500/30 text-sm"
-                    >
-                      {t('system:fanControl.curve.save')}
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Chart View */}
-            {viewMode === 'chart' && (
+            {editor.viewMode === 'chart' && (
               <div className="mt-4">
                 <FanCurveChart
-                  points={curvePoints}
-                  onPointsChange={handleChartPointsChange}
+                  points={editor.curvePoints}
+                  onPointsChange={editor.handleChartPointsChange}
                   currentTemp={fan.temperature_celsius}
                   currentPWM={fan.pwm_percent}
                   minPWM={fan.min_pwm_percent}
                   maxPWM={fan.max_pwm_percent}
                   emergencyTemp={fan.emergency_temp_celsius}
-                  isEditing={canEdit}
+                  isEditing={editor.canEdit}
                   isReadOnly={isReadOnly}
                 />
               </div>
             )}
 
-            {/* Table View */}
-            {viewMode === 'table' && (
-              <>
-                <div className="overflow-x-auto">
-                  <table className="w-full border border-slate-700">
-                    <thead className="bg-slate-800">
-                      <tr>
-                        <th className="px-4 py-2 text-left text-sm font-medium text-slate-300">{t('system:fanControl.details.temperatureCol')}</th>
-                        <th className="px-4 py-2 text-left text-sm font-medium text-slate-300">{t('system:fanControl.details.pwmCol')}</th>
-                        {canEdit && <th className="px-4 py-2 text-left text-sm font-medium text-slate-300">{t('system:fanControl.details.actionsCol')}</th>}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {[...curvePoints]
-                        .map((point, originalIndex) => ({ ...point, originalIndex }))
-                        .sort((a, b) => a.temp - b.temp)
-                        .map((point) => (
-                          <tr key={point.originalIndex} className="border-t border-slate-700">
-                            <td className="px-4 py-2">
-                              {canEdit ? (
-                                <input
-                                  type="number"
-                                  value={point.temp}
-                                  onChange={(e) => handleUpdatePoint(point.originalIndex, 'temp', parseFloat(e.target.value))}
-                                  className="w-20 px-2 py-1 border border-slate-600 rounded bg-slate-800 text-white"
-                                  min={0}
-                                  max={150}
-                                />
-                              ) : (
-                                <span className="text-slate-300">{point.temp}°C</span>
-                              )}
-                            </td>
-                            <td className="px-4 py-2">
-                              {canEdit ? (
-                                <input
-                                  type="number"
-                                  value={point.pwm}
-                                  onChange={(e) => handleUpdatePoint(point.originalIndex, 'pwm', parseInt(e.target.value))}
-                                  className="w-20 px-2 py-1 border border-slate-600 rounded bg-slate-800 text-white"
-                                  min={fan.min_pwm_percent}
-                                  max={fan.max_pwm_percent}
-                                />
-                              ) : (
-                                <span className="text-slate-300">{point.pwm}%</span>
-                              )}
-                            </td>
-                            {canEdit && (
-                              <td className="px-4 py-2">
-                                <button
-                                  onClick={() => handleRemovePoint(point.originalIndex)}
-                                  disabled={curvePoints.length <= 2}
-                                  className="text-rose-400 hover:text-rose-300 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-                                >
-                                  {t('system:fanControl.curve.remove')}
-                                </button>
-                              </td>
-                            )}
-                          </tr>
-                        ))}
-                    </tbody>
-                  </table>
-                </div>
-
-                {canEdit && curvePoints.length < 10 && (
-                  <button
-                    onClick={handleAddPoint}
-                    className="mt-3 px-4 py-2 bg-sky-500 text-white rounded-lg hover:bg-sky-600 shadow-lg shadow-sky-500/30 text-sm"
-                  >
-                    {t('system:fanControl.curve.addPoint')}
-                  </button>
-                )}
-              </>
+            {editor.viewMode === 'table' && (
+              <FanCurveTableEditor
+                curvePoints={editor.curvePoints}
+                canEdit={editor.canEdit}
+                minPwm={fan.min_pwm_percent}
+                maxPwm={fan.max_pwm_percent}
+                onUpdatePoint={editor.handleUpdatePoint}
+                onRemovePoint={editor.handleRemovePoint}
+                onAddPoint={editor.handleAddPoint}
+              />
             )}
           </>
         )}
 
-        {/* Flat curve editor */}
-        {curveType === 'flat' && (
+        {editor.curveType === 'flat' && (
           <CurveEditorFlat
             value={fan.flat_pwm_percent ?? 50}
-            onChange={handleFlatChange}
+            onChange={editor.handleFlatChange}
             disabled={isReadOnly}
           />
         )}
 
-        {/* Target curve editor */}
-        {curveType === 'target' && (
+        {editor.curveType === 'target' && (
           <CurveEditorTarget
             targetTemp={fan.target_temp_celsius ?? 65}
             targetPwm={fan.target_pwm_percent ?? 80}
-            onChange={handleTargetChange}
+            onChange={editor.handleTargetChange}
             disabled={isReadOnly}
           />
         )}
 
-        {/* Mix curve editor */}
-        {curveType === 'mix' && (
+        {editor.curveType === 'mix' && (
           <CurveEditorMix
             profiles={profiles ?? []}
             curveAId={fan.mix_curve_a_id ?? null}
             curveBId={fan.mix_curve_b_id ?? null}
             fn={(fan.mix_function as 'max' | 'sum') ?? 'max'}
-            onChange={handleMixChange}
+            onChange={editor.handleMixChange}
             disabled={isReadOnly}
           />
         )}
 
-        {/* Sync curve editor */}
-        {curveType === 'sync' && (
+        {editor.curveType === 'sync' && (
           <CurveEditorSync
             allFans={allFans ?? []}
             currentFanId={fan.fan_id}
             syncFanId={fan.sync_fan_id ?? null}
-            onChange={handleSyncChange}
+            onChange={editor.handleSyncChange}
             disabled={isReadOnly}
           />
         )}
@@ -544,7 +142,7 @@ export default function FanDetails({ fan, onCurveUpdate, isReadOnly, onEditingCh
 
       {/* Advanced Settings */}
       <div className="mt-4">
-        <AdvancedFanSettings fan={fan} onChange={handleAdvancedChange} disabled={isReadOnly} />
+        <AdvancedFanSettings fan={fan} onChange={editor.handleAdvancedChange} disabled={isReadOnly} />
       </div>
 
       {/* GPU Manual Mode Toggle (AMD GPU fans only) */}
@@ -552,67 +150,22 @@ export default function FanDetails({ fan, onCurveUpdate, isReadOnly, onEditingCh
         <div className="mt-4">
           <GpuManualModeToggle
             fanId={fan.fan_id}
-            enabled={localGpuManualEnabled}
-            onChange={setLocalGpuManualEnabled}
+            enabled={editor.localGpuManualEnabled}
+            onChange={editor.setLocalGpuManualEnabled}
           />
         </div>
       )}
 
       {/* Fan Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 pt-4 border-t border-slate-700">
-        <div>
-          <p className="text-xs text-slate-400">{t('system:fanControl.details.minPwm')}</p>
-          <p className="text-lg font-bold text-white">{fan.min_pwm_percent}%</p>
-        </div>
-        <div>
-          <p className="text-xs text-slate-400">{t('system:fanControl.details.maxPwm')}</p>
-          <p className="text-lg font-bold text-white">{fan.max_pwm_percent}%</p>
-        </div>
-        <div>
-          <p className="text-xs text-slate-400">{t('system:fanControl.details.emergencyTemp')}</p>
-          <p className="text-lg font-bold text-white">{fan.emergency_temp_celsius}°C</p>
-        </div>
-        <div>
-          <p className="text-xs text-slate-400">{t('system:fanControl.details.sensorId')}</p>
-          <p className="text-sm font-mono text-slate-300">{fan.temp_sensor_id || '—'}</p>
-        </div>
-        <div>
-          <p className="text-xs text-slate-400 flex items-center gap-1">
-            {t('system:fanControl.details.hysteresis')}
-            <span
-              className="cursor-help"
-              title={t('system:fanControl.details.hysteresisTooltip')}
-            >
-              <Info className="w-3 h-3 text-slate-500" />
-            </span>
-          </p>
-          {canEdit ? (
-            <div className="flex items-center gap-2">
-              <input
-                type="number"
-                value={hysteresis}
-                onChange={(e) => handleHysteresisChange(parseFloat(e.target.value) || 0)}
-                onBlur={handleHysteresisSave}
-                onKeyDown={(e) => e.key === 'Enter' && handleHysteresisSave()}
-                className="w-16 px-2 py-1 text-sm border border-slate-600 rounded bg-slate-800 text-white"
-                min={0}
-                max={15}
-                step={0.5}
-                disabled={isUpdatingHysteresis}
-              />
-              <span className="text-sm text-slate-400">°C</span>
-              {hysteresisChanged && !isUpdatingHysteresis && (
-                <span className="text-xs text-amber-400">{t('system:fanControl.details.unsaved')}</span>
-              )}
-              {isUpdatingHysteresis && (
-                <span className="text-xs text-sky-400">{t('system:fanControl.details.saving')}</span>
-              )}
-            </div>
-          ) : (
-            <p className="text-lg font-bold text-white">{fan.hysteresis_celsius ?? 3.0}°C</p>
-          )}
-        </div>
-      </div>
+      <FanStatsGrid
+        fan={fan}
+        canEdit={editor.canEdit}
+        hysteresis={editor.hysteresis}
+        isUpdatingHysteresis={editor.isUpdatingHysteresis}
+        hysteresisChanged={editor.hysteresisChanged}
+        onHysteresisChange={editor.handleHysteresisChange}
+        onHysteresisSave={editor.handleHysteresisSave}
+      />
     </div>
   );
 }
