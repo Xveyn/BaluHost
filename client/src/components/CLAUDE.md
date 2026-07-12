@@ -44,7 +44,7 @@ Reusable, generic building blocks. No business logic, no API calls.
 | `dashboard/` | Dashboard widgets and `panels/` for plugin panels — `QuickStatCard`/`statIcons` (quick-stat tile + shared icon set), `SmartHealthPanel` composing `SmartDeviceCard` per SMART device, `RaidSummaryCard`, `SystemHealthCard` (health-checklist card), `computeSmartDeviceUsage` pure helper (SMART device used-bytes/percent derivation) — extracted from Dashboard.tsx (F2/#301) |
 | `device-management/` | Device management (desktop, mobile) |
 | `env-config/` | Runtime environment variable editor |
-| `fan-control/` | Fan curves, schedules, profiles — `FanDetails` composes `fan-details/*` (`FanPresetProfileButtons`, `FanCurveGraphControls`, `FanCurveTableEditor`, `FanStatsGrid`) + pure `fanCurveValidation` helper; state/handlers in `hooks/useFanCurveEditor` (extracted F2/#301) |
+| `fan-control/` | Fan curves, schedules, profiles — `FanDetails` composes `fan-details/*` (`FanPresetProfileButtons`, `FanCurveGraphControls`, `FanCurveTableEditor`, `FanStatsGrid`) + pure `fanCurveValidation`; state/handlers in `hooks/useFanCurveEditor`. `FanCurveChart` composes `fan-curve-chart/*` (`FanCurveTooltip`, `FanChartLegend`, `FanChartHint`) + pure `fanCurveGeometry`; drag/click/touch interaction in `hooks/useFanCurveInteraction` (extracted F2/#301) |
 | `file-manager/` | File browser, context menus, preview |
 | `firebase/` | Firebase push notification config |
 | `manual/` | User manual article viewer |
