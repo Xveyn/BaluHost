@@ -237,7 +237,7 @@ export function findNearestPointIndex(
 - [ ] **Step 4: Run test to verify it passes**
 
 Run (in `client/`): `npx vitest run src/__tests__/components/fan-control/fanCurveGeometry.test.ts`
-Expected: PASS (9 tests).
+Expected: PASS (8 tests).
 
 - [ ] **Step 5: Commit**
 
