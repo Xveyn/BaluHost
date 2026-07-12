@@ -489,6 +489,14 @@ describe('RaidWizardStepIndicator', () => {
     expect(screen.getByText('raidWizard.steps.raidLevel')).toBeInTheDocument();
     expect(screen.getByText('raidWizard.steps.confirm')).toBeInTheDocument();
   });
+
+  it('highlights steps up to and including the current one', () => {
+    // currentStep 'raid-level' => currentIndex 1: disks+raidLevel active, confirm inactive
+    render(<RaidWizardStepIndicator currentStep="raid-level" />);
+    expect(screen.getByText('raidWizard.steps.disks')).toHaveClass('text-slate-200');
+    expect(screen.getByText('raidWizard.steps.raidLevel')).toHaveClass('text-slate-200');
+    expect(screen.getByText('raidWizard.steps.confirm')).toHaveClass('text-slate-500');
+  });
 });
 ```
 
@@ -556,7 +564,7 @@ export default function RaidWizardStepIndicator({ currentStep }: RaidWizardStepI
 - [ ] **Step 4: Run test to verify it passes**
 
 Run (in `client/`): `npx vitest run src/__tests__/components/raid-setup/RaidWizardStepIndicator.test.tsx`
-Expected: PASS (1 test).
+Expected: PASS (2 tests).
 
 - [ ] **Step 5: Commit**
 
