@@ -252,6 +252,7 @@ vi.mock('../../api/fan-control', async (importActual) => {
 });
 
 import toast from 'react-hot-toast';
+import { updateFanConfig } from '../../api/fan-control';
 import { useFanCurveEditor } from '../../hooks/useFanCurveEditor';
 
 const fan = (over: Partial<FanInfo> = {}): FanInfo => ({
@@ -313,6 +314,13 @@ describe('useFanCurveEditor', () => {
     const { result } = renderHook(() => useFanCurveEditor(fan(), o));
     act(() => result.current.handleSaveCurve());
     expect(o.onCurveUpdate).toHaveBeenCalledWith('fan1', expect.any(Array));
+  });
+
+  it('handleCurveTypeChange pushes the new type to updateFanConfig (API wiring survives extraction)', async () => {
+    const { result } = renderHook(() => useFanCurveEditor(fan(), opts()));
+    await act(async () => { await result.current.handleCurveTypeChange('flat'); });
+    expect(vi.mocked(updateFanConfig)).toHaveBeenCalledWith('fan1', { curve_type: 'flat' });
+    expect(result.current.curveType).toBe('flat');
   });
 
   it('does not overwrite user-edited points when the fan prop re-syncs', () => {
@@ -580,7 +588,7 @@ export function useFanCurveEditor(fan: FanInfo, opts: UseFanCurveEditorOptions) 
 - [ ] **Step 4: Run test to verify it passes**
 
 Run (in `client/`): `npx vitest run src/__tests__/hooks/useFanCurveEditor.test.tsx`
-Expected: PASS (8 tests).
+Expected: PASS (9 tests).
 
 - [ ] **Step 5: Commit**
 
@@ -989,12 +997,15 @@ describe('FanCurveTableEditor', () => {
     expect(screen.getByText('40°C')).toBeInTheDocument();
   });
 
-  it('fires onUpdatePoint with the original index (sorted view maps back)', () => {
+  it('maps the sorted first row back to its original (unsorted) index', () => {
     const onUpdatePoint = vi.fn();
-    render(<FanCurveTableEditor {...base} onUpdatePoint={onUpdatePoint} />);
+    // Input is NOT pre-sorted: originalIndex 1 is the coldest (temp 40 -> renders first)
+    const unsorted: FanCurvePoint[] = [{ temp: 60, pwm: 80 }, { temp: 40, pwm: 40 }];
+    render(<FanCurveTableEditor {...base} curvePoints={unsorted} onUpdatePoint={onUpdatePoint} />);
     const tempInputs = screen.getAllByRole('spinbutton');
+    // First rendered row is temp 40 => originalIndex 1, so the remap must report index 1
     fireEvent.change(tempInputs[0], { target: { value: '42' } });
-    expect(onUpdatePoint).toHaveBeenCalledWith(0, 'temp', 42);
+    expect(onUpdatePoint).toHaveBeenCalledWith(1, 'temp', 42);
   });
 });
 ```
