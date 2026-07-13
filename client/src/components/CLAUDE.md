@@ -47,7 +47,7 @@ Reusable, generic building blocks. No business logic, no API calls.
 | `fan-control/` | Fan curves, schedules, profiles — `FanDetails` composes `fan-details/*` (`FanPresetProfileButtons`, `FanCurveGraphControls`, `FanCurveTableEditor`, `FanStatsGrid`) + pure `fanCurveValidation`; state/handlers in `hooks/useFanCurveEditor`. `FanCurveChart` composes `fan-curve-chart/*` (`FanCurveTooltip`, `FanChartLegend`, `FanChartHint`) + pure `fanCurveGeometry`; drag/click/touch interaction in `hooks/useFanCurveInteraction` (extracted F2/#301) |
 | `file-manager/` | File browser, context menus, preview |
 | `firebase/` | Firebase push notification config |
-| `manual/` | User manual article viewer |
+| `manual/` | User manual article viewer — `ApiReferenceTab` composes `api-reference/*` (`EndpointCard`, `ApiViewToggle`, `ApiBaseUrlCard`, `ApiSearchBar`, `ApiCategoryTabs`, `ApiSchemaError`, `ApiLoadingSkeleton`, `ApiSectionList`) + pure `lib/apiRateLimitMatch`; state/fetch in `hooks/useApiReference` (extracted F2/#301) |
 | `mobile-devices/` | Mobile device registration — `MobileDevicesPage` composes `mobile-devices/*`: `RegisterDeviceCard`, `MobileDevicesList`/`MobileDeviceCard`, `NotificationStatus`, `QrCodeDialog` (→ `NewTokenQrView` / `ExistingDeviceInfoView`) + `mobileDeviceDates` helper; state/handlers in `hooks/useMobileRegistration` (extracted F2/#301) |
 | `monitoring/` | System monitoring charts and cards |
 | `pihole/` | Pi-hole DNS dashboard, `ad-discovery/` |
