@@ -60,10 +60,47 @@ The component has **0 existing tests** → this decomposition is a net test gain
 All Tailwind classes, `t()` keys, and icons carried over verbatim. `getApiBaseUrl`
 port heuristic (3001 dev / 8000 prod) ported unchanged — not "cleaned up".
 
+## Test Plan
+
+Component has **0 existing tests** → net gain (~35 new tests, comparable to
+RaidSetupWizard +31 / FanDetails +26). Style mirrors `__tests__/lib/adminOwnerMap.test.ts`.
+
+**1. `lib/apiRateLimitMatch.ts` — the centrepiece (~22 tests).** The matcher has ~40
+*ordered* branches (specific-before-generic); the ordering is behaviour-relevant, so each
+critical priority is pinned:
+
+| Pinned case | expected | why order-sensitive |
+|---|---|---|
+| `POST /api/auth/login` | `auth_login` | before `/api/auth/*` catch (`user_operations`) |
+| `POST /api/auth/2fa/setup` | `auth_2fa_setup` | before generic auth catch |
+| `POST /api/files/upload/chunked` | `file_chunked` | before `/api/files/upload` → `file_upload` |
+| `GET /api/files/download/x` | `file_download` | before `/api/files/` catch (`file_write`) |
+| `DELETE /api/files/x` | `file_delete` | method decides |
+| `PATCH /api/shares/1` | `share_create` | POST/PATCH/DELETE before GET → `share_list` |
+| `POST /api/benchmark/run` | `admin_benchmark` | before admin catch-all (`/api/benchmark/`) |
+| `GET` vs `POST /api/system/x` | `system_monitor` / `admin_operations` | GET split |
+| `GET` vs `POST /api/vcl/x` | `file_list` / `file_write` | GET split |
+| `GET` vs `POST /api/ssd-cache/x` | `file_list` / `admin_operations` | GET split |
+| `/api/pihole/…`, `/api/fans/…` (admin prefixes) | `admin_operations` | catch-all |
+| `/api/unknown/x` | `null` | fallback |
+
+**2. `EndpointCard` (~4):** renders method/path/auth-shield/rate-limit badge; click
+toggles open; copy sets `copied`.
+
+**3. `useApiReference` (renderHook, ~5):** admin loads rate limits + maps by
+`endpoint_type`; non-admin skips fetch → `loading=false`; `visibleSections` filters
+correctly for search / category / section.
+
+**4. Smoke (`ApiCategoryTabs`, `ApiSectionList`, ~4):** click calls the right setter /
+renders the endpoint list.
+
+Purely presentational blocks (`ApiBaseUrlCard`, `ApiSearchBar`, `ApiLoadingSkeleton`,
+`ApiSchemaError`) get tests only if they carry logic — no artificial markup tests (YAGNI,
+matching prior F2 PRs).
+
 ## Verification
 
-- Per-unit Vitest: pure helper (branch coverage), `EndpointCard`, `useApiReference`,
-  plus render-smoke tests for `ApiCategoryTabs` / `ApiSectionList` (click → setter).
+- Per-unit Vitest as above.
 - Gates before PR: `eslint .` (0 errors), `npm run build` (tsc -b), `npx vitest run`.
 - Browser smoke (Manual → API reference): category/sub-tab switch, search filters,
   card open/close + copy, refresh, admin Docs↔Rate-Limits toggle. No full Playwright
