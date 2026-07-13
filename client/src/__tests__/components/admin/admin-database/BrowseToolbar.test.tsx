@@ -67,7 +67,7 @@ describe('BrowseToolbar — table selected', () => {
   })
 
   it('disables the prev button on page 1 and advances on next', () => {
-    const { props } = renderToolbar({ page: 1 })
+    renderToolbar({ page: 1 })
     const prev = screen.getAllByRole('button').find(b => (b as HTMLButtonElement).disabled && b.querySelector('svg'))
     expect(prev).toBeTruthy()
     // next page button is enabled at page 1 of 6
