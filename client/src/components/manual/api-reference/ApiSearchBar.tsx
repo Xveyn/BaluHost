@@ -1,9 +1,10 @@
 import { Search } from 'lucide-react';
+import type { TFunction } from 'i18next';
 
 export interface ApiSearchBarProps {
   value: string;
   onChange: (q: string) => void;
-  t: (key: string, fallback?: string) => string;
+  t: TFunction;
 }
 
 export function ApiSearchBar({ value, onChange, t }: ApiSearchBarProps) {
