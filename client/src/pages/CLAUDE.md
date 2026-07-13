@@ -25,7 +25,7 @@ Pages are conditionally included based on `__DEVICE_MODE__` build flag:
 | `SharesPage.tsx` | `/shares` | Yes | File share management — composes `components/shares/*` (tables/toolbar/stat-cards, extracted F2) |
 | `VpnPage.tsx` | `/vpn` | Admin | VPN client management |
 | `Logging.tsx` | `/logging` | Admin | Audit log viewer |
-| `AdminDatabase.tsx` | `/admin-db` | Admin | Database table inspector |
+| `AdminDatabase.tsx` | `/admin-db` | Admin | Database table inspector — thin orchestrator over `components/admin/admin-database/*` (category nav, table browser, browse toolbar, schema strip, owner mapping, analytics content), browse state in `useAdminDatabaseBrowse` (extracted F2/#301) |
 | `AdminHealth.tsx` | `/admin/health` | Admin | Service health dashboard |
 | `SchedulerDashboard.tsx` | `/schedulers` | Admin | Background scheduler status and history |
 | `DevicesPage.tsx` | `/devices` | Yes | Desktop/mobile device management |
