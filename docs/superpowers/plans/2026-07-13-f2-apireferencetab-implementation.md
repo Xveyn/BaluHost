@@ -223,7 +223,7 @@ Create `client/src/__tests__/hooks/useApiReference.test.tsx`:
 
 ```tsx
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { renderHook, waitFor } from '@testing-library/react'
+import { renderHook, waitFor, act } from '@testing-library/react'
 
 // Controlled schema so the hook doesn't hit /openapi.json.
 const mkSection = (title: string, paths: string[]) => ({
@@ -279,24 +279,20 @@ describe('useApiReference', () => {
 
   it('visibleSections: search filters endpoints by path/description', () => {
     const { result } = renderHook(() => useApiReference({ isAdmin: false, token: null }))
-    result.current.setSearchQuery('files')
-    // re-read after state update
-    const { result: r2 } = renderHook(() => useApiReference({ isAdmin: false, token: null }))
-    r2.current.setSearchQuery('files')
-    // Query in a fresh render:
-    expect(SECTIONS.some(s => s.endpoints.some(e => e.path.includes('files')))).toBe(true)
+    act(() => result.current.setSearchQuery('files'))
+    // only the "Files" section survives the /api/files/list path match
+    expect(result.current.visibleSections.map(s => s.title)).toEqual(['Files'])
   })
 
   it('visibleSections: selecting a category narrows to its sections', () => {
     const { result } = renderHook(() => useApiReference({ isAdmin: false, token: null }))
-    result.current.setSelectedCategory('core')
-    // one render tick later the category sections are ['Files']
-    expect(CATEGORIES[0].sections.map(s => s.title)).toEqual(['Files'])
+    act(() => result.current.setSelectedCategory('core'))
+    expect(result.current.visibleSections.map(s => s.title)).toEqual(['Files'])
   })
 })
 ```
 
-> Note: React state updates inside `renderHook` need `act`/rerender to observe; keep the search/category assertions focused on the pure filter contract (as above) to avoid flakiness. The core admin/non-admin fetch behaviour is the load-bearing coverage.
+> Note: state updates must be wrapped in `act(...)` from `@testing-library/react` (the repo standard — see `useRaidSetupWizard.test.tsx` / `useSleepConfigForm.test.ts`), then assert on `result.current.visibleSections`. Do NOT assert on the raw fixture constants — that would test nothing.
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -369,7 +365,9 @@ export function useApiReference({ isAdmin, token }: UseApiReferenceArgs): UseApi
   };
 
   const visibleSections = useMemo(() => {
-    // copy lines 306-326 verbatim
+    // copy the memo BODY, lines 306-325, verbatim (NOT line 326 — that is the
+    // closing `}, [...]);` which this template already provides; copying it too
+    // duplicates the closing and is a syntax error).
   }, [searchQuery, selectedCategory, selectedSection, apiSections, apiCategories]);
 
   const currentCategorySections = selectedCategory
@@ -386,7 +384,7 @@ export function useApiReference({ isAdmin, token }: UseApiReferenceArgs): UseApi
 }
 ```
 
-> Behaviour note: the effect dep array stays `[isAdmin]` (matches the original — it does NOT re-fetch on token change). The `eslint-disable-next-line` keeps the 0-error gate clean without changing behaviour.
+> Behaviour note: the effect dep array stays `[isAdmin]` (matches the original — it does NOT re-fetch on token change). The `eslint-disable-next-line react-hooks/exhaustive-deps` is a benign addition (the original relies on the ungated warning); it changes no behaviour and just silences the one warning this moved code would otherwise emit. `exhaustive-deps` is a warning, not part of the 0-error gate — the disable is cosmetic. `loadRateLimits` is referenced in the effect above its `const` declaration exactly as the original does; the deferred effect callback runs after the `const` is initialised, so there is no TDZ error.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -457,7 +455,9 @@ describe('EndpointCard', () => {
     expect(screen.queryByText('{"token":"x"}')).toBeNull()
     fireEvent.click(screen.getByText('/api/auth/login'))
     expect(screen.getByText('{"token":"x"}')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '' })) // copy button (icon-only)
+    // after expansion the copy button is the only <button> in the card
+    // (the header toggle is a <div onClick>, not a button)
+    fireEvent.click(screen.getByRole('button'))
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith('{"token":"x"}')
   })
 })
@@ -493,7 +493,7 @@ export function EndpointCard({ endpoint, rateLimits, t }: EndpointCardProps) {
 - [ ] **Step 4: Run test to verify it passes**
 
 Run (from `client/`): `npx vitest run src/__tests__/components/manual/api-reference/EndpointCard.test.tsx`
-Expected: PASS. If the icon-only copy-button query is ambiguous, select via `getAllByRole('button')` and click the last one.
+Expected: PASS. (The expanded card has exactly one `<button>` — the copy button — so `getByRole('button')` is unambiguous.)
 
 - [ ] **Step 5: Commit**
 
