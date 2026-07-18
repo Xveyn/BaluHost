@@ -7,6 +7,10 @@ import { UploadProgressBar } from './UploadProgressBar';
 import ImpersonationBanner from './ImpersonationBanner';
 import { useLayoutNav } from '../hooks/useLayoutNav';
 import { usePowerActions } from '../hooks/usePowerActions';
+// '/index' is required, not a stylistic choice: on a case-insensitive filesystem (Windows),
+// a bare './layout' specifier resolves to the sibling Layout.tsx (this file) instead of the
+// layout/ directory, silently self-importing and making every barrel export undefined.
+// This only breaks on Windows — do not "simplify" this back to './layout'.
 import { DesktopSidebar, MobileSidebar, LayoutHeader, PendingPowerOverlay } from './layout/index';
 
 interface LayoutProps {

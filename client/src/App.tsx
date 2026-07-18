@@ -1,6 +1,8 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { useState, useEffect, lazy, Suspense } from 'react';
-import Layout from './components/Layout';
+// '/index' is required — see Layout.tsx for why a bare './components/layout' silently
+// self-resolves to this file's sibling Layout.tsx on Windows (case-insensitive FS).
+import { AppLayout } from './components/layout/index';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { PluginProvider } from './contexts/PluginContext';
 import { VersionProvider } from './contexts/VersionContext';
@@ -12,6 +14,7 @@ import { useIdleTimeout } from './hooks/useIdleTimeout';
 import { IdleWarningDialog } from './components/ui/IdleWarningDialog';
 import { usePresenceHeartbeat } from './hooks/usePresenceHeartbeat';
 import { FEATURES, isDesktop } from './lib/features';
+import { LoadingFallback } from './components/ui/LoadingFallback';
 import logoMark from './assets/baluhost-logo.png';
 import './App.css';
 
@@ -57,17 +60,6 @@ const PluginPage = isDesktop ? lazyWithRetry(() => import('./components/PluginPa
 const PiDashboard = FEATURES.piDashboard ? lazyWithRetry(() => import('./pages/PiDashboard')) : null;
 
 const SetupWizard = lazyWithRetry(() => import('./pages/SetupWizard'));
-
-function LoadingFallback() {
-  return (
-    <div className="flex min-h-screen items-center justify-center">
-      <div className="flex flex-col items-center gap-3">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-600 border-t-sky-500" />
-        <p className="text-sm text-slate-500">Loading...</p>
-      </div>
-    </div>
-  );
-}
 
 function LoadingScreen({ backendReady, backendCheckAttempts }: { backendReady: boolean; backendCheckAttempts: number }) {
   const [dots, setDots] = useState('');
@@ -143,7 +135,7 @@ function LoadingScreen({ backendReady, backendCheckAttempts }: { backendReady: b
   );
 }
 
-function AppRoutes() {
+export function AppRoutes() {
   const { user, logout, loading, isAdmin } = useAuth();
 
   const { warningVisible, secondsRemaining, resetTimer } = useIdleTimeout({
@@ -173,57 +165,36 @@ function AppRoutes() {
       <Routes>
         <Route
           path="/login"
-          element={
-            user ? <Navigate to="/" /> : <Login />
-          }
-        />
-        <Route
-          path="/"
-          element={
-            user ? (
-              <Layout>
-                {PiDashboard ? <PiDashboard /> : <Dashboard />}
-              </Layout>
-            ) : (
-              <Navigate to="/login" />
-            )
-          }
-        />
-        <Route
-          path="/system"
-          element={
-            user ? (
-              <Layout>
-                <SystemMonitor />
-              </Layout>
-            ) : (
-              <Navigate to="/login" />
-            )
-          }
+          element={user ? <Navigate to="/" /> : <Login />}
         />
 
-        {/* Desktop-only routes (not bundled in Pi builds) */}
-        {FileManager && <Route path="/files" element={user ? <Layout><FileManager /></Layout> : <Navigate to="/login" />} />}
-        {UserManagement && <Route path="/users" element={isAdmin ? <Layout><UserManagement /></Layout> : <Navigate to="/" />} />}
-        {AdminDatabase && <Route path="/admin-db" element={isAdmin ? <Layout><AdminDatabase /></Layout> : <Navigate to="/" />} />}
-        {SchedulerDashboard && <Route path="/schedulers" element={isAdmin ? <Layout><SchedulerDashboard /></Layout> : <Navigate to="/" />} />}
-        {SharesPage && <Route path="/shares" element={user ? <Layout><SharesPage /></Layout> : <Navigate to="/login" />} />}
-        {SettingsPage && <Route path="/settings" element={user ? <Layout><SettingsPage /></Layout> : <Navigate to="/login" />} />}
-        {DevicesPage && <Route path="/devices" element={user ? <Layout><DevicesPage /></Layout> : <Navigate to="/login" />} />}
-        {SystemControlPage && <Route path="/admin/system-control" element={isAdmin ? <Layout><SystemControlPage /></Layout> : <Navigate to="/" />} />}
+        <Route element={user ? <AppLayout /> : <Navigate to="/login" replace />}>
+          <Route path="/" element={PiDashboard ? <PiDashboard /> : <Dashboard />} />
+          <Route path="/system" element={<SystemMonitor />} />
+
+          {/* Desktop-only routes (not bundled in Pi builds) */}
+          {FileManager && <Route path="/files" element={<FileManager />} />}
+          {UserManagement && <Route path="/users" element={isAdmin ? <UserManagement /> : <Navigate to="/" />} />}
+          {AdminDatabase && <Route path="/admin-db" element={isAdmin ? <AdminDatabase /> : <Navigate to="/" />} />}
+          {SchedulerDashboard && <Route path="/schedulers" element={isAdmin ? <SchedulerDashboard /> : <Navigate to="/" />} />}
+          {SharesPage && <Route path="/shares" element={<SharesPage />} />}
+          {SettingsPage && <Route path="/settings" element={<SettingsPage />} />}
+          {DevicesPage && <Route path="/devices" element={<DevicesPage />} />}
+          {SystemControlPage && <Route path="/admin/system-control" element={isAdmin ? <SystemControlPage /> : <Navigate to="/" />} />}
+          {NotificationsArchivePage && <Route path="/notifications" element={<NotificationsArchivePage />} />}
+          {UserManualPage && <Route path="/manual" element={<UserManualPage />} />}
+          {PluginsPage && <Route path="/plugins" element={isAdmin ? <PluginsPage /> : <Navigate to="/" />} />}
+          {PluginPage && <Route path="/plugins/:pluginName/*" element={<PluginPage />} />}
+          {UpdatePage && <Route path="/updates" element={isAdmin ? <UpdatePage /> : <Navigate to="/" />} />}
+          {CloudImportPage && <Route path="/cloud-import" element={<CloudImportPage />} />}
+          {PiholePage && <Route path="/pihole" element={isAdmin ? <PiholePage /> : <Navigate to="/" />} />}
+          {SmartDevicesPage && <Route path="/smart-devices" element={<SmartDevicesPage />} />}
+        </Route>
+
+        {/* Redirects bleiben unverändert außerhalb der Layout-Route */}
         {isDesktop && <Route path="/settings/notifications" element={<Navigate to="/settings?tab=notifications" replace />} />}
-        {NotificationsArchivePage && <Route path="/notifications" element={user ? <Layout><NotificationsArchivePage /></Layout> : <Navigate to="/login" />} />}
         {isDesktop && <Route path="/notifications/settings" element={<Navigate to="/settings?tab=notifications" replace />} />}
-        {UserManualPage && <Route path="/manual" element={user ? <Layout><UserManualPage /></Layout> : <Navigate to="/login" />} />}
         {isDesktop && <Route path="/docs" element={<Navigate to="/manual" replace />} />}
-        {PluginsPage && <Route path="/plugins" element={isAdmin ? <Layout><PluginsPage /></Layout> : <Navigate to="/" />} />}
-        {PluginPage && <Route path="/plugins/:pluginName/*" element={user ? <Layout><PluginPage /></Layout> : <Navigate to="/login" />} />}
-        {UpdatePage && <Route path="/updates" element={isAdmin ? <Layout><UpdatePage /></Layout> : <Navigate to="/" />} />}
-        {CloudImportPage && <Route path="/cloud-import" element={user ? <Layout><CloudImportPage /></Layout> : <Navigate to="/login" />} />}
-        {PiholePage && <Route path="/pihole" element={isAdmin ? <Layout><PiholePage /></Layout> : <Navigate to="/" />} />}
-        {SmartDevicesPage && <Route path="/smart-devices" element={user ? <Layout><SmartDevicesPage /></Layout> : <Navigate to="/login" />} />}
-
-        {/* Desktop-only redirects */}
         {isDesktop && <Route path="/raid" element={<Navigate to="/admin/system-control?tab=raid" replace />} />}
         {isDesktop && <Route path="/health" element={<Navigate to="/system?tab=health" replace />} />}
         {isDesktop && <Route path="/power" element={<Navigate to="/admin/system-control?tab=energy" replace />} />}
