@@ -3,11 +3,19 @@ import { useFormattedVersion } from '../../contexts/VersionContext';
 import { DeveloperBadge } from '../ui/DeveloperBadge';
 import { isPi } from '../../lib/features';
 
-const SIZES = {
+interface BrandSizeConfig {
+  box: string;
+  pi: string;
+  title: string;
+  // Omitted for 'compact' — that variant never renders the version line.
+  version?: string;
+}
+
+const SIZES: Record<'desktop' | 'mobile' | 'compact', BrandSizeConfig> = {
   desktop: { box: 'h-12 w-12 p-[3px]', pi: 'text-sm', title: 'text-lg', version: 'text-xs uppercase tracking-[0.35em] text-slate-100-tertiary' },
   mobile: { box: 'h-10 w-10 p-[3px]', pi: 'text-xs', title: 'text-base', version: 'text-[10px] uppercase tracking-[0.3em] text-slate-100-tertiary' },
-  compact: { box: 'h-8 w-8 p-[2px]', pi: 'text-[10px]', title: 'text-sm', version: '' },
-} as const;
+  compact: { box: 'h-8 w-8 p-[2px]', pi: 'text-[10px]', title: 'text-sm' },
+};
 
 export function SidebarBrand({ variant }: { variant: keyof typeof SIZES }) {
   const formattedVersion = useFormattedVersion('');

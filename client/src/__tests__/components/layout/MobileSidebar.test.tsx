@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { Link, MemoryRouter } from 'react-router-dom';
 import { MobileSidebar } from '../../../components/layout/MobileSidebar';
 
 vi.mock('react-i18next', () => ({
@@ -44,5 +44,26 @@ describe('MobileSidebar', () => {
     renderSidebar(true);
     expect(screen.getByText('alice')).toBeInTheDocument();
     expect(screen.getByText('User')).toBeInTheDocument();
+  });
+
+  it('schließt bei echter Navigation (pathname-Wechsel im Router)', () => {
+    const onClose = vi.fn();
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Link to="/other">go</Link>
+        <MobileSidebar
+          open={true}
+          onClose={onClose}
+          isImpersonating={false}
+          items={[{ path: '/', label: 'Dash', description: 'd', icon: <span /> }]}
+          adminStartIndex={-1}
+          username="alice"
+          isAdmin={false}
+        />
+      </MemoryRouter>,
+    );
+    onClose.mockClear(); // Mount-Effekt (pathname) ruft onClose initial — siehe Test oben.
+    fireEvent.click(screen.getByText('go'));
+    expect(onClose).toHaveBeenCalled();
   });
 });
