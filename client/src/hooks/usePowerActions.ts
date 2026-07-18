@@ -10,9 +10,14 @@ export function usePowerActions(logout: () => void) {
   const [pendingMessage, setPendingMessage] = useState<string | null>(null);
   const timeoutsRef = useRef<Array<ReturnType<typeof setTimeout>>>([]);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Guards a poll tick that is already suspended at `await localApi.isAvailable()`
+  // when unmount happens: clearInterval only stops *future* ticks, it does not
+  // abort one already in flight. Checked immediately after that await.
+  const mountedRef = useRef(true);
 
   // Cleanup bei Unmount: Ist-Code leakte Intervall/Timeouts (Layout.tsx:579-594)
   useEffect(() => () => {
+    mountedRef.current = false;
     timeoutsRef.current.forEach(clearTimeout);
     if (intervalRef.current) clearInterval(intervalRef.current);
   }, []);
@@ -57,6 +62,7 @@ export function usePowerActions(logout: () => void) {
       const startTime = Date.now();
       intervalRef.current = setInterval(async () => {
         const available = await localApi.isAvailable();
+        if (!mountedRef.current) return;
         if (available) {
           stopPolling();
           setPendingAction(null);

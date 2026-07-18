@@ -89,4 +89,46 @@ describe('usePowerActions', () => {
     expect(logout).not.toHaveBeenCalled();
     expect(reloadMock).not.toHaveBeenCalled();
   });
+
+  // Isoliert vom Intervall-Pfad oben: der shutdown-Erfolgspfad plant NUR ein
+  // setTimeout (kein setInterval). Wird die Timeoutsref-Cleanup-Zeile entfernt,
+  // während die Intervall-Cleanup bleibt, muss GENAU dieser Test rot werden —
+  // der Test oben bleibt grün, weil er nie einen Timeout durchläuft.
+  it('Cleanup: Unmount während des ausstehenden Shutdown-Timeouts verhindert logout danach', async () => {
+    localApiMock.shutdown.mockResolvedValue({ eta_seconds: 3 });
+    const logout = vi.fn();
+    const { result, unmount } = renderHook(() => usePowerActions(logout));
+    await act(() => result.current.onShutdown());
+    await act(() => vi.advanceTimersByTimeAsync(1000)); // mittendrin im (eta+1)=4s-Fenster
+    unmount();
+    await act(() => vi.advanceTimersByTimeAsync(10000)); // weit über die ursprüngliche Deadline hinaus
+    expect(logout).not.toHaveBeenCalled();
+  });
+
+  // clearInterval verhindert nur KÜNFTIGE Ticks — ein bereits laufender Tick, der
+  // bei `await localApi.isAvailable()` hängt, läuft nach dem Unmount weiter und
+  // würde ohne den mountedRef-Guard danach noch setPendingAction/reload/logout
+  // auslösen. Dieser Test hält isAvailable() bewusst offen, unmountet währenddessen
+  // und löst die Antwort erst danach auf.
+  it('mountedRef-Guard: ein beim Unmount noch laufender Poll-Tick löst danach kein reload/logout aus', async () => {
+    localApiMock.restart.mockResolvedValue(undefined);
+    let resolveAvailable: (value: boolean) => void = () => {};
+    localApiMock.isAvailable.mockImplementation(
+      () => new Promise<boolean>((resolve) => { resolveAvailable = resolve; }),
+    );
+    const logout = vi.fn();
+    const { result, unmount } = renderHook(() => usePowerActions(logout));
+    await act(() => result.current.onRestart());
+    // Tick auslösen; er hängt jetzt bei isAvailable() (Promise noch nicht aufgelöst).
+    await act(() => vi.advanceTimersByTimeAsync(2000));
+    // Während der Tick noch "in flight" ist, unmounten.
+    unmount();
+    // Jetzt erst die Antwort liefern und Microtasks/Timer nachziehen.
+    await act(async () => {
+      resolveAvailable(true);
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(reloadMock).not.toHaveBeenCalled();
+    expect(logout).not.toHaveBeenCalled();
+  });
 });
