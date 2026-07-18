@@ -57,7 +57,7 @@ Unter `client/src/components/layout/` (+ Hooks in `client/src/hooks/`):
 | `MobileSidebar.tsx` | Overlay + Slide-in, Close-Button, User-Card unten; schließt bei Nav-Klick **und** bei `location.pathname`-Wechsel (neu nötig, s. Verhaltensdeltas) | `{ open, onClose, … }` |
 | `LayoutHeader.tsx` | Hamburger, Mobile-Brand, `TopbarStatusStrip` (Desktop, nicht-Pi), `NotificationCenter` (nicht-Pi), `UserMenu`, `PowerMenu` bzw. Pi-Logout | `{ onOpenMobileMenu, onShutdown, onRestart, … }` |
 | `PendingPowerOverlay.tsx` | Shutdown/Restart-Spinner-Overlay | `{ action, message }` |
-| `hooks/usePowerActions.ts` | Shutdown/Restart-Handler inkl. Restart-Polling (2 s-Intervall, 60 s-Timeout) und ETA-Handling | `{ pendingAction, pendingMessage, onShutdown, onRestart }` |
+| `hooks/usePowerActions.ts` | Shutdown/Restart-Handler inkl. Restart-Polling (2 s-Intervall, 60 s-Timeout) und ETA-Handling. **Fix im Zuge der Extraktion:** Der Ist-Code (Layout.tsx:579–594) räumt Intervall/Timeouts bei Unmount nicht auf (setState nach Unmount, `reload()` feuert nach Unmount trotzdem) — der Hook bekommt explizites Cleanup; Fake-Timer-Tests decken es ab | `{ pendingAction, pendingMessage, onShutdown, onRestart }` |
 | `Layout.tsx` | Bleibt am selben Pfad; dünner Orchestrator (~120 Zeilen); **behält `{ children }`** | nach außen unverändert |
 
 Barrel `components/layout/index.ts` analog zu den anderen F2-Verzeichnissen.
@@ -87,14 +87,20 @@ Eine Eltern-Route ersetzt die Einzel-Wrappings:
 
 ### Bewusste Verhaltensdeltas (gewollt, dokumentiert)
 
-1. Layout persistiert über Navigationen → `getStatusBarState`-Fetch nur noch
-   einmal pro Mount statt pro Navigation; Sidebar-Scrollposition bleibt erhalten;
-   ein laufendes Shutdown/Restart-Overlay überlebt Routenwechsel.
-2. Ausgeloggt auf Admin-Route: bisher zwei Hops (`/users` → `/` → `/login`),
+1. Layout persistiert über Navigationen → Sidebar-Scrollposition bleibt
+   erhalten; ein laufendes Shutdown/Restart-Overlay überlebt Routenwechsel.
+2. **Kein** Delta beim UploadBar-Gate: Der `getStatusBarState`-Effect wird auf
+   `location.pathname` gekeyt und refetcht damit — wie heute durch den Remount —
+   bei jeder Navigation. Sonst würde `show_bottom_upload` nach einer
+   Einstellungsänderung bis zum Full-Reload stale bleiben.
+3. Ausgeloggt auf Admin-Route: bisher zwei Hops (`/users` → `/` → `/login`),
    neu direkt `/login`. Gleiches Endziel.
-3. Mobile-Menü: bisher schloss der Remount es implizit; neu schließt es ein
+4. Mobile-Menü: bisher schloss der Remount es implizit; neu schließt es ein
    `useEffect` auf `location.pathname` (zusätzlich zum bestehenden
    Klick-Handler).
+5. Offene Dropdowns (`NotificationCenter`, `UserMenu`) persistieren künftig
+   über Navigationen — vorher schloss der Remount sie implizit. Akzeptiert;
+   beide schließen weiterhin bei Klick außerhalb.
 
 ## Tests
 
@@ -105,17 +111,29 @@ Reihenfolge ist Teil des Designs:
    Admin-Trenner, Plugin-Items, `/admin-db`-Breite, Impersonation-Offsets,
    Mobile-Menü öffnen/schließen, UploadBar-Gate. Diese Tests müssen nach dem
    Umbau **unverändert** grün bleiben (deshalb behält Layout `{ children }`).
-2. **Unit-Tests pro Extraktion**: `useLayoutNav` (Rollen/Pi/Plugin-Filter,
+   Mock-Strategie ist tragend dafür: schwere Kinder (`NotificationCenter`,
+   `TopbarStatusStrip`, `UserMenu`, `PowerMenu`, `UploadProgressBar`) werden
+   **per Modulpfad** gemockt — solche Mocks überleben den Refactor, weil sich
+   nur der Importeur ändert, nicht der Modulspezifizierer.
+2. **jsdom-Realität einplanen**: `lg:hidden` wirkt nicht — Desktop- und
+   Mobile-Sidebar stehen beide im DOM, Nav-Labels existieren doppelt.
+   Assertions über `getAllBy…` und Klassen (`-translate-x-full` vs.
+   `translate-x-0`), nicht über Sichtbarkeit.
+3. **Unit-Tests pro Extraktion**: `useLayoutNav` (Rollen/Pi/Plugin-Filter,
    `adminStartIndex`), `usePowerActions` (Fake-Timer: Shutdown-ETA,
-   Restart-Poll Erfolg + 60 s-Timeout), `SidebarNav`, `PendingPowerOverlay`,
-   `LayoutHeader` (Pi vs. Standard).
-3. **Routing-Tests** (App-Ebene, MemoryRouter): Navigation zwischen zwei Routen
-   → `getStatusBarState`-Spy genau 1× (beweist Persistenz);
-   Admin-Guard-Redirects; ausgeloggt → `/login`.
-4. Bekannte Fallen: Build-Globals `__BUILD_TYPE__`/`__GIT_COMMIT__` müssen in
-   der Vitest-Config definiert sein (tsconfig.test-Gotcha aus PR #402-Umfeld);
+   Restart-Poll Erfolg + 60 s-Timeout, Cleanup bei Unmount;
+   `window.location.reload` stubben — jsdom implementiert es nicht),
+   `SidebarNav`, `PendingPowerOverlay`, `LayoutHeader` (Pi vs. Standard).
+4. **Routing-Tests** (App-Ebene, MemoryRouter): Navigation zwischen zwei Routen
+   → Layout bleibt gemountet, belegt über Mount-Zähler in einem gemockten
+   Layout-Kind (nicht über den `getStatusBarState`-Spy — der feuert wegen
+   Delta Nr. 2 absichtlich pro Navigation); Admin-Guard-Redirects;
+   ausgeloggt → `/login`.
+5. Bekannte Fallen — **verifiziert entschärft**: `vite.config.ts` definiert
+   `__BUILD_TYPE__`/`__GIT_COMMIT__` (gilt auch für Vitest), und
+   `tsconfig.test.json` inkludiert `src/vite-env.d.ts` bereits.
    `isPi` als Modul-Konstante per `vi.mock('…/lib/features')`.
-5. Gates vor PR: `eslint .` (0 Errors), `npm run build` (tsc -b),
+6. Gates vor PR: `eslint .` (0 Errors), `npm run build` (tsc -b),
    `npx vitest run` (komplette Suite).
 
 ## PR-Aufbau
@@ -137,7 +155,10 @@ Ein PR (Branch `refactor/f2-layout-decomposition`), gestaffelte Commits:
 | Risiko | Gegenmaßnahme |
 |---|---|
 | Kein Sicherheitsnetz vor dem Umbau | Charakterisierungs-Tests als erster Commit |
+| UploadBar-Gate wird durch Persistenz stale | Effect auf `location.pathname` keyen (Delta Nr. 2) |
+| Restart-Polling leakt bei Unmount (Ist-Bug) | Cleanup in `usePowerActions` + Fake-Timer-Test |
 | Mobile-Menü bleibt nach Navigation offen | expliziter `useEffect` auf `pathname` + Routing-Test |
 | Suspense-Fallback ersetzt ganze Seite inkl. Sidebar | innerer Suspense in `AppLayout` um `<Outlet/>` |
 | Visuelle Regression durch Klassen-Umbau | Klassen verbatim kopieren; kein Redesign |
-| Build-Globals brechen Tests/tsc -b | Vitest-`define` prüfen, bevor Tests geschrieben werden |
+| Charakterisierungs-Tests brechen beim Umbau, obwohl Verhalten gleich | Kinder per Modulpfad mocken; Assertions jsdom-fest (getAllBy, Klassen) |
+| Build-Globals brechen Tests/tsc -b | verifiziert: `vite.config.ts`-`define` + `vite-env.d.ts` in `tsconfig.test.json` bereits vorhanden |
