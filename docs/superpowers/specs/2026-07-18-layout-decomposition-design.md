@@ -85,22 +85,52 @@ Eine Eltern-Route ersetzt die Einzel-Wrappings:
   bleiben außerhalb der Layout-Route.
 - `/login` bleibt außerhalb.
 
+### KORREKTUR (2026-07-19, in Task 6 empirisch festgestellt)
+
+**Die Remount-Annahme dieses Specs war falsch.** Der Spec ging davon aus, dass
+die ~18-fache `<Layout>`-Wrappung Layout bei jedem Routenwechsel neu mountet.
+Das trifft nicht zu: React rekonzilliert nach Komponententyp an gleicher
+Baumposition, und react-routers `<Routes>`/`_renderMatches` keyt das gerenderte
+Element weder nach Route-ID noch nach Pathname. Da alle 18 Routen dieselbe
+`Layout`-Import-Referenz verwenden, bailt React in ein Update statt in
+Unmount/Remount.
+
+Verifiziert auf drei unabhängigen Wegen: (a) einzelne Routen testweise wieder
+per-Route gewrappt → Mount-Count blieb 1; (b) die **literal originale**
+`App.tsx` wiederhergestellt und dieselbe Messung → Mount-Count blieb 1;
+(c) Minimal-Repro ohne BaluHost-Code und ohne react-router-Spezifika → ebenfalls 1.
+
+Konsequenzen:
+- Sidebar-Scroll und StatusBar-Fetch verhielten sich **schon vorher** so, wie
+  der Spec sie als „Verbesserung" beschrieb. Kein Delta.
+- Der ursprünglich hier stehende Punkt „Effect auf `location.pathname` keyen"
+  war damit **keine** Bewahrung, sondern hätte einen zusätzlichen HTTP-Request
+  pro Navigation eingeführt. Zurückgenommen (Effect bleibt bei `[]`).
+
+**Der Umbau bleibt trotzdem richtig**, nur aus anderen Gründen:
+- Die Persistenz wird zur **strukturellen Eigenschaft** des Routen-Baums statt
+  ein Zufall davon, dass alle 18 Routen dieselbe Import-Referenz treffen. Eine
+  spätere Änderung, die auf einer Route einen anderen Top-Level-Typ einführt,
+  würde heute stillschweigend wieder remounten — ohne Compiler- oder Testsignal.
+- **Suspense-Platzierung** ist der real messbare Gewinn: vorher umschloss
+  `<Suspense>` den gesamten `<Routes>`-Block, Layout lag also *innerhalb* der
+  Boundary. Bei einem echt langsamen Chunk-Load riss der Fallback Sidebar und
+  Header mit weg. Neu sitzt `<Suspense>` *innerhalb* von `Layout` um `<Outlet/>`
+  — nur noch der Content-Bereich blankt.
+- Die Duplikation von 18 Wrappern auf einen Ort verschwindet.
+
 ### Bewusste Verhaltensdeltas (gewollt, dokumentiert)
 
-1. Layout persistiert über Navigationen → Sidebar-Scrollposition bleibt
-   erhalten; ein laufendes Shutdown/Restart-Overlay überlebt Routenwechsel.
-2. **Kein** Delta beim UploadBar-Gate: Der `getStatusBarState`-Effect wird auf
-   `location.pathname` gekeyt und refetcht damit — wie heute durch den Remount —
-   bei jeder Navigation. Sonst würde `show_bottom_upload` nach einer
-   Einstellungsänderung bis zum Full-Reload stale bleiben.
-3. Ausgeloggt auf Admin-Route: bisher zwei Hops (`/users` → `/` → `/login`),
+1. Ausgeloggt auf Admin-Route: bisher zwei Hops (`/users` → `/` → `/login`),
    neu direkt `/login`. Gleiches Endziel.
-4. Mobile-Menü: bisher schloss der Remount es implizit; neu schließt es ein
-   `useEffect` auf `location.pathname` (zusätzlich zum bestehenden
-   Klick-Handler).
-5. Offene Dropdowns (`NotificationCenter`, `UserMenu`) persistieren künftig
-   über Navigationen — vorher schloss der Remount sie implizit. Akzeptiert;
-   beide schließen weiterhin bei Klick außerhalb.
+2. Mobile-Menü: schließt neu über einen `useEffect` auf `location.pathname`
+   (zusätzlich zum bestehenden Klick-Handler). Unter der alten Struktur schloss
+   es *nicht* durch einen Remount (den es nie gab), sondern ausschließlich über
+   den Klick-Handler am Link — der Effect ist damit eine kleine Härtung gegen
+   Navigationen, die nicht über einen Sidebar-Klick ausgelöst werden.
+3. Offene Dropdowns (`NotificationCenter`, `UserMenu`): unverändert, da es auch
+   vorher keinen Remount gab.
+4. Suspense-Fallback blankt nur noch den Content statt der ganzen Seite (s. o.).
 
 ## Tests
 
@@ -155,7 +185,7 @@ Ein PR (Branch `refactor/f2-layout-decomposition`), gestaffelte Commits:
 | Risiko | Gegenmaßnahme |
 |---|---|
 | Kein Sicherheitsnetz vor dem Umbau | Charakterisierungs-Tests als erster Commit |
-| UploadBar-Gate wird durch Persistenz stale | Effect auf `location.pathname` keyen (Delta Nr. 2) |
+| ~~UploadBar-Gate wird durch Persistenz stale~~ | Hinfällig — es gab nie einen Remount, das Gate war schon immer fetch-once. Effect bleibt bei `[]`; die Staleness ist ein pre-existing Quirk und wird bewusst nicht mit-„verbessert" |
 | Restart-Polling leakt bei Unmount (Ist-Bug) | Cleanup in `usePowerActions` + Fake-Timer-Test |
 | Mobile-Menü bleibt nach Navigation offen | expliziter `useEffect` auf `pathname` + Routing-Test |
 | Suspense-Fallback ersetzt ganze Seite inkl. Sidebar | innerer Suspense in `AppLayout` um `<Outlet/>` |
