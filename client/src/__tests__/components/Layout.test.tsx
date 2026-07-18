@@ -52,8 +52,9 @@ vi.mock('../../components/ImpersonationBanner', () => ({ default: () => null }))
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (key: string, defaultValue?: string | Record<string, unknown>) =>
-      typeof defaultValue === 'string' ? key : key,
+    // Layout calls t(key), t(key, 'fallback string'), and t(key, 'fallback', { options }) —
+    // extra args are simply ignored by JS, so returning the key always is safe for all three shapes.
+    t: (key: string) => key,
   }),
 }));
 
@@ -82,7 +83,7 @@ describe('Layout (Charakterisierung)', () => {
     renderLayout();
     expect(screen.getByTestId('page-content')).toBeInTheDocument();
     // Desktop-Sidebar + Mobile-Sidebar + Mobile-Header-Brand = 3x "BaluHost"
-    expect(screen.getAllByText('BaluHost').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText('BaluHost')).toHaveLength(3);
   });
 
   it('Admin sieht Admin-Items und Admin-Trenner in beiden Sidebars', () => {
@@ -107,7 +108,7 @@ describe('Layout (Charakterisierung)', () => {
     expect(screen.getAllByText('navigation.dashboard')).toHaveLength(2);
     expect(screen.getAllByText('navigation.system')).toHaveLength(2);
     expect(screen.queryAllByText('navigation.files')).toHaveLength(0);
-    expect(screen.getAllByText('BaluPi').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText('BaluPi')).toHaveLength(3);
     expect(screen.queryByTestId('notification-center')).not.toBeInTheDocument();
     await waitFor(() => expect(getStatusBarStateMock).toHaveBeenCalled());
     expect(screen.queryByTestId('upload-progress-bar')).not.toBeInTheDocument();
