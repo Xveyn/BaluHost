@@ -15,6 +15,7 @@
 - Erhaltene Sonderfälle: `/admin-db` → `max-w-none` statt `max-w-7xl`; Impersonation-Offsets `top-10`/`h-[calc(100vh-2.5rem)]`/`mt-[112px]`; Pi-Mode (Brand "BaluPi", nur `/` + `/system`, kein NotificationCenter/UploadBar, Logout-Button statt PowerMenu).
 - UploadBar-Gate-Effect wird auf `location.pathname` gekeyt (Spec-Delta Nr. 2) — **kein** Fetch-once-Verhalten einführen.
 - Schwere Kinder in Tests **per Modulpfad** mocken (Mocks überleben den Refactor). jsdom: beide Sidebars sind im DOM (`lg:hidden` wirkt nicht) → `getAllBy…`/Klassen-Assertions.
+- **`@testing-library/user-event` ist NICHT installiert** (in Task 1 festgestellt). Für Klicks `fireEvent` aus `@testing-library/react` verwenden — keine neue Dependency hinzufügen. Die Testcode-Blöcke unten, die noch `userEvent` zeigen, sind entsprechend zu übersetzen: `await user.click(el)` → `fireEvent.click(el)`, und Zustandswechsel, die von einem async Effect abhängen, vorher per `await waitFor(...)` abwarten (vermeidet `act()`-Warnungen).
 - Gates vor dem PR: `npx eslint .` (0 Errors), `npm run build`, `npx vitest run` — alle aus `client/`.
 - Commits auf Branch `refactor/f2-layout-decomposition` (existiert bereits, enthält den Spec). Commit-Messages enden mit `Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>`.
 - Alle Pfade unten relativ zum Repo-Root `D:\Programme (x86)\Baluhost`. Testläufe: `cd client` vorausgesetzt.
@@ -390,12 +391,11 @@ export function buildNavItems(t: TFunction): LayoutNavItem[] {
 
 ```tsx
 import { useTranslation } from 'react-i18next';
-import { Plug } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlugins } from '../contexts/PluginContext';
 import { isPi } from '../lib/features';
 import { resolvePluginString } from '../lib/pluginI18n';
-import { buildNavItems, PI_NAV_PATHS, type LayoutNavItem } from '../components/layout/layoutNavConfig';
+import { buildNavItems, PI_NAV_PATHS, pluginNavIcon, type LayoutNavItem } from '../components/layout/layoutNavConfig';
 
 export function useLayoutNav(): { allNavItems: LayoutNavItem[]; adminStartIndex: number } {
   const { t } = useTranslation('common');
@@ -411,7 +411,7 @@ export function useLayoutNav(): { allNavItems: LayoutNavItem[]; adminStartIndex:
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       label: resolvePluginString((item as any)._translations, `nav.${item.label}`, item.label),
       description: 'Plugin',
-      icon: <Plug className="h-5 w-5" />,
+      icon: pluginNavIcon,
       adminOnly: item.admin_only,
       isPlugin: true,
     }));
@@ -425,7 +425,14 @@ export function useLayoutNav(): { allNavItems: LayoutNavItem[]; adminStartIndex:
 }
 ```
 
-Achtung: JSX im Hook → Dateiendung muss `.tsx` sein? Nein — Repo-Konvention prüfen: andere Hooks mit JSX (`useApiReference`) sind `.ts` oder `.tsx`? Falls `tsc` meckert („Cannot use JSX unless the '--jsx' flag is provided"), Datei `useLayoutNav.tsx` nennen und Importe entsprechend setzen. Test-Import dann anpassen.
+**Entschieden (Controller, Pre-Flight):** Das Repo hat **null** `.tsx`-Hooks — alle 66 Dateien in `client/src/hooks/` sind `.ts`. Damit `useLayoutNav.ts` dieser Konvention folgen kann, darf der Hook **kein JSX enthalten**. Deshalb wandert das Plugin-Icon als fertiges Element nach `layoutNavConfig.tsx`:
+
+```tsx
+// in layoutNavConfig.tsx, zusätzlich exportieren:
+export const pluginNavIcon = <Plug className="h-5 w-5" />;
+```
+
+und `useLayoutNav.ts` importiert `pluginNavIcon` statt `Plug` und setzt `icon: pluginNavIcon`. Der Hook bleibt so JSX-frei und `.ts`.
 
 - [ ] **Step 5: Test laufen lassen — muss passen**
 
@@ -466,8 +473,7 @@ git commit -m "feat(layout): extract layoutNavConfig + useLayoutNav hook (#301)"
 
 ```tsx
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { SidebarNav } from '../../../components/layout/SidebarNav';
 import type { LayoutNavItem } from '../../../components/layout/layoutNavConfig';
@@ -513,10 +519,10 @@ describe('SidebarNav', () => {
     expect(active.className).toContain('border-sky-500');
   });
 
-  it('onNavigate feuert bei Klick auf einen Link', async () => {
+  it('onNavigate feuert bei Klick auf einen Link', () => {
     const onNavigate = vi.fn();
     renderNav({ onNavigate });
-    await userEvent.setup().click(screen.getByText('Files'));
+    fireEvent.click(screen.getByText('Files'));
     expect(onNavigate).toHaveBeenCalledTimes(1);
   });
 });
@@ -526,8 +532,7 @@ describe('SidebarNav', () => {
 
 ```tsx
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { MobileSidebar } from '../../../components/layout/MobileSidebar';
 
@@ -560,11 +565,11 @@ describe('MobileSidebar', () => {
     expect(document.body.querySelector('div.fixed.inset-0.z-40')).toBeNull();
   });
 
-  it('offen: translate-x-0, Overlay-Klick ruft onClose', async () => {
+  it('offen: translate-x-0, Overlay-Klick ruft onClose', () => {
     const onClose = renderSidebar(true);
     onClose.mockClear(); // Mount-Effekt (pathname) ruft onClose initial
     expect(document.body.querySelector('aside')!.className).toContain('translate-x-0');
-    await userEvent.setup().click(document.body.querySelector('div.fixed.inset-0.z-40')!);
+    fireEvent.click(document.body.querySelector('div.fixed.inset-0.z-40')!);
     expect(onClose).toHaveBeenCalled();
   });
 
@@ -1423,8 +1428,7 @@ Wichtig: Die per-Route `user`-Checks entfallen (übernimmt die Eltern-Route); di
 
 ```tsx
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { AppRoutes } from '../App';
 
 const authState = vi.hoisted(() => ({
@@ -1506,14 +1510,13 @@ beforeEach(() => {
 
 describe('App routing mit Layout-Route', () => {
   it('Layout bleibt über Navigation gemountet; StatusBar refetcht pro Navigation', async () => {
-    const user = userEvent.setup();
     render(<AppRoutes />);
     await screen.findByTestId('dashboard-page');
     expect(mountCount.current).toBe(1);
     const fetchesBefore = getStatusBarStateMock.mock.calls.length;
 
     // Desktop-Sidebar-Link "System" klicken (erster von zwei)
-    await user.click(screen.getAllByText('navigation.system')[0]);
+    fireEvent.click(screen.getAllByText('navigation.system')[0]);
     await screen.findByTestId('system-page');
 
     expect(mountCount.current).toBe(1); // KEIN Remount
