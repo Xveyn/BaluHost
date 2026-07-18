@@ -17,12 +17,13 @@ interface MobileSidebarProps {
 export function MobileSidebar({ open, onClose, isImpersonating, items, adminStartIndex, username, isAdmin }: MobileSidebarProps) {
   const location = useLocation();
 
-  // Before the Task 6 persistent layout route, navigating remounted Layout and the
-  // mobile menu reset to closed as a side effect of that remount. With a single
-  // persistent route the component no longer remounts on navigation, so this effect
-  // makes the close explicit. It also fires once on mount (closing an
-  // already-closed menu) — harmless, and accounted for in the test via
-  // `onClose.mockClear()`.
+  // Explicit close-on-navigation safety net: nav links already call onClose via
+  // onNavigate, but this covers navigations that don't go through a rendered link
+  // (e.g. browser back/forward, a redirect). Layout itself was never remounted by
+  // navigation, before or after the Task 6 route restructuring, so this effect is
+  // not compensating for a remount — it's just an explicit catch-all. It also
+  // fires once on mount (closing an already-closed menu) — harmless, and
+  // accounted for in the test via `onClose.mockClear()`.
   useEffect(() => {
     onClose();
   }, [location.pathname, onClose]);

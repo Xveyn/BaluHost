@@ -81,18 +81,23 @@ beforeEach(() => {
 });
 
 describe('App routing mit Layout-Route', () => {
-  it('Layout bleibt über Navigation gemountet; StatusBar refetcht pro Navigation', async () => {
+  it('Layout bleibt über Navigation gemountet; StatusBar fetcht nur einmal pro Layout-Mount', async () => {
     render(<AppRoutes />);
     await screen.findByTestId('dashboard-page');
     expect(mountCount.current).toBe(1);
     const fetchesBefore = getStatusBarStateMock.mock.calls.length;
+    expect(fetchesBefore).toBeGreaterThan(0); // initial fetch on mount happened
 
     // Desktop-Sidebar-Link "System" klicken (erster von zwei)
     fireEvent.click(screen.getAllByText('navigation.system')[0]);
     await screen.findByTestId('system-page');
 
     expect(mountCount.current).toBe(1); // KEIN Remount
-    expect(getStatusBarStateMock.mock.calls.length).toBeGreaterThan(fetchesBefore); // Delta Nr. 2
+    // Layout's getStatusBarState effect has `[]` deps (fetch once per mount, not
+    // per navigation) — this matches the pre-refactor original, which never
+    // remounted Layout on navigation either (see task-6-report.md). No new
+    // fetch should have happened just from navigating.
+    expect(getStatusBarStateMock.mock.calls.length).toBe(fetchesBefore);
   });
 
   it('ausgeloggt → /login', async () => {

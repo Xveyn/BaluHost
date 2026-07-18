@@ -25,16 +25,21 @@ export default function Layout({ children }: LayoutProps) {
   const { allNavItems, adminStartIndex } = useLayoutNav();
   const { pendingAction, pendingMessage, onShutdown, onRestart } = usePowerActions(logout);
 
-  // Auf pathname gekeyt: refetcht wie vor der Layout-Route bei jeder Navigation,
-  // sonst bliebe show_bottom_upload nach einer Einstellungsänderung stale
-  // (Spec-Delta Nr. 2).
+  // Fetch once per Layout mount, not per navigation. This matches the pre-Task-6
+  // original: Layout never remounted on navigation even under the old per-route
+  // <Layout> structure (same component reference reused for every route — a
+  // structural fact, verified independently of this refactor), so the original
+  // effect's `[]` deps meant "fetch once per app session", not "once per page".
+  // Keeping `[]` here preserves that — including its pre-existing staleness quirk:
+  // show_bottom_upload won't update until Layout remounts or the page reloads.
+  // That quirk is intentionally out of scope for this refactor.
   useEffect(() => {
     let cancelled = false;
     getStatusBarState()
       .then((s) => { if (!cancelled) setShowUploadBar(s.show_bottom_upload); })
       .catch(() => { /* default to showing on error */ });
     return () => { cancelled = true; };
-  }, [location.pathname]);
+  }, []);
 
   const closeMobileMenu = useCallback(() => setMobileMenuOpen(false), []);
 
