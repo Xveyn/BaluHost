@@ -1,8 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { useState, useEffect, lazy, Suspense } from 'react';
-// '/index' is required — see Layout.tsx for why a bare './components/layout' silently
-// self-resolves to this file's sibling Layout.tsx on Windows (case-insensitive FS).
-import { AppLayout } from './components/layout/index';
+import { AppLayout } from './components/layout/AppLayout';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { PluginProvider } from './contexts/PluginContext';
 import { VersionProvider } from './contexts/VersionContext';

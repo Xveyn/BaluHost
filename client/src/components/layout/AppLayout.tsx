@@ -14,7 +14,7 @@ import { LoadingFallback } from '../ui/LoadingFallback';
 export function AppLayout() {
   return (
     <Layout>
-      <Suspense fallback={<LoadingFallback />}>
+      <Suspense fallback={<LoadingFallback size="inline" />}>
         <Outlet />
       </Suspense>
     </Layout>
