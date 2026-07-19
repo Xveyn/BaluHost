@@ -41,6 +41,12 @@ export default function Layout({ children }: LayoutProps) {
     return () => { cancelled = true; };
   }, []);
 
+  // MUST stay referentially stable ([] deps): it's passed as `onClose` to
+  // MobileSidebar, whose effect closes the menu on every `onClose` identity
+  // change (see MobileSidebar.tsx). A new identity on every render (e.g. an
+  // inline arrow here instead of useCallback) would re-fire that effect right
+  // after the hamburger sets mobileMenuOpen = true, closing the menu on the
+  // same render it opened — the mobile menu could never stay open.
   const closeMobileMenu = useCallback(() => setMobileMenuOpen(false), []);
 
   return (

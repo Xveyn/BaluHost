@@ -166,6 +166,13 @@ export function AppRoutes() {
           element={user ? <Navigate to="/" /> : <Login />}
         />
 
+        {/* `replace` is an intentional deviation from the original per-route guards,
+            which used a plain `<Navigate to="/login" />` (a push, no replace). That
+            left a redirect-bouncing entry in browser history on logout, mid-session
+            token expiry, and logged-out deep links (back button would land back on
+            the bounced redirect instead of wherever the user came from). `replace`
+            here is the better behavior — keep it — but it's a real change to
+            back-button history, not an accident of the route-tree restructuring. */}
         <Route element={user ? <AppLayout /> : <Navigate to="/login" replace />}>
           <Route path="/" element={PiDashboard ? <PiDashboard /> : <Dashboard />} />
           <Route path="/system" element={<SystemMonitor />} />

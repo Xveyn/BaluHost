@@ -24,6 +24,14 @@ export function MobileSidebar({ open, onClose, isImpersonating, items, adminStar
   // not compensating for a remount — it's just an explicit catch-all. It also
   // fires once on mount (closing an already-closed menu) — harmless, and
   // accounted for in the test via `onClose.mockClear()`.
+  //
+  // `onClose` is in the deps array, so it MUST be referentially stable across
+  // renders of the caller (Layout keeps it behind useCallback([], [])). If it
+  // ever weren't, this effect re-fires on every render that produces a new
+  // `onClose` identity — including the very render where the hamburger sets
+  // `open` to true — and immediately closes the menu again. Net effect: the
+  // mobile menu could never be opened. Do not replace the caller's memoized
+  // callback with an inline arrow.
   useEffect(() => {
     onClose();
   }, [location.pathname, onClose]);

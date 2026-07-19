@@ -13,7 +13,7 @@
 - **Null visuelle Änderung:** Alle Tailwind-Klassenstrings werden **verbatim** aus dem Ist-`Layout.tsx` übernommen (Quell-Zeilennummern stehen an jedem Task). Kein Redesign, keine Klassen-"Aufräumarbeiten".
 - `Layout.tsx` bleibt an seinem Pfad, Default-Export, Prop `{ children: ReactNode }` — die Task-1-Tests laufen nach Task 5 **unverändert**.
 - Erhaltene Sonderfälle: `/admin-db` → `max-w-none` statt `max-w-7xl`; Impersonation-Offsets `top-10`/`h-[calc(100vh-2.5rem)]`/`mt-[112px]`; Pi-Mode (Brand "BaluPi", nur `/` + `/system`, kein NotificationCenter/UploadBar, Logout-Button statt PowerMenu).
-- UploadBar-Gate-Effect wird auf `location.pathname` gekeyt (Spec-Delta Nr. 2) — **kein** Fetch-once-Verhalten einführen.
+- **Korrigiert (siehe Commit `1a9efe7c`):** UploadBar-Gate-Effect bleibt auf `[]` gekeyt, NICHT auf `location.pathname`. Layout wurde vor der Layout-Route nie durch Navigation remountet (react-router reconciled per Komponententyp an derselben Baumposition; die Routen keyten die gerenderten Elemente nicht) — das Ist-Verhalten war also schon immer "fetch once per Layout-Mount", nicht "einmal pro Seite". `[]` erhält genau das, inklusive der bereits vorher bestehenden Staleness-Macke (`show_bottom_upload` aktualisiert sich erst bei Remount/Reload) — die ist bewusst out of scope, nicht ein Bug dieses Refactors.
 - Schwere Kinder in Tests **per Modulpfad** mocken (Mocks überleben den Refactor). jsdom: beide Sidebars sind im DOM (`lg:hidden` wirkt nicht) → `getAllBy…`/Klassen-Assertions.
 - **`@testing-library/user-event` ist NICHT installiert** (in Task 1 festgestellt). Für Klicks `fireEvent` aus `@testing-library/react` verwenden — keine neue Dependency hinzufügen. Die Testcode-Blöcke unten, die noch `userEvent` zeigen, sind entsprechend zu übersetzen: `await user.click(el)` → `fireEvent.click(el)`, und Zustandswechsel, die von einem async Effect abhängen, vorher per `await waitFor(...)` abwarten (vermeidet `act()`-Warnungen).
 - Gates vor dem PR: `npx eslint .` (0 Errors), `npm run build`, `npx vitest run` — alle aus `client/`.
@@ -1246,16 +1246,21 @@ export default function Layout({ children }: LayoutProps) {
   const { allNavItems, adminStartIndex } = useLayoutNav();
   const { pendingAction, pendingMessage, onShutdown, onRestart } = usePowerActions(logout);
 
-  // Auf pathname gekeyt: refetcht wie vor der Layout-Route bei jeder Navigation,
-  // sonst bliebe show_bottom_upload nach einer Einstellungsänderung stale
-  // (Spec-Delta Nr. 2).
+  // Fetch once per Layout mount, not per navigation. This matches the pre-Task-6
+  // original: Layout never remounted on navigation even under the old per-route
+  // <Layout> structure (same component reference reused for every route — a
+  // structural fact, verified independently of this refactor), so the original
+  // effect's `[]` deps meant "fetch once per app session", not "once per page".
+  // Keeping `[]` here preserves that — including its pre-existing staleness quirk:
+  // show_bottom_upload won't update until Layout remounts or the page reloads.
+  // That quirk is intentionally out of scope for this refactor.
   useEffect(() => {
     let cancelled = false;
     getStatusBarState()
       .then((s) => { if (!cancelled) setShowUploadBar(s.show_bottom_upload); })
       .catch(() => { /* default to showing on error */ });
     return () => { cancelled = true; };
-  }, [location.pathname]);
+  }, []);
 
   const closeMobileMenu = useCallback(() => setMobileMenuOpen(false), []);
 
@@ -1509,18 +1514,23 @@ beforeEach(() => {
 });
 
 describe('App routing mit Layout-Route', () => {
-  it('Layout bleibt über Navigation gemountet; StatusBar refetcht pro Navigation', async () => {
+  it('Layout bleibt über Navigation gemountet; StatusBar fetcht nur einmal pro Layout-Mount', async () => {
     render(<AppRoutes />);
     await screen.findByTestId('dashboard-page');
     expect(mountCount.current).toBe(1);
     const fetchesBefore = getStatusBarStateMock.mock.calls.length;
+    expect(fetchesBefore).toBeGreaterThan(0); // initial fetch on mount happened
 
     // Desktop-Sidebar-Link "System" klicken (erster von zwei)
     fireEvent.click(screen.getAllByText('navigation.system')[0]);
     await screen.findByTestId('system-page');
 
     expect(mountCount.current).toBe(1); // KEIN Remount
-    expect(getStatusBarStateMock.mock.calls.length).toBeGreaterThan(fetchesBefore); // Delta Nr. 2
+    // Layout's getStatusBarState effect has `[]` deps (fetch once per mount, not
+    // per navigation) — this matches the pre-refactor original, which never
+    // remounted Layout on navigation either. No new fetch should have happened
+    // just from navigating.
+    expect(getStatusBarStateMock.mock.calls.length).toBe(fetchesBefore);
   });
 
   it('ausgeloggt → /login', async () => {
