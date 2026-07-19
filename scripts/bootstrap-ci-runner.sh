@@ -54,18 +54,14 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# RUNNER_DIR is per-instance via --dir. RUNNER_WORK is derived the same way for
-# consistency (it seeds an upfront `mkdir -p` below); the GitHub Actions runner's
-# own work directory is actually config.sh's `--work "_work"` arg, which is
-# relative to $RUNNER_DIR at registration time (see Step 5) — so it is already
-# per-instance for free once RUNNER_DIR is. The legacy path is kept for the
-# default instance so a re-run does not change anything for the already
-# registered first runner.
+# RUNNER_DIR is per-instance via --dir.
 RUNNER_DIR="${RUNNER_HOME}/${RUNNER_DIR_NAME}"
-RUNNER_WORK="${RUNNER_HOME}/_work-${RUNNER_DIR_NAME}"
-if [[ "$RUNNER_DIR_NAME" == "runner" ]]; then
-  RUNNER_WORK="${RUNNER_HOME}/_work"   # don't relocate the existing instance
-fi
+
+# RUNNER_WORK is NOT what config.sh actually uses for the runner's work directory
+# (that's `--work "_work"` in Step 5, relative to $RUNNER_DIR — already per-instance
+# for free once RUNNER_DIR is). This variable only seeds the legacy `mkdir -p` below;
+# kept at its single pre-existing value for all instances.
+RUNNER_WORK="${RUNNER_HOME}/_work"
 
 if [[ "$EUID" -ne 0 ]]; then
   echo "ERROR: must be run as root (sudo)." >&2
