@@ -58,13 +58,17 @@ jobs:
           # `term:skip-covered` hides 100%-covered files to keep the log short.
           # `--cov-report=json` writes backend/coverage.json (bind-mounted, so it
           # survives the container) for the job-summary step below.
+          # -n 4 (not -n auto): --cpus is a CFS quota, not a cpuset — os.cpu_count()
+          # in the container still reports all 12 host threads, so -n auto would
+          # oversubscribe the 3g-capped container.
           podman run --rm \
             --network=bridge \
+            --cpus=4 --memory=3g \
             -v "${{ github.workspace }}:/work:Z" \
             -w /work/backend \
             -e NAS_MODE=dev \
             "$TEST_IMAGE" \
-            bash -c "set -euo pipefail; pip install --no-cache-dir -e '.[dev]' && python -m ruff check . && python -m pytest -q --timeout=120 -n auto -o addopts= --cov=app --cov-report=term:skip-covered --cov-report=json"
+            bash -c "set -euo pipefail; pip install --no-cache-dir -e '.[dev]' && python -m ruff check . && python -m pytest -q --timeout=120 -n 4 -o addopts= --cov=app --cov-report=term:skip-covered --cov-report=json"
 
       - name: Backend coverage → job summary
         if: always()
@@ -88,49 +92,82 @@ jobs:
             >> "$GITHUB_STEP_SUMMARY"
 
   frontend-build:
-    runs-on: ubuntu-latest
+    # Runner selection (#207-Muster, wie backend-tests): upstream IMMER der
+    # gehärtete ci-sandbox-Runner (nicht konfigurierbar); Forks wählen über
+    # die Repo-Variable FRONTEND_BUILD_RUNNER (JSON-Array, gesetzt von
+    # scripts/configure-ci.sh), Fallback secret-freie ubuntu-latest-VM.
+    # PR-Code kann das nicht beeinflussen: Repository-Literal + vars only.
+    runs-on: ${{ fromJSON(github.repository == 'Xveyn/BaluHost' && '["self-hosted","ci-sandbox"]' || vars.FRONTEND_BUILD_RUNNER || '"ubuntu-latest"') }}
+    # ci-tests-Freigabe-Gate: immer für Upstream-PRs; in Forks nur, wenn der
+    # Fork einen self-hosted Runner gewählt hat. workflow_call (aus
+    # deploy-production nach Merge) läuft ungegated — Code ist dann vertraut.
+    environment: ${{ (github.event_name == 'pull_request' && (github.repository == 'Xveyn/BaluHost' || contains(vars.FRONTEND_BUILD_RUNNER, 'self-hosted'))) && 'ci-tests' || '' }}
+    timeout-minutes: 15
 
     steps:
       - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v5
-        with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: client/package-lock.json
+      - name: Assert runner identity (defense-in-depth tripwire)
+        # Upstream-only: identisch zum backend-tests-Tripwire.
+        if: github.repository == 'Xveyn/BaluHost'
+        run: |
+          set -euo pipefail
+          test "$(whoami)" = "ci-runner" || { echo "::error::Runner not running as ci-runner (got: $(whoami))"; exit 1; }
+          test "$(id -u)" -ne 0 || { echo "::error::Runner running as root"; exit 1; }
+          command -v podman >/dev/null || { echo "::error::podman not installed on runner host"; exit 1; }
+          for grp in docker sudo wheel; do
+            if id -nG "$(whoami)" | tr ' ' '\n' | grep -qx "$grp"; then
+              echo "::error::ci-runner is in group '$grp' — isolation broken"
+              exit 1
+            fi
+          done
+          echo "Identity OK: $(whoami) uid=$(id -u) groups=$(id -nG)"
 
-      - name: Install dependencies
-        working-directory: client
-        run: npm ci
-
-      - name: Lint (ESLint)
-        working-directory: client
-        run: npx eslint .
-
-      - name: Build
-        working-directory: client
-        run: npm run build
-
-      - name: Run unit tests (with coverage)
-        working-directory: client
-        # Coverage is measured and printed only — no thresholds enforced yet
-        # (see vite.config.ts `test.coverage`). The unit tests themselves still
-        # gate the build; a low coverage number does not fail CI.
-        run: npm run test:coverage
+      - name: Lint + build + unit tests (with coverage) in rootless Podman container
+        env:
+          NODE_IMAGE: docker.io/library/node:20-slim
+        run: |
+          set -euo pipefail
+          # Kein npm-Cache: ein PR-beschreibbarer Cache wäre geteilter Zustand
+          # zwischen PRs (Poisoning). npm ci läuft frisch, wie pip install im
+          # backend-tests-Job. --cpus/--memory: die Box ist zugleich Prod-NAS;
+          # CI darf sie nicht sättigen. Kein git im Image: vite.config.ts
+          # fällt auf __GIT_COMMIT__='unknown'/buildType 'release' zurück —
+          # akzeptiert, der Gate-Build wird verworfen (Deploy baut auf
+          # BaluNode mit git). Details: docs/CI.md.
+          # --maxWorkers=4: --cpus ist eine CFS-Quote, KEIN cpuset — os.cpus()
+          # im Container meldet weiterhin alle 12 Host-Threads, Vitest würde
+          # also ~11 jsdom-Worker in die 3-GB-Grenze spawnen (OOM-Kill).
+          podman run --rm \
+            --network=bridge \
+            --cpus=4 --memory=3g \
+            -v "${{ github.workspace }}:/work:Z" \
+            -w /work/client \
+            "$NODE_IMAGE" \
+            bash -c "set -euo pipefail; npm ci && npx eslint . && npm run build && npm run test:coverage -- --maxWorkers=4"
 
       - name: Frontend coverage → job summary
         if: always()
-        working-directory: client
-        # Reads the json-summary written by the coverage run and appends a
-        # markdown block to the run summary. Best-effort: no-op if the file is
-        # missing (e.g. tests failed before coverage was written).
+        env:
+          NODE_IMAGE: docker.io/library/node:20-slim
         run: |
-          node -e '
-            const fs = require("fs");
-            const p = "coverage/coverage-summary.json";
-            if (!fs.existsSync(p)) process.exit(0);
-            const t = JSON.parse(fs.readFileSync(p, "utf8")).total;
-            const row = (k) => `| ${k} | ${t[k].pct}% (${t[k].covered}/${t[k].total}) |`;
-            const md = ["## Frontend coverage (client)", "", "| Metric | Coverage |", "|---|---|", row("lines"), row("statements"), row("functions"), row("branches"), ""].join("\n");
-            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, md + "\n");
-          '
+          set -euo pipefail
+          if [ ! -f client/coverage/coverage-summary.json ]; then
+            echo "no client/coverage/coverage-summary.json — skipping coverage summary"
+            exit 0
+          fi
+          # Parsen im selben gepinnten Image (nur stdlib, kein npm install).
+          # Der Container schreibt nach stdout; die Umleitung in
+          # $GITHUB_STEP_SUMMARY passiert auf dem HOST — die Variable ist ein
+          # Host-Pfad und existiert im Container nicht.
+          podman run --rm \
+            -v "${{ github.workspace }}:/work:Z" \
+            -w /work/client \
+            "$NODE_IMAGE" \
+            node -e '
+              const fs = require("fs");
+              const t = JSON.parse(fs.readFileSync("coverage/coverage-summary.json", "utf8")).total;
+              const row = (k) => `| ${k} | ${t[k].pct}% (${t[k].covered}/${t[k].total}) |`;
+              process.stdout.write(["## Frontend coverage (client)", "", "| Metric | Coverage |", "|---|---|", row("lines"), row("statements"), row("functions"), row("branches"), ""].join("\n") + "\n");
+            ' \
+            >> "$GITHUB_STEP_SUMMARY"
