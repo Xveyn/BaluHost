@@ -81,13 +81,16 @@ Den bestehenden `frontend-build:`-Block vollständig ersetzen durch:
           # fällt auf __GIT_COMMIT__='unknown'/buildType 'release' zurück —
           # akzeptiert, der Gate-Build wird verworfen (Deploy baut auf
           # BaluNode mit git). Details: docs/CI.md.
+          # --maxWorkers=4: --cpus ist eine CFS-Quote, KEIN cpuset — os.cpus()
+          # im Container meldet weiterhin alle 12 Host-Threads, Vitest würde
+          # also ~11 jsdom-Worker in die 3-GB-Grenze spawnen (OOM-Kill).
           podman run --rm \
             --network=bridge \
             --cpus=4 --memory=3g \
             -v "${{ github.workspace }}:/work:Z" \
             -w /work/client \
             "$NODE_IMAGE" \
-            bash -c "set -euo pipefail; npm ci && npx eslint . && npm run build && npm run test:coverage"
+            bash -c "set -euo pipefail; npm ci && npx eslint . && npm run build && npm run test:coverage -- --maxWorkers=4"
 
       - name: Frontend coverage → job summary
         if: always()
@@ -118,18 +121,22 @@ Den bestehenden `frontend-build:`-Block vollständig ersetzen durch:
 
 Wichtige Deltas zum Original, die NICHT verloren gehen dürfen: `actions/setup-node` entfällt ersatzlos; das alte `node -e` nutzte `fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, …)` — im Container ist diese Env leer, deshalb stdout + Host-Redirect; der `if (!fs.existsSync(p)) process.exit(0)`-Guard wandert als `[ ! -f … ]` auf den Host (spart den Container-Start komplett).
 
-- [ ] **Step 2: Verifizieren**
+- [ ] **Step 2: backend-tests dieselbe Kappung geben (Spec, Abschnitt A)**
+
+Im `backend-tests`-Job desselben Files, am bestehenden `podman run` (Zeile ~64): `--cpus=4 --memory=3g` ergänzen **und** im inneren pytest-Aufruf `-n auto` durch `-n 4` ersetzen — aus demselben Grund wie oben: `-n auto` zählt die 12 Host-Threads, nicht die CFS-Quote. Sonst NICHTS an dem Job ändern (kein Umbau des Tripwires, der Env-Zeilen oder der Coverage-Schritte).
+
+- [ ] **Step 3: Verifizieren**
 
 Run: `bash -n` ist für YAML nutzlos — stattdessen: `npx --yes actionlint@latest .github/workflows/ci-check.yml 2>&1 | head -30` (falls Netz/npx verfügbar; sonst `python -c "import yaml,sys; yaml.safe_load(open('.github/workflows/ci-check.yml'))"` als Minimal-Syntaxcheck).
 Expected: keine neuen Fehler; Warnungen „Context access might be invalid: FRONTEND_BUILD_RUNNER" sind erwartet und OK.
 
-- [ ] **Step 3: Diff-Selbstkontrolle** — `git diff .github/workflows/ci-check.yml`: `backend-tests`-Job unangetastet, Job-ID `frontend-build` unverändert, keine anderen Jobs berührt.
+- [ ] **Step 4: Diff-Selbstkontrolle** — `git diff .github/workflows/ci-check.yml`: am `backend-tests`-Job NUR die zwei Kappungs-Änderungen (podman-Flags + `-n 4`), Job-ID `frontend-build` unverändert, keine anderen Jobs berührt.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
 git add .github/workflows/ci-check.yml
-git commit -m "ci(frontend): run frontend-build in rootless podman on ci-sandbox (#gate: ci-tests)"
+git commit -m "ci(frontend): run frontend-build in rootless podman on ci-sandbox; cap CI container resources"
 ```
 
 ---
@@ -187,6 +194,8 @@ bash "/d/Programme (x86)/Baluhost/scripts/configure-ci.sh" --repo someone/BaluHo
 ```
 
 Expected: `[dry-run] gh variable set FRONTEND_BUILD_RUNNER … '["self-hosted","my-box"]'` — und mit `FRONTEND_BUILD_RUNNER=github` stattdessen die delete-Zeile. (Der `--repo`-Guard gegen Xveyn/BaluHost greift vor jedem echten API-Call; dry-run macht ohnehin keine.)
+
+**Achtung, ungeprüfte Annahme:** Der Test unterstellt, dass das Skript `ci-config.conf` im CWD sucht. Prüfe zuerst die `CONFIG_FILE`-Auflösung am Skriptanfang (Zeilen 1–40); sucht es im Repo-Root oder relativ zum Skript, den Test dort mit einer temporären `ci-config.conf` fahren (Datei ist gitignored) und sie danach löschen — sie darf unter keinen Umständen committet werden.
 
 - [ ] **Step 4: `SELF_HOSTING.en.md` prüfen** — per `Select-String -Path docs/deployment/SELF_HOSTING.en.md -Pattern "BACKEND_TEST_RUNNER"`. Bei Treffern den Frontend-Pendant-Absatz im selben Stil ergänzen; keine Treffer → nichts tun, im Report vermerken.
 
@@ -361,19 +370,18 @@ sudo cp -r /tmp/balu-ci-branch /var/lib/ci-runner/smoke && sudo chown -R ci-runn
 sudo -u ci-runner -H podman run --rm --network=bridge --cpus=4 --memory=3g \
   -v /var/lib/ci-runner/smoke:/work:Z -w /work/client \
   docker.io/library/node:20-slim \
-  bash -c "set -euo pipefail; npm ci && npx eslint . && npm run build && npm run test:coverage"
+  bash -c "set -euo pipefail; npm ci && npx eslint . && npm run build && npm run test:coverage -- --maxWorkers=4"
 # Erwartung: eslint 0 Errors, build OK, Vitest-Suite grün (~1134 Tests).
 # Laufzeit notieren (Vergleichswert: 4m46s auf ubuntu-latest).
-sudo rm -rf /var/lib/ci-runner/smoke /tmp/balu-ci-branch
+sudo rm -rf /var/lib/ci-runner/smoke
 ```
 
 - [ ] **Step 3: Registrierungs-Token holen** (am Dev-Rechner oder auf der Box, gh als Xveyn): `gh api -X POST repos/Xveyn/BaluHost/actions/runners/registration-token -q .token` — Token ist single-use, ~1 h gültig.
 
-- [ ] **Step 4: Zweite Instanz registrieren** (mit dem Skript AUS DEM BRANCH):
+- [ ] **Step 4: Zweite Instanz registrieren** (mit dem Skript aus dem Clone von Step 1):
 
 ```bash
-cd /tmp && git clone --depth 1 --branch feat/frontend-build-sandbox-runner https://github.com/Xveyn/BaluHost balu-ci-branch
-sudo ./balu-ci-branch/scripts/bootstrap-ci-runner.sh --token <TOKEN> --name BaluNode-ci-sandbox-2 --dir runner-2
+sudo /tmp/balu-ci-branch/scripts/bootstrap-ci-runner.sh --token <TOKEN> --name BaluNode-ci-sandbox-2 --dir runner-2
 # Das Skript ist idempotent und läuft seine Self-Tests selbst; es MUSS mit
 # "All self-tests passed" enden. Bricht es ab: Output an den Controller.
 rm -rf /tmp/balu-ci-branch
@@ -393,7 +401,7 @@ Expected: `BaluNode` (prod, online), `BaluNode-ci-sandbox` (online) **und** `Bal
 
 **Voraussetzungen:** Task 6 bestätigt (drei Runner online), PR #420 gemergt (sonst zuerst darauf hinweisen).
 
-- [ ] **Step 1: Push + PR.** PR-Body (via Write-Tool + `--body-file`, Memory: keine Here-Strings) muss enthalten: Zusammenfassung der Umstellung; die drei Spec-Entscheidungen (kein Cache / eigene Fork-Variable / zweite Instanz) mit je einem Satz Begründung; Hinweis auf `docs/CI.md`; **explizit**: „PRs pausieren ab jetzt sichtbar auf ‚Review pending deployments' — das ist das ci-tests-Gate, kein Hänger; ein Klick gibt beide Jobs frei"; Verweis auf Spec + PR #420.
+- [ ] **Step 1: Push + PR.** PR-Body (via Write-Tool + `--body-file`, Memory: keine Here-Strings) muss enthalten: Zusammenfassung der Umstellung; die drei Spec-Entscheidungen (kein Cache / eigene Fork-Variable / zweite Instanz) mit je einem Satz Begründung; Hinweis auf `docs/CI.md`; **explizit**: „PRs pausieren ab jetzt sichtbar auf ‚Review pending deployments' — das ist das ci-tests-Gate, kein Hänger; ein Klick gibt beide Jobs frei"; **und die DX-Änderung**: bisher lief `frontend-build` sofort und lieferte Lint-Feedback ohne Klick, während nur `backend-tests` wartete — künftig läuft vor der Freigabe gar nichts; Verweis auf Spec + PR #420.
 
 - [ ] **Step 2: Den eigenen PR-Lauf beobachten** — er führt bereits die neue Workflow-Datei aus:
   1. Beide Jobs warten auf ci-tests-Freigabe → Xveyn klickt „Approve and deploy".
