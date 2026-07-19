@@ -232,13 +232,7 @@ RUNNER_DIR="${RUNNER_HOME}/${RUNNER_DIR_NAME}"
 RUNNER_WORK="${RUNNER_HOME}/_work-${RUNNER_DIR_NAME}"
 ```
 
-**Kritisch — `RUNNER_WORK` muss pro Instanz getrennt sein:** zwei Runner, die dasselbe `_work` teilen, checken denselben Workspace-Pfad (`_work/BaluHost/BaluHost`) aus und zerstören sich bei parallelen Jobs gegenseitig den Checkout. Rückwärtskompatibilität für die bereits registrierte Erst-Instanz: prüfen, wo `RUNNER_WORK` verwendet wird (config.sh `--work`?) — falls die Erst-Instanz mit `${RUNNER_HOME}/_work` registriert ist, für `RUNNER_DIR_NAME=runner` den Alt-Pfad beibehalten:
-
-```bash
-if [[ "$RUNNER_DIR_NAME" == "runner" ]]; then
-  RUNNER_WORK="${RUNNER_HOME}/_work"   # Bestands-Instanz nicht umziehen
-fi
-```
+**KORREKTUR (Task 3, verifiziert):** Die ursprüngliche Sorge, zwei Instanzen teilten sich `_work` und zerschössen sich den Checkout, war unbegründet — `config.sh` erhält `--work "_work"` **relativ zu `RUNNER_DIR`**, der effektive Work-Dir ist also `$RUNNER_DIR/_work` und die Instanz-Trennung kommt mit `--dir` automatisch. `RUNNER_WORK` ist vorbestehender toter Code (einziger Effekt: ein `mkdir`-Pre-Create eines nie benutzten Verzeichnisses). Konsequenz: `RUNNER_WORK` bleibt unverändert auf `${RUNNER_HOME}/_work` für alle Instanzen (kein per-Instanz-Suffix — das würde nur ein weiteres unbenutztes Verzeichnis erzeugen), plus ein Kommentar, der den realen Work-Dir dokumentiert. Der tote Code selbst ist ein Nebenbefund (Maintainer-Entscheidung, ggf. Issue).
 
 - [ ] **Step 2: Node-Image vorab pullen** — bei den Konstanten `NODE_IMAGE="docker.io/library/node:20-slim"` ergänzen und neben dem bestehenden `as_runner podman pull "$TEST_IMAGE"` (Zeile ~169): `as_runner podman pull "$NODE_IMAGE"`. (Verhindert einen Pull-Race, wenn beide Instanzen gleichzeitig ihren ersten Job bekommen.)
 
