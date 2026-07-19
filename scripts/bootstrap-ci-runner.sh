@@ -8,13 +8,16 @@
 # - Configures subuid/subgid + systemd lingering for rootless containers.
 # - Installs and registers a GitHub Actions self-hosted runner instance as 'ci-runner'
 #   with labels: self-hosted,Linux,X64,ci-sandbox.
-# - Pre-pulls docker.io/library/python:3.11-slim into ci-runner's storage.
+# - Pre-pulls docker.io/library/python:3.11-slim and docker.io/library/node:20-slim
+#   into ci-runner's storage.
 # - Runs self-tests; aborts with a clear error if any isolation guarantee is violated.
 #
 # Idempotent: safe to re-run.
 #
 # Usage:
 #   sudo ./bootstrap-ci-runner.sh --token <RUNNER_REGISTRATION_TOKEN>
+#   # second instance (parallel CI jobs; frontend-build + backend-tests):
+#   sudo ./bootstrap-ci-runner.sh --token <TOKEN> --name BaluNode-ci-sandbox-2 --dir runner-2
 #
 # Get the token from: https://github.com/Xveyn/BaluHost/settings/actions/runners/new
 # (Click "New self-hosted runner", copy the value passed to --token in the displayed
@@ -27,12 +30,12 @@ set -euo pipefail
 # ---------- Configuration ----------
 RUNNER_USER="ci-runner"
 RUNNER_HOME="/var/lib/ci-runner"
-RUNNER_WORK="${RUNNER_HOME}/_work"
-RUNNER_DIR="${RUNNER_HOME}/runner"
+RUNNER_DIR_NAME="runner"   # unique per instance; second instance: --dir runner-2
 REPO_URL="https://github.com/Xveyn/BaluHost"
 RUNNER_LABELS="self-hosted,Linux,X64,ci-sandbox"
 RUNNER_NAME="${RUNNER_NAME:-BaluNode-ci-sandbox}"
 TEST_IMAGE="docker.io/library/python:3.11-slim"
+NODE_IMAGE="docker.io/library/node:20-slim"
 SUBUID_RANGE="100000-165535"
 SUBGID_RANGE="100000-165535"
 
@@ -42,6 +45,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --token) RUNNER_TOKEN="$2"; shift 2 ;;
     --name)  RUNNER_NAME="$2";  shift 2 ;;
+    --dir)   RUNNER_DIR_NAME="$2"; shift 2 ;;
     -h|--help)
       sed -n '1,/^set -euo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'
       exit 0
@@ -49,6 +53,15 @@ while [[ $# -gt 0 ]]; do
     *) echo "ERROR: unknown arg: $1" >&2; exit 2 ;;
   esac
 done
+
+# RUNNER_DIR is per-instance via --dir.
+RUNNER_DIR="${RUNNER_HOME}/${RUNNER_DIR_NAME}"
+
+# RUNNER_WORK is NOT what config.sh actually uses for the runner's work directory
+# (that's `--work "_work"` in Step 5, relative to $RUNNER_DIR — already per-instance
+# for free once RUNNER_DIR is). This variable only seeds the legacy `mkdir -p` below;
+# kept at its single pre-existing value for all instances.
+RUNNER_WORK="${RUNNER_HOME}/_work"
 
 if [[ "$EUID" -ne 0 ]]; then
   echo "ERROR: must be run as root (sudo)." >&2
@@ -167,6 +180,8 @@ log "Starting runner service (idempotent)..."
 # ---------- Step 6: pre-pull test image ----------
 log "Pre-pulling $TEST_IMAGE as $RUNNER_USER (first pull, ~50 MB)..."
 as_runner podman pull "$TEST_IMAGE"
+log "Pre-pulling $NODE_IMAGE as $RUNNER_USER..."
+as_runner podman pull "$NODE_IMAGE"
 
 # ---------- Step 7: self-tests ----------
 log "Running isolation self-tests..."

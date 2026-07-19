@@ -43,7 +43,8 @@ while IFS='=' read -r key value; do
     CFG[$key]="$value"
 done < <(grep -E '^[A-Z0-9_]+=' "$CONFIG_FILE")
 
-KNOWN_KEYS="BACKEND_TEST_RUNNER BACKEND_TEST_RUNNER_LABELS ENABLE_PLAYWRIGHT_E2E \
+KNOWN_KEYS="BACKEND_TEST_RUNNER BACKEND_TEST_RUNNER_LABELS FRONTEND_BUILD_RUNNER \
+FRONTEND_BUILD_RUNNER_LABELS ENABLE_PLAYWRIGHT_E2E \
 ENABLE_RAID_LOOPBACK ENABLE_TAURI_BUILD ENABLE_TUI_BUILD ENABLE_DEPLOY_PI \
 ENABLE_RELEASE_STABLE ENABLE_DEPLOY_FORK DEPLOY_FORK_RUNNER_LABELS DEPLOY_FORK_INSTALL_DIR"
 for key in "${!CFG[@]}"; do
@@ -110,6 +111,15 @@ case "${CFG[BACKEND_TEST_RUNNER]:-github}" in
 esac
 if [[ "${CFG[BACKEND_TEST_RUNNER]:-github}" != "self-hosted" && -n "${CFG[BACKEND_TEST_RUNNER_LABELS]:-}" ]]; then
     echo "WARNING: BACKEND_TEST_RUNNER_LABELS is set but BACKEND_TEST_RUNNER is not 'self-hosted' — labels ignored" >&2
+fi
+
+case "${CFG[FRONTEND_BUILD_RUNNER]:-github}" in
+    github)      del_var FRONTEND_BUILD_RUNNER ;;
+    self-hosted) set_var FRONTEND_BUILD_RUNNER "$(labels_to_json "${CFG[FRONTEND_BUILD_RUNNER_LABELS]:-}")" ;;
+    *) die "FRONTEND_BUILD_RUNNER must be 'github' or 'self-hosted'" ;;
+esac
+if [[ "${CFG[FRONTEND_BUILD_RUNNER]:-github}" != "self-hosted" && -n "${CFG[FRONTEND_BUILD_RUNNER_LABELS]:-}" ]]; then
+    echo "WARNING: FRONTEND_BUILD_RUNNER_LABELS is set but FRONTEND_BUILD_RUNNER is not 'self-hosted' — labels ignored" >&2
 fi
 
 bool_var ENABLE_PLAYWRIGHT_E2E true

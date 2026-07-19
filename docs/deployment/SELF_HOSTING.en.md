@@ -64,6 +64,23 @@ The RAID mdadm loopback tests are the deliberate exception: their runner is
 destroy disks on a physical machine; the tests only ever run on ephemeral
 GitHub VMs against loop devices.
 
+## Running the frontend build on your own machine
+
+1. Register a [self-hosted runner](https://docs.github.com/en/actions/hosting-your-own-runners)
+   on your fork and give it a label, e.g. `my-frontend-box`. Podman must be
+   installed on the runner host (build+tests run in a rootless container).
+2. In `ci-config.conf`: `FRONTEND_BUILD_RUNNER=self-hosted` and
+   `FRONTEND_BUILD_RUNNER_LABELS=my-frontend-box`, then re-run `scripts/configure-ci.sh`.
+3. **Security:** with a self-hosted build runner configured, PR-triggered
+   `frontend-build` runs in your fork request the same `ci-tests` environment
+   as `backend-tests`. GitHub auto-creates it unprotected on first use — if
+   you ever accept PRs from strangers into your fork, add yourself as a
+   required reviewer for `ci-tests` in your fork's Settings → Environments.
+   Never run PR code from people you don't trust on hardware you care about.
+   The gate detection relies on the JSON-array format `configure-ci.sh`
+   writes — if you set `FRONTEND_BUILD_RUNNER` by hand, keep the literal
+   `self-hosted` in the value.
+
 ## Deploying your fork to your own box (`deploy-fork`)
 
 Prerequisites (one-time, on a Debian box):
@@ -97,6 +114,8 @@ NOT part of fork deploys — that stays exclusive to the canonical pipeline.
   secret-dependent workflow (`ENABLE_DEPLOY_PI`, `ENABLE_RELEASE_STABLE`)
   without adding the secret to your fork. Disable it or add the secret.
 - **`backend-tests` hangs forever** — your `BACKEND_TEST_RUNNER` points at
+  labels no online runner has. Check `gh api repos/<you>/<fork>/actions/runners`.
+- **`frontend-build` hangs forever** — your `FRONTEND_BUILD_RUNNER` points at
   labels no online runner has. Check `gh api repos/<you>/<fork>/actions/runners`.
 - **`deploy-fork` fails** — `configure-ci.sh` refuses `ENABLE_DEPLOY_FORK=true`
   without `DEPLOY_FORK_RUNNER_LABELS` (stored as the `DEPLOY_FORK_RUNNER`
