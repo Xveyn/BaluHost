@@ -151,7 +151,7 @@ When reviewing changes that touch CI/CD, deploy scripts, or these rules:
 - [ ] **Sudoers / systemd**: Changes under `deploy/install/templates/` to sudoers or service units? Verify the new rules are scoped to specific binaries with explicit args (no `ALL`, no globs that match user-controlled paths).
 - [ ] **Deploy script**: Changes to `deploy/scripts/ci-deploy.sh`? Verify no new shell injection surfaces (user-controlled env vars interpolated into commands), no new `sudo` invocations without sudoers entries, rollback path still works.
 - [ ] **Workflow secrets**: New `secrets.*` references? Confirm the secret exists, is scoped correctly, and is not echoed/logged.
-- [ ] **Fork-config gate logic**: Does a change touch the `github.repository == 'Xveyn/BaluHost'` literals or the `contains(vars.BACKEND_TEST_RUNNER, 'self-hosted')` environment-gate condition in `ci-check.yml`/`deploy-fork.yml`? If it weakens the upstream-hardcoded path or derives gates from PR-controlled data — block.
+- [ ] **Fork-config gate logic**: Does a change touch the `github.repository == 'Xveyn/BaluHost'` literals or the `contains(vars.BACKEND_TEST_RUNNER, 'self-hosted')` / `contains(vars.FRONTEND_BUILD_RUNNER, 'self-hosted')` environment-gate conditions in `ci-check.yml`/`deploy-fork.yml`? If it weakens the upstream-hardcoded path or derives gates from PR-controlled data — block.
 - [ ] **mdadm runner pin**: Does a change make the `raid-mdadm-loopback.yml` runner configurable, or set `BALUHOST_MDADM_LOOPBACK` outside that workflow? If yes — block (mdadm must never run on self-hosted hardware).
 
 ---
