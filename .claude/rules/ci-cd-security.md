@@ -31,7 +31,7 @@ Owned paths:
 
 | Workflow | Runner | Triggers |
 |---|---|---|
-| `ci-check.yml` `frontend-build` | `ubuntu-latest` | `pull_request`, `workflow_call` |
+| `ci-check.yml` `frontend-build` | **upstream: `self-hosted, ci-sandbox` (hardcoded repo literal); forks: `vars.FRONTEND_BUILD_RUNNER`, default `ubuntu-latest`** (rootless Podman everywhere) | `pull_request` (gated by `ci-tests` env), `workflow_call` (ungated) |
 | `ci-check.yml` `backend-tests` | **upstream: `self-hosted, ci-sandbox` (hardcoded repo literal); forks: `vars.BACKEND_TEST_RUNNER`, default `ubuntu-latest`** (rootless Podman everywhere) | `pull_request` (gated by `ci-tests` env), `workflow_call` (ungated) |
 | `create-release.yml` | `ubuntu-latest` | tag push (`v*-pre.*`) |
 | `deploy-pi.yml` | `ubuntu-latest` | `workflow_dispatch` |
@@ -58,9 +58,13 @@ A workflow on `ci-sandbox` that runs `pip install` directly on the runner host (
 are driven exclusively by `github.repository == 'Xveyn/BaluHost'` literals and
 server-side Repository Variables (`vars.*`, set via `scripts/configure-ci.sh`).
 Upstream behavior is hardcoded and needs no variables; PR code cannot influence
-runner choice or environment gates through either mechanism. The `ci-tests`
-gate condition on `pull_request` events is
-`github.repository == 'Xveyn/BaluHost' || contains(vars.BACKEND_TEST_RUNNER, 'self-hosted')`.
+runner choice or environment gates through either mechanism. `backend-tests`
+and `frontend-build` follow the identical pattern, gated by `vars.BACKEND_TEST_RUNNER`
+and `vars.FRONTEND_BUILD_RUNNER` respectively. The `ci-tests` gate condition on
+`pull_request` events is
+`github.repository == 'Xveyn/BaluHost' || contains(vars.BACKEND_TEST_RUNNER, 'self-hosted')`
+for `backend-tests`, and the same shape with `contains(vars.FRONTEND_BUILD_RUNNER, 'self-hosted')`
+for `frontend-build`.
 `raid-mdadm-loopback.yml` is deliberately NOT runner-configurable: real mdadm on
 a self-hosted box could destroy disks — only the on/off toggle
 `ENABLE_RAID_LOOPBACK` exists, and `BALUHOST_MDADM_LOOPBACK=1` is never set
@@ -69,6 +73,8 @@ be invalid: ENABLE_*" on the toggle vars are expected — the variables are
 intentionally unset upstream (unset → `''` → defaults apply).
 
 **Resolved (2026-06-09)**: the dead `raid-mdadm-selfhosted.yml` (which required a non-existent `mdadm` runner label and only ran mock tests anyway) was retired and replaced by `raid-mdadm-loopback.yml` on `ubuntu-latest`. Real mdadm coverage now runs on ephemeral GitHub-hosted VMs against loop-device arrays — no self-hosted runner, no production-disk risk (issue #185).
+
+Fork-/dev-facing summary of the design decisions: `docs/CI.md`.
 
 ### Layer 3 — `github.actor == 'Xveyn'` Allowlist
 
@@ -101,7 +107,7 @@ The deploy job declares `environment: production`, so any run pauses for reviewe
 
 #### `ci-tests` Environment
 
-Gates PR-triggered backend test runs on `ci-sandbox`. Configured in GitHub repo settings.
+Gates PR-triggered backend/frontend runs on `ci-sandbox`. Configured in GitHub repo settings.
 
 | Setting | Required value | Verified state |
 |---|---|---|
@@ -124,7 +130,7 @@ These live as GitHub server-state and cannot be read from the repo. Verify perio
 | Branch protection on `main` | `gh api repos/Xveyn/BaluHost/branches/main/protection` | Required status checks: `backend-tests`, `frontend-build` (jobs from `ci-check.yml`); `allow_force_pushes: false`; `allow_deletions: false`; `enforce_admins: false` (admin bypass — see Known Gaps) |
 | Production environment | `gh api repos/Xveyn/BaluHost/environments/production` | `protection_rules` includes `required_reviewers` (Xveyn), `deployment_branch_policy.protected_branches: true`, `can_admins_bypass: false` |
 | `ci-tests` environment | `gh api repos/Xveyn/BaluHost/environments/ci-tests` | `protection_rules` includes `required_reviewers` (Xveyn), `can_admins_bypass: false` |
-| Self-hosted runners | `gh api repos/Xveyn/BaluHost/actions/runners` | `BaluNode` online (`self-hosted, Linux, X64, prod`) and `BaluNode-ci-sandbox` online (`self-hosted, Linux, X64, ci-sandbox`). The `prod` label is what `deploy-production.yml` targets; without it on `BaluNode` the deploy could land on the sandbox runner. |
+| Self-hosted runners | `gh api repos/Xveyn/BaluHost/actions/runners` | `BaluNode` online (`self-hosted, Linux, X64, prod`); `BaluNode-ci-sandbox` online (`self-hosted, Linux, X64, ci-sandbox`); expected: also `BaluNode-ci-sandbox-2` online (provisioned via `bootstrap-ci-runner.sh --dir runner-2`, see `docs/CI.md`), so `backend-tests` and `frontend-build` run in parallel instead of queuing on one instance. The `prod` label is what `deploy-production.yml` targets; without it on `BaluNode` the deploy could land on the sandbox runner. |
 | Default workflow permissions | `gh api repos/Xveyn/BaluHost/actions/permissions/workflow` | `default_workflow_permissions: read`, `can_approve_pull_request_reviews: false` |
 | `DEPLOY_PAT` secret | repo Settings → Secrets → Actions | Present, owned by Xveyn, has `repo` + `workflow` scopes only |
 
@@ -162,6 +168,6 @@ When reviewing changes that touch CI/CD, deploy scripts, or these rules:
 5. **In-repo CODEOWNERS for paths outside the repo (e.g., GitHub environment settings) is impossible** — Layer 4 protections must be re-verified manually after any account/plan change (see Repo Settings table).
 6. **`enforce_admins: false` on main branch protection** — Xveyn (owner/admin) can bypass branch protection (force-push, skip status checks). Intentional for solo-dev emergency hotfix capability; the production environment reviewer (Layer 4) still gates the actual deploy.
 7. **`raid-mdadm-selfhosted.yml` runner label mismatch — resolved (2026-06-09)** — The dead workflow was retired and replaced by `raid-mdadm-loopback.yml` on `ubuntu-latest` (loop-device mdadm tests). No self-hosted runner is involved, so the label-mismatch gap no longer exists (issue #185).
-8. **`ci-runner` and its containers have unrestricted egress** — A maliciously approved PR can exfiltrate the workdir contents and make outbound calls to arbitrary hosts. Mitigations: the `ci-tests` environment gate (manual approval), the limited blast radius (workdir contains only PR code), no production secrets reachable. Future tightening: egress firewall allowing only `pypi.org`, `files.pythonhosted.org`, `api.github.com`, `objects.githubusercontent.com`, `registry.docker.io`.
+8. **`ci-runner` and its containers have unrestricted egress** — A maliciously approved PR can exfiltrate the workdir contents and make outbound calls to arbitrary hosts. Mitigations: the `ci-tests` environment gate (manual approval), the limited blast radius (workdir contains only PR code), no production secrets reachable. Future tightening: egress firewall allowing only `pypi.org`, `files.pythonhosted.org`, `registry.npmjs.org`, `api.github.com`, `objects.githubusercontent.com`, `registry.docker.io`.
 9. **`baluhost` user may stop/start/mask/unmask `power-profiles-daemon`** — Added in `deploy/install/templates/sudoers-baluhost-power` for the CPU power authority feature (`backend/app/services/power/ppd_authority.py`). Intentional and tightly scoped: four explicit `systemctl <verb> power-profiles-daemon` invocations, no `ALL`, no wildcards, single target unit. Blast radius is limited to that one systemd unit; it grants no general service control. The verbs are exercised only behind the local-channel + admin gate (`require_local_admin`) on `PUT /api/power/authority`.
 10. **`baluhost` user may invoke the plugin spawn wrapper as root** — Added in `deploy/install/templates/baluhost-plugin-sudoers` (Track B Phase 5a). Intentional and tightly scoped: exactly one binary at `/usr/local/sbin/baluhost-spawn-plugin-worker.sh` (root:root 0755, outside `/opt/baluhost` so `baluhost` cannot swap it). The wrapper validates every caller-influenced argument, always drops privilege to the unprivileged `baluhost-plugin` user, and runs the worker in a dedicated network namespace (only loopback). It grants no general command execution — blast radius is one isolated subprocess under `baluhost-plugin` with no NAS-storage or secret access.
