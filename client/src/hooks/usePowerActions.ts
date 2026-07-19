@@ -15,11 +15,22 @@ export function usePowerActions(logout: () => void) {
   // abort one already in flight. Checked immediately after that await.
   const mountedRef = useRef(true);
 
-  // Cleanup bei Unmount: Ist-Code leakte Intervall/Timeouts (Layout.tsx:579-594)
-  useEffect(() => () => {
-    mountedRef.current = false;
-    timeoutsRef.current.forEach(clearTimeout);
-    if (intervalRef.current) clearInterval(intervalRef.current);
+  // Cleanup bei Unmount: Ist-Code leakte Intervall/Timeouts (Layout.tsx:579-594).
+  // Must have a setup body, not just cleanup: React 18 StrictMode double-invokes
+  // effects in dev (mount → effect → cleanup → effect). A cleanup-only body sets
+  // mountedRef.current = false on that first pass and nothing ever sets it back
+  // — the guard latches permanently "unmounted" from the first render onward,
+  // and every poll tick then returns early at the `if (!mountedRef.current)`
+  // check, so restart polling never reaches its success or 60s-timeout branch.
+  // Re-arming on setup fixes that; production is unaffected (no double-invoke
+  // there), but correctness must not depend on StrictMode being absent.
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      timeoutsRef.current.forEach(clearTimeout);
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
   }, []);
 
   const later = (fn: () => void, ms: number) => {

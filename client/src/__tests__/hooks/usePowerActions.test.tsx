@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { StrictMode } from 'react';
 import { renderHook, act } from '@testing-library/react';
 import { usePowerActions } from '../../hooks/usePowerActions';
 
@@ -130,5 +131,26 @@ describe('usePowerActions', () => {
     });
     expect(reloadMock).not.toHaveBeenCalled();
     expect(logout).not.toHaveBeenCalled();
+  });
+
+  // React 18 StrictMode double-invokes effects in dev (mount → effect → cleanup
+  // → effect again). The cleanup effect used to be cleanup-only, so that first
+  // pass set mountedRef.current = false and nothing ever set it back — the
+  // restart poll's `if (!mountedRef.current) return;` guard then latched
+  // permanently, and neither the success branch (reload) nor the 60s-timeout
+  // branch (logout) could ever run. This wraps the hook in StrictMode and
+  // asserts the poll still reaches its success branch — proof the guard is
+  // re-armed on effect setup, not just cleared on cleanup.
+  it('StrictMode: mountedRef wird beim doppelten Effect-Setup neu gesetzt — Poll erreicht weiterhin reload', async () => {
+    localApiMock.restart.mockResolvedValue(undefined);
+    localApiMock.isAvailable.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    const { result } = renderHook(() => usePowerActions(vi.fn()), { wrapper: StrictMode });
+    await act(() => result.current.onRestart());
+    expect(result.current.pendingAction).toBe('restart');
+    await act(() => vi.advanceTimersByTimeAsync(2000)); // Poll 1: false
+    expect(reloadMock).not.toHaveBeenCalled();
+    await act(() => vi.advanceTimersByTimeAsync(2000)); // Poll 2: true
+    expect(reloadMock).toHaveBeenCalledTimes(1);
+    expect(result.current.pendingAction).toBeNull();
   });
 });
