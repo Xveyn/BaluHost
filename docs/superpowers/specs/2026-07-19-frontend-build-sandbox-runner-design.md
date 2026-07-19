@@ -93,6 +93,7 @@ frontend-build:
       run: |
         podman run --rm \
           --network=bridge \
+          --cpus=4 --memory=3g \
           -v "${{ github.workspace }}:/work:Z" \
           -w /work/client \
           "$NODE_IMAGE" \
@@ -100,8 +101,31 @@ frontend-build:
 
     - name: Frontend coverage → job summary
       if: always()
-      # node -e läuft im selben gepinnten Image, nicht auf dem Host
+      # node -e läuft im selben gepinnten Image, nicht auf dem Host.
+      # WICHTIG (Backend-Muster): der Container schreibt nach stdout, die
+      # Umleitung `>> "$GITHUB_STEP_SUMMARY"` passiert auf dem HOST —
+      # $GITHUB_STEP_SUMMARY ist ein Host-Pfad und existiert im Container nicht.
 ```
+
+**Ressourcen-Limits sind Pflicht, nicht Politur.** BaluNode ist zugleich
+Produktions-NAS und Gaming-PC (Ryzen 5 5600GT, 16 GB RAM, 4 Uvicorn-Worker,
+KDE). Mit der zweiten Instanz laufen künftig zwei CI-Container **parallel**,
+und `backend-tests` startet mit `pytest -n auto` bereits ~12 Worker. Ohne
+Limits kann ein PR-Push die Box spürbar ausbremsen. Deshalb `--cpus=4
+--memory=3g` am neuen Job (Werte nach erster Messung justieren) — und im
+selben PR prüfen, ob `backend-tests` dieselbe Kappung bekommt (bisher
+unlimitiert; auf `ubuntu-latest` war das egal, auf der eigenen Box nicht).
+
+**`node:20-slim` enthält kein `git` — bewusst akzeptiert.** `vite.config.ts:9-27`
+liest Branch/Commit per `execSync('git …')` mit try/catch-Fallback: im Container
+wird `__GIT_COMMIT__` zu `'unknown'` und `buildType` zu `'release'`. Das ist
+für diesen Job in Ordnung, weil (a) heute auf dem PR-Detached-HEAD
+`git branch --show-current` ohnehin leer liefert und (b) der CI-Build ein
+reiner Gate-Build ist, dessen Artefakt verworfen wird — das ausgelieferte
+Frontend entsteht beim Deploy auf BaluNode (`ci-deploy.sh`), wo git vorhanden
+ist. **Kein git ins Image installieren** (Zeit + Angriffsfläche); stattdessen
+diese Erwartung hier festhalten, damit „unknown" im CI-Log niemanden auf eine
+falsche Fährte schickt.
 
 Die Job-ID bleibt `frontend-build` — der Required-Status-Check auf `main`
 bricht dadurch nicht.
@@ -142,6 +166,10 @@ userweit und bereits abgedeckt.
 - „Repo Settings to Verify": Runner-Zeile auf **zwei** Sandbox-Instanzen
   erweitern.
 - Fork-Abschnitt um `FRONTEND_BUILD_RUNNER` ergänzen.
+- **Known Gap #8 (Egress-Allowlist) um `registry.npmjs.org` erweitern.** Die
+  dort notierte künftige Firewall-Liste kennt nur PyPI/GitHub/Docker — wer sie
+  später umsetzt und abschreibt, sperrt `npm ci` aus und legt die Frontend-CI
+  still lahm.
 
 Die Reviewer-Checkliste braucht keine neue Zeile — „Does a workflow on
 `ci-sandbox` run `pip install`, `npm install`, or any untrusted code directly
@@ -152,12 +180,17 @@ on the runner host (not inside `podman run`)?" deckt den Fall bereits ab.
 1. **PR #420 muss zuerst gemergt sein.** Er dokumentiert das scharfgeschaltete
    `ci-tests`-Gate. Die Settings selbst sind bereits live, aber ohne #420
    widerspricht die Doku dem Zustand.
-2. Bootstrap-Änderung + zweite Instanz auf BaluNode einrichten und
+2. **Einmaliger Container-Smoke-Test** (auf BaluNode oder lokal):
+   `podman run --rm -v <repo>:/work -w /work/client docker.io/library/node:20-slim bash -c "npm ci && npx eslint . && npm run build && npm run test:coverage"`.
+   `client/package.json` enthält nach Prüfung keine nativen/postinstall-Deps
+   (esbuild/swc nutzen vorgebaute Binaries), aber diese Annahme gehört einmal
+   real belegt, bevor der Gate-Job darauf steht.
+3. Bootstrap-Änderung + zweite Instanz auf BaluNode einrichten und
    `gh api repos/Xveyn/BaluHost/actions/runners` prüfen: zwei Runner mit Label
    `ci-sandbox`, beide `online`.
-3. Erst dann `ci-check.yml` umstellen.
+4. Erst dann `ci-check.yml` umstellen.
 
-Reihenfolge 3-vor-2 würde die CI ausbremsen, ohne dass jemand merkt warum.
+Reihenfolge 4-vor-3 würde die CI ausbremsen, ohne dass jemand merkt warum.
 
 ## Risiken
 
@@ -170,6 +203,8 @@ Reihenfolge 3-vor-2 würde die CI ausbremsen, ohne dass jemand merkt warum.
 | Bösartiger Fork-PR löscht seine eigene `environment:`-Zeile | Fork-Policy `all_external_contributors` greift vorher — sie ist Repo-State, nicht PR-editierbar |
 | Zweite Instanz erbt Isolationsfehler | die Bootstrap-Self-Tests müssen für **beide** Instanzen grün sein |
 | Plattenverbrauch durch zwei `node_modules` + Images | `--rm` räumt Container ab; Workspaces liegen pro Instanz getrennt. Bei Bedarf `podman system prune` per Timer |
+| CI-Last drückt Produktions-NAS/Gaming auf derselben Box | `--cpus`/`--memory` am Frontend-Container (s. o.); Kappung für `backend-tests` im selben PR prüfen; reale Last nach dem ersten parallelen Doppel-Lauf beobachten |
+| `__GIT_COMMIT__`='unknown' im CI-Build irritiert beim Debuggen | bewusst akzeptiert und in Abschnitt A dokumentiert; Deploy-Artefakt entsteht auf BaluNode mit git |
 
 ## Offen (bewusst nicht entschieden)
 
