@@ -103,15 +103,47 @@ The deploy job declares `environment: production`, so any run pauses for reviewe
 
 Gates PR-triggered backend test runs on `ci-sandbox`. Configured in GitHub repo settings.
 
-| Setting | Required value | Verified state |
+| Setting | Required value | Verified state (2026-07-19) |
 |---|---|---|
-| Required reviewers | `Xveyn` | check `gh api repos/Xveyn/BaluHost/environments/ci-tests` |
-| `prevent_self_review` | `false` (solo dev) | check above |
-| Wait timer | 0 | check above |
-| Deployment branches and tags | All branches | check above |
-| `can_admins_bypass` | `false` | check above |
+| Required reviewers | `Xveyn` | `Xveyn` ✓ |
+| `prevent_self_review` | `false` (solo dev) | `false` ✓ |
+| Wait timer | 0 | 0 ✓ |
+| Deployment branches and tags | All branches | `deployment_branch_policy: null` ✓ |
+| `can_admins_bypass` | `false` | `false` ✓ |
 
 The `backend-tests` job declares `environment: ci-tests` conditionally on `github.event_name == 'pull_request'`. PR runs pause for Xveyn approval; `workflow_call` runs (from `deploy-production.yml` after a manual merge to `main`) execute immediately because the code is already trusted at that point.
+
+> **Incident 2026-07-19 — this gate was hollow for two months.** The environment
+> was created 2026-05-19 but **no protection rules were ever added**
+> (`protection_rules: []`, `can_admins_bypass: true`). The table above claimed
+> reviewers were configured; that had never been verified — the "Verified state"
+> column read "check `gh api …`" rather than an actual result. In the meantime
+> every PR ran `backend-tests` on the self-hosted `ci-sandbox` runner with **no
+> manual approval**. Fixed 2026-07-19 and verified against the live API.
+> Lesson: a row whose evidence column says "check this yourself" is an untested
+> assertion, not a verified control. Record the observed value and the date.
+
+### Fork PR approval policy
+
+Repo setting, **not** in any workflow file — and therefore the one PR-triggered
+control that a malicious PR cannot edit.
+
+| Setting | Required value | Verified state (2026-07-19) |
+|---|---|---|
+| `approval_policy` | `all_external_contributors` | `all_external_contributors` ✓ |
+
+Check: `gh api repos/Xveyn/BaluHost/actions/permissions/fork-pr-contributor-approval`
+
+**Why this outranks the environment gate for fork PRs.** On a `pull_request`
+event the workflow definition comes from the *PR's* merge ref, not from `main`.
+A malicious fork PR can therefore delete the `environment: ci-tests` line from
+`ci-check.yml` and remove its own gate. The fork approval policy is evaluated
+from repo settings before any workflow starts, so PR content cannot influence
+it. The `ci-tests` environment remains valuable as defense-in-depth and is the
+control that covers same-repo branches, where the fork policy does not apply.
+
+Was `first_time_contributors` until 2026-07-19 — meaning any contributor who had
+been merged once could run code on the self-hosted sandbox runner unattended.
 
 ---
 
@@ -123,7 +155,8 @@ These live as GitHub server-state and cannot be read from the repo. Verify perio
 |---|---|---|
 | Branch protection on `main` | `gh api repos/Xveyn/BaluHost/branches/main/protection` | Required status checks: `backend-tests`, `frontend-build` (jobs from `ci-check.yml`); `allow_force_pushes: false`; `allow_deletions: false`; `enforce_admins: false` (admin bypass — see Known Gaps) |
 | Production environment | `gh api repos/Xveyn/BaluHost/environments/production` | `protection_rules` includes `required_reviewers` (Xveyn), `deployment_branch_policy.protected_branches: true`, `can_admins_bypass: false` |
-| `ci-tests` environment | `gh api repos/Xveyn/BaluHost/environments/ci-tests` | `protection_rules` includes `required_reviewers` (Xveyn), `can_admins_bypass: false` |
+| `ci-tests` environment | `gh api repos/Xveyn/BaluHost/environments/ci-tests` | `protection_rules` includes `required_reviewers` (Xveyn), `can_admins_bypass: false`. **A non-empty `protection_rules` array is the whole control** — an environment with `protection_rules: []` still resolves and the job runs unpaused, so "the environment exists" proves nothing (see incident 2026-07-19) |
+| Fork PR approval policy | `gh api repos/Xveyn/BaluHost/actions/permissions/fork-pr-contributor-approval` | `approval_policy: all_external_contributors` — the only PR-triggered gate a malicious PR cannot edit, since it is repo state rather than workflow YAML |
 | Self-hosted runners | `gh api repos/Xveyn/BaluHost/actions/runners` | `BaluNode` online (`self-hosted, Linux, X64, prod`) and `BaluNode-ci-sandbox` online (`self-hosted, Linux, X64, ci-sandbox`). The `prod` label is what `deploy-production.yml` targets; without it on `BaluNode` the deploy could land on the sandbox runner. |
 | Default workflow permissions | `gh api repos/Xveyn/BaluHost/actions/permissions/workflow` | `default_workflow_permissions: read`, `can_approve_pull_request_reviews: false` |
 | `DEPLOY_PAT` secret | repo Settings → Secrets → Actions | Present, owned by Xveyn, has `repo` + `workflow` scopes only |
