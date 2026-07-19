@@ -9,7 +9,7 @@ Reusable, generic building blocks. No business logic, no API calls.
 - `Button.tsx`, `Input.tsx`, `Select.tsx` — Form elements
 - `Card.tsx`, `Badge.tsx`, `StatCard.tsx` — Display elements
 - `Modal.tsx`, `ConfirmDialog.tsx`, `IdleWarningDialog.tsx` — Overlays
-- `Spinner.tsx`, `ProgressBar.tsx`, `EmptyState.tsx` — Feedback
+- `Spinner.tsx`, `ProgressBar.tsx`, `EmptyState.tsx`, `LoadingFallback.tsx` — Feedback (`LoadingFallback` is the route-Suspense fallback, `size: 'full' | 'inline'` — `'full'` for top-level fallbacks that render before `Layout` mounts, `'inline'` for the boundary inside `Layout`'s content area, extracted F2/#301)
 - `Tabs.tsx`, `SortableHeader.tsx` — Navigation/tables
 - `ByteSizeInput.tsx` — Byte-aware number input
 - `AdminBadge.tsx`, `PluginBadge.tsx`, `DeveloperBadge.tsx` — Role indicators
@@ -17,7 +17,7 @@ Reusable, generic building blocks. No business logic, no API calls.
 - `index.ts` — Barrel re-export for all ui/ primitives
 
 ### Top-level Components (shared across pages)
-- `Layout.tsx` — Main layout with sidebar navigation, header, power menu, notification center
+- `Layout.tsx` — Thin orchestrator over `layout/*` (sidebar navigation, header, power overlay); mounted once via the `AppLayout` layout route (F2/#301)
 - `ErrorBoundary.tsx` — React error boundary with fallback UI
 - `UploadProgressBar.tsx` — Global file upload progress
 - `NotificationCenter.tsx` — Real-time notification dropdown (WebSocket)
@@ -47,8 +47,9 @@ Reusable, generic building blocks. No business logic, no API calls.
 | `fan-control/` | Fan curves, schedules, profiles — `FanDetails` composes `fan-details/*` (`FanPresetProfileButtons`, `FanCurveGraphControls`, `FanCurveTableEditor`, `FanStatsGrid`) + pure `fanCurveValidation`; state/handlers in `hooks/useFanCurveEditor`. `FanCurveChart` composes `fan-curve-chart/*` (`FanCurveTooltip`, `FanChartLegend`, `FanChartHint`) + pure `fanCurveGeometry`; drag/click/touch interaction in `hooks/useFanCurveInteraction` (extracted F2/#301) |
 | `file-manager/` | File browser, context menus, preview |
 | `firebase/` | Firebase push notification config |
+| `layout/` | App shell — `AppLayout` (layout route: `<Layout><Suspense><Outlet/></Suspense></Layout>`), `DesktopSidebar`/`MobileSidebar` (composing `SidebarBrand`+`SidebarNav`), `LayoutHeader`, `PendingPowerOverlay`, `layoutNavConfig` (icons + `buildNavItems`); nav filtering in `hooks/useLayoutNav`, shutdown/restart in `hooks/usePowerActions` (extracted F2/#301) |
 | `manual/` | User manual article viewer — `ApiReferenceTab` composes `api-reference/*` (`EndpointCard`, `ApiViewToggle`, `ApiBaseUrlCard`, `ApiSearchBar`, `ApiCategoryTabs`, `ApiSchemaError`, `ApiLoadingSkeleton`, `ApiSectionList`) + pure `lib/apiRateLimitMatch`; state/fetch in `hooks/useApiReference` (extracted F2/#301) |
-| `mobile-devices/` | Mobile device registration — `MobileDevicesPage` composes `mobile-devices/*`: `RegisterDeviceCard`, `MobileDevicesList`/`MobileDeviceCard`, `NotificationStatus`, `QrCodeDialog` (→ `NewTokenQrView` / `ExistingDeviceInfoView`) + `mobileDeviceDates` helper; state/handlers in `hooks/useMobileRegistration` (extracted F2/#301) |
+| `mobile-devices/` | Mobile device registration — `MobileDevicesPage` composes `mobile-devices/*`: `RegisterDeviceCard`, `MobileDevicesList`/`MobileDeviceCard`, `NotificationStatus`, `QrCodeDialog` (→ `NewTokenQrView` / `ExistingDeviceInfoView`) + `mobileDeviceDates` helper; state/handlers in `hooks/useMobileRegistration` (extracted F2/#301). **Note:** `pages/MobileDevicesPage.tsx` is currently not routed or mounted anywhere — only comments reference it. See `pages/CLAUDE.md` → "Unrouted page components" |
 | `monitoring/` | System monitoring charts and cards |
 | `pihole/` | Pi-hole DNS dashboard, `ad-discovery/` |
 | `plugins/` | Plugin management UI — `plugin-management/` holds the `PluginsPage` decomposition: `PluginTabNav`, `PluginList`/`PluginListCard`, `PluginDetailsSidebar` (composing `PluginDetailsCard`/`PluginPermissionsCard`/`PluginDashboardPanelCard`/`PluginActionsCard`), `PermissionGrantModal`, `ScopeGrantModal`, `getCategoryColor` helper — re-exported via `plugin-management/index.ts`; state/actions in `hooks/usePluginManagement.ts` (extracted F2/#301) |
