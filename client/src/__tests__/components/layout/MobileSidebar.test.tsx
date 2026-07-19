@@ -8,13 +8,13 @@ vi.mock('react-i18next', () => ({
 }));
 vi.mock('../../../contexts/VersionContext', () => ({ useFormattedVersion: () => 'v1.38.0' }));
 
-function renderSidebar(open: boolean, onClose = vi.fn()) {
+function renderSidebar(open: boolean, onClose = vi.fn(), isImpersonating = false) {
   render(
     <MemoryRouter>
       <MobileSidebar
         open={open}
         onClose={onClose}
-        isImpersonating={false}
+        isImpersonating={isImpersonating}
         items={[{ path: '/', label: 'Dash', description: 'd', icon: <span /> }]}
         adminStartIndex={-1}
         username="alice"
@@ -44,6 +44,22 @@ describe('MobileSidebar', () => {
     renderSidebar(true);
     expect(screen.getByText('alice')).toBeInTheDocument();
     expect(screen.getByText('User')).toBeInTheDocument();
+  });
+
+  // Regression coverage: nothing elsewhere pins these offset classes on the
+  // mobile <aside> — Layout.test.tsx only asserts them on <header>/<main>, and
+  // every other test here renders with isImpersonating={false} by default, so
+  // dropping the prop from MobileSidebar entirely would still leave the suite green.
+  it('normal: top-0 h-screen, kein Impersonation-Offset', () => {
+    renderSidebar(true, vi.fn(), false);
+    expect(document.body.querySelector('aside')!.className).toContain('top-0 h-screen');
+    expect(document.body.querySelector('aside')!.className).not.toContain('top-10');
+  });
+
+  it('Impersonation: top-10 h-[calc(100vh-2.5rem)]', () => {
+    renderSidebar(true, vi.fn(), true);
+    expect(document.body.querySelector('aside')!.className).toContain('top-10 h-[calc(100vh-2.5rem)]');
+    expect(document.body.querySelector('aside')!.className).not.toContain('top-0 h-screen');
   });
 
   it('schließt bei echter Navigation (pathname-Wechsel im Router)', () => {

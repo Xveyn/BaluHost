@@ -125,6 +125,25 @@ describe('App routing mit Layout-Route', () => {
     expect(window.location.pathname).toBe('/login');
   });
 
+  // The cold-start logged-out case above only proves the guard works on first
+  // render. The parent-route guard (`user ? <AppLayout/> : <Navigate to="/login"
+  // replace/>`) is now the single point of failure for auth across all 18
+  // child routes, so the interesting direction is the transition: user becomes
+  // null on an already-mounted, already-authenticated tree — logout or a token
+  // expiring mid-session — not just a page loaded while logged out.
+  it('Logout während laufender Session (Tree bereits gemountet) → redirect auf /login', async () => {
+    const { rerender } = render(<AppRoutes />);
+    await screen.findByTestId('dashboard-page');
+    expect(window.location.pathname).toBe('/');
+
+    authState.user = null;
+    authState.isAdmin = false;
+    rerender(<AppRoutes />);
+
+    await screen.findByTestId('login-page');
+    expect(window.location.pathname).toBe('/login');
+  });
+
   // Alle sieben admin-guarded Routen (isAdmin ? <Page/> : <Navigate to="/"/>) —
   // ein geflipptes Guard ist das dominante Risiko dieses Refactors.
   it.each([
