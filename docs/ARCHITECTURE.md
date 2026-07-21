@@ -1,8 +1,8 @@
 # BaluHost - Architecture Documentation
 
-**Version:** 1.16.4
-**Last Updated:** 19. März 2026
 **Status:** ✅ DEPLOYED IN PRODUCTION (seit 25. Januar 2026)
+**Version:** see `backend/pyproject.toml` (single source of truth) or the top of `CHANGELOG.md` — deliberately not repeated here, because the hand-maintained copy sat at 1.16.4 until July 2026 while the project was at 1.38.0 (#349)
+**Last content change:** `git log -1 --format=%ad -- docs/ARCHITECTURE.md`
 
 ## 📐 System Overview
 
@@ -148,7 +148,7 @@ baluhost/
 │   │   ├── core/              # Config, security, database, rate limiter
 │   │   └── middleware/        # Security headers, rate limiting, device tracking
 │   ├── baluhost_tui/          # Terminal UI (Textual)
-│   ├── tests/                 # 82 test files, 1465 test functions
+│   ├── tests/                 # Pytest suite (size: Testing row in README.md)
 │   ├── alembic/               # 74 database migrations
 │   └── pyproject.toml         # Python dependencies
 │
@@ -434,7 +434,7 @@ class TelemetrySnapshot:
 ```
 
 ### Test Coverage
-- 82 test files, 1465 test functions
+- Suite size: see the Testing row in `README.md`, kept current by `scripts/generate_readme_stats.py`. Not restated here — this line claimed "82 test files, 1465 test functions" long after the suite had grown past four times that (#349)
 - Services: Comprehensive coverage
 - API routes: Integration tests
 - Frontend: Vitest unit tests configured
@@ -685,7 +685,6 @@ For detailed documentation see [`backend/app/plugins/README.md`](../backend/app/
 
 ---
 
-**Last Updated:** 19. März 2026
-**Version:** 1.16.4
 **Maintainer:** Xveyn
+**Version & last change:** see the header of this document
 **Status:** ✅ DEPLOYED IN PRODUCTION

@@ -1,13 +1,13 @@
 # BaluHost NAS Manager - TODO List
 
-## 🚀 Production Deployment Status (deployed 25. Januar 2026, current v1.36.0 / Juni 2026)
+## 🚀 Production Deployment Status (deployed 25. Januar 2026)
 
 BaluHost ist **LIVE IN PRODUCTION**:
 - ✅ Debian 13 Server (Ryzen 5 5600GT, 16GB RAM, 250GB NVMe SSD)
 - ✅ PostgreSQL 17.7 Datenbank
 - ✅ Nginx Reverse Proxy (Port 80, HTTP)
 - ✅ Systemd Services (4 Uvicorn Workers)
-- ✅ 82 Test Files, 1465 Test Functions
+- ✅ Pytest-Suite (Umfang: Testing-Zeile in `README.md`, maschinell gepflegt)
 - ✅ Prometheus/Grafana Ready Monitoring
 - ✅ Structured JSON Logging
 
@@ -106,7 +106,7 @@ BaluHost ist **LIVE IN PRODUCTION**:
 | 📝 Docs | Documentation | Code-Kommentare standardisieren | ⏳ Pending | Docstrings, JSDoc |
 | 📝 Docs | Documentation | Changelog.md für Versionshistorie | ✅ Done | CHANGELOG.md complete through v1.4.x |
 | 📝 Docs | Documentation | Badges aktualisieren | ⏳ Pending | Test-Coverage, Build |
-| 🧪 Test | Backend Testing | Integration Tests für alle API-Endpunkte | ✅ Done | 82 test files, 1465 test functions including integration, security, RAID, upload progress, sync tests |
+| 🧪 Test | Backend Testing | Integration Tests für alle API-Endpunkte | ✅ Done | Integration, security, RAID, upload progress, sync tests; Suite-Umfang siehe Testing-Zeile in `README.md` |
 | 🧪 Test | Backend Testing | Unit Tests für alle Services erweitern | ✅ Done | Excellent test coverage across all services |
 | 🧪 Test | Backend Testing | Load Testing (Performance unter Last) | ⏳ Pending | Performance |
 | 🧪 Test | Backend Testing | Security Testing (Penetration Tests) | ⏳ Pending | Security |

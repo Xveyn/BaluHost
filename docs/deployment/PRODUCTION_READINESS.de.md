@@ -4,7 +4,7 @@
 
 **Produktiv seit:** 25. Januar 2026  
 **Server:** Debian 13, Ryzen 5 5600GT, 16 GB RAM, 250 GB NVMe SSD  
-**Version:** 1.23.0
+**Version:** siehe `backend/pyproject.toml` bzw. den Kopf von `CHANGELOG.md` — hier nicht wiederholt, diese Zeile stand auf 1.23.0, während das Projekt bei 1.38.0 war (#349)
 
 ## Infrastruktur
 
@@ -33,7 +33,7 @@
 
 ## Tests
 
-- **82 Testdateien**, 1465 Testfunktionen
+- Pytest-Suite — Umfang in der Testing-Zeile von `README.md` (maschinell gepflegt)
 - CI/CD-Pipeline via GitHub Actions
 - Automatische Tests bei Push/PR
 

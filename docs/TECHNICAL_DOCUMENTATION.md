@@ -4,12 +4,12 @@ Kurzfassung
 -
 BaluHost ist eine Full‑Stack NAS-Management-Anwendung. Das Backend ist in Python (FastAPI) implementiert, das Frontend ist ein React + TypeScript Single-Page-Application (Vite). Diese Dokumentation beschreibt Architektur, Komponenten, Deployment- und Entwicklungs-Workflows und zeigt ein ASCII-Diagramm, wie Frontend und Backend miteinander zusammenspielen.
 
-Version & Datum
+Stand
 -
-- **Version:** 1.16.4
-- **Last Updated:** 19. März 2026
 - **Maintainer:** Xveyn
 - **Status:** ✅ DEPLOYED IN PRODUCTION (seit 25. Januar 2026)
+- **Version:** siehe `backend/pyproject.toml` (Single Source of Truth) bzw. den Kopf von `CHANGELOG.md`. Hier bewusst nicht wiederholt: die handgepflegte Kopie stand bis Juli 2026 auf 1.16.4, während das Projekt bei 1.38.0 war (#349)
+- **Letzte inhaltliche Änderung:** `git log -1 --format=%ad -- docs/TECHNICAL_DOCUMENTATION.md` — git weiß das genauer als eine Zeile, die beim Bearbeiten mitgepflegt werden müsste
 
 Technologie-Überblick
 -
@@ -18,7 +18,7 @@ Technologie-Überblick
 - Runtime: Uvicorn (ASGI)
 - System & Monitoring: psutil, smartctl (optional, Linux)
 - Auth: JWT (Access + Refresh flows)
-- DB (dev): SQLite; Production: PostgreSQL empfohlen
+- DB (dev): SQLite; Production: PostgreSQL 17.7 (seit Januar 2026 im Einsatz, nicht bloß empfohlen)
 
 Projektstruktur (Wichtigste Ordner)
 -
@@ -164,7 +164,8 @@ Was ist neu / Highlights (Kurz)
 
 Änderungs- und Releasehinweis
 -
-- Version: 1.16.4 — Plugin-System mit Pluggy-Hooks, async Events, Permission-System, Dashboard-Panels. Smart-Device-Framework mit Capability-Protocols und SHM-basiertem Polling. Mitgelieferte Plugins: Optical Drive, Storage Analytics, Tapo Smart Plug. Security: Rate Limiting, Security Headers, TOTP 2FA, Fernet-Verschlüsselung. PostgreSQL 17.7 in Produktion.
+- Die Release-Historie steht vollständig in `CHANGELOG.md` und wird dort gepflegt; dieser Abschnitt fasst nur zusammen, was das System heute kann.
+- Plugin-System mit Pluggy-Hooks, async Events, Permission-System, Dashboard-Panels. Smart-Device-Framework mit Capability-Protocols und SHM-basiertem Polling. Mitgelieferte Plugins: Optical Drive, Storage Analytics, Tapo Smart Plug. Security: Rate Limiting, Security Headers, TOTP 2FA, Fernet-Verschlüsselung. PostgreSQL 17.7 in Produktion.
 
 Kontakt & Mitwirkung
 -
@@ -2143,7 +2144,6 @@ Comprehensive user settings interface with multiple tabs:
 
 ---
 
-**Last Updated:** 19. März 2026
-**Version:** 1.16.4
 **Maintainer:** Xveyn
 **Status:** ✅ DEPLOYED IN PRODUCTION
+**Version & Änderungsdatum:** siehe „Stand" am Anfang dieses Dokuments
