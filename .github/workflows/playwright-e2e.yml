@@ -66,6 +66,16 @@ jobs:
           done
           echo "Identity OK: $(whoami) uid=$(id -u) groups=$(id -nG)"
 
+      - name: "Ensure rootless Podman is healthy (serialized, #394)"
+        # Same lock as ci-check.yml's two jobs (full rationale there). mock-e2e
+        # is the third consumer of the one shared rootless Podman state on the
+        # ci-sandbox pool and runs concurrently with them on every PR, so it has
+        # to take part in the serialization rather than race past it.
+        if: github.repository == 'Xveyn/BaluHost'
+        run: |
+          set -euo pipefail
+          flock "$HOME/.podman-health.lock" -c 'podman info >/dev/null 2>&1 || podman system migrate'
+
       - name: Mocked Playwright tests in rootless Podman container
         env:
           # Pinned to the SAME version as client/package-lock.json's
