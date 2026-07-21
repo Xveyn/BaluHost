@@ -2,7 +2,7 @@
 """Bump the project version in all relevant files.
 
 Single source of truth: backend/pyproject.toml
-Synced targets: client/package.json, CLAUDE.md
+Synced targets: client/package.json, CLAUDE.md, SECURITY.md (supported-version table)
 
 Usage:
     python scripts/bump_version.py 1.21.0
@@ -22,6 +22,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PYPROJECT = ROOT / "backend" / "pyproject.toml"
 PACKAGE_JSON = ROOT / "client" / "package.json"
 CLAUDE_MD = ROOT / "CLAUDE.md"
+SECURITY_MD = ROOT / "SECURITY.md"
 
 
 def read_current_version() -> str:
@@ -78,6 +79,25 @@ def update_claude_md(version: str) -> None:
     CLAUDE_MD.write_text(text, encoding="utf-8")
 
 
+def update_security_md(version: str) -> None:
+    """Point SECURITY.md's supported-version table at the current minor line.
+
+    Unlike the version headers that #349 removed from the docs, this number is a
+    policy statement — it tells a reporter which release line still receives
+    security fixes — so it has to stay accurate rather than be deleted. It sat
+    at 1.30.x while the project was at 1.38.0.
+
+    Only the minor line is written (1.38.x / < 1.38); the patch level is
+    irrelevant to the statement being made.
+    """
+    major_minor = ".".join(version.split(".")[:2])
+    text = SECURITY_MD.read_text(encoding="utf-8")
+    # Prose mention and the two table rows all carry the same two shapes.
+    text = re.sub(r"\d+\.\d+\.x", f"{major_minor}.x", text)
+    text = re.sub(r"< \d+\.\d+(?!\.)", f"< {major_minor}", text)
+    SECURITY_MD.write_text(text, encoding="utf-8")
+
+
 def main() -> None:
     args = sys.argv[1:]
     dry_run = False
@@ -113,11 +133,14 @@ def main() -> None:
 
     update_package_json(new_version)
     update_claude_md(new_version)
+    update_security_md(new_version)
 
+    major_minor = ".".join(new_version.split(".")[:2])
     print(f"Updated files:")
     print(f"  backend/pyproject.toml  -> {new_version}")
     print(f"  client/package.json     -> {new_version}")
     print(f"  CLAUDE.md               -> {new_version}")
+    print(f"  SECURITY.md             -> {major_minor}.x")
     print()
     print("Note: Run 'cd client && npm install' to sync package-lock.json")
 

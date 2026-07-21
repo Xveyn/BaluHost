@@ -4,7 +4,7 @@
 
 **In production since:** January 25, 2026  
 **Server:** Debian 13, Ryzen 5 5600GT, 16 GB RAM, 250 GB NVMe SSD  
-**Version:** 1.23.0
+**Version:** see `backend/pyproject.toml` or the top of `CHANGELOG.md` — not repeated here, this line sat at 1.23.0 while the project was at 1.38.0 (#349)
 
 ## Infrastructure
 
@@ -33,7 +33,7 @@
 
 ## Tests
 
-- **82 test files**, 1465 test functions
+- Pytest suite — size in the Testing row of `README.md` (machine-maintained)
 - CI/CD pipeline via GitHub Actions
 - Automatic tests on push/PR
 
@@ -79,4 +79,4 @@ rsync -av /opt/baluhost/storage/ /backup/storage/
 
 ---
 
-**Last updated:** April 2026
+**Last content change:** `git log -1 --format=%ad -- docs/deployment/PRODUCTION_READINESS.en.md`

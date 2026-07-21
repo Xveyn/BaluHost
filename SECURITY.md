@@ -2,12 +2,12 @@
 
 ## Supported Versions
 
-Only the latest minor release line receives security updates. BaluHost follows semantic versioning — patch releases (`1.30.x`) carry security fixes for the current minor.
+Only the latest minor release line receives security updates. BaluHost follows semantic versioning — patch releases (`1.38.x`) carry security fixes for the current minor.
 
 | Version | Supported |
 | ------- | --------- |
-| 1.30.x  | ✅        |
-| < 1.30  | ❌        |
+| 1.38.x  | ✅        |
+| < 1.38  | ❌        |
 
 ## Reporting a Vulnerability
 
