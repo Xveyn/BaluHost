@@ -10,7 +10,7 @@ paths:
 - **Pydantic models** for request/response validation
 - **Docstrings** for all services
 - **Services pattern**: Business logic in `services/`, not in routes
-- **Testing**: Pytest with async support, 80%+ coverage target
+- **Testing**: Pytest with async support; CI enforces a coverage **floor** of 65% on `app/` (`--cov-fail-under`), measured at 67% on 2026-07-21 — not an 80% target
 - **Formatting**: Follow existing patterns (4 spaces, snake_case)
 
 ## Example Service Function

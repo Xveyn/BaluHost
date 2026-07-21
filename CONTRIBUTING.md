@@ -191,7 +191,7 @@ npm run test
 
 ### Test Requirements
 - **All new features must have tests**
-- Maintain **80%+ code coverage**
+- Don't drop below the CI coverage floor: **65%** on `backend/app/`, **23%** lines on `client/src/` (`--cov-fail-under` / Vitest `thresholds`). These are regression guards frozen just under the current measurement, not quality targets — raise them when the numbers climb.
 - Tests should be deterministic (no random failures)
 - Use dev-mode fixtures for reproducibility
 
