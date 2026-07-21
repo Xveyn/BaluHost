@@ -355,7 +355,7 @@ class CustomListsService:
         Args:
             db: Database session.
             list_id: ID of the list to deploy.
-            base_url: Public base URL of the BaluHost API (e.g. ``http://nas.local:3001``).
+            base_url: Public base URL of the BaluHost API (e.g. ``http://nas.local:8000``).
             pihole_backend: Pi-hole protocol backend instance.
 
         Returns:

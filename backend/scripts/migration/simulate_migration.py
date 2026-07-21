@@ -332,7 +332,7 @@ def generate_test_commands(sqlite_path: Path):
 
     print("# 5. Start backend")
     print("cd backend")
-    print("uvicorn app.main:app --reload --port 3001")
+    print("uvicorn app.main:app --reload --port 8000")
 
 
 def main():

@@ -119,7 +119,7 @@ The same machine doubles as a KDE Plasma desktop and — thanks to the Radeon GP
 ### Development (recommended)
 
 ```bash
-# Start both backend (port 3001) and frontend (port 5173)
+# Start both backend (port 8000) and frontend (port 5173)
 python start_dev.py
 ```
 
@@ -137,7 +137,7 @@ cd backend
 python -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
-uvicorn app.main:app --reload --port 3001
+uvicorn app.main:app --reload --port 8000
 
 # Frontend (separate terminal)
 cd client
@@ -243,7 +243,7 @@ BaluHost/
 
 ## API Overview
 
-Interactive API docs at http://localhost:3001/docs (Swagger UI) or `/redoc`.
+Interactive API docs at http://localhost:8000/docs (Swagger UI) or `/redoc`.
 
 All routes prefixed with `/api`:
 
@@ -289,10 +289,10 @@ TELEMETRY_INTERVAL_SECONDS=3.0
 ### Frontend `.env`
 
 ```env
-VITE_API_BASE_URL=http://localhost:3001
+VITE_API_BASE_URL=http://localhost:8000
 ```
 
-The Vite dev server proxies `/api` requests to port 3001 automatically (see `client/vite.config.ts`).
+The Vite dev server proxies `/api` requests to port 8000 automatically (see `client/vite.config.ts`).
 
 ---
 

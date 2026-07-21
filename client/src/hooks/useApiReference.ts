@@ -44,11 +44,13 @@ export function useApiReference({ isAdmin, token }: UseApiReferenceArgs): UseApi
   // Dynamically determine API base URL based on current location
   const getApiBaseUrl = (): string => {
     const hostname = window.location.hostname;
-    const isDev = import.meta.env.DEV;
 
-    // In development, backend runs on port 3001
-    // In production, backend typically runs on port 8000
-    const port = isDev ? 3001 : 8000;
+    // 8000 in both modes: start_dev.py starts uvicorn on 8000 (which is also
+    // what client/vite.config.ts proxies to), and in production
+    // baluhost-backend.service binds 8000 behind nginx. The dev branch used to
+    // say 3001 — a port nothing has listened on, so the API reference showed a
+    // base URL that did not work.
+    const port = 8000;
     const protocol = window.location.protocol; // http: or https:
 
     return `${protocol}//${hostname}:${port}`;

@@ -38,7 +38,7 @@ python start_dev.py
 # This will:
 # - Set up Python virtual environment
 # - Install dependencies
-# - Start FastAPI backend (port 3001)
+# - Start FastAPI backend (port 8000)
 # - Start Vite dev server (port 5173)
 # - Initialize 2x5GB RAID1 sandbox storage
 ```
@@ -51,7 +51,7 @@ cd backend
 python -m venv .venv
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
-uvicorn app.main:app --reload --port 3001
+uvicorn app.main:app --reload --port 8000
 ```
 
 **Frontend:**

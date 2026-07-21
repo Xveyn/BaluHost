@@ -136,7 +136,7 @@ Dev-Mode & Testing
 
 Deployment (Kurz)
 -
-- Production Backend: `uvicorn app.main:app --host 0.0.0.0 --port 3001`
+- Production Backend: `uvicorn app.main:app --host 0.0.0.0 --port 8000`
 - Frontend: `npm run build` → `client/dist/` → Serve via Nginx / static host
 - DB: Verwende PostgreSQL in Produktion, setze `DATABASE_URL`
 
@@ -1965,7 +1965,7 @@ python start_dev.py
 
 **URLs:**
 - Frontend: http://localhost:5173
-- Backend API: http://localhost:3001/api
+- Backend API: http://localhost:8000/api
 
 ### Production (Recommended)
 
@@ -1973,7 +1973,7 @@ python start_dev.py
 # Backend
 cd backend
 pip install .
-uvicorn app.main:app --host 0.0.0.0 --port 3001
+uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 # Frontend (Build)
 cd client
@@ -2046,8 +2046,8 @@ npm run test:e2e    # E2E tests (Placeholder)
 Complete API reference: See `docs/API_REFERENCE.md`.
 
 **FastAPI Docs (automatically generated with custom styling):**
-- Swagger UI: http://localhost:3001/docs (Custom BaluHost design)
-- ReDoc: http://localhost:3001/redoc
+- Swagger UI: http://localhost:8000/docs (Custom BaluHost design)
+- ReDoc: http://localhost:8000/redoc
 
 **Custom Swagger Features:**
 - Dark theme matching frontend design

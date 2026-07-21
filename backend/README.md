@@ -162,14 +162,14 @@ python scripts/migrate_sqlite_to_postgresql.py --backup --no-migrate
 ### Start Application
 ```bash
 # Backend alleine starten
-python -m uvicorn app.main:app --reload --port 3001
+python -m uvicorn app.main:app --reload --port 8000
 
 # Kombinierter Start (Frontend + Backend): im Projektstamm
 python start_dev.py
 
 # API Dokumentation öffnen (Custom Styled)
-# http://localhost:3001/docs (Swagger UI - BaluHost Design)
-# http://localhost:3001/redoc (ReDoc)
+# http://localhost:8000/docs (Swagger UI - BaluHost Design)
+# http://localhost:8000/redoc (ReDoc)
 ```
 
 ### Custom API Documentation
@@ -560,7 +560,7 @@ CREATE TABLE file_metadata (
 ### Health
 - `GET /api/health` - Health check
 
-**Vollständige API-Referenz**: `http://localhost:3001/docs`
+**Vollständige API-Referenz**: `http://localhost:8000/docs`
 
 ## RAID Settings (CI and Production Safety)
 
@@ -658,8 +658,8 @@ CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 
 ## Documentation
 
-- **API Docs**: http://localhost:3001/docs (Swagger UI)
-- **ReDoc**: http://localhost:3001/redoc
+- **API Docs**: http://localhost:8000/docs (Swagger UI)
+- **ReDoc**: http://localhost:8000/redoc
 - **Deployment**: `docs/DEPLOYMENT.md`
 
 ## Nächste Schritte

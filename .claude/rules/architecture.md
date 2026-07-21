@@ -111,7 +111,7 @@ All API routes are prefixed with `/api`:
 - `/api/benchmark/*` - System benchmarking
 - `/api/api-keys/*` - API key management
 
-API documentation available at: `http://localhost:3001/docs` (Swagger UI with custom BaluHost styling)
+API documentation available at: `http://localhost:8000/docs` (Swagger UI with custom BaluHost styling)
 
 ## Important Patterns & Conventions
 
