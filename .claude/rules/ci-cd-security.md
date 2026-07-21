@@ -35,7 +35,8 @@ Owned paths:
 | `ci-check.yml` `backend-tests` | **upstream: `self-hosted, ci-sandbox` (hardcoded repo literal); forks: `vars.BACKEND_TEST_RUNNER`, default `ubuntu-latest`** (rootless Podman everywhere) | `pull_request` (gated by `ci-tests` env), `workflow_call` (ungated) |
 | `create-release.yml` | `ubuntu-latest` | tag push (`v*-pre.*`) |
 | `deploy-pi.yml` | `ubuntu-latest` | `workflow_dispatch` |
-| `playwright-e2e.yml` | `ubuntu-latest` | `pull_request`, `push: main` |
+| `playwright-e2e.yml` `mock-e2e` | **upstream: `self-hosted, ci-sandbox` (hardcoded repo literal); forks: `vars.E2E_RUNNER`, default `ubuntu-latest`** (rootless Podman everywhere) | `pull_request` (gated by `ci-tests` env), `push: main`, `workflow_dispatch` |
+| `playwright-e2e.yml` `live-e2e` | `ubuntu-latest` | `workflow_dispatch` only (never ran — env + secret unprovisioned, #330) |
 | `release-stable.yml` | `ubuntu-latest` | `workflow_dispatch` |
 | `deploy-production.yml` | **`self-hosted, prod`** | `push: main`, `workflow_dispatch` |
 | `deploy-fork.yml` | **fork-configured via `vars.DEPLOY_FORK_RUNNER`** | `push: main`, `workflow_dispatch` — dead upstream (repo guard on every job) |
@@ -58,13 +59,14 @@ A workflow on `ci-sandbox` that runs `pip install` directly on the runner host (
 are driven exclusively by `github.repository == 'Xveyn/BaluHost'` literals and
 server-side Repository Variables (`vars.*`, set via `scripts/configure-ci.sh`).
 Upstream behavior is hardcoded and needs no variables; PR code cannot influence
-runner choice or environment gates through either mechanism. `backend-tests`
-and `frontend-build` follow the identical pattern, gated by `vars.BACKEND_TEST_RUNNER`
-and `vars.FRONTEND_BUILD_RUNNER` respectively. The `ci-tests` gate condition on
+runner choice or environment gates through either mechanism. `backend-tests`,
+`frontend-build`, and `playwright-e2e.yml`'s `mock-e2e` follow the identical pattern,
+gated by `vars.BACKEND_TEST_RUNNER`, `vars.FRONTEND_BUILD_RUNNER`, and `vars.E2E_RUNNER`
+respectively. The `ci-tests` gate condition on
 `pull_request` events is
 `github.repository == 'Xveyn/BaluHost' || contains(vars.BACKEND_TEST_RUNNER, 'self-hosted')`
 for `backend-tests`, and the same shape with `contains(vars.FRONTEND_BUILD_RUNNER, 'self-hosted')`
-for `frontend-build`.
+/ `contains(vars.E2E_RUNNER, 'self-hosted')` for the other two.
 `raid-mdadm-loopback.yml` is deliberately NOT runner-configurable: real mdadm on
 a self-hosted box could destroy disks — only the on/off toggle
 `ENABLE_RAID_LOOPBACK` exists, and `BALUHOST_MDADM_LOOPBACK=1` is never set
@@ -117,7 +119,7 @@ Gates PR-triggered backend/frontend runs on `ci-sandbox`. Configured in GitHub r
 | Deployment branches and tags | All branches | `deployment_branch_policy: null` ✓ |
 | `can_admins_bypass` | `false` | `false` ✓ |
 
-Both `backend-tests` and `frontend-build` declare `environment: ci-tests` conditionally on `github.event_name == 'pull_request'`. PR runs pause for Xveyn approval (one click approves both jobs of the run); `workflow_call` runs (from `deploy-production.yml` after a manual merge to `main`) execute immediately because the code is already trusted at that point.
+`backend-tests`, `frontend-build`, and `playwright-e2e.yml`'s `mock-e2e` declare `environment: ci-tests` conditionally on `github.event_name == 'pull_request'`. PR runs pause for Xveyn approval — one click releases both `ci-check.yml` jobs, and `mock-e2e` raises a **second, separate prompt** because GitHub groups pending deployments per workflow run, not per repo. `workflow_call` runs (from `deploy-production.yml` after a manual merge to `main`) execute immediately because the code is already trusted at that point.
 
 > **Incident 2026-07-19 — this gate was hollow for two months.** The environment
 > was created 2026-05-19 but **no protection rules were ever added**
@@ -184,7 +186,7 @@ When reviewing changes that touch CI/CD, deploy scripts, or these rules:
 - [ ] **Sudoers / systemd**: Changes under `deploy/install/templates/` to sudoers or service units? Verify the new rules are scoped to specific binaries with explicit args (no `ALL`, no globs that match user-controlled paths).
 - [ ] **Deploy script**: Changes to `deploy/scripts/ci-deploy.sh`? Verify no new shell injection surfaces (user-controlled env vars interpolated into commands), no new `sudo` invocations without sudoers entries, rollback path still works.
 - [ ] **Workflow secrets**: New `secrets.*` references? Confirm the secret exists, is scoped correctly, and is not echoed/logged.
-- [ ] **Fork-config gate logic**: Does a change touch the `github.repository == 'Xveyn/BaluHost'` literals or the `contains(vars.BACKEND_TEST_RUNNER, 'self-hosted')` / `contains(vars.FRONTEND_BUILD_RUNNER, 'self-hosted')` environment-gate conditions in `ci-check.yml`/`deploy-fork.yml`? If it weakens the upstream-hardcoded path or derives gates from PR-controlled data — block.
+- [ ] **Fork-config gate logic**: Does a change touch the `github.repository == 'Xveyn/BaluHost'` literals or the `contains(vars.BACKEND_TEST_RUNNER, 'self-hosted')` / `contains(vars.FRONTEND_BUILD_RUNNER, 'self-hosted')` / `contains(vars.E2E_RUNNER, 'self-hosted')` environment-gate conditions in `ci-check.yml`/`playwright-e2e.yml`/`deploy-fork.yml`? If it weakens the upstream-hardcoded path or derives gates from PR-controlled data — block.
 - [ ] **mdadm runner pin**: Does a change make the `raid-mdadm-loopback.yml` runner configurable, or set `BALUHOST_MDADM_LOOPBACK` outside that workflow? If yes — block (mdadm must never run on self-hosted hardware).
 
 ---
@@ -194,7 +196,7 @@ When reviewing changes that touch CI/CD, deploy scripts, or these rules:
 1. **`main` does not require PR approvals** — Solo-dev workflow: Xveyn merges manually after CI passes (no auto-merge bot). The `production` environment reviewer (Layer 4) is the compensating control.
 2. **Two self-hosted runners with different trust levels on one host**:
     - `BaluNode` (`self-hosted, Linux, X64, prod`) — runs production deploys. Full access to `/opt/baluhost`, `.env.production`, sudo entries. Never sees PR code (Layer 2 prohibition + workflows pin to label `ci-sandbox` for PR work). The `prod` label is what `deploy-production.yml` targets — removing it from `BaluNode` would route deploys to the sandbox and break them (caught 2026-05-19).
-    - `BaluNode-ci-sandbox` (`self-hosted, Linux, X64, ci-sandbox`) — runs `backend-tests` for PRs. Runs as `ci-runner` (no sudo, no production read), wraps test execution in rootless Podman. Even if a PR is maliciously approved at the `ci-tests` gate, blast radius is limited to the container workdir and outbound network (see gap #8).
+    - `BaluNode-ci-sandbox` (`self-hosted, Linux, X64, ci-sandbox`) — runs `backend-tests`, `frontend-build`, and `mock-e2e` for PRs. Runs as `ci-runner` (no sudo, no production read), wraps test execution in rootless Podman. Even if a PR is maliciously approved at the `ci-tests` gate, blast radius is limited to the container workdir and outbound network (see gap #8).
     Both runners share the host kernel. A kernel-namespace escape from the Podman container would land as `ci-runner` on the host — still without sudo or production access. The bootstrap script's self-tests must pass for these guarantees to hold.
 3. **`DEPLOY_PAT` is a personal access token, not a fine-grained app token** — Rotation is manual. Track in [[project_baluhost_secrets_todo]].
 4. **CODEOWNERS is advisory on `main`** — See the deliberate gap above.

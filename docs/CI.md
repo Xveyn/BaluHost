@@ -18,8 +18,8 @@ replace it.
 | `deploy-fork.yml` → `ci-check` / `deploy` | fork-supplied only; dead upstream (`github.repository != 'Xveyn/BaluHost'` guard) | `DEPLOY_FORK_RUNNER` (required once `ENABLE_DEPLOY_FORK=true`) | `environment: fork-production` (protection is opt-in — you must add required reviewers yourself) |
 | `deploy-pi.yml` → `deploy` | `ubuntu-latest` | `ENABLE_DEPLOY_PI` (on/off) | none |
 | `deploy-production.yml` → `deploy` | `[self-hosted, prod]` (hardcoded, not fork-configurable) | — | `environment: production` + actor allowlist (Layer 3 in the security rules) |
-| `playwright-e2e.yml` → `mock-e2e` | `ubuntu-latest` | `ENABLE_PLAYWRIGHT_E2E` (on/off) | none |
-| `playwright-e2e.yml` → `live-e2e` | `ubuntu-latest` | `ENABLE_PLAYWRIGHT_E2E` (on/off) | `environment: live-e2e` + `RUN_LIVE_E2E` secret, `workflow_dispatch` only |
+| `playwright-e2e.yml` → `mock-e2e` | `self-hosted, ci-sandbox` (hardcoded) | `E2E_RUNNER` (default: `ubuntu-latest`), `ENABLE_PLAYWRIGHT_E2E` (on/off) | `ci-tests` on `pull_request` |
+| `playwright-e2e.yml` → `live-e2e` | `ubuntu-latest` | `ENABLE_PLAYWRIGHT_E2E` (on/off) | `environment: live-e2e` + `RUN_LIVE_E2E` secret, `workflow_dispatch` only — **neither exists yet**, see below |
 | `raid-mdadm-loopback.yml` → `mdadm-loopback` | `ubuntu-latest` (hardcoded, **must not** become configurable) | `ENABLE_RAID_LOOPBACK` (on/off only — no runner variable exists) | none |
 | `release-stable.yml` → `release` | `ubuntu-latest` | `ENABLE_RELEASE_STABLE` (needs a `DEPLOY_PAT` secret) | none (`workflow_dispatch` already requires repo write access) |
 | `tauri-build.yml` → `build` | `ubuntu-latest` (hardcoded) | `ENABLE_TAURI_BUILD` (on/off) | none |
@@ -41,17 +41,26 @@ script's self-tests on every run:
   `.env.production`).
 - **Rootless Podman.** `pip install`, `npm ci`, and the rest of the PR's
   build/test commands run inside `podman run --rm` against a pinned image
-  (`python:3.11-slim` / `node:20-slim`), with only the checked-out workspace
-  bind-mounted in. No Docker daemon, no `docker.sock`, no host filesystem
-  access beyond that mount.
+  (`python:3.11-slim` / `node:20-slim` / `mcr.microsoft.com/playwright`), with
+  only the checked-out workspace bind-mounted in. No Docker daemon, no
+  `docker.sock`, no host filesystem access beyond that mount.
 
-Both PR-facing jobs in `ci-check.yml` also run an "assert runner identity"
-tripwire step (upstream only) that fails the job outright if it somehow ends
-up running as `root`, outside `ci-runner`, or in a privileged group.
+All three PR-facing jobs (`backend-tests`, `frontend-build`, `mock-e2e`) also
+run an "assert runner identity" tripwire step (upstream only) that fails the
+job outright if it somehow ends up running as `root`, outside `ci-runner`, or
+in a privileged group.
+
+The Playwright image is pinned to the exact version in
+`client/package-lock.json`, because it ships matching browsers in
+`/ms-playwright` — that is what removes the per-run browser download. A guard
+inside the container compares `npx playwright --version` against the image tag
+and fails loudly on drift, so bumping `@playwright/test` without bumping
+`PLAYWRIGHT_IMAGE` cannot turn into a confusing mid-run error. Chromium also
+needs `--shm-size=1g`; it segfaults on podman's 64 MB default.
 
 ### Why the upstream runner choice is hardcoded
 
-`runs-on` for `backend-tests` and `frontend-build` is
+`runs-on` for `backend-tests`, `frontend-build`, and `mock-e2e` is
 `github.repository == 'Xveyn/BaluHost' && '[...]' || vars.<NAME> || '"ubuntu-latest"'`
 — a repository literal, not anything derived from PR content. A PR cannot
 change which runner its own job lands on: forks steer this exclusively
@@ -67,13 +76,22 @@ that `backend-tests` and `frontend-build` — both gated, both potentially
 triggered by the same PR — run in parallel instead of queuing behind each
 other and roughly doubling PR turnaround time.
 
+Since `mock-e2e` joined the sandbox there are three sandbox jobs and two
+instances, so on any given PR one of them waits for a free slot. That is a
+deliberate trade rather than an oversight: E2E is the slowest and least
+urgent of the three, and a third instance costs RAM on a box that is also the
+production NAS. Register one with `--dir runner-3` if the queueing becomes
+the bottleneck.
+
 ## Approval gates
 
 **`ci-tests` environment.** PR-triggered jobs on self-hosted hardware pause
 for manual approval ("Review pending deployments") before they run at all.
 GitHub groups every job in a run that's waiting on the same environment under
 one prompt, so approving once releases both `backend-tests` and
-`frontend-build` together. `workflow_call` invocations of `ci-check.yml` (from
+`frontend-build` together. `mock-e2e` lives in a *different workflow*, so it
+raises its own separate approval prompt — one extra click per PR, the price of
+running E2E on the sandbox instead of a GitHub VM. `workflow_call` invocations of `ci-check.yml` (from
 `deploy-production.yml`, after a PR has already been merged to `main`) skip
 the gate — that code is already trusted.
 
@@ -130,10 +148,14 @@ than the other way around. Full detail: `.claude/rules/ci-cd-security.md`.
 
 ## Egress expectations
 
-The two sandboxed jobs and the runner agent itself need outbound access to:
-`registry.npmjs.org` (`npm ci` in `frontend-build`), `pypi.org` and
-`files.pythonhosted.org` (`pip install` in `backend-tests`),
+The three sandboxed jobs and the runner agent itself need outbound access to:
+`registry.npmjs.org` (`npm ci` in `frontend-build` and `mock-e2e`), `pypi.org`
+and `files.pythonhosted.org` (`pip install` in `backend-tests`),
 `registry.docker.io` (pulling the pinned `python:3.11-slim` / `node:20-slim`
-images), and `api.github.com` plus `objects.githubusercontent.com` (job
-orchestration, checkout, log/artifact upload). Any future egress firewall on
-the runner host must allow all of these or CI silently breaks.
+images), `mcr.microsoft.com` plus `*.data.mcr.microsoft.com` (pulling the
+pinned Playwright image and its blobs), and `api.github.com` plus
+`objects.githubusercontent.com` (job orchestration, checkout, log/artifact
+upload). Any future egress firewall on the runner host must allow all of these
+or CI silently breaks. Note that the Playwright image needs no
+`playwright.download.prss.microsoft.com` access, because the browsers come
+baked into the pinned image rather than being downloaded per run.
