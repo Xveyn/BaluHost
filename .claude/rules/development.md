@@ -4,7 +4,7 @@
 
 ### Combined Development Start
 ```bash
-# Starts both backend (port 3001) and frontend (port 5173)
+# Starts both backend (port 8000) and frontend (port 5173)
 python start_dev.py
 ```
 
@@ -16,7 +16,7 @@ cd backend
 pip install -e ".[dev]"
 
 # Run server (dev mode with auto-reload)
-uvicorn app.main:app --reload --port 3001
+uvicorn app.main:app --reload --port 8000
 
 # Run tests
 python -m pytest
@@ -80,14 +80,14 @@ alembic downgrade -1
 
 1. **Always use dev mode** for local development (`python start_dev.py`)
 2. **Check logs** in terminal where `start_dev.py` is running
-3. **API testing**: Use Swagger UI at `http://localhost:3001/docs`
+3. **API testing**: Use Swagger UI at `http://localhost:8000/docs`
 4. **Database inspection**: Use SQLite browser on `backend/baluhost.db`
 5. **Reset dev environment**: `python backend/scripts/debug/reset_dev_storage.py`
 6. **Test a specific feature**: Write pytest test, then implement feature (TDD)
 
 ## Common Issues & Solutions
 
-**Backend won't start**: Check if port 3001 is already in use
+**Backend won't start**: Check if port 8000 is already in use
 **Frontend can't reach API**: Verify proxy config in `client/vite.config.ts`
 **Permission denied on file operation**: Check file ownership in `.metadata.json`
 **RAID commands fail**: Ensure dev mode is active or run on Linux with mdadm
