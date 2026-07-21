@@ -42,5 +42,5 @@ async def get_file_list(
 - **Integration tests**: Test API endpoints with test database
 - **Fixtures**: Use pytest fixtures for database, auth tokens
 - **Test database**: Separate SQLite database for tests
-- **Coverage**: 82 test files, 1465 test functions
+- **Suite size**: see the Testing row in `README.md` — those counts are machine-maintained (`scripts/generate_readme_stats.py`, spliced on stable release). Deliberately not repeated here: this line said "82 test files, 1465 test functions" for long enough that it was off by a factor of four
 - Run with: `python -m pytest -v`

@@ -40,6 +40,9 @@ Active security enforcement rule for BaluHost. Applies to all changes in `backen
 | Access | 15 min (`ACCESS_TOKEN_EXPIRE_MINUTES`) | `"access"` | Contains `sub`, `username`, `role` |
 | Refresh | 7 days (`REFRESH_TOKEN_EXPIRE_DAYS`) | `"refresh"` | Contains `jti` for revocation |
 | SSE | 60 sec | `"sse"` | Scoped to single `upload_id`, safe for query params |
+| WS | 60 sec | `"ws"` | WebSocket handshake, contains `sub` + `username` |
+| 2FA pending | 5 min | `"2fa_pending"` | Issued between password check and TOTP verify; carries `sub` only |
+| Setup | 30 min | `"setup"` | Setup wizard; `role: admin` but only accepted by setup endpoints |
 
 ### Dependency Chain
 ```

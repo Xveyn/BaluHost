@@ -8,7 +8,7 @@ Application foundation: configuration, database, security, and cross-cutting inf
 |---|---|
 | `config.py` | `Settings` (pydantic-settings) — all config via env vars. Access via `settings` singleton or `get_settings()`. Production validators reject weak secrets |
 | `database.py` | SQLAlchemy engine + `SessionLocal` factory. SQLite (dev, WAL mode) or PostgreSQL (prod, QueuePool). `get_db()` is the FastAPI dependency. `init_db()` creates tables (SQLite only; Postgres uses Alembic) |
-| `security.py` | JWT token creation/verification (HS256). Token types: `access` (15min), `refresh` (7d, has JTI), `sse` (60s), `ws` (60s), `2fa_pending` (5min). Always validates `type` claim |
+| `security.py` | JWT token creation/verification (HS256). Token types: `access` (15min), `refresh` (7d, has JTI), `sse` (60s), `ws` (60s), `2fa_pending` (5min), `setup` (30min, admin-equivalent but only accepted by setup endpoints). Always validates `type` claim |
 | `crypto.py` | Shared at-rest encryption (MultiFernet, TOTP→VPN key); totp_service delegates here |
 | `rate_limiter.py` | slowapi-based rate limiting. `limiter` instance + `get_limit(endpoint_type)` lookup. DB-backed config with in-memory cache. Dev/test mode relaxes non-auth limits. `user_limiter` for per-user limits |
 | `lifespan.py` | FastAPI lifespan: startup/shutdown orchestration. Primary-worker election via file lock. Starts hardware services, plugins, mDNS, heartbeat writer. `IS_PRIMARY_WORKER` flag controls which process runs hardware tasks |

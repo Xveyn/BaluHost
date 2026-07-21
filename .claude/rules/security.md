@@ -7,7 +7,7 @@
 ## Security Patterns
 - All file operations check ownership or admin role
 - Path traversal prevention via `is_within_sandbox()`
-- JWT tokens expire after 12 hours (configurable)
+- JWT access tokens expire after 15 minutes, refresh tokens after 7 days (`ACCESS_TOKEN_EXPIRE_MINUTES` / `REFRESH_TOKEN_EXPIRE_DAYS` in `core/config.py`). Short-lived special-purpose tokens (`sse`, `ws`, `2fa_pending`, `setup`) are listed in `.claude/rules/security-agent.md` and `backend/app/core/CLAUDE.md` — keep those two in sync rather than restating TTLs here
 - Audit logging for sensitive operations
 - Rate limiting implemented via slowapi
 
