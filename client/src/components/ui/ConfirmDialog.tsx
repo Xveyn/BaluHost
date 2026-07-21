@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useId } from 'react';
 import { createPortal } from 'react-dom';
 
 export interface ConfirmDialogProps {
@@ -40,6 +40,8 @@ export function ConfirmDialog({
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
+  const titleId = useId();
+
   useEffect(() => {
     if (!open) return;
     const handleEscape = (e: KeyboardEvent) => {
@@ -59,8 +61,16 @@ export function ConfirmDialog({
   // block, dragging the centered dialog up into that ancestor's box.
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xl">
-      <div className={`card w-full max-w-md ${styles.border} bg-slate-900/80 backdrop-blur-2xl ${styles.shadow}`}>
-        <h3 className="text-xl font-semibold text-white">{title}</h3>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        // `data-variant` is the stable hook for tests/E2E — asserting on the
+        // Tailwind classes below would couple them to the styling (T7/#325).
+        data-variant={variant}
+        className={`card w-full max-w-md ${styles.border} bg-slate-900/80 backdrop-blur-2xl ${styles.shadow}`}
+      >
+        <h3 id={titleId} className="text-xl font-semibold text-white">{title}</h3>
         <p className="mt-3 text-sm text-slate-400">{message}</p>
         <div className="mt-6 flex justify-end gap-3">
           <button
