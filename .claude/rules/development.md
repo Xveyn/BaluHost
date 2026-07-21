@@ -96,11 +96,15 @@ alembic downgrade -1
 
 ## Documentation Structure
 
+Repo root:
 - `README.md` - Project overview, quick start
-- `TECHNICAL_DOCUMENTATION.md` - Complete feature documentation (1600+ lines)
-- `ARCHITECTURE.md` - System architecture and design decisions
 - `TODO.md` - Roadmap and planned features
-- `PRODUCTION_READINESS.md` - Production deployment checklist
-- `docs/` - Feature-specific documentation (RAID, VPN, Mobile, etc.)
 - `CONTRIBUTING.md` - Contribution guidelines
 - `SECURITY.md` - Security policy
+- `CHANGELOG.md` - Release history (the version number itself lives in `backend/pyproject.toml`)
+
+Under `docs/`:
+- `docs/TECHNICAL_DOCUMENTATION.md` - Complete feature documentation
+- `docs/ARCHITECTURE.md` - System architecture and design decisions
+- `docs/deployment/PRODUCTION_READINESS.{en,de}.md` - Production deployment checklist
+- everything else under `docs/` - Feature-specific documentation (RAID, VPN, Mobile, etc.)
