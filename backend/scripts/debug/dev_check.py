@@ -6,7 +6,7 @@ from typing import Any, Dict
 
 import httpx
 
-DEFAULT_BASE_URL = "http://127.0.0.1:3001/api"
+DEFAULT_BASE_URL = "http://127.0.0.1:8000/api"
 
 
 def _print_section(title: str, payload: Dict[str, Any]) -> None:
