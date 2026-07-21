@@ -308,24 +308,65 @@ def test_admin_can_upload_anywhere(client: TestClient, user1_token: str, admin_t
 def test_list_files_shows_only_accessible(
     client: TestClient, user1_token: str, user2_token: str
 ) -> None:
-    # Upload file as user1 into their home directory
+    """user2's root listing must not expose user1's home directory.
+
+    A non-admin never sees the real storage root: `list_files` short-circuits to
+    `list_user_root()`, which returns `Shared`, the caller's own home directory
+    and — only when shares exist — "Shared with me". The isolation property is
+    therefore about *which* home directory shows up, not about file entries.
+    """
+    # user1 puts a file in their home directory
     files = {"files": ("visible.txt", BytesIO(b"user1"), "text/plain")}
-    client.post(
+    upload_resp = client.post(
         f"{settings.api_prefix}/files/upload",
         files=files,
         data={"path": "user1"},
         headers={"Authorization": f"Bearer {user1_token}"},
     )
+    assert upload_resp.status_code == 200
 
-    # List as user2
+    # Positive control. Without it, a listing endpoint that returned nothing at
+    # all for everybody would satisfy every isolation assertion below.
+    own_resp = client.get(
+        f"{settings.api_prefix}/files/list",
+        params={"path": "user1"},
+        headers={"Authorization": f"Bearer {user1_token}"},
+    )
+    assert own_resp.status_code == 200
+    assert "visible.txt" in [f["name"] for f in own_resp.json()["files"]]
+
+    # user2's root listing: own home directory yes, the other user's no.
     list_resp = client.get(
         f"{settings.api_prefix}/files/list",
         headers={"Authorization": f"Bearer {user2_token}"},
     )
     assert list_resp.status_code == 200
-    files_data = list_resp.json()["files"]
+    names = [f["name"] for f in list_resp.json()["files"]]
+    assert "user2" in names, f"user2 lost sight of their own home directory: {names}"
+    assert "user1" not in names, f"user2 can see user1's home directory: {names}"
 
-    # User2 should not see user1's files (unless no owner or admin override)
-    user1_files = [f for f in files_data if f.get("owner_id") and f["owner_id"] != "1"]
-    # Since we're filtering on backend now, files without ownership or visible should appear
-    # This test depends on implementation - adjust based on actual filter behavior
+
+def test_list_foreign_home_directory_is_forbidden(
+    client: TestClient, user1_token: str, user2_token: str
+) -> None:
+    """Addressing another user's home directory directly is refused, not empty.
+
+    The root listing hiding a directory is only half of the isolation — a
+    listing that merely omitted the entry while still serving its contents on
+    request would pass the test above.
+    """
+    files = {"files": ("private.txt", BytesIO(b"user1"), "text/plain")}
+    upload_resp = client.post(
+        f"{settings.api_prefix}/files/upload",
+        files=files,
+        data={"path": "user1"},
+        headers={"Authorization": f"Bearer {user1_token}"},
+    )
+    assert upload_resp.status_code == 200
+
+    forbidden = client.get(
+        f"{settings.api_prefix}/files/list",
+        params={"path": "user1"},
+        headers={"Authorization": f"Bearer {user2_token}"},
+    )
+    assert forbidden.status_code == 403
