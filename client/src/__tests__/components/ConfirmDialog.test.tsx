@@ -69,17 +69,27 @@ describe('ConfirmDialog', () => {
     expect(onCancel).toHaveBeenCalledOnce();
   });
 
-  it('renders danger variant with rose styling', () => {
-    // Dialog is portaled to document.body, so query the whole document.
-    render(<ConfirmDialog {...defaultProps} variant="danger" />);
-    const card = document.querySelector('.border-rose-500\\/40');
-    expect(card).not.toBeNull();
+  it('exposes the dialog role and labels it with its title', () => {
+    render(<ConfirmDialog {...defaultProps} title="Delete file?" />);
+
+    const dialog = screen.getByRole('dialog');
+    expect(dialog).toHaveAttribute('aria-modal', 'true');
+    expect(dialog).toHaveAccessibleName('Delete file?');
   });
 
-  it('renders warning variant with amber styling', () => {
+  it('marks the danger variant on the dialog', () => {
+    render(<ConfirmDialog {...defaultProps} variant="danger" />);
+    expect(screen.getByRole('dialog')).toHaveAttribute('data-variant', 'danger');
+  });
+
+  it('marks the warning variant on the dialog', () => {
     render(<ConfirmDialog {...defaultProps} variant="warning" />);
-    const card = document.querySelector('.border-amber-500\\/40');
-    expect(card).not.toBeNull();
+    expect(screen.getByRole('dialog')).toHaveAttribute('data-variant', 'warning');
+  });
+
+  it('defaults to the default variant', () => {
+    render(<ConfirmDialog {...defaultProps} />);
+    expect(screen.getByRole('dialog')).toHaveAttribute('data-variant', 'default');
   });
 
   it('shows custom labels', () => {

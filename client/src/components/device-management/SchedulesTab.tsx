@@ -72,9 +72,15 @@ export function SchedulesTab({
   const [dayOfMonth, setDayOfMonth] = useState<number | null>(null);
   const [autoVpn, setAutoVpn] = useState(false);
 
-  const sleepActive = !!sleepSchedule?.enabled;
-  const createInSleepWindow =
-    sleepActive && isTimeInSleepWindow(timeOfDay, sleepSchedule!.sleep_time, sleepSchedule!.wake_time);
+  // Narrowed once here — null unless a sleep schedule is actually enabled — so
+  // the window checks below need no non-null assertions (F7/#311). The conflict
+  // helpers carry the interpolation values straight into the i18n calls.
+  const activeSleep = sleepSchedule?.enabled ? sleepSchedule : null;
+  const sleepConflictFor = (time: string) =>
+    activeSleep && isTimeInSleepWindow(time, activeSleep.sleep_time, activeSleep.wake_time)
+      ? { sleepTime: activeSleep.sleep_time, wakeTime: activeSleep.wake_time }
+      : null;
+  const createSleepConflict = sleepConflictFor(timeOfDay);
 
   // Edit modal state
   const [editingSchedule, setEditingSchedule] = useState<SyncSchedule | null>(null);
@@ -221,7 +227,7 @@ export function SchedulesTab({
           <div className="flex items-end">
             <button
               onClick={handleCreate}
-              disabled={!selectedDeviceId || createInSleepWindow}
+              disabled={!selectedDeviceId || createSleepConflict !== null}
               className="w-full rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-200 hover:border-emerald-500/50 hover:bg-emerald-500/20 disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation active:scale-95 flex items-center justify-center gap-2"
             >
               <Plus className="h-4 w-4" />
@@ -230,15 +236,10 @@ export function SchedulesTab({
           </div>
         </div>
 
-        {createInSleepWindow && (
+        {createSleepConflict && (
           <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
             <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5" />
-            <span>
-              {t('schedules.sleepWarning', {
-                sleepTime: sleepSchedule!.sleep_time,
-                wakeTime: sleepSchedule!.wake_time,
-              })}
-            </span>
+            <span>{t('schedules.sleepWarning', createSleepConflict)}</span>
           </div>
         )}
 
@@ -266,9 +267,7 @@ export function SchedulesTab({
           {schedules.map((schedule) => {
             const deviceName = resolveDeviceName(devices, schedule.device_id, schedule.device_name);
             const isEnabled = schedule.is_enabled !== false;
-            const inSleepWindow =
-              sleepActive &&
-              isTimeInSleepWindow(schedule.time_of_day, sleepSchedule!.sleep_time, sleepSchedule!.wake_time);
+            const sleepConflict = sleepConflictFor(schedule.time_of_day);
 
             return (
               <div
@@ -293,13 +292,10 @@ export function SchedulesTab({
                   </div>
 
                   <div className="flex items-center gap-2 flex-shrink-0">
-                    {inSleepWindow && (
+                    {sleepConflict && (
                       <span
                         className="rounded-full px-2.5 py-1 text-xs font-medium border border-amber-500/40 bg-amber-500/15 text-amber-200 flex items-center gap-1"
-                        title={t('schedules.sleepBadge', {
-                          sleepTime: sleepSchedule!.sleep_time,
-                          wakeTime: sleepSchedule!.wake_time,
-                        })}
+                        title={t('schedules.sleepBadge', sleepConflict)}
                       >
                         <AlertTriangle className="h-3 w-3" />
                         Sleep
