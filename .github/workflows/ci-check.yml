@@ -46,6 +46,34 @@ jobs:
           done
           echo "Identity OK: $(whoami) uid=$(id -u) groups=$(id -nG)"
 
+      # Name is quoted: an unquoted '#394)' would start a YAML comment and the
+      # step would silently lose the issue reference from its display name.
+      - name: "Ensure rootless Podman is healthy (serialized, #394)"
+        # Upstream-only: the shared rootless state exists solely on the
+        # ci-sandbox pool. Fork/GitHub-hosted runners get podman per VM.
+        if: github.repository == 'Xveyn/BaluHost'
+        run: |
+          set -euo pipefail
+          # BaluNode-ci-sandbox and BaluNode-ci-sandbox-2 run as the SAME POSIX
+          # user (ci-runner), so all three sandbox jobs share ONE rootless
+          # Podman state — including the pause process that holds the user
+          # namespace. Both recorded failures (#127, #394) hit a job that
+          # started while another job's podman was coming up or running:
+          #   2026-07-13 17:00:01Z  backend-tests and frontend-build started in
+          #                         the same second; backend-tests died after 8s
+          #   2026-07-19 18:29:03Z  backend-tests started inside frontend-build's
+          #                         podman window; died after 21s
+          # both with 'invalid internal status ... could not find any running
+          # process'. Re-running the failed job alone is always green, because
+          # nothing races it then.
+          # `podman info` initialises the runtime and would recreate the pause
+          # process itself, so the probe has to be serialized too — hence flock
+          # around the whole check rather than a bare `||`.
+          # `podman system migrate` runs ONLY when podman is already broken:
+          # resetting the pause process unconditionally would rip it out from
+          # under a container the other runner instance is running right now.
+          flock "$HOME/.podman-health.lock" -c 'podman info >/dev/null 2>&1 || podman system migrate'
+
       - name: Lint + backend tests (with coverage) in rootless Podman container
         env:
           TEST_IMAGE: docker.io/library/python:3.11-slim
@@ -137,6 +165,16 @@ jobs:
             fi
           done
           echo "Identity OK: $(whoami) uid=$(id -u) groups=$(id -nG)"
+
+      - name: "Ensure rootless Podman is healthy (serialized, #394)"
+        # Identical to the backend-tests step; full rationale lives there. This
+        # job is the OTHER half of the race, so it needs the same lock —
+        # whichever job starts first recreates the pause process while the other
+        # waits, instead of both racing to create it.
+        if: github.repository == 'Xveyn/BaluHost'
+        run: |
+          set -euo pipefail
+          flock "$HOME/.podman-health.lock" -c 'podman info >/dev/null 2>&1 || podman system migrate'
 
       - name: Lint + build + unit tests (with coverage) in rootless Podman container
         env:
