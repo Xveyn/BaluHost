@@ -216,12 +216,17 @@ BaluHost/
 │       ├── hooks/           # Custom React hooks
 │       ├── contexts/        # Auth context
 │       └── lib/             # Utilities, formatters
-├── deploy/                  # Deployment configs
+├── deploy/                  # Deployment configs & installer
+│   ├── install/             # Modular installer (modules/, templates/, verify/)
+│   │                        #   systemd units live in install/templates/
+│   ├── scripts/             # ci-deploy.sh, backup & DB restore
 │   ├── nginx/               # Reverse proxy configs
-│   ├── systemd/             # Service files
 │   ├── samba/               # SMB configuration
-│   ├── prometheus/          # Metrics scraping
-│   └── grafana/             # Dashboard templates
+│   ├── nfs/                 # NFS export setup
+│   ├── ssl/                 # Let's Encrypt / self-signed certs
+│   ├── avahi/, wsdd/        # mDNS + WS-Discovery announcements
+│   ├── runner/              # Self-hosted CI runner helpers
+│   └── update/              # Self-update runner
 ├── docs/                    # Documentation
 ├── .github/workflows/       # CI/CD pipelines
 ├── start_dev.py             # Dev launcher

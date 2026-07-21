@@ -1,21 +1,30 @@
 name: Playwright E2E
 
 # Notes:
-# - To allow live E2E runs, add a repository secret named `RUN_LIVE_E2E` and set it to `true` only
-#   when you want to enable live, production-adjacent tests. Keep this secret off for normal PRs.
-# - Protect the `live-e2e` environment (Repository Settings → Environments) and require
-#   reviews/approvals before allowing jobs to run there — this provides an additional safety
-#   gate beyond the secret.
-# - The `live-e2e` job checks `secrets.RUN_LIVE_E2E` at runtime and will abort if it is not set
-#   to `true`. Use manual `workflow_dispatch` to start the live job and ensure approvers are
-#   available to review the protected environment.
+# - `mock-e2e` runs on every trigger and needs no backend: the specs stub every route and
+#   Playwright starts its own Vite server. Upstream it runs in rootless Podman on the
+#   `ci-sandbox` runner, gated by the `ci-tests` environment on PRs.
+# - `live-e2e` is NOT provisioned yet (checked 2026-07-21): neither the `live-e2e`
+#   environment nor the `RUN_LIVE_E2E` secret exists on the repo, so a dispatch with
+#   live=true reaches the job and then aborts at the secret check. Before enabling it,
+#   create the environment WITH required reviewers (an environment referenced by a job is
+#   auto-created without any protection — existing ≠ protected, cf. the ci-tests incident
+#   2026-07-19) and add the secret. Tracked in #330.
+# - Note what live-e2e does today: it starts a throwaway dev backend on the runner. Running
+#   E2E against the real deployed NAS instance is a different design (prod runner, real
+#   data, dedicated test user) and is deliberately NOT what this job does.
 
 on:
   push:
     branches: [ main ]
   pull_request:
     branches: [ '*' ]
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      live:
+        description: 'Run the gated live E2E job after the mocked run'
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -23,33 +32,90 @@ permissions:
 jobs:
   mock-e2e:
     name: Mocked E2E (fast)
+    # Runner selection (#207 pattern, identical to backend-tests/frontend-build):
+    # upstream ALWAYS the hardened ci-sandbox runner (Layer 2, not configurable);
+    # forks choose via the server-side repo variable E2E_RUNNER (JSON array, set
+    # by scripts/configure-ci.sh), falling back to a secret-free ubuntu-latest VM.
+    # PR code cannot influence this: repository literal + vars only.
+    runs-on: ${{ fromJSON(github.repository == 'Xveyn/BaluHost' && '["self-hosted","ci-sandbox"]' || vars.E2E_RUNNER || '"ubuntu-latest"') }}
     # vars.ENABLE_PLAYWRIGHT_E2E: fork toggle (#207), default on; unset upstream.
-    if: vars.ENABLE_PLAYWRIGHT_E2E != 'false' && (github.event_name != 'workflow_dispatch' || github.event.inputs.run == 'mock')
-    runs-on: ubuntu-latest
+    # Runs on every trigger, dispatch included. It used to also require
+    # `github.event.inputs.run == 'mock'` — an input that was never declared, so
+    # on dispatch this job skipped and took live-e2e down with it via needs: (D1/#330).
+    if: vars.ENABLE_PLAYWRIGHT_E2E != 'false'
+    # ci-tests approval gate: always for upstream PRs; in forks only when the
+    # fork opted into a self-hosted runner. Same construct as ci-check.yml.
+    environment: ${{ (github.event_name == 'pull_request' && (github.repository == 'Xveyn/BaluHost' || contains(vars.E2E_RUNNER, 'self-hosted'))) && 'ci-tests' || '' }}
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
 
-      - name: Setup Node
-        uses: actions/setup-node@v5
-        with:
-          node-version: '20'
-
-      - name: Install client deps
+      - name: Assert runner identity (defense-in-depth tripwire)
+        # Upstream-only: identical to the ci-check.yml tripwires.
+        if: github.repository == 'Xveyn/BaluHost'
         run: |
-          cd client
-          npm ci
-          npx playwright install --with-deps
+          set -euo pipefail
+          test "$(whoami)" = "ci-runner" || { echo "::error::Runner not running as ci-runner (got: $(whoami))"; exit 1; }
+          test "$(id -u)" -ne 0 || { echo "::error::Runner running as root"; exit 1; }
+          command -v podman >/dev/null || { echo "::error::podman not installed on runner host"; exit 1; }
+          for grp in docker sudo wheel; do
+            if id -nG "$(whoami)" | tr ' ' '\n' | grep -qx "$grp"; then
+              echo "::error::ci-runner is in group '$grp' — isolation broken"
+              exit 1
+            fi
+          done
+          echo "Identity OK: $(whoami) uid=$(id -u) groups=$(id -nG)"
 
-      - name: Run mocked Playwright tests
+      - name: Mocked Playwright tests in rootless Podman container
+        env:
+          # Pinned to the SAME version as client/package-lock.json's
+          # @playwright/test — the image ships matching browsers in
+          # /ms-playwright, which is why no `playwright install` download is
+          # needed. Bump both together; the guard below catches it if not.
+          PLAYWRIGHT_IMAGE: mcr.microsoft.com/playwright:v1.57.0-noble
         run: |
-          cd client
-          npx playwright test --project=chromium --reporter=list
+          set -euo pipefail
+          # Untrusted PR code never runs on the runner host (Layer B) — same
+          # construct as ci-check.yml. No npm cache (a PR-writable cache is
+          # shared mutable state between PRs). --cpus/--memory: the box is also
+          # the production NAS. --shm-size=1g: Chromium crashes with the 64 MB
+          # podman default. -e CI=true: the runner's CI var does not cross into
+          # the container, and playwright.config.ts branches on it
+          # (reuseExistingServer). --workers=2 for the same reason pytest is
+          # pinned to -n 4: --cpus is a CFS quota, not a cpuset, so os.cpus()
+          # still reports every host thread and Playwright would oversubscribe.
+          # No backend is started: the mocked specs stub every route and
+          # Playwright brings up its own Vite server (webServer in the config).
+          podman run --rm \
+            --network=bridge \
+            --cpus=4 --memory=3g --shm-size=1g \
+            -e CI=true \
+            -e PLAYWRIGHT_IMAGE \
+            -v "${{ github.workspace }}:/work:Z" \
+            -w /work/client \
+            "$PLAYWRIGHT_IMAGE" \
+            bash -c '
+              set -euo pipefail
+              npm ci
+              # Version-drift guard: npm-installed Playwright vs the browsers
+              # baked into the image. A mismatch otherwise surfaces mid-run as a
+              # confusing missing-executable error.
+              have=$(npx playwright --version | cut -d" " -f2)
+              want=${PLAYWRIGHT_IMAGE##*:}
+              case "$want" in
+                "v$have"|"v$have"-*) ;;
+                *) echo "::error::Playwright version drift: package-lock has $have, image is $want — bump PLAYWRIGHT_IMAGE"; exit 1 ;;
+              esac
+              npx playwright test --project=chromium --reporter=list --workers=2
+            '
 
   live-e2e:
     name: Live E2E (gated)
     # Toggle repeated here on purpose: the needs:-skip cascade already covers
     # this today, but an explicit guard survives future needs: refactors.
-    if: vars.ENABLE_PLAYWRIGHT_E2E != 'false' && github.event_name == 'workflow_dispatch'
+    # `needs: mock-e2e` keeps the cheap mocked run as the gate in front of the
+    # live one — a red mock still blocks live, which is why it is not always().
+    if: vars.ENABLE_PLAYWRIGHT_E2E != 'false' && github.event_name == 'workflow_dispatch' && inputs.live
     runs-on: ubuntu-latest
     needs: mock-e2e
     environment: live-e2e
