@@ -63,6 +63,19 @@ jobs:
           # -n 4 (not -n auto): --cpus is a CFS quota, not a cpuset — os.cpu_count()
           # in the container still reports all 12 host threads, so -n auto would
           # oversubscribe the 3g-capped container.
+          # pip --timeout 60 (default: 15): the job pulls ~150 packages fresh on
+          # every run (--no-cache-dir) over the box's home uplink. On 2026-07-21 a
+          # single stalled read of exactly 15.00s killed the whole install twice —
+          # ReadTimeoutError from files.pythonhosted.org, job dead after ~48s, the
+          # re-run green both times. --retries does NOT cover this: pip defines it
+          # as "maximum attempts to establish a new HTTP connection", not body
+          # reads, and pip 24.0 (pinned in python:3.11-slim) predates the
+          # --resume-retries flag added in pip 25.1. Raising the socket timeout is
+          # the only lever here. A shared pip cache would also mask it but is
+          # deliberately not used — same PR-poisoning argument as the missing npm
+          # cache in frontend-build.
+          # Note the two unrelated timeouts on the line below: pip's --timeout is
+          # a per-read socket timeout, pytest's --timeout=120 is a per-test limit.
           podman run --rm \
             --network=bridge \
             --cpus=4 --memory=3g \
@@ -70,7 +83,7 @@ jobs:
             -w /work/backend \
             -e NAS_MODE=dev \
             "$TEST_IMAGE" \
-            bash -c "set -euo pipefail; pip install --no-cache-dir -e '.[dev]' && python -m ruff check . && python -m pytest -q --timeout=120 -n 4 -o addopts= --cov=app --cov-fail-under=65 --cov-report=term:skip-covered --cov-report=json"
+            bash -c "set -euo pipefail; pip install --no-cache-dir --timeout 60 -e '.[dev]' && python -m ruff check . && python -m pytest -q --timeout=120 -n 4 -o addopts= --cov=app --cov-fail-under=65 --cov-report=term:skip-covered --cov-report=json"
 
       - name: Backend coverage → job summary
         if: always()
