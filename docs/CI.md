@@ -109,6 +109,17 @@ than the other way around. Full detail: `.claude/rules/ci-cd-security.md`.
   (`ENABLE_RAID_LOOPBACK`) exists. Real `mdadm` commands against real disks
   could destroy an array; the loop-device tests only ever run on disposable
   GitHub-hosted VMs.
+- **Coverage floors, not coverage targets.** Both test jobs measure coverage,
+  print it to the job summary, and fail below a floor frozen just under the
+  last measurement (`--cov-fail-under=65` for `backend/app`; Vitest
+  `thresholds` of 23/23/23/21 for `client/src`). The floor exists to catch a
+  regression, not to certify quality — the numbers are low and honest about
+  it. Deliberately absent: per-diff coverage ("new code ≥ X%") and any
+  third-party coverage service. Diff-coverage would need a second container
+  image just to run `diff-cover`, and an external service would mean an
+  unpinned action plus egress to a host that isn't on the allowlist below.
+  Both become worth revisiting once the frontend test surface grows
+  (issues #316, #317).
 - **Resource limits on CI containers.** Both sandbox jobs run their container
   with `--cpus=4 --memory=3g`. The runner host also runs production BaluHost
   workloads, so CI must not be free to saturate it. Because `--cpus` is a CFS

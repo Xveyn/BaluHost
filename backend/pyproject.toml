@@ -94,7 +94,8 @@ extend-exclude = ["dev-storage", "storage", "tmp"]
 # Ruff's default rule set, made explicit: pyflakes (F) + a curated pycodestyle
 # subset (E4 imports, E7 statements, E9 syntax). Line-length (E501) and the
 # pycodestyle W warnings are intentionally NOT enabled yet — see issue #184 for
-# the staged rollout (ruff -> eslint -> mypy -> coverage threshold).
+# the staged rollout (ruff -> eslint -> mypy -> coverage threshold; the coverage
+# stage landed 2026-07-21 as --cov-fail-under=65 in ci-check.yml, #340).
 select = ["E4", "E7", "E9", "F"]
 ignore = [
     # SQLAlchemy: `Column == True/False/None` is the INTENDED way to build SQL

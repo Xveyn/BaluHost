@@ -63,9 +63,6 @@ export default defineConfig(({ mode }) => {
     setupFiles: ['./src/__tests__/setup.ts'],
     include: ['src/__tests__/**/*.test.{ts,tsx}'],
     coverage: {
-      // Measurement only — no thresholds yet (coverage is intentionally low
-      // while the untested surface is being decomposed under #301). Enforced
-      // targets can be added later via `thresholds`.
       provider: 'v8',
       reporter: ['text-summary', 'json-summary'],
       reportsDirectory: './coverage',
@@ -77,6 +74,19 @@ export default defineConfig(({ mode }) => {
         'src/main.tsx',
         'src/vite-env.d.ts',
       ],
+      // Floor, not a target (T1/#315). Measured on CI 2026-07-21:
+      // lines 23.91 / statements 23.67 / functions 23.34 / branches 21.37 —
+      // each rounded DOWN to leave room for churn. This catches a regression,
+      // it does not reward standing still: when the frontend-build job summary
+      // sits comfortably above a number below, raise that number and note the
+      // new measurement here. A floor without its measurement date decays into
+      // a hollow control (cf. the ci-tests gate, 2026-07-19).
+      thresholds: {
+        lines: 23,
+        statements: 23,
+        functions: 23,
+        branches: 21,
+      },
     },
   },
   server: {
