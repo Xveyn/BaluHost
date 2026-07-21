@@ -72,4 +72,4 @@ Out of scope:
 
 ## Security Posture
 
-For context on BaluHost's current security invariants, accepted risks, and threat model, see `.claude/rules/security-agent.md` in this repository. Known gaps are documented there and in `PRODUCTION_READINESS.md`.
+For context on BaluHost's current security invariants, accepted risks, and threat model, see `.claude/rules/security-agent.md` in this repository. Known gaps are documented there and in `docs/deployment/PRODUCTION_READINESS.en.md`.

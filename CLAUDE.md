@@ -49,7 +49,7 @@ backend/
 │   ├── models/            # SQLAlchemy ORM models
 │   └── core/config.py     # Configuration
 ├── baluhost_tui/          # Terminal UI application
-├── tests/                 # Pytest tests (82 files, 1465 test functions)
+├── tests/                 # Pytest tests (suite size: Testing row in README.md)
 └── pyproject.toml         # Dependencies
 
 client/
@@ -144,7 +144,7 @@ marketplace is fail-closed (harmless — 0 external plugins deployed). Design de
 
 ## Contact & Support
 
-- **Issues**: GitHub Issues (repository URL needed)
+- **Issues**: <https://github.com/Xveyn/BaluHost/issues>
 - **Documentation**: See `docs/` directory
 - **Maintainer**: Xveyn
-- **Version**: 1.38.0 (as of May 2026)
+- **Version**: 1.38.0 (kept in sync by `scripts/bump_version.py` — do not add a hand-written date here, only the number is machine-updated)

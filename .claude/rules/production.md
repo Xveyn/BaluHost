@@ -10,17 +10,17 @@
 - Structured JSON logging
 - Systemd deployment with 4 Uvicorn workers
 - Nginx reverse proxy with rate limiting
-- 82 test files, 1465 test functions
+- Test suite (size: see the Testing row in `README.md` — machine-maintained by `scripts/generate_readme_stats.py`, so it is not restated here)
 - CI/CD pipeline (GitHub Actions)
 - Comprehensive monitoring (Prometheus/Grafana ready)
+- Localization (i18n) — i18next with `de` + `en`, 19 namespaces each (`client/src/i18n/locales/`), switcher in Settings and the setup wizard. Remaining hardcoded English strings are tracked in #406
 
 **Optional/Future:**
 - SSL/HTTPS (currently HTTP on port 80)
 - Email notifications
 - PWA support
-- Localization (i18n)
 
-See `PRODUCTION_READINESS.md` for complete checklist.
+See `docs/deployment/PRODUCTION_READINESS.en.md` (German: `PRODUCTION_READINESS.de.md`, same directory) for complete checklist.
 
 ## Deployment
 
