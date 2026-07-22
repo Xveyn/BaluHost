@@ -26,6 +26,19 @@ def _validate_pill_id(value: str) -> str:
     )
 
 
+def is_valid_composed_pill_id(value: str) -> bool:
+    """True if *value* matches the ``plugin:<name>:<suffix>`` shape.
+
+    ``StatusPillSpec.id`` is pattern-constrained, but ``PluginMetadata.name``
+    is not validated anywhere — a plugin directory named e.g. "my-plugin"
+    composes an id this shape rejects. Exposed here (rather than only inside
+    the private ``_validate_pill_id``) so the status-bar service can check a
+    composed id *before* it reaches a DB row or a Pydantic model, and skip it
+    with a log line instead of a 500 deep inside the admin config endpoint.
+    """
+    return bool(_PLUGIN_PILL_RE.fullmatch(value))
+
+
 PillId = Annotated[str, AfterValidator(_validate_pill_id)]
 
 PillVisibility = Literal["admin", "all"]

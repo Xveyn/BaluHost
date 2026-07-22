@@ -13,7 +13,10 @@ class StatusBarPillConfig(Base):
     __tablename__ = "status_bar_pill_config"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    pill_id: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
+    # 96 chars covers "plugin:" (7) + a generous plugin_name + ":" (1) + suffix
+    # with headroom — see the length guard in status_bar/service.py that skips
+    # (rather than 500s on) any composed id that would still overflow this.
+    pill_id: Mapped[str] = mapped_column(String(96), unique=True, nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     visibility: Mapped[str] = mapped_column(String(8), nullable=False, default="admin")  # "admin" | "all"
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

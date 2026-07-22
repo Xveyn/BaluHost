@@ -15,6 +15,7 @@ from app.schemas.status_bar import (
     StatusBarConfigResponse,
     StatusBarConfigUpdate,
     StatusBarStateResponse,
+    is_valid_composed_pill_id,
 )
 from app.services.status_bar.catalog import CATALOG, CATALOG_BY_ID, PillDefinition
 from app.services.status_bar.collectors import COLLECTORS
@@ -23,6 +24,10 @@ logger = logging.getLogger(__name__)
 
 # A plugin collector that never returns must not stall the whole strip.
 PLUGIN_COLLECTOR_TIMEOUT_SECONDS = 2.0
+
+# Composed plugin pill ids ("plugin:<name>:<suffix>") must fit the DB column
+# — read from the model so this can never silently drift from the schema.
+_PILL_ID_MAX_LENGTH: int = StatusBarPillConfig.__table__.columns["pill_id"].type.length
 
 
 def iter_enabled_plugins() -> list[tuple[str, PluginBase]]:
@@ -59,29 +64,53 @@ class StatusBarService:
         pills = list(CATALOG)
         for plugin_name, plugin in iter_enabled_plugins():
             try:
-                specs = plugin.get_status_pills()
+                # get_translations() is a concrete PluginBase method (default:
+                # None). Every enabled plugin is guaranteed to be a PluginBase
+                # subclass instance — the manager only registers classes that
+                # pass an issubclass check — so a bare call is safe here; no
+                # extra try/except around a real, always-present method.
+                translations = plugin.get_translations() or None
+                # A minimal/duck-typed plugin can forget the `return` in an
+                # override and hand back None instead of []; don't let that
+                # TypeError the whole loop for every other plugin.
+                specs = plugin.get_status_pills() or []
+                for spec in specs:
+                    composed_id = f"plugin:{plugin_name}:{spec.id}"
+                    if not is_valid_composed_pill_id(composed_id):
+                        # PluginMetadata.name is not pattern-validated anywhere;
+                        # a directory named e.g. "my-plugin" would otherwise
+                        # only surface as a ValidationError deep inside the
+                        # admin config endpoint.
+                        logger.warning(
+                            "plugin %s declared pill id %r does not match the "
+                            "namespaced pill id shape, skipping",
+                            plugin_name, composed_id,
+                        )
+                        continue
+                    if len(composed_id) > _PILL_ID_MAX_LENGTH:
+                        # Would raise DataError out of _ensure_rows()'s INSERT
+                        # on PostgreSQL — see the pill_id column widen migration.
+                        logger.warning(
+                            "plugin %s declared pill id %r (%d chars) exceeds "
+                            "the max stored pill id length (%d), skipping",
+                            plugin_name, composed_id, len(composed_id), _PILL_ID_MAX_LENGTH,
+                        )
+                        continue
+                    pills.append(PillDefinition(
+                        id=composed_id,
+                        name_key=spec.name_key,
+                        default_visibility=spec.default_visibility,
+                        visibility_locked=spec.visibility_locked,
+                        silent_when_ok=spec.silent_when_ok,
+                        href=spec.href,
+                        icon=spec.icon,
+                        plugin_name=plugin_name,
+                        name_text=spec.name_text,
+                        translations=translations,
+                    ))
             except Exception:  # noqa: BLE001 - one bad plugin must not hide the rest
                 logger.warning("plugin %s failed to declare pills", plugin_name, exc_info=True)
                 continue
-            try:
-                # get_translations() is a PluginBase default (returns None); guard
-                # anyway so a minimal/duck-typed plugin without it still gets pills.
-                translations = plugin.get_translations() or None
-            except Exception:  # noqa: BLE001 - translations are optional, pills are not
-                translations = None
-            for spec in specs:
-                pills.append(PillDefinition(
-                    id=f"plugin:{plugin_name}:{spec.id}",
-                    name_key=spec.name_key,
-                    default_visibility=spec.default_visibility,
-                    visibility_locked=spec.visibility_locked,
-                    silent_when_ok=spec.silent_when_ok,
-                    href=spec.href,
-                    icon=spec.icon,
-                    plugin_name=plugin_name,
-                    name_text=spec.name_text,
-                    translations=translations,
-                ))
         return pills
 
     def _plugin_for(self, definition: PillDefinition) -> Optional[PluginBase]:
@@ -119,20 +148,24 @@ class StatusBarService:
         entries = []
         for definition in sorted(catalog, key=lambda d: rows[d.id].sort_order):
             row = rows[definition.id]
-            entries.append(PillCatalogEntry(
-                pill_id=definition.id,
-                name_key=definition.name_key,
-                enabled=row.enabled,
-                visibility=cast(PillVisibility, row.visibility),
-                visibility_locked=definition.visibility_locked,
-                sort_order=row.sort_order,
-                href=definition.href,
-                icon=definition.icon,
-                display_mode=cast(DisplayMode, getattr(row, "display_mode", "always")),
-                display_mode_configurable=definition.display_mode_configurable,
-                name_text=definition.name_text,
-                translations=definition.translations,
-            ))
+            try:
+                entries.append(PillCatalogEntry(
+                    pill_id=definition.id,
+                    name_key=definition.name_key,
+                    enabled=row.enabled,
+                    visibility=cast(PillVisibility, row.visibility),
+                    visibility_locked=definition.visibility_locked,
+                    sort_order=row.sort_order,
+                    href=definition.href,
+                    icon=definition.icon,
+                    display_mode=cast(DisplayMode, getattr(row, "display_mode", "always")),
+                    display_mode_configurable=definition.display_mode_configurable,
+                    name_text=definition.name_text,
+                    translations=definition.translations,
+                ))
+            except Exception as exc:  # noqa: BLE001 - one bad entry must not 5xx the config endpoint
+                logger.warning("status bar pill %s produced an invalid catalog entry: %s", definition.id, exc)
+                continue
         return StatusBarConfigResponse(pills=entries, show_bottom_upload=settings.show_bottom_upload)
 
     def update_config(self, update: StatusBarConfigUpdate) -> dict:
