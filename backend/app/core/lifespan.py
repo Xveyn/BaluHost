@@ -55,6 +55,44 @@ _plugin_manager = None
 _websocket_manager = None
 _smart_device_manager = None
 
+# Long-running tasks this module starts itself. The event loop only keeps a
+# weak reference to a task, so anything not held here may be garbage-collected
+# mid-flight — and without a reference `_shutdown()` has nothing to cancel.
+_BACKGROUND_TASKS: "set[asyncio.Task]" = set()
+
+
+def _spawn_background(coro, name: str) -> "asyncio.Task":
+    """Start a lifespan-owned background task that is referenced and observable.
+
+    Without this, an exception inside one of these loops was never retrieved:
+    the heartbeat writer could die on startup and every worker would keep
+    reporting the last state it had written, indistinguishable from healthy.
+    """
+    task = asyncio.create_task(coro, name=name)
+    _BACKGROUND_TASKS.add(task)
+
+    def _done(finished: "asyncio.Task") -> None:
+        _BACKGROUND_TASKS.discard(finished)
+        if finished.cancelled():
+            return  # shutdown, not a failure
+        exc = finished.exception()
+        if exc is not None:
+            logger.error("Background task %s crashed: %s", name, exc, exc_info=exc)
+
+    task.add_done_callback(_done)
+    return task
+
+
+async def _cancel_background_tasks() -> None:
+    """Cancel every lifespan-owned task and wait for it to actually stop."""
+    tasks = list(_BACKGROUND_TASKS)
+    for task in tasks:
+        task.cancel()
+    if tasks:
+        await asyncio.gather(*tasks, return_exceptions=True)
+        logger.info("Stopped %d lifespan background task(s)", len(tasks))
+    _BACKGROUND_TASKS.clear()
+
 
 def _try_become_primary() -> bool:
     """Try to acquire the primary-worker file lock (non-blocking).
@@ -535,9 +573,9 @@ async def _startup(app: FastAPI) -> None:
 
     # Start heartbeat writer and background loops on primary worker
     if IS_PRIMARY_WORKER:
-        asyncio.create_task(_write_service_heartbeats())
-        asyncio.create_task(_pihole_health_loop())
-        asyncio.create_task(_expiry_warning_catchup_on_startup())
+        _spawn_background(_write_service_heartbeats(), "service_heartbeats")
+        _spawn_background(_pihole_health_loop(), "pihole_health")
+        _spawn_background(_expiry_warning_catchup_on_startup(), "expiry_warning_catchup")
 
         try:
             from app.services.pihole.query_collector import get_dns_query_collector
@@ -605,11 +643,11 @@ async def _startup(app: FastAPI) -> None:
 
     # Start SmartDevice WebSocket bridge (primary worker only)
     if IS_PRIMARY_WORKER:
-        asyncio.create_task(_smart_device_ws_bridge())
+        _spawn_background(_smart_device_ws_bridge(), "smart_device_ws_bridge")
 
         # Start Dashboard panel WS bridge (primary worker only)
         from app.services.dashboard_panel_bridge import dashboard_panel_ws_bridge
-        asyncio.create_task(dashboard_panel_ws_bridge())
+        _spawn_background(dashboard_panel_ws_bridge(), "dashboard_panel_ws_bridge")
 
     # Notify BaluPi companion device that NAS is online
     if IS_PRIMARY_WORKER and settings.balupi_enabled:
@@ -624,6 +662,10 @@ async def _shutdown() -> None:
     """Run all graceful shutdown steps."""
     # ---- Lifecycle notification (best-effort, must run BEFORE app dies) ----
     await _emit_lifecycle_shutdown()
+
+    # Stop our own loops before the services they touch (DB, WebSocket manager,
+    # plugins) are torn down below.
+    await _cancel_background_tasks()
 
     from app.services import jobs
     from app.services.power import manager as power_manager
