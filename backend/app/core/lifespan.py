@@ -172,20 +172,30 @@ def _do_heartbeat_write_sync() -> None:
         db.close()
 
 
+_HEARTBEAT_INTERVAL_SECONDS = 15
+
+
 async def _do_heartbeat_write() -> None:
     """Write current service states to the service_heartbeats table once."""
     await asyncio.to_thread(_do_heartbeat_write_sync)
 
 
 async def _write_service_heartbeats() -> None:
-    """Periodically write service states to DB for secondary workers (primary only)."""
-    # Write initial heartbeat immediately so secondary workers
-    # have data from the very first request (instead of waiting 15s).
-    await _do_heartbeat_write()
+    """Periodically write service states to DB for secondary workers (primary only).
 
+    The first write happens immediately so secondary workers have data from the
+    very first request instead of waiting an interval.
+
+    A failed write must never end the loop: nothing restarts it, and its
+    silence is invisible — secondary workers keep serving the last row that
+    was written, so a dead writer looks exactly like a healthy one.
+    """
     while True:
-        await asyncio.sleep(15)
-        await _do_heartbeat_write()
+        try:
+            await _do_heartbeat_write()
+        except Exception as e:  # CancelledError is a BaseException — not caught here
+            logger.warning("Service heartbeat write failed: %s", e)
+        await asyncio.sleep(_HEARTBEAT_INTERVAL_SECONDS)
 
 
 async def _smart_device_ws_bridge() -> None:
