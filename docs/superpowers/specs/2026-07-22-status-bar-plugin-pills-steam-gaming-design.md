@@ -121,11 +121,12 @@ Ablauf:
 2. `SteamLaunch AppId=(\d+)` matchen und alle Treffer sammeln.
 3. **Nach AppID deduplizieren.** Der `mangohud`-Wrapper erzeugt zwei Prozesse
    mit derselben AppID — ohne Dedupe zählt dasselbe Spiel doppelt.
-4. Bleiben danach **mehrere verschiedene** AppIDs übrig (zwei parallel laufende
-   Spiele), gewinnt die mit der niedrigsten PID, also das zuerst gestartete
-   Spiel. Bewusste Vereinfachung: Die Pill zeigt eine Session, nicht eine
-   Liste. Der Detector gibt die vollständige Liste zurück, damit spätere
-   Teilprojekte ohne Umbau darauf zugreifen können.
+4. **Es läuft immer höchstens ein Spiel** — das ist die Annahme, auf die dieser
+   Entwurf baut, und der Detector liefert entsprechend `RunningGame | None`,
+   keine Liste. Falls doch je zwei verschiedene AppIDs auftauchen, gewinnt die
+   mit der niedrigsten PID. Das ist kein Mehrspiel-Feature, sondern nur die
+   Zusicherung, dass die Anzeige nicht von der Verzeichnisreihenfolge in
+   `/proc` abhängt und zwischen zwei Abfragen springt.
 5. Namen über `names.resolve(app_id)` auflösen; schlägt das fehl, bleibt
    `name=None` und die Pill zeigt nur das Label.
 
