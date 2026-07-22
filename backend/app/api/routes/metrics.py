@@ -22,6 +22,7 @@ from prometheus_client import (
     generate_latest,
     CONTENT_TYPE_LATEST,
 )
+import logging
 import psutil
 import time
 
@@ -29,6 +30,8 @@ from app.api import deps
 from app.core.config import settings
 from app.services.hardware.sensors import get_cpu_sensor_data
 from app.core.rate_limiter import limiter, get_limit
+
+logger = logging.getLogger(__name__)
 
 # Create router
 router = APIRouter()
@@ -374,7 +377,7 @@ def collect_system_metrics():
 
     except Exception as e:
         # Log error but don't fail metrics endpoint
-        print(f"Error collecting system metrics: {e}")
+        logger.warning("Error collecting system metrics: %s", e)
 
 
 def collect_raid_metrics():
@@ -404,7 +407,7 @@ def collect_raid_metrics():
             raid_sync_progress_percent.labels(device=device).set(sync_progress)
 
     except Exception as e:
-        print(f"Error collecting RAID metrics: {e}")
+        logger.warning("Error collecting RAID metrics: %s", e)
 
 
 def collect_smart_metrics():
@@ -441,7 +444,7 @@ def collect_smart_metrics():
                     pass
 
     except Exception as e:
-        print(f"Error collecting SMART metrics: {e}")
+        logger.warning("Error collecting SMART metrics: %s", e)
 
 
 def collect_database_metrics(db: Session):
@@ -457,7 +460,7 @@ def collect_database_metrics(db: Session):
         users_total.labels(role='user').set(user_count)
 
     except Exception as e:
-        print(f"Error collecting database metrics: {e}")
+        logger.warning("Error collecting database metrics: %s", e)
 
 
 def collect_app_metrics():
@@ -478,7 +481,7 @@ def collect_app_metrics():
         app_uptime_seconds.set(uptime)
 
     except Exception as e:
-        print(f"Error collecting app metrics: {e}")
+        logger.warning("Error collecting app metrics: %s", e)
 
 
 # ===================================
