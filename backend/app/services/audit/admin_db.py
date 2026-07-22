@@ -1,4 +1,5 @@
 from typing import List, Optional, Dict, Any
+import logging
 import re
 import os
 
@@ -7,6 +8,8 @@ from sqlalchemy.orm import Session
 
 from app.core import database
 from app.schemas.admin_db import AdminTableSchemaField, AdminTableRowsResponse
+
+logger = logging.getLogger(__name__)
 
 
 REDACT_PATTERN = re.compile(
@@ -232,7 +235,7 @@ class AdminDBService:
         try:
             total = db.execute(count_stmt).scalar()
         except Exception as e:
-            print(f"[ADMIN_DB] Failed to count rows: {e}")
+            logger.warning("Failed to count rows in %s: %s", table_name, e)
             total = None
 
         # Sorting
