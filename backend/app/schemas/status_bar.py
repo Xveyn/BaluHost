@@ -19,7 +19,7 @@ _PLUGIN_PILL_RE = re.compile(r"^plugin:[a-z0-9_]+:[a-z0-9_]+$")
 
 
 def _validate_pill_id(value: str) -> str:
-    if value in CORE_PILL_IDS or _PLUGIN_PILL_RE.match(value):
+    if value in CORE_PILL_IDS or _PLUGIN_PILL_RE.fullmatch(value):
         return value
     raise ValueError(
         f"unknown pill id {value!r}: expected a core pill or plugin:<name>:<suffix>"

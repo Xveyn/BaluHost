@@ -104,7 +104,10 @@ class StatusPillSpec(BaseModel):
     ``plugin:<plugin_name>:<id>`` — the plugin only picks the suffix.
     """
 
-    id: str = Field(description="Plugin-local suffix, e.g. 'session'")
+    id: str = Field(
+        pattern=r"^[a-z0-9_]+$",
+        description="Plugin-local suffix, e.g. 'session'",
+    )
     icon: str = Field(description="lucide icon name, e.g. 'Gamepad2'")
     href: str = Field(description="Click-through target")
     name_key: str = Field(description="Key into get_translations() for the catalog name")
