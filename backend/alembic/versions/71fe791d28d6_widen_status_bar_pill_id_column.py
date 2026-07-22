@@ -29,6 +29,9 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Widen status_bar_pill_config.pill_id from VARCHAR(32) to VARCHAR(96)."""
+    bind = op.get_bind()
+    if bind.dialect.name != "postgresql":
+        return
     op.alter_column(
         'status_bar_pill_config', 'pill_id',
         existing_type=sa.String(length=32),
@@ -44,6 +47,9 @@ def downgrade() -> None:
     persisted while this migration was applied — acceptable for a
     dev/rollback path, not something upgrade() needs to guard against.
     """
+    bind = op.get_bind()
+    if bind.dialect.name != "postgresql":
+        return
     op.alter_column(
         'status_bar_pill_config', 'pill_id',
         existing_type=sa.String(length=96),

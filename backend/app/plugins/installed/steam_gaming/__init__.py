@@ -8,6 +8,7 @@ avoids sharing state between workers entirely.
 """
 from __future__ import annotations
 
+import asyncio
 import time
 from typing import Dict, List, Optional
 
@@ -70,7 +71,12 @@ class SteamGamingPlugin(PluginBase):
         if pill_id != _PILL_ID:
             return None
 
-        game = _current_game()
+        # _current_game() does synchronous filesystem I/O (/proc scan, manifest
+        # reads); asyncio.wait_for() can only cancel awaits, not blocking sync
+        # code, so a slow/spun-down Steam library mount would otherwise stall
+        # the whole worker's event loop instead of being cut off by the
+        # PLUGIN_COLLECTOR_TIMEOUT_SECONDS timeout in the status bar service.
+        game = await asyncio.to_thread(_current_game)
         if game is None:
             if settings.is_dev_mode:
                 # No /proc on a Windows dev box — render something anyway.

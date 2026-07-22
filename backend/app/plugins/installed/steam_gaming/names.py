@@ -32,10 +32,9 @@ def _read_manifest_name(app_id: str) -> Optional[str]:
         manifest = steamapps / f"appmanifest_{app_id}.acf"
         try:
             data = vdf.parse(manifest.read_text(encoding="utf-8", errors="replace"))
-        except OSError:
-            continue
         except Exception:
-            # A corrupt manifest must not break detection for other libraries.
+            # A missing/corrupt manifest must not break detection for other
+            # libraries (OSError is a subclass of Exception, so it's covered).
             continue
         state = data.get("AppState")
         if not isinstance(state, dict):

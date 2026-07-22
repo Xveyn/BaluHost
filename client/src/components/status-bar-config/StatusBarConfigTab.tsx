@@ -48,6 +48,10 @@ export function StatusBarConfigTab() {
         // renderer's useTranslation('statusBar') resolves it.
         label_key: p.name_key.replace(/^statusBar\./, ''),
         href: p.href, value: null, value_key: null, value_params: null, icon: p.icon, extra: null,
+        // Plugin pills carry their own translations/literal fallback — without
+        // these PillRenderer falls back to t() and prints the raw i18n key.
+        translations: p.translations,
+        label_text: p.name_text,
       })),
     show_bottom_upload: cfg.showBottomUpload,
   }), [cfg.pills, cfg.showBottomUpload]);

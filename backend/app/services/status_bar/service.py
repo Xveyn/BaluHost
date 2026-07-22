@@ -3,6 +3,7 @@ import asyncio
 import logging
 from typing import Optional, cast
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.status_bar import StatusBarPillConfig, StatusBarSettings
@@ -17,7 +18,7 @@ from app.schemas.status_bar import (
     StatusBarStateResponse,
     is_valid_composed_pill_id,
 )
-from app.services.status_bar.catalog import CATALOG, CATALOG_BY_ID, PillDefinition
+from app.services.status_bar.catalog import CATALOG, PillDefinition
 from app.services.status_bar.collectors import COLLECTORS
 
 logger = logging.getLogger(__name__)
@@ -27,7 +28,10 @@ PLUGIN_COLLECTOR_TIMEOUT_SECONDS = 2.0
 
 # Composed plugin pill ids ("plugin:<name>:<suffix>") must fit the DB column
 # — read from the model so this can never silently drift from the schema.
-_PILL_ID_MAX_LENGTH: int = StatusBarPillConfig.__table__.columns["pill_id"].type.length
+# `.type.length` is None for an unbounded String()/Text column; fall back to a
+# sane default rather than letting the comparison below raise TypeError, which
+# would silently drop every plugin's pills behind one generic warning.
+_PILL_ID_MAX_LENGTH: int = StatusBarPillConfig.__table__.columns["pill_id"].type.length or 96
 
 
 def iter_enabled_plugins() -> list[tuple[str, PluginBase]]:
@@ -138,7 +142,17 @@ class StatusBarService:
                 existing[definition.id] = row
                 created = True
         if created:
-            self.db.commit()
+            try:
+                self.db.commit()
+            except IntegrityError:
+                # Multi-worker race: another worker committed the same
+                # pill_id (unique column) between our SELECT and our INSERT
+                # — expected the first time a plugin pill appears at
+                # runtime, since all four production workers can seed it
+                # concurrently. Roll back our half-applied insert and
+                # re-query so we return the row the winning worker created.
+                self.db.rollback()
+                existing = {r.pill_id: r for r in self.db.query(StatusBarPillConfig).all()}
         return existing
 
     def get_config(self) -> StatusBarConfigResponse:
@@ -173,9 +187,15 @@ class StatusBarService:
 
         Raises ValueError if a visibility_locked pill is set to visibility='all'.
         """
+        # Built once and reused below for both validation and row lookup —
+        # CATALOG_BY_ID only covers core pills, so validating against it let
+        # a visibility_locked plugin pill's lock and display_mode
+        # restriction be bypassed through this endpoint.
+        effective_catalog_by_id = {d.id: d for d in self._effective_catalog()}
+
         # Validate locked-visibility first (reject the whole update atomically).
         for item in update.pills:
-            definition = CATALOG_BY_ID.get(item.pill_id)
+            definition = effective_catalog_by_id.get(item.pill_id)
             if definition and definition.visibility_locked and item.visibility == "all":
                 raise ValueError(
                     f"pill '{item.pill_id}' is visibility_locked and cannot be set to 'all'"
@@ -186,8 +206,7 @@ class StatusBarService:
                     f"pill '{item.pill_id}' does not support a custom display_mode"
                 )
 
-        catalog = self._effective_catalog()
-        rows = self._ensure_rows(catalog)
+        rows = self._ensure_rows(list(effective_catalog_by_id.values()))
         diff: dict = {"changed": []}
         for item in update.pills:
             row = rows.get(item.pill_id)

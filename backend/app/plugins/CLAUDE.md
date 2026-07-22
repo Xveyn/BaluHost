@@ -78,6 +78,12 @@ Two plugin trust tiers with different isolation:
    or hangs silences only its own pill, never the whole strip. Labels come
    from `get_translations()`, resolved client-side via `resolvePluginString`,
    with `name_text`/`label_text` as literal fallbacks.
+   **Operator note:** `PluginManager._enabled` is process-local, populated at
+   startup. Toggling a pill-contributing plugin on/off through the UI only
+   updates the worker that handled that request — in production (4 Uvicorn
+   workers) the pill then appears on roughly one in four status-strip polls
+   until the backend is restarted. Restart `baluhost-backend` after enabling
+   or disabling a plugin that contributes a status pill so all workers agree.
 
 ## SmartDevice Framework (`smart_device/`)
 
