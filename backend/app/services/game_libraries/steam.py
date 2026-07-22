@@ -161,3 +161,43 @@ class SteamProvider:
             return os.stat(path).st_dev
         except OSError:
             return None
+
+
+def find_steamapps_dirs() -> List[Path]:
+    """Every readable ``steamapps`` directory across all Steam libraries.
+
+    Combines the standard Steam roots with the library paths declared in
+    ``libraryfolders.vdf`` — on a real box the games usually live on a
+    different mount than the Steam installation itself.
+    """
+    provider = SteamProvider()
+    dirs: List[Path] = []
+    seen: set[str] = set()
+
+    def _add(path: Path) -> None:
+        steamapps = path / "steamapps"
+        if not steamapps.is_dir():
+            return
+        real = os.path.realpath(str(steamapps))
+        if real in seen:
+            return
+        seen.add(real)
+        dirs.append(steamapps)
+
+    for root in provider._find_steam_roots():
+        _add(root)
+        try:
+            data = vdf.parse(
+                (root / "steamapps" / "libraryfolders.vdf").read_text(
+                    encoding="utf-8", errors="replace"
+                )
+            )
+        except OSError:
+            continue
+        folders = data.get("libraryfolders", {})
+        if not isinstance(folders, dict):
+            continue
+        for entry in folders.values():
+            if isinstance(entry, dict) and isinstance(entry.get("path"), str):
+                _add(Path(entry["path"]))
+    return dirs
