@@ -41,13 +41,18 @@ def test_mangohud_duplicate_yields_one_app_id(tmp_path):
 
 
 def test_lowest_pid_wins_when_two_app_ids_are_present(tmp_path):
-    """Deterministic answer instead of /proc directory order."""
+    """Deterministic answer instead of /proc directory order.
+
+    PIDs differ in digit count (9 vs 800) so numeric and lexicographic
+    ordering disagree — a regression to string comparison ("9" < "800")
+    would pick the wrong winner and this test would catch it.
+    """
     root = _fake_proc(tmp_path, {
-        900: "reaper SteamLaunch AppId=222 -- /x",
+        9: "reaper SteamLaunch AppId=222 -- /x",
         800: "reaper SteamLaunch AppId=111 -- /x",
     })
 
-    assert detector.detect_running_app_id(root) == "111"
+    assert detector.detect_running_app_id(root) == "222"
 
 
 def test_unreadable_and_vanished_entries_are_skipped(tmp_path):

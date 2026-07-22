@@ -35,6 +35,10 @@ def test_declares_one_namespaced_pill(plugin):
     assert len(specs) == 1
     assert specs[0].id == "session"
     assert specs[0].icon == "Gamepad2"
+    # Privacy-relevant default: showing what the owner is playing to every
+    # NAS user (default_visibility="all") would be a silent regression this
+    # test must catch.
+    assert specs[0].default_visibility == "admin"
 
 
 async def test_stays_silent_when_no_game_runs(plugin, monkeypatch, prod_mode):

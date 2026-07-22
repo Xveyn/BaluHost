@@ -351,6 +351,9 @@ def test_get_config_skips_a_catalog_entry_that_fails_pydantic_construction(db_se
     assert all(e.pill_id != bad.id for e in entries)
     # Core pills must still be present — one bad entry must not 5xx the rest.
     assert any(e.pill_id == "power" for e in entries)
+    # The warning is the only operator-facing signal that a pill silently
+    # vanished from the config response — pin that it's actually logged.
+    assert "produced an invalid catalog entry" in caplog.text
 
 
 # ── I-2: get_status_pills() returning None must not TypeError the iteration ──
@@ -388,3 +391,90 @@ async def test_a_plugin_returning_none_from_get_status_pills_does_not_break_coll
     state = await svc.StatusBarService(db_session).collect_state("admin")
 
     assert all(not p.id.startswith("plugin:") for p in state.pills)
+
+
+# ── F2: update_config() must validate against the *effective* catalog ─────
+
+
+class _LockedFakePlugin(_FakePlugin):
+    """A plugin pill declared visibility_locked=True -- used to prove
+    update_config() honours the lock for plugin pills, not just core ones."""
+
+    def get_status_pills(self):
+        return [StatusPillSpec(
+            id="session", icon="Gamepad2", href="/plugins",
+            name_key="pill.name", name_text="Gaming Session",
+            default_visibility="admin", visibility_locked=True,
+        )]
+
+
+def test_update_config_enforces_visibility_locked_for_plugin_pills(db_session, with_plugin):
+    """update_config() looked pills up in CATALOG_BY_ID (core-only), so a
+    visibility_locked plugin pill's lock was silently skipped and could be
+    flipped to visibility="all" through the admin API. Regression pin for
+    that fix: it must now be validated against the effective catalog."""
+    from app.schemas.status_bar import PillConfigItem, StatusBarConfigUpdate
+    from app.services.status_bar.service import StatusBarService
+
+    with_plugin(_LockedFakePlugin())
+    svc = StatusBarService(db_session)
+    svc.get_config()  # seed rows
+
+    update = StatusBarConfigUpdate(
+        pills=[PillConfigItem(
+            pill_id="plugin:steam_gaming:session",
+            enabled=True, visibility="all", sort_order=0,
+        )],
+        show_bottom_upload=True,
+    )
+
+    with pytest.raises(ValueError, match="visibility_locked"):
+        svc.update_config(update)
+
+
+# ── F3: _ensure_rows() must survive a concurrent-seed unique-constraint race ──
+
+
+def test_ensure_rows_recovers_from_a_concurrent_seed_race(db_session, with_plugin, monkeypatch):
+    """Simulates the multi-worker race: all four production workers can try
+    to insert the same new plugin pill row concurrently, one wins and the
+    others get IntegrityError out of commit(). The service must roll back,
+    re-query, and return the config instead of 500ing the status poll /
+    admin config page."""
+    from sqlalchemy.exc import IntegrityError
+
+    from app.models.status_bar import StatusBarPillConfig
+    from app.services.status_bar.service import StatusBarService
+
+    # Seed core pills first (no plugin yet), so the plugin pill is the only
+    # *new* row when the plugin is enabled below -- isolates the race to the
+    # single contested INSERT, matching the real production scenario.
+    StatusBarService(db_session).get_config()
+    with_plugin(_FakePlugin())
+
+    original_commit = db_session.commit
+    calls = {"n": 0}
+
+    def flaky_commit():
+        calls["n"] += 1
+        if calls["n"] == 1:
+            # Our own half-applied insert never lands -- IntegrityError aborts
+            # the whole transaction -- so simulate a sibling worker's
+            # identical INSERT having already won the race and durably
+            # committed, by committing it here ourselves.
+            db_session.rollback()
+            db_session.add(StatusBarPillConfig(
+                pill_id="plugin:steam_gaming:session",
+                enabled=True, visibility="admin", sort_order=99,
+            ))
+            original_commit()
+            raise IntegrityError("insert", {}, Exception("UNIQUE constraint failed"))
+        return original_commit()
+
+    monkeypatch.setattr(db_session, "commit", flaky_commit)
+
+    entries = StatusBarService(db_session).get_config().pills  # must not raise
+
+    assert any(e.pill_id == "plugin:steam_gaming:session" for e in entries)
+    # Core pills seeded before the race must still be present.
+    assert any(e.pill_id == "power" for e in entries)
