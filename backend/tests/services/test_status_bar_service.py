@@ -90,11 +90,11 @@ def test_locked_pills_default_to_admin_visibility():
 
 
 def test_pill_id_literal_matches_catalog():
-    """Drift detection: PILL_IDS Literal must equal the catalog ids exactly."""
-    from typing import get_args
-    from app.schemas.status_bar import PILL_IDS
+    """Drift detection: CORE_PILL_IDS must equal the catalog ids exactly."""
+    from app.schemas.status_bar import CORE_PILL_IDS
     from app.services.status_bar.catalog import CATALOG
-    assert set(get_args(PILL_IDS)) == {p.id for p in CATALOG}
+
+    assert CORE_PILL_IDS == {p.id for p in CATALOG}
 
 
 def test_locked_set_matches_spec():

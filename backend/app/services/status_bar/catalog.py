@@ -4,13 +4,14 @@ Each PillDefinition pairs static metadata (visibility rules, click-through
 href) with i18n key. Collectors are wired separately in collectors.py.
 """
 from dataclasses import dataclass
+from typing import Optional
 
-from app.schemas.status_bar import PILL_IDS
+from app.schemas.status_bar import PillId
 
 
 @dataclass(frozen=True)
 class PillDefinition:
-    id: PILL_IDS
+    id: PillId
     name_key: str                 # i18n key, e.g. "statusBar.pills.power.name"
     default_visibility: str       # "admin" | "all"
     visibility_locked: bool
@@ -18,6 +19,10 @@ class PillDefinition:
     href: str
     icon: str                     # lucide icon name; must match the collector's emitted icon
     display_mode_configurable: bool = False  # only True for pills with an admin-chosen display mode
+    # Set for plugin-contributed pills only:
+    plugin_name: Optional[str] = None
+    name_text: Optional[str] = None
+    translations: Optional[dict] = None
 
 
 CATALOG: list[PillDefinition] = [

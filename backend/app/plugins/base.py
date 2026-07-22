@@ -97,6 +97,23 @@ class DashboardPanelSpec(BaseModel):
     )
 
 
+class StatusPillSpec(BaseModel):
+    """A status-strip pill contributed by a plugin.
+
+    The public pill id is namespaced by the core as
+    ``plugin:<plugin_name>:<id>`` — the plugin only picks the suffix.
+    """
+
+    id: str = Field(description="Plugin-local suffix, e.g. 'session'")
+    icon: str = Field(description="lucide icon name, e.g. 'Gamepad2'")
+    href: str = Field(description="Click-through target")
+    name_key: str = Field(description="Key into get_translations() for the catalog name")
+    name_text: str = Field(description="Literal fallback for the catalog name")
+    default_visibility: Literal["admin", "all"] = "admin"
+    visibility_locked: bool = False
+    silent_when_ok: bool = True
+
+
 @dataclass
 class BackgroundTaskSpec:
     """Specification for a plugin background task."""
@@ -207,6 +224,19 @@ class PluginBase(ABC):
 
         Returns:
             DashboardPanelSpec or None if this plugin has no Dashboard panel.
+        """
+        return None
+
+    def get_status_pills(self) -> List["StatusPillSpec"]:
+        """Status-strip pills this plugin contributes. Default: none."""
+        return []
+
+    async def collect_status_pill(self, pill_id: str, db: "Session") -> Optional[dict]:
+        """Current state of one pill, or None to stay silent.
+
+        *pill_id* is the plugin-local suffix from the spec, not the namespaced
+        public id. The returned dict is passed to PillState — supply at least
+        ``kind``, ``tone`` and ``label_key``/``label_text``.
         """
         return None
 

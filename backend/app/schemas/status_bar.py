@@ -1,14 +1,32 @@
 """Pydantic schemas for the topbar status strip."""
-from typing import Literal, Optional
+import re
+from typing import Annotated, Literal, Optional
 
 from pydantic import BaseModel
+from pydantic.functional_validators import AfterValidator
 
-# Hardcoded to the current catalog. Kept in sync with CATALOG via
-# test_pill_id_literal_matches_catalog (see catalog tests).
-PILL_IDS = Literal[
+# Core pills. Kept in sync with CATALOG via test_core_pill_ids_match_the_catalog.
+# Duplicated here rather than imported from the catalog, which imports this
+# module — the test is what keeps the two honest.
+CORE_PILL_IDS: frozenset[str] = frozenset({
     "power", "pihole", "uploads", "sync", "raid", "sleep", "vpn", "temp",
     "always_awake", "scheduler", "backup", "desktop",
-]
+})
+
+# Plugin pills are namespaced by the core as plugin:<plugin_name>:<suffix>, so
+# they can never collide with a core id.
+_PLUGIN_PILL_RE = re.compile(r"^plugin:[a-z0-9_]+:[a-z0-9_]+$")
+
+
+def _validate_pill_id(value: str) -> str:
+    if value in CORE_PILL_IDS or _PLUGIN_PILL_RE.match(value):
+        return value
+    raise ValueError(
+        f"unknown pill id {value!r}: expected a core pill or plugin:<name>:<suffix>"
+    )
+
+
+PillId = Annotated[str, AfterValidator(_validate_pill_id)]
 
 PillVisibility = Literal["admin", "all"]
 PillKind = Literal["state", "activity", "alert"]
@@ -17,7 +35,7 @@ DisplayMode = Literal["always", "when_off", "when_on"]
 
 
 class PillConfigItem(BaseModel):
-    pill_id: PILL_IDS
+    pill_id: PillId
     enabled: bool
     visibility: PillVisibility
     sort_order: int
@@ -31,7 +49,7 @@ class StatusBarConfigUpdate(BaseModel):
 
 class PillCatalogEntry(BaseModel):
     """One catalog pill plus its persisted config — for the admin config GET."""
-    pill_id: PILL_IDS
+    pill_id: PillId
     name_key: str
     enabled: bool
     visibility: PillVisibility
@@ -41,6 +59,8 @@ class PillCatalogEntry(BaseModel):
     icon: str
     display_mode: DisplayMode
     display_mode_configurable: bool
+    name_text: Optional[str] = None       # literal fallback for plugin pills
+    translations: Optional[dict] = None   # plugin translations, resolved client-side
 
 
 class StatusBarConfigResponse(BaseModel):
@@ -50,7 +70,7 @@ class StatusBarConfigResponse(BaseModel):
 
 class PillState(BaseModel):
     """A rendered pill for the /state payload."""
-    id: PILL_IDS
+    id: PillId
     kind: PillKind
     tone: PillTone
     label_key: str                        # i18n key for the short live label, e.g. "pills.vpn.live"
@@ -61,6 +81,8 @@ class PillState(BaseModel):
     icon: Optional[str] = None
     href: str
     extra: Optional[dict] = None
+    label_text: Optional[str] = None      # literal fallback for plugin pills
+    translations: Optional[dict] = None   # plugin translations, resolved client-side
 
 
 class StatusBarStateResponse(BaseModel):
