@@ -46,3 +46,32 @@ describe('PillRenderer', () => {
     expect(screen.getByText('95°C')).toBeInTheDocument();
   });
 });
+
+describe('PillRenderer with plugin pills', () => {
+  const pluginBase = { ...base, id: 'plugin:steam_gaming:session', label_key: 'pill_label', icon: 'Gamepad2' };
+
+  it('resolves the label from the plugin translations', () => {
+    renderPill({
+      ...pluginBase,
+      label_text: 'Gaming Session',
+      translations: { en: { pill_label: 'Gaming Session' } },
+      value: 'Metro Exodus',
+    });
+    expect(screen.getByText('Gaming Session')).toBeInTheDocument();
+    expect(screen.getByText('Metro Exodus')).toBeInTheDocument();
+  });
+
+  it('falls back to label_text when the key is missing from the translations', () => {
+    renderPill({
+      ...pluginBase,
+      label_text: 'Gaming Session',
+      translations: { en: { something_else: 'nope' } },
+    });
+    expect(screen.getByText('Gaming Session')).toBeInTheDocument();
+  });
+
+  it('still uses core i18n for pills without translations', () => {
+    renderPill({ ...base, id: 'raid', label_key: 'pills.raid.live' });
+    expect(screen.getByText('RAID')).toBeInTheDocument();
+  });
+});

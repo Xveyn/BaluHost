@@ -3,6 +3,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { GripVertical, Lock } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { CSSProperties } from 'react';
+import { resolvePluginString } from '../../lib/pluginI18n';
 import type { PillCatalogEntry, PillVisibility, DisplayMode } from '../../api/statusBar';
 
 interface Props {
@@ -42,7 +43,11 @@ export function PillRow({ entry, onToggleEnabled, onSetVisibility, onSetDisplayM
       {/* Backend sends name_key as a fully-qualified i18next key with a dot-prefixed
           namespace ("statusBar.pills.power.name"). useTranslation('statusBar') already
           binds the namespace, so strip the leading "statusBar." to pass the ns-relative key. */}
-      <span className="flex-1 text-sm text-slate-200">{t(entry.name_key.replace(/^statusBar\./, ''))}</span>
+      <span className="flex-1 text-sm text-slate-200">
+        {entry.translations
+          ? resolvePluginString(entry.translations, entry.name_key, entry.name_text ?? entry.pill_id)
+          : t(entry.name_key.replace(/^statusBar\./, ''))}
+      </span>
 
       {entry.visibility_locked ? (
         <span className="inline-flex items-center gap-1 rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-400">
