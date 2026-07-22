@@ -29,11 +29,21 @@ _cache_initialized = False
 
 
 def _is_test_mode() -> bool:
-    """Detect whether we're running in tests/dev to relax rate limits."""
+    """Detect whether we're running in tests/dev to relax rate limits.
+
+    Production is decided first and never falls through to the env-var checks:
+    `SKIP_APP_INIT` is a test/tooling flag, and a stray copy of it in
+    `.env.production` would otherwise disarm every limit *and* hand bucket
+    selection back to the caller via `_select_key_func` (#318).
+    """
     try:
         from app.core.config import settings
-        return str(settings.nas_mode).lower() == "dev" or bool(os.environ.get("SKIP_APP_INIT"))
+        mode = str(settings.nas_mode).lower()
+        if mode == "prod":
+            return False
+        return mode == "dev" or bool(os.environ.get("SKIP_APP_INIT"))
     except Exception:
+        # Config unavailable (very early import) — fall back to test markers.
         return bool(os.environ.get("PYTEST_CURRENT_TEST")) or bool(os.environ.get("SKIP_APP_INIT"))
 
 
@@ -61,15 +71,29 @@ def _select_key_func(test_mode: bool) -> Callable[[Request], str]:
     return _test_client_key_func if test_mode else get_remote_address
 
 
+def _build_limiter(test_mode: bool) -> Limiter:
+    """Build the IP-keyed limiter for the given mode.
+
+    `default_limits` is empty in BOTH modes, deliberately. slowapi only ever
+    applies them from `SlowAPIMiddleware` — which this app does not install —
+    or for routes that opt in with `override_defaults=False`, which none do
+    (the decorator defaults to True). A non-empty value here would therefore
+    never limit a single request while reading like a global floor. Rate
+    limiting is per-route (`@limiter.limit(get_limit(...))`) plus the nginx
+    `api_limit`/`auth_limit` zones. Introducing a real global floor means
+    installing the middleware and choosing the numbers in the same change.
+    """
+    return Limiter(
+        key_func=_select_key_func(test_mode),
+        default_limits=[],
+        headers_enabled=False,
+        storage_uri="memory://",
+    )
+
+
 _init_test_mode = _is_test_mode()
 
-limiter = Limiter(
-    # Empty default limits in tests to avoid 429s during bulk integration runs.
-    key_func=_select_key_func(_init_test_mode),
-    default_limits=[] if _init_test_mode else ["100/minute", "1000/hour"],
-    headers_enabled=False,
-    storage_uri="memory://"
-)
+limiter = _build_limiter(_init_test_mode)
 
 # Rate limit configurations for different endpoint types
 RATE_LIMITS = {
@@ -282,10 +306,12 @@ def get_user_identifier(request: Request) -> str:
     return get_remote_address(request)
 
 
-# Alternative limiter with user-based identification
+# Alternative limiter with user-based identification.
+# default_limits stays empty for the same reason as in `_build_limiter`:
+# without SlowAPIMiddleware nothing applies them.
 user_limiter = Limiter(
     key_func=get_user_identifier,
-    default_limits=["200/minute", "2000/hour"],
+    default_limits=[],
     headers_enabled=True,
     storage_uri="memory://"
 )

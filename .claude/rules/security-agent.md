@@ -23,7 +23,7 @@ Active security enforcement rule for BaluHost. Applies to all changes in `backen
 
 - Use `Depends(deps.get_current_user)` or `Depends(deps.get_current_admin)` on protected endpoints
 - Use `ensure_owner_or_privileged()` from `services/permissions.py` for ownership checks
-- Apply rate-limiting via `@limiter.limit(get_limit("..."))` on new endpoints (`core/rate_limiter.py:148`)
+- Apply rate-limiting via `@limiter.limit(get_limit("..."))` on new endpoints (`core/rate_limiter.py`) — there is **no global fallback limit**: `default_limits` are empty because `SlowAPIMiddleware` is not installed, so an undecorated route is unlimited at the app layer
 - Use Pydantic schemas for request body validation — never accept raw `dict` payloads
 - Reject `..` in all user-supplied file paths
 - Log security-relevant actions via `get_audit_logger_db()` (login, password change, admin ops, failed auth)
