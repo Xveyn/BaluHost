@@ -74,4 +74,13 @@ describe('PillRenderer with plugin pills', () => {
     renderPill({ ...base, id: 'raid', label_key: 'pills.raid.live' });
     expect(screen.getByText('RAID')).toBeInTheDocument();
   });
+
+  it('falls back to the raw label_key when both label_text and the translation lookup are missing', () => {
+    renderPill({
+      ...pluginBase,
+      label_key: 'pill_label_missing',
+      translations: { en: { something_else: 'nope' } },
+    });
+    expect(screen.getByText('pill_label_missing')).toBeInTheDocument();
+  });
 });

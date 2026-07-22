@@ -13,7 +13,7 @@ export function PillRenderer({ pill, flat }: { pill: PillState; flat?: boolean }
   }
   // Plugin pills carry their own translations; core pills live in the app bundle.
   const label = pill.translations
-    ? resolvePluginString(pill.translations, pill.label_key, pill.label_text ?? '')
+    ? resolvePluginString(pill.translations, pill.label_key, pill.label_text ?? pill.label_key)
     : t(pill.label_key, { ...(pill.label_params ?? {}) });
   const value = pill.value_key
     ? t(pill.value_key, { ...(pill.value_params ?? {}), defaultValue: pill.value ?? '' })
