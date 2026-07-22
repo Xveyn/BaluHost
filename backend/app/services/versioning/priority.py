@@ -6,6 +6,8 @@ preserving high-priority and recent versions.
 """
 from typing import List, Tuple, Optional, TYPE_CHECKING
 from datetime import datetime, timedelta, timezone
+import logging
+
 from sqlalchemy import and_, or_, func
 from sqlalchemy.orm import Session
 
@@ -15,6 +17,8 @@ if TYPE_CHECKING:
 else:
     from app.models.vcl import FileVersion, VersionBlob, VCLSettings, VCLStats
     from app.services.versioning.vcl import VCLService
+
+logger = logging.getLogger(__name__)
 
 
 class VCLPriorityMode:
@@ -278,7 +282,7 @@ class VCLPriorityMode:
                     })
                     freed_bytes += blob_size
                 except Exception as e:
-                    print(f"⚠️ Failed to delete blob {blob.id}: {e}")
+                    logger.warning("Failed to delete blob %s: %s", blob.id, e)
             else:
                 deleted_blobs.append({
                     'id': blob.id,
