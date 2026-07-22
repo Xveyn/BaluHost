@@ -106,3 +106,123 @@ def test_status_pill_spec_accepts_valid_id_pattern():
         name_key="pill.session", name_text="Gaming Session",
     )
     assert spec.id == "session"
+
+
+# ── Part 2: StatusBarService merges plugin pills into the catalog ──────────
+
+import asyncio
+
+from app.plugins.base import StatusPillSpec
+
+
+class _FakePlugin:
+    """Minimal stand-in — the service only needs these two methods."""
+
+    def __init__(self, result=None, hang: bool = False, boom: bool = False):
+        self._result, self._hang, self._boom = result, hang, boom
+
+    def get_status_pills(self):
+        return [StatusPillSpec(
+            id="session", icon="Gamepad2", href="/plugins",
+            name_key="pill.name", name_text="Gaming Session",
+        )]
+
+    async def collect_status_pill(self, pill_id, db):
+        if self._boom:
+            raise RuntimeError("collector exploded")
+        if self._hang:
+            await asyncio.sleep(30)
+        return self._result
+
+
+@pytest.fixture
+def with_plugin(monkeypatch):
+    """Install a fake enabled plugin into the status bar service."""
+    def _install(plugin):
+        from app.services.status_bar import service as svc
+        monkeypatch.setattr(svc, "iter_enabled_plugins",
+                            lambda: [("steam_gaming", plugin)])
+    return _install
+
+
+def test_plugin_pill_appears_in_the_config(db_session, with_plugin):
+    from app.services.status_bar.service import StatusBarService
+    with_plugin(_FakePlugin())
+
+    entries = StatusBarService(db_session).get_config().pills
+    entry = next(e for e in entries if e.pill_id == "plugin:steam_gaming:session")
+
+    assert entry.name_text == "Gaming Session"
+    assert entry.icon == "Gamepad2"
+
+
+def test_plugin_pills_start_enabled(db_session, with_plugin):
+    """Deliberate deviation: core pills seed disabled, plugin pills do not."""
+    from app.services.status_bar.service import StatusBarService
+    with_plugin(_FakePlugin())
+
+    entries = StatusBarService(db_session).get_config().pills
+    plugin_entry = next(e for e in entries if e.pill_id.startswith("plugin:"))
+    core_entry = next(e for e in entries if e.pill_id == "power")
+
+    assert plugin_entry.enabled is True
+    assert core_entry.enabled is False
+
+
+async def test_plugin_pill_is_rendered_into_the_state(db_session, with_plugin):
+    from app.services.status_bar.service import StatusBarService
+    with_plugin(_FakePlugin(result={
+        "kind": "state", "tone": "info",
+        "label_key": "pill.session", "label_text": "Gaming Session",
+        "value": "Metro Exodus", "icon": "Gamepad2",
+    }))
+
+    state = await StatusBarService(db_session).collect_state("admin")
+    pill = next(p for p in state.pills if p.id == "plugin:steam_gaming:session")
+
+    assert pill.value == "Metro Exodus"
+    assert pill.label_text == "Gaming Session"
+
+
+async def test_a_silent_plugin_collector_emits_no_pill(db_session, with_plugin):
+    from app.services.status_bar.service import StatusBarService
+    with_plugin(_FakePlugin(result=None))
+
+    state = await StatusBarService(db_session).collect_state("admin")
+
+    assert all(not p.id.startswith("plugin:") for p in state.pills)
+
+
+async def test_a_throwing_plugin_collector_does_not_break_the_strip(db_session, with_plugin):
+    from app.services.status_bar.service import StatusBarService
+    with_plugin(_FakePlugin(boom=True))
+
+    state = await StatusBarService(db_session).collect_state("admin")
+
+    assert all(not p.id.startswith("plugin:") for p in state.pills)
+
+
+async def test_a_hanging_plugin_collector_is_cut_off(db_session, with_plugin, monkeypatch):
+    from app.services.status_bar import service as svc
+    monkeypatch.setattr(svc, "PLUGIN_COLLECTOR_TIMEOUT_SECONDS", 0.05)
+    with_plugin(_FakePlugin(hang=True))
+
+    state = await svc.StatusBarService(db_session).collect_state("admin")
+
+    assert all(not p.id.startswith("plugin:") for p in state.pills)
+
+
+def test_a_disabled_plugin_drops_its_pill_but_keeps_the_settings(db_session, with_plugin, monkeypatch):
+    from app.services.status_bar import service as svc
+    with_plugin(_FakePlugin())
+    svc.StatusBarService(db_session).get_config()  # seeds the row
+
+    monkeypatch.setattr(svc, "iter_enabled_plugins", lambda: [])
+    entries = svc.StatusBarService(db_session).get_config().pills
+    assert all(not e.pill_id.startswith("plugin:") for e in entries)
+
+    from app.models.status_bar import StatusBarPillConfig
+    row = db_session.query(StatusBarPillConfig).filter(
+        StatusBarPillConfig.pill_id == "plugin:steam_gaming:session"
+    ).first()
+    assert row is not None, "settings must survive a disabled plugin"
