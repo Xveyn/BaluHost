@@ -2,7 +2,15 @@
 
 import pytest
 from httpx import AsyncClient
-from app.core.rate_limiter import RATE_LIMITS
+from slowapi.util import get_remote_address
+from starlette.requests import Request
+
+from app.core.rate_limiter import (
+    RATE_LIMITS,
+    _is_test_mode,
+    _select_key_func,
+    limiter,
+)
 
 
 @pytest.mark.asyncio
@@ -213,3 +221,54 @@ class TestRateLimitConfiguration:
         # Mobile registration should have strict limit
         mobile_register_limit = int(RATE_LIMITS["mobile_register"].split("/")[0])
         assert mobile_register_limit <= 5
+
+
+class TestRateLimiterKeyFunction:
+    """`X-Test-Client` is test-only infrastructure and must stay out of prod (#318).
+
+    The header lets the test suite give every client its own limiter bucket.
+    If the production limiter honoured it too, any caller could mint a fresh
+    bucket per request and walk straight through the IP-based default limits.
+    """
+
+    @staticmethod
+    def _request(client_ip: str = "203.0.113.7", **headers: str) -> Request:
+        """Build a minimal ASGI request with the given headers and peer IP."""
+        return Request({
+            "type": "http",
+            "method": "POST",
+            "path": "/api/auth/login",
+            "headers": [(k.replace("_", "-").lower().encode(), v.encode())
+                        for k, v in headers.items()],
+            "client": (client_ip, 51234),
+            "scheme": "http",
+            "server": ("testserver", 80),
+            "query_string": b"",
+        })
+
+    def test_production_key_func_ignores_test_client_header(self):
+        """A caller cannot pick its own bucket by sending the test header."""
+        key_func = _select_key_func(test_mode=False)
+
+        spoofed = key_func(self._request(X_Test_Client="attacker-chosen"))
+        plain = key_func(self._request())
+
+        # Same IP, same bucket — the header buys the caller nothing.
+        assert spoofed == plain == "203.0.113.7"
+
+    def test_test_mode_key_func_isolates_buckets_per_client(self):
+        """In tests the header still separates buckets, or the suite goes flaky."""
+        key_func = _select_key_func(test_mode=True)
+
+        assert key_func(self._request(X_Test_Client="abc")) == "testclient:abc"
+        assert key_func(self._request(X_Test_Client="xyz")) == "testclient:xyz"
+        # Without the header it falls back to the peer IP.
+        assert key_func(self._request()) == "203.0.113.7"
+
+    def test_production_key_func_is_the_plain_remote_address(self):
+        """No test-aware wrapper is left in the production code path at all."""
+        assert _select_key_func(test_mode=False) is get_remote_address
+
+    def test_limiter_is_wired_to_the_selected_key_func(self):
+        """The module-level limiter uses the mode it detected — no second path."""
+        assert limiter._key_func is _select_key_func(_is_test_mode())

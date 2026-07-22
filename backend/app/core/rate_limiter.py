@@ -7,7 +7,7 @@ from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 import logging
 import os
-from typing import Optional
+from typing import Callable, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -26,16 +26,25 @@ _cache_initialized = False
 # 3. Counters reset on service restart — acceptable for a single-instance NAS.
 #
 # In test or dev mode we relax/disable strict limits to avoid flakiness in automated tests.
-try:
-    from app.core.config import settings
-    _init_test_mode = str(settings.nas_mode).lower() == "dev" or bool(os.environ.get("SKIP_APP_INIT"))
-except Exception:
-    _init_test_mode = bool(os.environ.get("PYTEST_CURRENT_TEST")) or bool(os.environ.get("SKIP_APP_INIT"))
+
+
+def _is_test_mode() -> bool:
+    """Detect whether we're running in tests/dev to relax rate limits."""
+    try:
+        from app.core.config import settings
+        return str(settings.nas_mode).lower() == "dev" or bool(os.environ.get("SKIP_APP_INIT"))
+    except Exception:
+        return bool(os.environ.get("PYTEST_CURRENT_TEST")) or bool(os.environ.get("SKIP_APP_INIT"))
+
 
 def _test_client_key_func(request: Request) -> str:
     """
     Key function that prefers a per-test header when present (set by tests).
     Falls back to the remote IP address otherwise.
+
+    TEST/DEV ONLY — must never key the production limiter. A caller who picks
+    its own key mints a fresh bucket per request and walks past the IP-based
+    limits (#318); `_select_key_func` is what keeps this out of prod.
     """
     try:
         # Use a unique per-test header if provided to avoid tests sharing limiter buckets
@@ -47,21 +56,20 @@ def _test_client_key_func(request: Request) -> str:
     return get_remote_address(request)
 
 
-if _init_test_mode:
-    # Use effectively unlimited/default empty limits to avoid 429s during tests
-    limiter = Limiter(
-        key_func=_test_client_key_func,
-        default_limits=[],
-        headers_enabled=False,
-        storage_uri="memory://"
-    )
-else:
-    limiter = Limiter(
-        key_func=_test_client_key_func,
-        default_limits=["100/minute", "1000/hour"],
-        headers_enabled=False,
-        storage_uri="memory://"
-    )
+def _select_key_func(test_mode: bool) -> Callable[[Request], str]:
+    """Per-test bucketing in test/dev, plain peer IP in production."""
+    return _test_client_key_func if test_mode else get_remote_address
+
+
+_init_test_mode = _is_test_mode()
+
+limiter = Limiter(
+    # Empty default limits in tests to avoid 429s during bulk integration runs.
+    key_func=_select_key_func(_init_test_mode),
+    default_limits=[] if _init_test_mode else ["100/minute", "1000/hour"],
+    headers_enabled=False,
+    storage_uri="memory://"
+)
 
 # Rate limit configurations for different endpoint types
 RATE_LIMITS = {
@@ -181,15 +189,6 @@ def refresh_rate_limits_cache():
         if not _cache_initialized:
             _rate_limits_cache = RATE_LIMITS.copy()
             _cache_initialized = True
-
-
-def _is_test_mode() -> bool:
-    """Detect whether we're running in tests/dev to relax rate limits."""
-    try:
-        from app.core.config import settings
-        return str(settings.nas_mode).lower() == "dev" or bool(os.environ.get("SKIP_APP_INIT"))
-    except Exception:
-        return bool(os.environ.get("PYTEST_CURRENT_TEST")) or bool(os.environ.get("SKIP_APP_INIT"))
 
 
 def get_limit(endpoint_type: str) -> str:
