@@ -5,11 +5,14 @@ from httpx import AsyncClient
 from slowapi.util import get_remote_address
 from starlette.requests import Request
 
+from app.core.config import settings
 from app.core.rate_limiter import (
     RATE_LIMITS,
+    _build_limiter,
     _is_test_mode,
     _select_key_func,
     limiter,
+    user_limiter,
 )
 
 
@@ -272,3 +275,51 @@ class TestRateLimiterKeyFunction:
     def test_limiter_is_wired_to_the_selected_key_func(self):
         """The module-level limiter uses the mode it detected — no second path."""
         assert limiter._key_func is _select_key_func(_is_test_mode())
+
+
+class TestTestModeDetection:
+    """Test mode relaxes limits drastically — production must never reach it.
+
+    `_is_test_mode()` also gates which key function the limiter gets, so a
+    stray env var does not just loosen the numbers, it hands bucket selection
+    back to the caller (see `TestRateLimiterKeyFunction`).
+    """
+
+    def test_prod_mode_never_enters_test_mode(self, monkeypatch):
+        """SKIP_APP_INIT is a test/tooling flag — in prod it must not disarm limits."""
+        monkeypatch.setattr(settings, "nas_mode", "prod")
+        monkeypatch.setenv("SKIP_APP_INIT", "1")
+
+        assert _is_test_mode() is False
+
+    def test_dev_mode_still_relaxes_limits(self, monkeypatch):
+        """Dev keeps the relaxed behaviour the suite depends on."""
+        monkeypatch.setattr(settings, "nas_mode", "dev")
+
+        assert _is_test_mode() is True
+
+
+class TestDefaultLimitsAreNotDeadConfig:
+    """`default_limits` are unreachable in this app — so they must stay empty.
+
+    slowapi applies them from `SlowAPIMiddleware` (not installed here) or for
+    routes that opt in with `override_defaults=False` (none do — the decorator
+    defaults to True). A non-empty value is therefore decoration that promises
+    a global floor which does not exist.
+    """
+
+    def test_neither_limiter_advertises_unreachable_defaults(self):
+        assert _build_limiter(test_mode=False)._default_limits == []
+        assert _build_limiter(test_mode=True)._default_limits == []
+        assert user_limiter._default_limits == []
+
+    def test_no_middleware_silently_activates_the_defaults(self):
+        """Guard: installing SlowAPIMiddleware makes the defaults live again.
+
+        If this fails, someone enabled global limiting — decide the numbers
+        deliberately at that point instead of inheriting an empty list.
+        """
+        from app.main import app
+
+        installed = [m.cls.__name__ for m in app.user_middleware]
+        assert "SlowAPIMiddleware" not in installed
