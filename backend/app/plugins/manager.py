@@ -932,7 +932,15 @@ class PluginManager:
         try:
             has_router = plugin.get_router() is not None
         except Exception:
-            return False
+            # Fail toward "tell the admin to restart". This flag exists so the
+            # UI does not feign readiness; a plugin whose get_router() throws
+            # is exactly the case where we cannot claim its endpoints are up.
+            logger.warning(
+                "plugin %s: get_router() raised while computing restart_required",
+                name,
+                exc_info=True,
+            )
+            return True
         if not has_router:
             return False
         return name not in self._routes_mounted_at_startup

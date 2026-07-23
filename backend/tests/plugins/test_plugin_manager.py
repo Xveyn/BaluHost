@@ -300,6 +300,22 @@ class TestRouterRestartRequired:
         mgr = PluginManager(plugins_dir=empty_plugins_dir)
         assert mgr.router_restart_required("nope") is False
 
+    def test_true_when_get_router_raises(self, empty_plugins_dir: Path):
+        """Fail toward telling the admin to restart.
+
+        The flag exists so the UI does not feign readiness. A plugin whose
+        get_router() throws is precisely the case where we cannot claim its
+        endpoints are up - answering False there would be the one wrong
+        direction this field must never take.
+        """
+        mgr = PluginManager(plugins_dir=empty_plugins_dir)
+        plugin = MagicMock()
+        plugin.get_router.side_effect = RuntimeError("boom")
+        mgr._plugins["broken"] = plugin
+        mgr._enabled.add("broken")
+
+        assert mgr.router_restart_required("broken") is True
+
     def test_true_when_enabled_after_the_startup_router_snapshot(self, empty_plugins_dir: Path):
         """The startup mount (get_router()) ran before this plugin existed -
         it has a router, but it is not in the mounted-at-startup set."""
