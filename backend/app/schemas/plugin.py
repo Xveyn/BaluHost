@@ -133,6 +133,7 @@ class PluginDetailResponse(BaseModel):
     dashboard_panel_enabled: bool = False
     is_external: bool = False
     requested_api_scopes: List[str] = []
+    restart_required: bool = False
 
     # UI info
     nav_items: List[PluginNavItemSchema] = []

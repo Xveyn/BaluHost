@@ -101,10 +101,17 @@ def is_enabled(name: str) -> Optional[bool]:
 
 
 def invalidate() -> None:
-    """Drop the cache so the next refresh reloads (called after a local toggle)."""
+    """Drop the cache so the next refresh reloads (called after a local toggle).
+
+    Also clears the reconcile backoff: an invalidation is exactly the signal
+    that the DB state changed, so an admin who fixes and re-enables a plugin
+    should not have to wait out the full FAILED_RETRY_SECONDS backoff on the
+    other workers.
+    """
     global _cache, _cached_at
     _cache = None
     _cached_at = 0.0
+    _failed_until.clear()
 
 
 FAILED_RETRY_SECONDS: float = 60.0
@@ -158,15 +165,25 @@ async def reconcile_worker() -> None:
 
         now = _monotonic()
 
-        for name, grant in desired.items():
-            if name in loaded:
-                continue
-            if _failed_until.get(name, 0.0) > now:
-                continue
-            try:
-                from app.core.database import SessionLocal
+        # One session for the whole reconcile, not one per missing plugin:
+        # enable_plugin() never uses `db` itself, so holding a pool connection
+        # across its (possibly slow) on_startup() call - once per plugin that
+        # needs enabling - only ties up a connection for no reason.
+        try:
+            from app.core.database import SessionLocal
 
-                with SessionLocal() as db:
+            db = SessionLocal()
+        except Exception:  # broad on purpose: never raises - best-effort maintenance
+            logger.warning("plugin enablement reconcile session setup failed", exc_info=True)
+            return
+
+        try:
+            for name, grant in desired.items():
+                if name in loaded:
+                    continue
+                if _failed_until.get(name, 0.0) > now:
+                    continue
+                try:
                     ok = await manager.enable_plugin(
                         name,
                         grant["granted_permissions"],
@@ -174,11 +191,13 @@ async def reconcile_worker() -> None:
                         start_background_tasks=lifespan.IS_PRIMARY_WORKER,
                         granted_api_scopes=grant["granted_api_scopes"],
                     )
-            except Exception:  # broad on purpose: one bad plugin must not stop the rest
-                logger.warning("lazy enable of plugin %s failed", name, exc_info=True)
-                ok = False
-            if not ok:
-                _failed_until[name] = now + FAILED_RETRY_SECONDS
+                except Exception:  # broad on purpose: one bad plugin must not stop the rest
+                    logger.warning("lazy enable of plugin %s failed", name, exc_info=True)
+                    ok = False
+                if not ok:
+                    _failed_until[name] = now + FAILED_RETRY_SECONDS
+        finally:
+            db.close()
 
         for name in loaded - set(desired):
             try:

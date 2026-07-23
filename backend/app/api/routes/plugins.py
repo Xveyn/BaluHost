@@ -265,6 +265,7 @@ async def get_plugin_details(
         has_dashboard_panel=plugin.get_dashboard_panel() is not None,
         dashboard_panel_enabled=db_record.dashboard_panel_enabled if db_record else False,
         is_external=False,
+        restart_required=plugin_manager.router_restart_required(name),
         requested_api_scopes=[],
         nav_items=[
             PluginNavItemSchema(**item.model_dump())
@@ -841,12 +842,19 @@ async def run_plugin_menu_action(
     middleware/plugin_gate.py). This is only the first line of defense
     though: PluginManager.disable_plugin() drops the name from ``_enabled``
     but leaves the instance in ``_plugins``, so get_plugin() alone would
-    still return it. Check is_enabled() too, so this endpoint does not rely
+    still return it. Check is_loaded() too, so this endpoint does not rely
     solely on the middleware (a prefix change or router move must not
     silently defeat the enabled-check).
+
+    is_loaded() rather than is_enabled(): is_enabled() answers "the database
+    says this plugin is on", which is true even when this worker's
+    enable_plugin() call itself failed (e.g. on_startup() raised) - the
+    instance sits in _plugins but never entered _enabled. Dispatching into
+    such a plugin would run a menu action against something that never
+    finished starting up.
     """
     plugin = plugin_manager.get_plugin(name)
-    if plugin is None or not plugin_manager.is_enabled(name):
+    if plugin is None or not plugin_manager.is_loaded(name):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Plugin not found or not enabled",

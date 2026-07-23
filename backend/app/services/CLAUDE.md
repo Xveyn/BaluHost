@@ -25,6 +25,7 @@ Business logic layer. Routes delegate to services — services contain the actua
 | `recovery_code_service.py` | Password recovery codes — generate/verify/consume single-use codes (hash+encrypt at rest), timing-equalized username verify |
 | `token_service.py` | Refresh token management, rotation |
 | `plugin_service.py` | Plugin install/uninstall/toggle operations |
+| `plugin_enablement.py` | Single source of truth for "which plugins are enabled" across the four Uvicorn workers (#448) — TTL-cached DB read (`refresh()`/`enabled_plugins()`/`is_enabled()`) plus `reconcile_worker()`, which aligns THIS worker's loaded plugins (`PluginManager._enabled`) with the DB on the next request via `Depends(deps.reconciled_plugin_state)`. Single-flight per worker; a plugin whose `enable_plugin()` fails is backed off `FAILED_RETRY_SECONDS` (60s) until `invalidate()` (called after a local toggle) clears the backoff early |
 | `power_permissions.py` | Per-user power action permissions (get, update, check), incl. `can_toggle_desktop`. UI name: "System Permissions / Systemberechtigungen"; backend identifiers stay `power_permissions` (deliberate — no rename/migration). |
 | `samba_service.py` | Samba/SMB share management |
 | `webdav_service.py` | WebDAV server lifecycle control |

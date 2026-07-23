@@ -91,6 +91,14 @@ class TestCache:
             await pe.refresh()
         assert fetch.call_count == 2
 
+    async def test_invalidate_clears_the_failed_backoff(self):
+        """An admin who fixes and re-enables a plugin must not have to wait
+        out the full backoff on other workers - invalidate() is exactly the
+        signal that the DB state changed."""
+        pe._failed_until["demo"] = pe._monotonic() + pe.FAILED_RETRY_SECONDS
+        pe.invalidate()
+        assert pe._failed_until == {}
+
     async def test_enabled_plugins_carries_only_permissions_not_scopes(self):
         """enabled_plugins() must keep its documented ``name -> granted_permissions``
         contract even though the internal cache now also carries API scopes."""
@@ -101,6 +109,71 @@ class TestCache:
         ):
             await pe.refresh()
         assert pe.enabled_plugins() == {"demo": ["files.read"]}
+
+
+class TestFetchAgainstARealDatabase:
+    """``_fetch()`` itself, against a real DB session (#448 review finding 4).
+
+    Every other test in this file patches ``_fetch`` away, so the column
+    names, the ``is_enabled == True`` filter, and the row -> dict shape were
+    only eyeballed. A typo there raises inside ``asyncio.to_thread`` ->
+    ``refresh()`` raises -> every gated plugin request 500s while the display
+    silently falls back forever - and none of the mocked tests would notice.
+
+    ``_fetch()`` opens its own ``SessionLocal()`` rather than taking a
+    session. Rather than monkeypatching ``app.core.database.SessionLocal``
+    itself (module-global, riskier to leave patched across tests sharing the
+    same process), this rebinds a fresh sessionmaker to the ``db_session``
+    fixture's own engine and hands that to ``_fetch`` via ``pe._fetch`` calling
+    ``SessionLocal()`` -> the same underlying (StaticPool, single-connection)
+    SQLite database the fixture already wrote to, so the rows are visible
+    without needing the two sessions to share a transaction.
+    """
+
+    def test_fetch_returns_only_enabled_plugins_with_normalized_columns(
+        self, db_session, monkeypatch
+    ):
+        from sqlalchemy.orm import sessionmaker
+
+        import app.core.database as database_module
+        from app.models.plugin import InstalledPlugin
+
+        monkeypatch.setattr(
+            database_module, "SessionLocal", sessionmaker(bind=db_session.get_bind())
+        )
+
+        db_session.add_all([
+            InstalledPlugin(
+                name="alpha", version="1.0.0", display_name="Alpha",
+                is_enabled=True,
+                granted_permissions=["files.read"],
+                granted_api_scopes=["read:storage"],
+            ),
+            InstalledPlugin(
+                name="beta", version="1.0.0", display_name="Beta",
+                is_enabled=True,
+                granted_permissions=None,
+                granted_api_scopes=None,
+            ),
+            InstalledPlugin(
+                name="gamma", version="1.0.0", display_name="Gamma",
+                is_enabled=False,
+                granted_permissions=["files.read"],
+                granted_api_scopes=["read:storage"],
+            ),
+        ])
+        db_session.commit()
+
+        result = pe._fetch()
+
+        assert result == {
+            "alpha": {
+                "granted_permissions": ["files.read"],
+                "granted_api_scopes": ["read:storage"],
+            },
+            "beta": {"granted_permissions": [], "granted_api_scopes": []},
+        }
+        assert "gamma" not in result
 
 
 def _fake_manager(loaded: set) -> MagicMock:
@@ -301,6 +374,7 @@ class TestReconcileDependency:
         import inspect
 
         from app.api.deps import reconciled_plugin_state
+        from app.api.routes import dashboard as dashboard_routes
         from app.api.routes import plugins as plugins_routes
         from app.api.routes import status_bar as status_bar_routes
 
@@ -310,6 +384,7 @@ class TestReconcileDependency:
             (plugins_routes.run_plugin_menu_action, "run_plugin_menu_action"),
             (status_bar_routes.get_statusbar_config, "get_statusbar_config"),
             (status_bar_routes.get_statusbar_state, "get_statusbar_state"),
+            (dashboard_routes.get_plugin_panel, "get_plugin_panel"),
         ]
         for func, label in expected:
             deps = [
@@ -318,3 +393,20 @@ class TestReconcileDependency:
                 if hasattr(param.default, "dependency")
             ]
             assert reconciled_plugin_state in deps, f"{label} misses the reconcile dependency"
+
+    def test_toggle_plugin_does_not_declare_the_dependency(self):
+        """toggle_plugin must NOT reconcile - it would race the toggle's own
+        local enable/disable call with a reconcile reading the pre-toggle DB
+        state.
+        """
+        import inspect
+
+        from app.api.deps import reconciled_plugin_state
+        from app.api.routes import plugins as plugins_routes
+
+        deps = [
+            param.default.dependency
+            for param in inspect.signature(plugins_routes.toggle_plugin).parameters.values()
+            if hasattr(param.default, "dependency")
+        ]
+        assert reconciled_plugin_state not in deps

@@ -305,7 +305,7 @@ class TestDisabledPluginIsRefusedInTheRouteToo:
         plugin.run_menu_action = AsyncMock()
         manager = MagicMock()
         manager.get_plugin.return_value = plugin
-        manager.is_enabled.return_value = False
+        manager.is_loaded.return_value = False
 
         with patch("app.api.routes.plugins.user_limiter.enabled", False):
             with pytest.raises(HTTPException) as exc:
@@ -326,7 +326,7 @@ class TestDisabledPluginIsRefusedInTheRouteToo:
         )
         manager = MagicMock()
         manager.get_plugin.return_value = plugin
-        manager.is_enabled.return_value = True
+        manager.is_loaded.return_value = True
 
         with patch("app.api.routes.plugins.user_limiter.enabled", False), \
              patch("app.api.routes.plugins.get_audit_logger_db"):
@@ -462,3 +462,60 @@ class TestMenuActionThroughTheRealStack:
 
         assert response.status_code == 403
         assert "disabled" not in response.json()["detail"]
+
+
+class TestRunPluginMenuActionRequiresLoadedNotJustEnabled:
+    """#448 review finding 1: a failed-to-start plugin must not be dispatchable.
+
+    is_enabled() answers the database's question ("is this plugin on"), which
+    stays True even when THIS worker's enable_plugin() call itself failed
+    (on_startup() raised) - the instance sits in _plugins but never entered
+    _enabled. The route must key its guard off is_loaded(), not is_enabled().
+    """
+
+    @pytest.fixture(autouse=True)
+    def _reset_enablement_state(self):
+        from app.services import plugin_enablement as pe
+
+        pe.invalidate()
+        pe._failed_until.clear()
+        yield
+        pe.invalidate()
+        pe._failed_until.clear()
+
+    async def test_a_plugin_whose_on_startup_raised_is_refused(self, tmp_path):
+        from app.plugins.manager import PluginManager
+        from app.services import plugin_enablement as pe
+
+        manager = PluginManager(plugins_dir=tmp_path)
+
+        plugin = _declaring_plugin()
+        plugin.metadata = MagicMock(required_permissions=[])
+        plugin.on_startup = AsyncMock(side_effect=RuntimeError("boom"))
+        plugin.run_menu_action = AsyncMock()
+        manager._plugins["demo"] = plugin
+
+        with patch.object(
+            pe,
+            "_fetch",
+            return_value={"demo": {"granted_permissions": [], "granted_api_scopes": []}},
+        ), patch.object(pe, "_get_manager", return_value=manager):
+            await pe.reconcile_worker()
+
+        # on_startup() blew up: the instance is loaded but never entered
+        # _enabled, while the DB (and therefore is_enabled()) still says "on".
+        assert manager.get_plugin("demo") is plugin
+        assert manager.is_loaded("demo") is False
+        assert manager.is_enabled("demo") is True
+
+        with patch("app.api.routes.plugins.user_limiter.enabled", False):
+            with pytest.raises(HTTPException) as exc:
+                await run_plugin_menu_action(
+                    request=MagicMock(), response=MagicMock(),
+                    name="demo", action_id="do_it", db=MagicMock(),
+                    current_user=MagicMock(username="admin"),
+                    plugin_manager=manager,
+                )
+
+        assert exc.value.status_code == 404
+        plugin.run_menu_action.assert_not_awaited()

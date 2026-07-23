@@ -92,7 +92,13 @@ Two plugin trust tiers with different isolation:
    **One exception:** plugin HTTP routes are mounted once at startup
    (`core/lifespan.py`), so a plugin that ships its own router still needs a
    `baluhost-backend` restart before its endpoints exist. Its
-   method-based contributions work immediately.
+   method-based contributions work immediately. `GET /api/plugins/{name}`
+   surfaces this as `PluginDetailResponse.restart_required` — true when the
+   plugin contributes a router that was not part of the set
+   `PluginManager.get_router()` mounted at startup
+   (`PluginManager.router_restart_required()`); always false for plugins
+   without a router and for external (sandboxed) plugins, whose requests are
+   routed dynamically through the catch-all proxy with no restart needed.
 7. Override `get_ui_manifest()` with `menu_items` + `run_menu_action()` to
    contribute an action to the system (power) menu. `get_menu_items()` is not
    a separate override point: its default implementation derives the list
