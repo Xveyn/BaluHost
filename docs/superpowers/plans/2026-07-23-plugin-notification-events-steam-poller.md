@@ -186,7 +186,7 @@ In `backend/app/plugins/base.py`, direkt nach `collect_status_pill` (die letzte 
 - [ ] **Step 5: Run tests to verify they pass**
 
 Run: `cd backend ; python -m pytest tests/services/test_plugin_notification_events.py -q --no-cov`
-Expected: PASS (9 Tests — die 6 Parametrize-Fälle zählen einzeln)
+Expected: PASS (10 Tests — die 6 Parametrize-Fälle zählen einzeln)
 
 - [ ] **Step 6: Lint + commit**
 
@@ -317,6 +317,7 @@ from dataclasses import dataclass
 from typing import Iterator, Optional, Tuple
 
 from app.services.notifications.events import (
+    _COOLDOWN_SECONDS,
     EventConfig,
     _check_cooldown,
     _set_cooldown,
@@ -543,10 +544,22 @@ Ergänze eine Autouse-Fixture am Anfang der Datei, die den Cooldown-Cache leert 
 ```python
 @pytest.fixture(autouse=True)
 def _clear_cooldown():
+    """Cooldown state is module state and would leak across tests.
+
+    Clears the emit-timestamp cache AND the plugin: keys that
+    emit_plugin_event seeds into _COOLDOWN_SECONDS (mutation, not rebinding -
+    plugin_events imported the same dict object).
+    """
     from app.services.notifications import events as ev
-    ev._cooldown_cache.clear()
+
+    def _reset():
+        ev._cooldown_cache.clear()
+        for key in [k for k in ev._COOLDOWN_SECONDS if k.startswith("plugin:")]:
+            del ev._COOLDOWN_SECONDS[key]
+
+    _reset()
     yield
-    ev._cooldown_cache.clear()
+    _reset()
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -594,8 +607,15 @@ async def emit_plugin_event(
         logger.warning("emit_plugin_event: unknown event %s", public_id)
         return
 
-    if _check_cooldown(public_id, entity_id):
-        return
+    # _check_cooldown/_set_cooldown read the window from _COOLDOWN_SECONDS -
+    # a plugin id is never in that dict, so without seeding it here both calls
+    # would be silent no-ops and the declared cooldown would be dead. Seeding
+    # reuses the core machinery (cache, monotonic clock, entity keying) instead
+    # of duplicating it.
+    if entry.cooldown_seconds > 0:
+        _COOLDOWN_SECONDS[public_id] = entry.cooldown_seconds
+        if _check_cooldown(public_id, entity_id):
+            return
 
     emitter = get_event_emitter()
     try:
@@ -991,9 +1011,9 @@ Expected: alles grün. (Bekannt und **nicht** von dieser Arbeit: `tests/test_des
 - [ ] **Step 3: Frontend unberührt — nur gegenprüfen**
 
 ```bash
-cd client ; npx vitest run src/__tests__/contexts src/__tests__/components/NotificationCenter*
+cd client ; npx vitest run src/__tests__/contexts
 ```
-Expected: PASS bzw. „no test files" für den zweiten Glob — diese Arbeit ändert kein Frontend; der Lauf belegt nur, dass die Notification-UI unberührt ist.
+Expected: PASS. (Kein Glob auf nicht existierende Dateien — vitest exitet dann mit 1 „no test files", was ein Gate fälschlich als rot liest.) Diese Arbeit ändert kein Frontend; der Lauf belegt nur, dass die Kontext-Schicht unberührt ist.
 
 - [ ] **Step 4: Manueller Smoketest auf BaluNode (durch den Maintainer, nicht dispatchen)**
 
