@@ -15,11 +15,21 @@ from typing import Dict, List, Optional
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.plugins.base import PluginBase, PluginMetadata, StatusPillSpec
+from app.plugins.base import (
+    MenuActionResult,
+    PluginBase,
+    PluginMenuItem,
+    PluginMetadata,
+    PluginUIManifest,
+    StatusPillSpec,
+)
 from app.plugins.installed.steam_gaming.detector import detect_running_app_id
+from app.plugins.installed.steam_gaming.launcher import open_big_picture
 from app.plugins.installed.steam_gaming.names import resolve_name
+from app.services.power.desktop import get_desktop_service
 
 _PILL_ID = "session"
+_MENU_ACTION_ID = "gaming_mode"
 _CACHE_TTL_SECONDS = 3.0
 _CACHE: Dict[str, object] = {}
 
@@ -94,8 +104,70 @@ class SteamGamingPlugin(PluginBase):
             "icon": "Gamepad2",
         }
 
+    def get_ui_manifest(self) -> PluginUIManifest:
+        return PluginUIManifest(
+            enabled=True,
+            menu_items=[PluginMenuItem(
+                id=_MENU_ACTION_ID,
+                icon="Gamepad2",
+                tone="info",
+                order=10,
+                label_key="menu_gaming_mode",
+                label_text="Gaming Mode",
+                description_key="menu_gaming_mode_desc",
+                description_text="Turn displays on and open Big Picture",
+            )],
+        )
+
+    async def run_menu_action(self, action_id: str, db: Session) -> Optional[MenuActionResult]:
+        if action_id != _MENU_ACTION_ID:
+            return None
+
+        # Displays first: opening Big Picture onto dark screens helps nobody.
+        # LinuxDesktopBackend.enable() runs kscreen-doctor in a thread, so the
+        # core's wait_for stays effective.
+        ok, detail = await get_desktop_service().enable()
+        if not ok:
+            return MenuActionResult(
+                ok=False,
+                message_key="menu_displays_failed",
+                message_text=f"Displays could not be turned on: {detail}",
+            )
+
+        launched, detail = await asyncio.to_thread(open_big_picture)
+        if not launched:
+            return MenuActionResult(
+                ok=False,
+                message_key="menu_steam_failed",
+                message_text=f"Displays are on, but Steam did not start: {detail}",
+            )
+
+        # "started", not "Big Picture is running": the process is detached, so
+        # anything past the spawn is not observable from here.
+        return MenuActionResult(
+            ok=True,
+            message_key="menu_gaming_mode_started",
+            message_text="Gaming mode started",
+        )
+
     def get_translations(self) -> Optional[Dict[str, Dict[str, str]]]:
         return {
-            "en": {"pill_name": "Gaming Session", "pill_label": "Gaming Session"},
-            "de": {"pill_name": "Gaming-Session", "pill_label": "Gaming-Session"},
+            "en": {
+                "pill_name": "Gaming Session",
+                "pill_label": "Gaming Session",
+                "menu_gaming_mode": "Gaming Mode",
+                "menu_gaming_mode_desc": "Displays on + Big Picture",
+                "menu_gaming_mode_started": "Gaming mode started",
+                "menu_displays_failed": "Displays could not be turned on",
+                "menu_steam_failed": "Displays are on, but Steam did not start",
+            },
+            "de": {
+                "pill_name": "Gaming-Session",
+                "pill_label": "Gaming-Session",
+                "menu_gaming_mode": "Gaming-Modus",
+                "menu_gaming_mode_desc": "Displays an + Big Picture",
+                "menu_gaming_mode_started": "Gaming-Modus gestartet",
+                "menu_displays_failed": "Displays konnten nicht eingeschaltet werden",
+                "menu_steam_failed": "Displays sind an, aber Steam startete nicht",
+            },
         }
