@@ -57,6 +57,44 @@ class PluginNavItem(BaseModel):
     order: int = Field(default=100, description="Sort order in navigation")
 
 
+class PluginMenuItem(BaseModel):
+    """An action a plugin contributes to the system (power) menu.
+
+    Declaration only: the plugin says what it offers, the core decides who may
+    run it. There is deliberately no ``admin_only`` field (unlike
+    PluginNavItem) - a menu action executes something, so widening its
+    audience must not be the plugin's call.
+    """
+
+    id: str = Field(
+        pattern=r"^[a-z0-9_]+$",
+        description="Plugin-local action id, e.g. 'gaming_mode'",
+    )
+    icon: str = Field(description="lucide icon name, e.g. 'Gamepad2'")
+    label_key: str = Field(description="Key into get_translations() for the label")
+    label_text: str = Field(description="Literal fallback for the label")
+    description_key: Optional[str] = Field(
+        default=None, description="Key into get_translations() for the sub-label"
+    )
+    description_text: Optional[str] = Field(
+        default=None, description="Literal fallback for the sub-label"
+    )
+    tone: Literal["neutral", "info", "success", "warning", "danger"] = "neutral"
+    order: int = Field(default=100, description="Sort order within the plugin block")
+
+
+class MenuActionResult(BaseModel):
+    """Outcome of a menu action, rendered as a toast by the frontend.
+
+    ``message_key`` is resolved client-side against the plugin's translations
+    (same mechanic as pill labels) - the backend never picks a language.
+    """
+
+    ok: bool
+    message_key: Optional[str] = None
+    message_text: str = Field(description="Literal fallback, always set")
+
+
 class PluginUIManifest(BaseModel):
     """UI manifest for plugin frontend integration."""
 
@@ -64,6 +102,10 @@ class PluginUIManifest(BaseModel):
     nav_items: List[PluginNavItem] = Field(
         default_factory=list,
         description="Navigation items to add to sidebar",
+    )
+    menu_items: List["PluginMenuItem"] = Field(
+        default_factory=list,
+        description="Actions to add to the system menu",
     )
     bundle_path: str = Field(
         default="ui/bundle.js",
@@ -240,6 +282,23 @@ class PluginBase(ABC):
         *pill_id* is the plugin-local suffix from the spec, not the namespaced
         public id. The returned dict is passed to PillState — supply at least
         ``kind``, ``tone`` and ``label_key``/``label_text``.
+        """
+        return None
+
+    def get_menu_items(self) -> List["PluginMenuItem"]:
+        """System-menu actions this plugin contributes. Default: none."""
+        return []
+
+    async def run_menu_action(
+        self, action_id: str, db: "Session"
+    ) -> Optional["MenuActionResult"]:
+        """Execute one menu action, or None if this plugin does not know it.
+
+        *action_id* is the plugin-local id from the declared menu item. The
+        core validates it against get_menu_items() before calling, enforces the
+        admin gate, and applies a timeout - implementations only do the work.
+        Blocking work belongs in ``asyncio.to_thread`` so the timeout can
+        actually take effect.
         """
         return None
 
