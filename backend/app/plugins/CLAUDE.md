@@ -132,7 +132,10 @@ Two plugin trust tiers with different isolation:
    `services.notifications.plugin_events.emit_plugin_event(plugin_name, event_id,
    entity_id="", **kwargs)`; it enforces the declared `cooldown_seconds` itself
    (the async emit path has none) and delivers to `default_target` (`admins` by
-   default — a plugin cannot widen its own reach). Texts are server-rendered in
+   default — a plugin cannot widen its own reach). `default_target="all_users"`
+   delivers to every active user **unrouted** — the category-routing filter
+   that scopes the `admins` default does not apply on that branch — so it
+   must stay restricted to fully-trusted bundled plugins. Texts are server-rendered in
    one language (like the core events), so they are plain templates, not
    `resolvePluginString` keys. Background tasks run **primary-only** (#448), so a
    poller needs no cross-worker guard.

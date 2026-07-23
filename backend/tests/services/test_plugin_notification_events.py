@@ -1,4 +1,4 @@
-"""Plugin notification events: the extension point (Teilprojekt 3/4)."""
+"""Plugin notification events: the extension point (subproject 3 of 4)."""
 from __future__ import annotations
 
 import pytest
@@ -258,3 +258,78 @@ class TestEmitPluginEvent:
             await plugin_events.emit_plugin_event("steam_gaming", "session_started", entity_id="2", game="B")
 
         assert emitter.emit_for_admins.await_count == 2
+
+    async def test_all_users_target_uses_the_session_factory_and_emit_for_all_users(self):
+        """The all_users branch (opens a session, calls emit_for_all_users,
+        closes in finally) has no consumer today - the only shipped plugin
+        uses admins. Unexercised, a broken factory call here would only
+        surface the first time a plugin declares all_users."""
+        from app.services.notifications import plugin_events
+
+        session = MagicMock()
+        emitter = MagicMock()
+        emitter.emit_for_all_users = AsyncMock()
+        emitter._db_session_factory = MagicMock(return_value=session)
+
+        with patch.object(plugin_events, "lookup_plugin_event",
+                           return_value=self._entry(target="all_users", cooldown=0)), \
+             patch.object(plugin_events, "get_event_emitter", return_value=emitter):
+            await plugin_events.emit_plugin_event("steam_gaming", "session_started", game="Metro")
+
+        emitter._db_session_factory.assert_called_once()
+        emitter.emit_for_all_users.assert_awaited_once()
+        args, kwargs = emitter.emit_for_all_users.await_args
+        assert args[0] == "plugin:steam_gaming:session_started"
+        assert args[1] is session
+        assert kwargs["game"] == "Metro"
+        session.close.assert_called_once()
+
+
+class TestEmitPluginEventIntegration:
+    """Drives the FULL compose: emit_plugin_event -> namespacing ->
+    lookup_plugin_event -> a REAL EventEmitter.emit() -> a captured
+    notification service. The other tests in this file exercise the two
+    halves separately (registry+real-emitter-vs-mocked-service, and
+    emit_plugin_event+cooldown-vs-mocked-emitter); neither would catch a
+    namespacing mismatch between what emit_plugin_event builds
+    (``plugin:<name>:<suffix>``) and what lookup_plugin_event parses - that
+    would pass CI while the feature is silently dead in production."""
+
+    async def test_emit_plugin_event_through_the_real_emitter_to_a_captured_service(self):
+        from app.services.notifications.events import EventEmitter
+        from app.services.notifications import plugin_events
+        from app.plugins.base import PluginEventSpec
+
+        spec = PluginEventSpec(
+            id="session_started",
+            notification_type="info",
+            priority=1,
+            title_template="Started: {game}",
+            message_template="Game {game} started.",
+            cooldown_seconds=60,
+            default_target="admins",
+        )
+        plugin = _plugin_with_events(spec)
+
+        real_emitter = EventEmitter()
+        real_emitter.set_db_session_factory(lambda: MagicMock(close=lambda: None))
+
+        created = {}
+
+        class _Svc:
+            async def create(self, **kw):
+                created.update(kw)
+
+        with patch.object(plugin_events, "get_event_emitter", return_value=real_emitter), \
+             patch.object(plugin_events, "_iter_enabled_plugins",
+                          return_value=[("steam_gaming", plugin)]), \
+             patch("app.services.notifications.service.get_notification_service",
+                   return_value=_Svc()):
+            await plugin_events.emit_plugin_event(
+                "steam_gaming", "session_started", entity_id="1449560", game="Metro"
+            )
+
+        assert created["category"] == "steam_gaming"       # core-derived
+        assert created["title"] == "Started: Metro"
+        assert created["user_id"] is None                  # admins path
+        assert created["priority"] == 1
