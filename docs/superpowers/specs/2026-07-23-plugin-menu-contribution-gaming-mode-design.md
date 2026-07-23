@@ -132,6 +132,23 @@ deklarierten `menu_items` vorkommen, sonst 404 — `run_menu_action()` wird dann
 gar nicht erst aufgerufen. Die Ausführung läuft unter Exception-Guard **und**
 `asyncio.wait_for(..., PLUGIN_MENU_ACTION_TIMEOUT_SECONDS)`.
 
+**Deaktivierte Plugins blockt die vorhandene `PluginGateMiddleware`, nicht die
+Route.** `menu-actions` steht bewusst **nicht** in deren
+`_MANAGEMENT_SUFFIXES` — anders als `/toggle` oder `/config` ist eine Aktion
+kein Verwaltungszugriff, der auch bei deaktiviertem Plugin funktionieren muss.
+Die Middleware prüft die **DB** (den einzigen worker-übergreifenden Zustand)
+mit 5-s-TTL-Cache und antwortet 403; ein Deaktivieren wirkt damit binnen
+weniger Sekunden auf allen vier Prod-Workern.
+
+**Bekannte Einschränkung in der Gegenrichtung** (Erbstück aus Teilprojekt 1,
+Issue #448): `PluginManager._enabled` ist prozess-lokal. Nach einem
+*Aktivieren* über die UI kennt nur der behandelnde Worker die Plugin-Instanz;
+auf den übrigen liefert `get_plugin()` `None` → 404 auf einen expliziten
+Nutzerklick, bis das Backend neu gestartet wird. Die Operator-Note aus
+`plugins/CLAUDE.md` (Restart nach Toggle eines beitragenden Plugins) gilt hier
+unverändert und wird um Menü-Aktionen ergänzt. Der strukturelle Fix ist
+#448-Scope, nicht dieses Teilprojekt.
+
 `PLUGIN_MENU_ACTION_TIMEOUT_SECONDS = 20.0` — großzügiger als die 2 s der
 Pill-Collectoren, weil `kscreen-doctor` selbst ein 30-s-Subprocess-Timeout
 mitbringt. **Ehrliche Einschränkung:** blockierende Arbeit läuft im Plugin über
@@ -205,8 +222,10 @@ heute steht.
   Pills, mit generischem Fallback statt Absturz.
 - **Sperre während des Laufs.** `kscreen-doctor` braucht einen Moment; ohne
   deaktivierten Button feuert ein Doppelklick die Aktion zweimal.
-- **Nach Erfolg** wird der Desktop-Status neu geholt, damit „Desktop
-  aktivieren" auf „deaktivieren" umspringt statt eine Zeile lang zu lügen.
+- **Kein zusätzlicher Status-Refetch nötig.** Das Menü schließt beim Klick,
+  und `PowerMenu` lädt den Desktop-Status ohnehin bei jedem Öffnen neu
+  (`PowerMenu.tsx:27-36`) — beim nächsten Öffnen steht „Desktop deaktivieren"
+  also bereits korrekt da. Bestehendes Verhalten, keine neue Arbeit.
 - Toast bei beiden Ausgängen, Text aus `MenuActionResult`.
 
 Im Pi-Build lädt der `PluginContext` gar nicht erst Plugins — es erscheinen
@@ -216,7 +235,8 @@ dort automatisch keine Einträge.
 
 | Fall | Verhalten |
 |---|---|
-| Plugin deaktiviert/deinstalliert | Fällt aus dem Manifest → Menüpunkt weg; Route 404 |
+| Plugin deaktiviert/deinstalliert | Fällt aus dem Manifest → Menüpunkt weg; POST → **403 durch `PluginGateMiddleware`** (DB-basiert, wirkt binnen ~5 s auf allen Workern) |
+| Plugin aktiviert, aber Worker kennt es noch nicht | 404 bis zum Backend-Restart (prozess-lokales `_enabled`, #448 — siehe Extension-Point-Abschnitt) |
 | `action_id` nicht deklariert | 404, `run_menu_action()` wird nicht aufgerufen |
 | Aktion wirft | HTTP 200 mit `ok=false` + generischer Meldung; Details nur ins Log |
 | Aktion überschreitet das Timeout | Abgeschnitten, `ok=false` |
@@ -236,8 +256,16 @@ Server-Interna — dieselbe Regel wie bei den Pill-Collectoren.
   regexbeschränkt **und** gegen die deklarierte Liste geprüft, das Icon geht
   durch eine Allowlist.
 - Admin-Gate, Ratelimit und Audit-Eintrag liegen im Core, nicht im Plugin.
+  Der Audit-Eintrag wird **nach** der Ausführung geschrieben, mit
+  `success=ok` — auch Timeout und Fehlschlag landen im Trail.
 - Der Extension-Point erlaubt Plugins, eine Aktion *anzubieten* — nicht, ihre
   Sichtbarkeit oder Berechtigung zu bestimmen.
+- **Bewusst akzeptiert:** `GET /ui/manifest` ist `get_current_user` — auch
+  Nicht-Admins erhalten die `menu_items` (statische Labels/Icons) im Payload;
+  nur das Rendern ist clientseitig auf den Admin-Block beschränkt. Das ist
+  reine Metadaten-Sichtbarkeit ohne dynamische Daten (anders als der
+  Spielname in Teilprojekt 1, der serverseitig gefiltert wird); die
+  Ausführung selbst ist serverseitig admin-gegated.
 
 ## Tests
 
@@ -245,8 +273,11 @@ Server-Interna — dieselbe Regel wie bei den Pill-Collectoren.
 und Pfadanteile ab. `menu_items` erscheinen im UI-Manifest nur für aktivierte
 Plugins. Route: Nicht-Admin → 403; unbekanntes Plugin → 404; nicht deklarierte
 `action_id` → 404 **und** `run_menu_action()` ungerufen; Happy Path → `ok=true`
-plus Audit-Eintrag; werfende Aktion → 200 mit `ok=false`, keine Interna in der
-Antwort; hängende Aktion wird vom Timeout abgeschnitten.
+plus Audit-Eintrag mit `success=true`; werfende Aktion → 200 mit `ok=false`,
+keine Interna in der Antwort, Audit mit `success=false`; hängende Aktion wird
+vom Timeout abgeschnitten. Middleware: deaktiviertes Plugin → 403 durch
+`PluginGateMiddleware` (Test auf Pfad-Matching des neuen Sub-Pfads — er darf
+**nicht** als Management-Route durchrutschen).
 
 **Steam-Plugin.** Reihenfolge Displays-vor-Steam; scheiterndes `enable()` →
 Launcher **nicht** aufgerufen, `ok=false`; fehlendes `steam`-Binary
