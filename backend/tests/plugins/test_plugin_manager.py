@@ -219,3 +219,35 @@ class TestGetUiManifest:
         manifest = mgr.get_ui_manifest()
         assert "plugins" in manifest
         assert manifest["plugins"] == []
+
+
+class TestIterEnabledPlugins:
+    """iter_enabled_plugins() is the seam the status bar (and other status-
+    pill consumers) depend on to reach enabled plugin instances."""
+
+    @pytest.mark.asyncio
+    async def test_yields_enabled_loaded_plugins(self, plugins_dir_with_plugin: Path, db_session: Session):
+        mgr = PluginManager(plugins_dir=plugins_dir_with_plugin)
+        await mgr.enable_plugin("test_plugin", [], db_session)
+
+        result = list(mgr.iter_enabled_plugins())
+
+        assert len(result) == 1
+        name, plugin = result[0]
+        assert name == "test_plugin"
+        assert plugin is mgr.get_plugin("test_plugin")
+
+    def test_skips_enabled_names_with_no_loaded_instance(self, empty_plugins_dir: Path):
+        """`_enabled` can name a plugin that failed to load or was never
+        discovered (e.g. removed from disk after being enabled); such a
+        name must be skipped rather than yielding a None plugin."""
+        mgr = PluginManager(plugins_dir=empty_plugins_dir)
+        mgr._enabled.add("ghost_plugin")
+
+        result = list(mgr.iter_enabled_plugins())
+
+        assert result == []
+
+    def test_empty_when_nothing_enabled(self, empty_plugins_dir: Path):
+        mgr = PluginManager(plugins_dir=empty_plugins_dir)
+        assert list(mgr.iter_enabled_plugins()) == []

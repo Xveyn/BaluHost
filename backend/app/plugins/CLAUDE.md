@@ -66,6 +66,24 @@ Two plugin trust tiers with different isolation:
 3. Implement `metadata` property returning `PluginMetadata`
 4. Override `get_router()` for API routes, `get_background_tasks()` for periodic work
 5. Override `get_dashboard_panel()` + `get_dashboard_data()` for dashboard integration
+6. Override `get_status_pills()` + `collect_status_pill()` to contribute a
+   topbar status-strip pill. Only pick the plugin-local suffix (validated
+   against `^[a-z0-9_]+$` on `StatusPillSpec.id`) — the core composes the
+   public id as `plugin:<plugin_name>:<suffix>` and seeds its config row
+   **enabled by default** (core pills seed disabled). A composed id that
+   doesn't match the namespaced shape, or is too long for the `pill_id`
+   column, is skipped with a warning rather than breaking the endpoint.
+   The collector runs under both an exception guard and a
+   `PLUGIN_COLLECTOR_TIMEOUT_SECONDS` (2s) timeout — a collector that throws
+   or hangs silences only its own pill, never the whole strip. Labels come
+   from `get_translations()`, resolved client-side via `resolvePluginString`,
+   with `name_text`/`label_text` as literal fallbacks.
+   **Operator note:** `PluginManager._enabled` is process-local, populated at
+   startup. Toggling a pill-contributing plugin on/off through the UI only
+   updates the worker that handled that request — in production (4 Uvicorn
+   workers) the pill then appears on roughly one in four status-strip polls
+   until the backend is restarted. Restart `baluhost-backend` after enabling
+   or disabling a plugin that contributes a status pill so all workers agree.
 
 ## SmartDevice Framework (`smart_device/`)
 

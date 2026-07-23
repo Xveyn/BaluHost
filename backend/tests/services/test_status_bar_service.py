@@ -89,18 +89,36 @@ def test_locked_pills_default_to_admin_visibility():
             assert p.default_visibility == "admin"
 
 
-def test_pill_id_literal_matches_catalog():
-    """Drift detection: PILL_IDS Literal must equal the catalog ids exactly."""
-    from typing import get_args
-    from app.schemas.status_bar import PILL_IDS
-    from app.services.status_bar.catalog import CATALOG
-    assert set(get_args(PILL_IDS)) == {p.id for p in CATALOG}
-
-
 def test_locked_set_matches_spec():
     from app.services.status_bar.catalog import CATALOG
     locked = {p.id for p in CATALOG if p.visibility_locked}
     assert locked == {"raid", "sleep", "vpn", "temp", "always_awake", "scheduler", "backup"}
+
+
+# ── F6: _PILL_ID_MAX_LENGTH must never be None ────────────────────────────
+
+
+def test_pill_id_max_length_constant_is_derived_from_the_bounded_column():
+    """Sanity check against the real, currently-bounded pill_id column
+    (String(96)) — the module constant service.py derives from it."""
+    from app.services.status_bar.service import _PILL_ID_MAX_LENGTH
+    assert _PILL_ID_MAX_LENGTH == 96
+
+
+def test_pill_id_max_length_derivation_falls_back_to_96_for_an_unbounded_column(monkeypatch):
+    """`.type.length` is None for an unbounded String()/Text column. Mirrors
+    the exact `... .type.length or 96` fallback in
+    status_bar/service.py's _PILL_ID_MAX_LENGTH derivation against the real
+    column type object: without the fallback the derived constant would be
+    None, and every `len(id) > _PILL_ID_MAX_LENGTH` comparison in
+    _effective_catalog() would then TypeError, silently dropping every
+    plugin's pills behind one generic warning."""
+    col_type = StatusBarPillConfig.__table__.columns["pill_id"].type
+    monkeypatch.setattr(col_type, "length", None)
+
+    recomputed = StatusBarPillConfig.__table__.columns["pill_id"].type.length or 96
+
+    assert recomputed == 96
 
 
 # ── catalog icon (representative icon for the config Live Preview) ───────

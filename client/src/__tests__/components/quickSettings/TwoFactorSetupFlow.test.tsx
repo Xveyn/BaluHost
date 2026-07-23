@@ -24,7 +24,11 @@ describe('TwoFactorSetupFlow', () => {
     render(<TwoFactorSetupFlow onComplete={vi.fn()} onCancel={vi.fn()} />);
 
     await waitFor(() => expect(setup).toHaveBeenCalledOnce());
-    expect(screen.getByAltText(/qr/i)).toHaveAttribute('src', mockSetupData.qr_code);
+    // Wait for the rendered image, not just the mock call: setup2FA() runs
+    // synchronously in the mount effect, while the QR only appears after the
+    // promise resolves and React commits the resulting render. A synchronous
+    // query hits the loading DOM once that render slips a few ms (CI, 4 workers).
+    expect(await screen.findByAltText(/qr/i)).toHaveAttribute('src', mockSetupData.qr_code);
     expect(screen.getByText(mockSetupData.secret)).toBeInTheDocument();
   });
 

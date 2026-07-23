@@ -22,7 +22,7 @@ import sys
 import types
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional, Sequence, Set
+from typing import Any, Dict, Iterator, List, Literal, Optional, Sequence, Set, Tuple
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
@@ -847,6 +847,16 @@ class PluginManager:
             PluginBase instance or None
         """
         return self._plugins.get(name)
+
+    def iter_enabled_plugins(self) -> Iterator[Tuple[str, PluginBase]]:
+        """Yield ``(name, plugin)`` for every currently enabled plugin.
+
+        Public accessor so callers stop reaching into ``_enabled``.
+        """
+        for name in sorted(self._enabled):
+            plugin = self.get_plugin(name)
+            if plugin is not None:
+                yield name, plugin
 
     def is_enabled(self, name: str) -> bool:
         """Check if a plugin is enabled.

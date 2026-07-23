@@ -147,3 +147,69 @@ def test_size_falls_back_to_vdf_when_no_acf(tmp_path, monkeypatch):
     assert len(libs) == 1
     assert libs[0].games[0].size_bytes == 1234
     assert libs[0].games[0].name == "App 333"
+
+
+def _write_libraryfolders_vdf(root: Path, extra: dict) -> None:
+    """Write ``root/steamapps/libraryfolders.vdf`` declaring extra library paths.
+
+    Entry "0" always points at *root* itself, mirroring real Steam behavior
+    (the install root also lists itself as a library folder). *extra* maps
+    additional entry ids to path strings — e.g. a library on a different
+    mount than the Steam install, which is the scenario
+    ``find_steamapps_dirs()`` exists to handle.
+    """
+    steamapps = root / "steamapps"
+    steamapps.mkdir(parents=True, exist_ok=True)
+    entries = {"0": root.as_posix()}
+    entries.update(extra)
+    body = "".join(
+        f'    "{eid}"\n    {{\n        "path"  "{path}"\n        "apps"\n        {{\n        }}\n    }}\n'
+        for eid, path in entries.items()
+    )
+    vdf_text = '"libraryfolders"\n{\n' + body + '}\n'
+    (steamapps / "libraryfolders.vdf").write_text(vdf_text, encoding="utf-8")
+
+
+def test_find_steamapps_dirs_returns_root_steamapps(tmp_path, monkeypatch):
+    root = tmp_path / "SteamRoot"
+    _write_libraryfolders_vdf(root, {})
+    monkeypatch.setattr(steam, "_CANDIDATE_ROOTS", [str(root)])
+
+    dirs = steam.find_steamapps_dirs()
+    assert dirs == [root / "steamapps"]
+
+
+def test_find_steamapps_dirs_includes_library_on_different_mount(tmp_path, monkeypatch):
+    root = tmp_path / "SteamRoot"
+    # Simulates e.g. /mnt/cache-vcl/SteamLibrary declared in libraryfolders.vdf
+    # while the Steam install itself lives elsewhere.
+    extra = tmp_path / "SteamLibrary"
+    (extra / "steamapps").mkdir(parents=True)
+    _write_libraryfolders_vdf(root, {"1": extra.as_posix()})
+    monkeypatch.setattr(steam, "_CANDIDATE_ROOTS", [str(root)])
+
+    dirs = steam.find_steamapps_dirs()
+    assert set(dirs) == {root / "steamapps", extra / "steamapps"}
+
+
+def test_find_steamapps_dirs_dedupes_dir_reachable_twice(tmp_path, monkeypatch):
+    root = tmp_path / "SteamRoot"
+    extra = tmp_path / "SteamLibrary"
+    (extra / "steamapps").mkdir(parents=True)
+    # Same library path declared under two different entry ids.
+    _write_libraryfolders_vdf(root, {"1": extra.as_posix(), "2": extra.as_posix()})
+    monkeypatch.setattr(steam, "_CANDIDATE_ROOTS", [str(root)])
+
+    dirs = steam.find_steamapps_dirs()
+    assert len(dirs) == 2  # root + extra, not three
+    assert dirs.count(extra / "steamapps") == 1
+
+
+def test_find_steamapps_dirs_skips_declared_path_missing_on_disk(tmp_path, monkeypatch):
+    root = tmp_path / "SteamRoot"
+    missing = tmp_path / "UnmountedLibrary"  # never created on disk
+    _write_libraryfolders_vdf(root, {"1": missing.as_posix()})
+    monkeypatch.setattr(steam, "_CANDIDATE_ROOTS", [str(root)])
+
+    dirs = steam.find_steamapps_dirs()  # must not raise
+    assert dirs == [root / "steamapps"]

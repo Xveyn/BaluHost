@@ -3,9 +3,8 @@
  */
 import { apiClient } from '../lib/api';
 
-export type PillId =
-  | 'power' | 'pihole' | 'uploads' | 'sync' | 'raid' | 'sleep' | 'vpn' | 'temp'
-  | 'always_awake' | 'scheduler' | 'backup' | 'desktop';
+/** Core pill ids plus `plugin:<name>:<suffix>` — validated server-side. */
+export type PillId = string;
 
 export type DisplayMode = 'always' | 'when_off' | 'when_on';
 
@@ -25,6 +24,8 @@ export interface PillState {
   icon?: string | null;
   href: string;
   extra?: Record<string, unknown> | null;
+  label_text?: string | null;
+  translations?: Record<string, Record<string, string>> | null;
 }
 
 export interface StatusBarStateResponse {
@@ -43,6 +44,8 @@ export interface PillCatalogEntry {
   icon: string;
   display_mode: DisplayMode;
   display_mode_configurable: boolean;
+  name_text?: string | null;
+  translations?: Record<string, Record<string, string>> | null;
 }
 
 export interface StatusBarConfigResponse {
