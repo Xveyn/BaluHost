@@ -11,22 +11,32 @@ readers consume the warm cache and never open a session of their own, because
 the callers that need them (``PluginManager.get_all_plugins()``) have no
 session to give.
 
-The cache maps ``name -> granted_permissions`` rather than holding a bare set
-of names: ``PluginGateMiddleware`` needs both out of the same read, and a
-name-only cache would have forced it to keep a second query.
+Internally the cache keeps both ``granted_permissions`` (bundled-plugin
+permission model) and ``granted_api_scopes`` (external-plugin capability
+model) per plugin, because ``reconcile_worker()`` needs both out of the same
+read to call ``PluginManager.enable_plugin()`` correctly. ``enabled_plugins()``
+only ever hands out ``name -> granted_permissions`` - that is its contract and
+other modules (``PluginManager._effective_enabled()``, ``PluginGateMiddleware``)
+depend on the shape staying exactly that.
 """
 from __future__ import annotations
 
 import asyncio
 import logging
 import time
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, TypedDict
 
 logger = logging.getLogger(__name__)
 
 CACHE_TTL_SECONDS: float = 5.0
 
-_cache: Optional[Dict[str, List[str]]] = None
+
+class _PluginGrant(TypedDict):
+    granted_permissions: List[str]
+    granted_api_scopes: List[str]
+
+
+_cache: Optional[Dict[str, _PluginGrant]] = None
 _cached_at: float = 0.0
 
 
@@ -35,7 +45,7 @@ def _monotonic() -> float:
     return time.monotonic()
 
 
-def _fetch() -> Dict[str, List[str]]:
+def _fetch() -> Dict[str, _PluginGrant]:
     """Blocking DB read - always called through asyncio.to_thread."""
     from app.core.database import SessionLocal
     from app.models.plugin import InstalledPlugin
@@ -47,7 +57,13 @@ def _fetch() -> Dict[str, List[str]]:
             .filter(InstalledPlugin.is_enabled == True)  # SQL boolean filter - `is True` would break the query (E712 is globally ignored for this reason)
             .all()
         )
-        return {row.name: list(row.granted_permissions or []) for row in rows}
+        return {
+            row.name: {
+                "granted_permissions": list(row.granted_permissions or []),
+                "granted_api_scopes": list(row.granted_api_scopes or []),
+            }
+            for row in rows
+        }
     finally:
         db.close()
 
@@ -72,7 +88,9 @@ async def refresh(force: bool = False) -> None:
 
 def enabled_plugins() -> Optional[Dict[str, List[str]]]:
     """Warm cache as ``name -> granted_permissions``; None if never loaded."""
-    return dict(_cache) if _cache is not None else None
+    if _cache is None:
+        return None
+    return {name: list(entry["granted_permissions"]) for name, entry in _cache.items()}
 
 
 def is_enabled(name: str) -> Optional[bool]:
@@ -123,19 +141,24 @@ async def reconcile_worker() -> None:
             logger.warning("plugin enablement refresh failed", exc_info=True)
             return
 
-        desired = enabled_plugins()
+        desired = _cache
         if desired is None:
             return
 
-        # Read as a module attribute: lifespan sets this after the fork, so a
-        # from-import would freeze the pre-fork False forever.
-        from app.core import lifespan
+        try:
+            # Read as a module attribute: lifespan sets this after the fork, so
+            # a from-import would freeze the pre-fork False forever.
+            from app.core import lifespan
 
-        manager = _get_manager()
-        loaded = set(manager._enabled)
+            manager = _get_manager()
+            loaded = set(manager._enabled)
+        except Exception:  # broad on purpose: never raises - best-effort maintenance on a request path
+            logger.warning("plugin enablement reconcile setup failed", exc_info=True)
+            return
+
         now = _monotonic()
 
-        for name, permissions in desired.items():
+        for name, grant in desired.items():
             if name in loaded:
                 continue
             if _failed_until.get(name, 0.0) > now:
@@ -146,9 +169,10 @@ async def reconcile_worker() -> None:
                 with SessionLocal() as db:
                     ok = await manager.enable_plugin(
                         name,
-                        permissions,
+                        grant["granted_permissions"],
                         db,
                         start_background_tasks=lifespan.IS_PRIMARY_WORKER,
+                        granted_api_scopes=grant["granted_api_scopes"],
                     )
             except Exception:  # broad on purpose: one bad plugin must not stop the rest
                 logger.warning("lazy enable of plugin %s failed", name, exc_info=True)

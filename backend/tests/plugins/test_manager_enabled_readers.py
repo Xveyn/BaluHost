@@ -20,6 +20,14 @@ def _manager(tmp_path) -> PluginManager:
     return PluginManager(plugins_dir=tmp_path)
 
 
+def _grant(permissions=None, scopes=None) -> dict:
+    """Build a ``_fetch()``-shaped cache entry for one plugin."""
+    return {
+        "granted_permissions": list(permissions or []),
+        "granted_api_scopes": list(scopes or []),
+    }
+
+
 class TestIsEnabled:
     async def test_reports_enabled_although_this_worker_never_loaded_it(self, tmp_path):
         """The bug, in one assertion.
@@ -30,7 +38,7 @@ class TestIsEnabled:
         worker_b = _manager(tmp_path)
         assert worker_b._enabled == set()
 
-        with patch.object(pe, "_fetch", return_value={"demo": []}):
+        with patch.object(pe, "_fetch", return_value={"demo": _grant()}):
             await pe.refresh()
 
         assert worker_b.is_enabled("demo") is True
@@ -72,7 +80,7 @@ class TestGetAllPlugins:
 
         with patch.object(manager, "discover_plugins", return_value=["demo"]), \
              patch.object(manager, "get_discovered", return_value=None), \
-             patch.object(pe, "_fetch", return_value={"demo": []}):
+             patch.object(pe, "_fetch", return_value={"demo": _grant()}):
             await pe.refresh()
             info = manager.get_all_plugins()
 

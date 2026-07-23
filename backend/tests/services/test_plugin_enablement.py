@@ -9,25 +9,35 @@ import pytest
 from app.services import plugin_enablement as pe
 
 
+def _grant(permissions=None, scopes=None) -> dict:
+    """Build a ``_fetch()``-shaped cache entry for one plugin."""
+    return {
+        "granted_permissions": list(permissions or []),
+        "granted_api_scopes": list(scopes or []),
+    }
+
+
 @pytest.fixture(autouse=True)
 def _clean_cache():
     pe.invalidate()
     pe._failed_until.clear()
+    pe._reconcile_lock = asyncio.Lock()
     yield
     pe.invalidate()
     pe._failed_until.clear()
+    pe._reconcile_lock = asyncio.Lock()
 
 
 class TestCache:
     async def test_refresh_loads_names_and_permissions(self):
-        with patch.object(pe, "_fetch", return_value={"demo": ["files.read"]}):
+        with patch.object(pe, "_fetch", return_value={"demo": _grant(["files.read"])}):
             await pe.refresh()
         assert pe.enabled_plugins() == {"demo": ["files.read"]}
         assert pe.is_enabled("demo") is True
         assert pe.is_enabled("other") is False
 
     async def test_second_refresh_inside_the_ttl_does_not_hit_the_db(self):
-        with patch.object(pe, "_fetch", return_value={"demo": []}) as fetch:
+        with patch.object(pe, "_fetch", return_value={"demo": _grant()}) as fetch:
             await pe.refresh()
             await pe.refresh()
         assert fetch.call_count == 1
@@ -35,14 +45,14 @@ class TestCache:
     async def test_refresh_after_the_ttl_hits_the_db_again(self, monkeypatch):
         clock = {"now": 1000.0}
         monkeypatch.setattr(pe, "_monotonic", lambda: clock["now"])
-        with patch.object(pe, "_fetch", return_value={"demo": []}) as fetch:
+        with patch.object(pe, "_fetch", return_value={"demo": _grant()}) as fetch:
             await pe.refresh()
             clock["now"] += pe.CACHE_TTL_SECONDS + 0.1
             await pe.refresh()
         assert fetch.call_count == 2
 
     async def test_force_bypasses_the_ttl(self):
-        with patch.object(pe, "_fetch", return_value={"demo": []}) as fetch:
+        with patch.object(pe, "_fetch", return_value={"demo": _grant()}) as fetch:
             await pe.refresh()
             await pe.refresh(force=True)
         assert fetch.call_count == 2
@@ -55,7 +65,7 @@ class TestCache:
                 await pe.refresh()
 
     async def test_stale_cache_survives_a_failed_refresh(self):
-        with patch.object(pe, "_fetch", return_value={"demo": []}):
+        with patch.object(pe, "_fetch", return_value={"demo": _grant()}):
             await pe.refresh()
         with patch.object(pe, "_fetch", side_effect=RuntimeError("db down")):
             with pytest.raises(RuntimeError):
@@ -68,18 +78,29 @@ class TestCache:
 
     async def test_sync_readers_never_touch_the_db(self):
         """Pinned because get_all_plugins() has no session to give them."""
-        with patch.object(pe, "_fetch", return_value={"demo": []}):
+        with patch.object(pe, "_fetch", return_value={"demo": _grant()}):
             await pe.refresh()
         with patch.object(pe, "_fetch", side_effect=AssertionError("sync read hit the DB")):
             assert pe.is_enabled("demo") is True
             assert pe.enabled_plugins() == {"demo": []}
 
     async def test_invalidate_forces_the_next_refresh(self):
-        with patch.object(pe, "_fetch", return_value={"demo": []}) as fetch:
+        with patch.object(pe, "_fetch", return_value={"demo": _grant()}) as fetch:
             await pe.refresh()
             pe.invalidate()
             await pe.refresh()
         assert fetch.call_count == 2
+
+    async def test_enabled_plugins_carries_only_permissions_not_scopes(self):
+        """enabled_plugins() must keep its documented ``name -> granted_permissions``
+        contract even though the internal cache now also carries API scopes."""
+        with patch.object(
+            pe,
+            "_fetch",
+            return_value={"demo": _grant(["files.read"], ["read:storage"])},
+        ):
+            await pe.refresh()
+        assert pe.enabled_plugins() == {"demo": ["files.read"]}
 
 
 def _fake_manager(loaded: set) -> MagicMock:
@@ -102,7 +123,7 @@ def _fake_manager(loaded: set) -> MagicMock:
 class TestReconcile:
     async def test_loads_what_the_database_says_is_missing(self):
         manager = _fake_manager(set())
-        with patch.object(pe, "_fetch", return_value={"demo": ["files.read"]}), \
+        with patch.object(pe, "_fetch", return_value={"demo": _grant(["files.read"])}), \
              patch.object(pe, "_get_manager", return_value=manager):
             await pe.reconcile_worker()
 
@@ -110,6 +131,23 @@ class TestReconcile:
         args, kwargs = manager.enable_plugin.await_args
         assert args[0] == "demo"
         assert args[1] == ["files.read"]
+
+    async def test_grants_the_api_scopes_to_the_manager(self):
+        """External plugins are routed through granted_api_scopes (manager.py:463-465);
+        dropping it leaves a lazily-reconciled external plugin with zero
+        capabilities even though it is now counted as enabled."""
+        manager = _fake_manager(set())
+        with patch.object(
+            pe,
+            "_fetch",
+            return_value={"demo": _grant(["files.read"], ["read:storage", "read:network"])},
+        ), patch.object(pe, "_get_manager", return_value=manager):
+            await pe.reconcile_worker()
+
+        manager.enable_plugin.assert_awaited_once()
+        args, kwargs = manager.enable_plugin.await_args
+        assert args[0] == "demo"
+        assert sorted(kwargs["granted_api_scopes"]) == ["read:network", "read:storage"]
 
     async def test_drops_what_the_database_no_longer_lists(self):
         manager = _fake_manager({"demo"})
@@ -125,7 +163,7 @@ class TestReconcile:
         from app.core import lifespan
 
         manager = _fake_manager(set())
-        with patch.object(pe, "_fetch", return_value={"demo": []}), \
+        with patch.object(pe, "_fetch", return_value={"demo": _grant()}), \
              patch.object(pe, "_get_manager", return_value=manager), \
              patch.object(lifespan, "IS_PRIMARY_WORKER", False):
             await pe.reconcile_worker()
@@ -134,7 +172,7 @@ class TestReconcile:
 
         manager = _fake_manager(set())
         pe.invalidate()
-        with patch.object(pe, "_fetch", return_value={"demo": []}), \
+        with patch.object(pe, "_fetch", return_value={"demo": _grant()}), \
              patch.object(pe, "_get_manager", return_value=manager), \
              patch.object(lifespan, "IS_PRIMARY_WORKER", True):
             await pe.reconcile_worker()
@@ -152,8 +190,9 @@ class TestReconcile:
 
         manager.enable_plugin = AsyncMock(side_effect=_enable)
 
-        with patch.object(pe, "_fetch", return_value={"bad": [], "good": []}), \
-             patch.object(pe, "_get_manager", return_value=manager):
+        with patch.object(
+            pe, "_fetch", return_value={"bad": _grant(), "good": _grant()}
+        ), patch.object(pe, "_get_manager", return_value=manager):
             await pe.reconcile_worker()
 
         assert "good" in manager._enabled
@@ -162,12 +201,32 @@ class TestReconcile:
         manager = _fake_manager(set())
         manager.enable_plugin = AsyncMock(return_value=False)
 
-        with patch.object(pe, "_fetch", return_value={"demo": []}), \
+        with patch.object(pe, "_fetch", return_value={"demo": _grant()}), \
              patch.object(pe, "_get_manager", return_value=manager):
             await pe.reconcile_worker()
             await pe.reconcile_worker()
 
         assert manager.enable_plugin.await_count == 1
+
+    async def test_a_failed_plugin_is_retried_once_the_backoff_expires(self, monkeypatch):
+        """Proves the release half of the backoff, not just the block: removing
+        ``+ FAILED_RETRY_SECONDS`` (turning the pause permanent) leaves this red."""
+        clock = {"now": 1000.0}
+        monkeypatch.setattr(pe, "_monotonic", lambda: clock["now"])
+
+        manager = _fake_manager(set())
+        manager.enable_plugin = AsyncMock(return_value=False)
+
+        with patch.object(pe, "_fetch", return_value={"demo": _grant()}), \
+             patch.object(pe, "_get_manager", return_value=manager):
+            await pe.reconcile_worker()
+            assert manager.enable_plugin.await_count == 1
+
+            clock["now"] += pe.FAILED_RETRY_SECONDS + 0.1
+            pe.invalidate()
+            await pe.reconcile_worker()
+
+        assert manager.enable_plugin.await_count == 2
 
     async def test_concurrent_reconciles_enable_only_once(self):
         """Status-strip poll and plugin list arrive together in practice; both
@@ -184,18 +243,25 @@ class TestReconcile:
 
         manager.enable_plugin = AsyncMock(side_effect=_slow_enable)
 
-        with patch.object(pe, "_fetch", return_value={"demo": []}), \
+        with patch.object(pe, "_fetch", return_value={"demo": _grant()}), \
              patch.object(pe, "_get_manager", return_value=manager):
             first = asyncio.create_task(pe.reconcile_worker())
-            await started.wait()
-            # wait_for is what makes this test fail CLEANLY under mutation:
-            # without the single-flight guard the second call queues on the
-            # lock, release.set() is never reached, and the test would hang
-            # forever instead of going red (no pytest timeout is configured).
-            # With the guard it returns immediately; without it, TimeoutError.
-            await asyncio.wait_for(pe.reconcile_worker(), timeout=1.0)
-            release.set()
-            await first
+            try:
+                await started.wait()
+                # wait_for is what makes this test fail CLEANLY under mutation:
+                # without the single-flight guard the second call queues on the
+                # lock, release.set() is never reached, and the test would hang
+                # forever instead of going red (no pytest timeout is configured).
+                # With the guard it returns immediately; without it, TimeoutError.
+                await asyncio.wait_for(pe.reconcile_worker(), timeout=1.0)
+            finally:
+                # If the assertion/wait_for above raises, `first` must still be
+                # released and awaited - otherwise it stays pending forever
+                # holding _reconcile_lock, and every later test in the process
+                # single-flights out immediately (poisoned suite, see #448
+                # review finding 3).
+                release.set()
+                await first
 
         assert manager.enable_plugin.await_count == 1
 
@@ -207,3 +273,11 @@ class TestReconcile:
 
         manager.enable_plugin.assert_not_awaited()
         manager.disable_plugin.assert_not_awaited()
+
+    async def test_get_manager_failure_does_not_propagate(self):
+        """The docstring promises reconcile_worker() never raises. _get_manager()
+        constructs the PluginManager singleton and can touch settings; a failure
+        there must not fail the caller's request."""
+        with patch.object(pe, "_fetch", return_value={"demo": _grant()}), \
+             patch.object(pe, "_get_manager", side_effect=RuntimeError("boom")):
+            await pe.reconcile_worker()  # must not raise
