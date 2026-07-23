@@ -45,7 +45,7 @@ Solange beide immer gleich waren (Zustand nur beim Start gesetzt), fiel das nich
 
 ## Ziel
 
-- Die UI zeigt den Zustand, der in der DB steht — unabhängig davon, welcher Worker antwortet.
+- Die UI zeigt den Zustand, der in der DB steht — unabhängig davon, welcher Worker antwortet (verbleibende Staleness TTL-begrenzt auf wenige Sekunden, statt wie heute unbegrenzt bis zum Restart).
 - Ein Toggle wirkt **ohne Neustart** für methodenbasierte Extension-Points (Status-Pills, Menü-Aktionen, Dashboard-Panels).
 - Wo ein Neustart technisch unvermeidbar bleibt, sagt das System es, statt Bereitschaft vorzutäuschen.
 
@@ -64,29 +64,43 @@ Konsequenz für den Entwurf: nachaktiviert wird trotzdem (halbe Funktion ist bes
 ## Architektur
 
 ```
-services/plugin_enablement.py     NEU: enabled_names(db) -> set[str], DB + TTL-Cache
-                                       reconcile_worker(db) -> None  (async)
-plugins/manager.py                 Lesepfade beantworten aus der DB-Menge;
+services/plugin_enablement.py     NEU: enabled_plugins() -> Mapping[name, granted_permissions]
+                                       (DB + TTL-Cache, Refresh off-loop)
+                                       refresh(force=False) -> None      (async, to_thread)
+                                       reconcile_worker() -> None        (async, single-flight)
+plugins/manager.py                 Status-Lesepfade konsumieren den Cache;
                                    _enabled bedeutet nur noch "lokal geladen"
 middleware/plugin_gate.py          nutzt denselben Helper statt eigener Kopie
-api/routes/plugins.py              reconcile an den async-Einstiegspunkten
+api/routes/plugins.py              refresh + reconcile an den async-Einstiegspunkten
 services/status_bar/service.py     dito vor dem Pill-Collect
 ```
 
 ### Eine Wahrheitsquelle
 
-`enabled_names(db) -> set[str]` liest `installed_plugins.is_enabled` und cacht das Ergebnis für ein kurzes TTL-Fenster. Das Muster existiert bereits in `PluginGateMiddleware._fetch_plugin_status` (5 s TTL, `plugin_gate.py:25`); dieser Entwurf zieht es an **eine** Stelle, und die Middleware wird sein zweiter Nutzer statt einer zweiten Implementierung.
+Der Helper liest `installed_plugins` und cacht **`name -> granted_permissions`** für ein kurzes TTL-Fenster; die Menge der aktivierten Namen ist davon abgeleitet.
+
+**Warum ein Mapping und kein Set:** `PluginGateMiddleware` braucht aus demselben DB-Read zwei Dinge — den Aktivierungszustand *und* die granted permissions, die sie gegen `get_required_permissions()` prüft (`plugin_gate.py:49-68`, Rückgabe heute `(bool, List[str])`). Ein reines Namens-Set würde die Middleware zwingen, ihre eigene Abfrage zu behalten — und das „eine Stelle"-Versprechen wäre von Anfang an gebrochen. Mit dem Mapping wird sie tatsächlich zweiter Nutzer statt zweiter Implementierung; ihr Fail-Closed-Verhalten (DB-Fehler → 500) bleibt unverändert.
+
+**Wer liest wie:** Der DB-Zugriff passiert ausschließlich im async `refresh()` und läuft per `asyncio.to_thread` — dieselbe Konvention, mit der die Middleware heute ihren Read vom Event-Loop fernhält. **Synchrone Leser (`get_all_plugins()`, `is_enabled()`) konsumieren nur den warmen Cache und fassen die DB nie selbst an.** Das ist keine Nebensächlichkeit: `get_all_plugins()` hat keine Session (auch die Route `list_plugins` hat heute kein `db`-Dependency), und ein synchroner DB-Read im Getter würde den Event-Loop blockieren — genau die Fehlerklasse, die beim `kscreen-doctor`-Fix gerade erst beseitigt wurde. Die async Einstiegspunkte rufen `refresh()` vor dem Getter auf.
 
 `_enabled` bleibt bestehen, verliert aber seine Doppelrolle: es beantwortet ausschließlich „dieser Worker hat die Instanz geladen und gestartet" und wird nie wieder als Aktivierungszustand nach außen gegeben.
+
+**Zwei Sorten Lesepfade, zwei Semantiken.** Reine Statusanzeigen (`get_all_plugins()`-`is_enabled`-Flag, `is_enabled()`) beantworten aus dem Cache — der DB-Wahrheit. `iter_enabled_plugins()` und `get_ui_manifest()` dagegen brauchen **Instanzen** (`manager.py:859-862` yieldet `self.get_plugin(name)`), und eine Instanz kann nur aus dem lokalen Zustand kommen: ihre Semantik ist **DB ∩ lokal geladen**. Nach dem Reconcile konvergieren beide Mengen; die Formulierung steht hier, damit niemand versucht, aus einer DB-Zeile eine Instanz zu yielden.
+
+**Verbleibende Staleness ist begrenzt, nicht null.** Nach einem Toggle ist der behandelnde Worker sofort frisch (`invalidate_plugin_cache` bleibt prozess-lokal und wird um die Invalidierung des neuen Caches ergänzt); die übrigen Worker sind bis zum TTL-Ablauf stale. Aus „falsch bis zum Restart" wird „maximal ~5 s" — das ist das ehrliche Versprechen dieses Entwurfs, kein absolutes.
 
 ### Selbstheilung statt Signalisierung
 
 ```python
-async def reconcile_worker(db: Session) -> None:
-    """Gleicht die lokal geladenen Plugins an die DB an."""
+async def reconcile_worker() -> None:
+    """Gleicht die lokal geladenen Plugins an die DB an. Single-flight."""
 ```
 
-Die Funktion bildet die Differenz zwischen `enabled_names(db)` und `manager._enabled` und gleicht sie lokal an: fehlende werden über `enable_plugin()` nachgeladen, überzählige über `disable_plugin()` abgeräumt. Aufgerufen wird sie an den **async** Einstiegspunkten, die den Zustand brauchen:
+Die Funktion refresht den Cache, bildet die Differenz zwischen der DB-Menge und `manager._enabled` und gleicht sie lokal an: fehlende werden über `enable_plugin()` nachgeladen (mit den `granted_permissions` aus dem Cache-Mapping), überzählige über `disable_plugin()` abgeräumt.
+
+**Single-flight pro Worker.** Zwei gleichzeitige Requests (Statusleisten-Poll und Plugin-Liste treffen realistisch zusammen) sehen sonst beide dieselbe Differenz und rufen beide `enable_plugin()` für dasselbe Plugin — `on_startup()` liefe doppelt und parallel. Ein `asyncio.Lock` um den Reconcile genügt; wer den Lock nicht bekommt, wartet nicht, sondern läuft mit dem aktuellen Zustand weiter (der Reconcile des anderen ist gleich fertig).
+
+Aufgerufen wird sie an den **async** Einstiegspunkten, die den Zustand brauchen:
 
 - `GET /api/plugins` (Liste)
 - `GET /api/plugins/ui/manifest`
@@ -133,9 +147,10 @@ Weitere Fälle:
 
 Dazu:
 
-- **Helper:** liefert die DB-Menge; cacht innerhalb des TTL-Fensters (zweiter Aufruf liest nicht erneut); nach Ablauf wieder; DB-Fehler wird nach oben gereicht statt verschluckt.
-- **Lesepfade:** `get_all_plugins()`, `ui/manifest` und `is_enabled()` melden „aktiviert", obwohl `_enabled` des Workers leer ist.
-- **Reconcile:** lädt Fehlendes nach; räumt Überzähliges ab; startet Hintergrund-Tasks **nur** wenn Primary; ein werfendes Plugin blockiert die übrigen nicht; ein gescheitertes wird nicht sofort erneut versucht.
+- **Helper:** liefert das Mapping `name -> granted_permissions`; cacht innerhalb des TTL-Fensters (zweiter Aufruf liest nicht erneut); nach Ablauf wieder; DB-Fehler wird nach oben gereicht statt verschluckt; synchrone Leser lösen **keinen** DB-Read aus (nachweisbar: Cache warm, DB-Fixture entfernt, Leser funktioniert weiter).
+- **Lesepfade:** `get_all_plugins()` und `is_enabled()` melden „aktiviert", obwohl `_enabled` des Workers leer ist; `iter_enabled_plugins()`/`get_ui_manifest()` liefern das Plugin erst **nach** dem Reconcile (DB ∩ geladen).
+- **Reconcile:** lädt Fehlendes nach (mit den Permissions aus dem Mapping); räumt Überzähliges ab; startet Hintergrund-Tasks **nur** wenn Primary; ein werfendes Plugin blockiert die übrigen nicht; ein gescheitertes wird nicht sofort erneut versucht; **zwei gleichzeitige Reconciles aktivieren nur einmal** (Single-Flight — `on_startup()`-Zählung unter parallelem Aufruf).
+- **Middleware:** bezieht Zustand und Permissions aus dem Helper und verhält sich unverändert (aktiviert+Permissions → durch, deaktiviert → 403, fehlende Permission → 403).
 - **Regression Gate:** `PluginGateMiddleware` antwortet bei DB-Fehler weiterhin fehlschlagend, nicht durchlassend.
 - **Router-Fall:** ein lazy aktiviertes Plugin mit Router wird als „Neustart erforderlich" gemeldet.
 
