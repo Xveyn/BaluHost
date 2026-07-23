@@ -15,12 +15,26 @@ class PluginNavItemSchema(BaseModel):
     order: int = 100
 
 
+class PluginMenuItemSchema(BaseModel):
+    """System-menu action offered by a plugin (mirror of PluginMenuItem)."""
+
+    id: str
+    icon: str
+    label_key: str
+    label_text: str
+    description_key: Optional[str] = None
+    description_text: Optional[str] = None
+    tone: str = "neutral"
+    order: int = 100
+
+
 class PluginUIInfo(BaseModel):
     """UI information for a plugin."""
 
     name: str
     display_name: str
     nav_items: List[PluginNavItemSchema] = []
+    menu_items: List[PluginMenuItemSchema] = []
     bundle_path: str = "ui/bundle.js"
     styles_path: Optional[str] = None
     dashboard_widgets: List[str] = []

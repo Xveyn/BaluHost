@@ -64,3 +64,51 @@ class TestPluginBaseDefaults:
 
     def test_ui_manifest_menu_items_default_empty(self):
         assert PluginUIManifest().menu_items == []
+
+
+from unittest.mock import MagicMock
+
+from app.plugins.manager import PluginManager
+from app.schemas.plugin import PluginUIInfo
+
+
+def _plugin_with_menu(name: str = "demo") -> MagicMock:
+    plugin = MagicMock()
+    plugin.metadata.display_name = "Demo"
+    plugin.get_ui_manifest.return_value = PluginUIManifest(
+        enabled=True,
+        menu_items=[PluginMenuItem(
+            id="do_it", icon="Zap", label_key="menu_do_it", label_text="Do it",
+        )],
+    )
+    plugin.get_translations.return_value = {"en": {"menu_do_it": "Do it"}}
+    return plugin
+
+
+class TestManifestCarriesMenuItems:
+    def test_enabled_plugin_menu_items_reach_the_manifest(self, tmp_path):
+        manager = PluginManager(plugins_dir=tmp_path)
+        manager._plugins = {"demo": _plugin_with_menu()}
+        manager._enabled = {"demo"}
+
+        entry = manager.get_ui_manifest()["plugins"][0]
+
+        assert entry["menu_items"] == [{
+            "id": "do_it", "icon": "Zap",
+            "label_key": "menu_do_it", "label_text": "Do it",
+            "description_key": None, "description_text": None,
+            "tone": "neutral", "order": 100,
+        }]
+
+    def test_plugin_without_menu_items_yields_empty_list(self, tmp_path):
+        plugin = _plugin_with_menu()
+        plugin.get_ui_manifest.return_value = PluginUIManifest(enabled=True)
+        manager = PluginManager(plugins_dir=tmp_path)
+        manager._plugins = {"demo": plugin}
+        manager._enabled = {"demo"}
+
+        assert manager.get_ui_manifest()["plugins"][0]["menu_items"] == []
+
+    def test_schema_defaults_to_empty(self):
+        info = PluginUIInfo(name="demo", display_name="Demo")
+        assert info.menu_items == []

@@ -807,6 +807,9 @@ class PluginManager:
                         "nav_items": [
                             item.model_dump() for item in ui_manifest.nav_items
                         ],
+                        "menu_items": [
+                            item.model_dump() for item in ui_manifest.menu_items
+                        ],
                         "bundle_path": ui_manifest.bundle_path,
                         "styles_path": ui_manifest.styles_path,
                         "dashboard_widgets": ui_manifest.dashboard_widgets,
