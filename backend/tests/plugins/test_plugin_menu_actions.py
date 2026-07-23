@@ -112,3 +112,142 @@ class TestManifestCarriesMenuItems:
     def test_schema_defaults_to_empty(self):
         info = PluginUIInfo(name="demo", display_name="Demo")
         assert info.menu_items == []
+
+
+import asyncio
+from unittest.mock import AsyncMock, patch
+
+from fastapi import HTTPException
+
+from app.api.routes.plugins import (
+    PLUGIN_MENU_ACTION_TIMEOUT_SECONDS,
+    run_plugin_menu_action,
+)
+
+
+@pytest.fixture(autouse=True)
+def _bypass_limiter_request_check():
+    """Allow calling the decorated route function directly with a MagicMock request.
+
+    These tests call ``run_plugin_menu_action`` as a plain coroutine (no
+    TestClient/ASGI stack), matching this repo's established direct-call
+    pattern for route-level unit tests. slowapi's ``@user_limiter.limit(...)``
+    wrapper requires an actual ``starlette.requests.Request`` instance
+    whenever ``Limiter.enabled`` is True - unrelated to the behaviour under
+    test here. Disabling it for the duration of these tests only bypasses
+    that isinstance check, not any assertion in the tests below.
+    """
+    from app.core.rate_limiter import user_limiter
+
+    original = user_limiter.enabled
+    user_limiter.enabled = False
+    try:
+        yield
+    finally:
+        user_limiter.enabled = original
+
+
+def _declaring_plugin(action_id: str = "do_it") -> MagicMock:
+    plugin = MagicMock()
+    plugin.get_menu_items.return_value = [PluginMenuItem(
+        id=action_id, icon="Zap", label_key="k", label_text="Do it",
+    )]
+    return plugin
+
+
+async def _call(plugin, name: str = "demo", action_id: str = "do_it"):
+    manager = MagicMock()
+    manager.get_plugin.return_value = plugin
+    return await run_plugin_menu_action(
+        request=MagicMock(client=MagicMock(host="127.0.0.1")),
+        response=MagicMock(),
+        name=name,
+        action_id=action_id,
+        db=MagicMock(),
+        current_user=MagicMock(username="admin"),
+        plugin_manager=manager,
+    )
+
+
+class TestMenuActionRoute:
+    async def test_unknown_plugin_is_404(self):
+        manager = MagicMock()
+        manager.get_plugin.return_value = None
+        with pytest.raises(HTTPException) as exc:
+            await run_plugin_menu_action(
+                request=MagicMock(), response=MagicMock(),
+                name="nope", action_id="do_it", db=MagicMock(),
+                current_user=MagicMock(username="admin"), plugin_manager=manager,
+            )
+        assert exc.value.status_code == 404
+
+    async def test_undeclared_action_is_404_and_never_dispatches(self):
+        plugin = _declaring_plugin()
+        plugin.run_menu_action = AsyncMock()
+        with pytest.raises(HTTPException) as exc:
+            await _call(plugin, action_id="something_else")
+        assert exc.value.status_code == 404
+        plugin.run_menu_action.assert_not_awaited()
+
+    async def test_happy_path_returns_result_and_audits_success(self):
+        plugin = _declaring_plugin()
+        plugin.run_menu_action = AsyncMock(
+            return_value=MenuActionResult(ok=True, message_key="ok_key", message_text="done")
+        )
+        with patch("app.api.routes.plugins.get_audit_logger_db") as audit:
+            result = await _call(plugin)
+        assert (result.ok, result.message_key, result.message_text) == (True, "ok_key", "done")
+        kwargs = audit.return_value.log_event.call_args.kwargs
+        assert kwargs["event_type"] == "PLUGIN"
+        assert kwargs["action"] == "menu_action"
+        assert kwargs["resource"] == "demo:do_it"
+        assert kwargs["success"] is True
+
+    async def test_raising_action_stays_200_with_generic_message(self):
+        plugin = _declaring_plugin()
+        plugin.run_menu_action = AsyncMock(side_effect=RuntimeError("secret path /opt/baluhost"))
+        with patch("app.api.routes.plugins.get_audit_logger_db") as audit:
+            result = await _call(plugin)
+        assert result.ok is False
+        assert "secret path" not in result.message_text
+        assert audit.return_value.log_event.call_args.kwargs["success"] is False
+
+    async def test_hanging_action_is_cut_off_by_the_timeout(self):
+        async def _hang(action_id, db):
+            await asyncio.sleep(60)
+
+        plugin = _declaring_plugin()
+        plugin.run_menu_action = _hang
+        with patch("app.api.routes.plugins.PLUGIN_MENU_ACTION_TIMEOUT_SECONDS", 0.01), \
+             patch("app.api.routes.plugins.get_audit_logger_db"):
+            result = await _call(plugin)
+        assert result.ok is False
+
+    async def test_plugin_returning_none_despite_declaration_is_not_ok(self):
+        plugin = _declaring_plugin()
+        plugin.run_menu_action = AsyncMock(return_value=None)
+        with patch("app.api.routes.plugins.get_audit_logger_db"):
+            result = await _call(plugin)
+        assert result.ok is False
+
+    def test_timeout_is_generous_enough_for_kscreen_doctor(self):
+        """kscreen-doctor carries a 30s subprocess timeout of its own."""
+        assert PLUGIN_MENU_ACTION_TIMEOUT_SECONDS >= 10.0
+
+
+from app.middleware.plugin_gate import _is_management_route
+
+
+class TestMenuActionIsGatedByMiddleware:
+    def test_menu_action_path_is_not_a_management_route(self):
+        """A disabled plugin must not be able to run actions.
+
+        Management routes (toggle/config/ui) stay reachable while a plugin is
+        disabled - menu actions must NOT, or disabling a plugin would leave its
+        actions live.
+        """
+        assert _is_management_route("/menu-actions/gaming_mode") is False
+
+    def test_management_routes_still_bypass(self):
+        assert _is_management_route("/toggle") is True
+        assert _is_management_route("/config") is True

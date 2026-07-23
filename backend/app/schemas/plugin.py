@@ -28,6 +28,14 @@ class PluginMenuItemSchema(BaseModel):
     order: int = 100
 
 
+class PluginMenuActionResponse(BaseModel):
+    """Outcome of a plugin menu action (mirror of MenuActionResult)."""
+
+    ok: bool
+    message_key: Optional[str] = None
+    message_text: str
+
+
 class PluginUIInfo(BaseModel):
     """UI information for a plugin."""
 
