@@ -88,7 +88,6 @@ backend/app/plugins/installed/steam_gaming/
 ```python
 class PluginEventSpec(BaseModel):
     id: str = Field(pattern=r"^[a-z0-9_]+$")   # plugin-lokal, z. B. "session_started"
-    category: str                               # z. B. "steam_gaming"
     notification_type: Literal["info", "warning", "critical"] = "info"
     priority: int = Field(default=0, ge=0, le=3)
     title_template: str                          # "Gaming-Session gestartet: {game}"
@@ -113,6 +112,16 @@ wie der Pill-Katalog. Die öffentliche Event-ID lautet
 `plugin:<plugin_name>:<suffix>`, gebildet vom **Core**, nicht vom Plugin — eine
 Kollision mit Core-IDs (`raid.degraded` etc.) ist ausgeschlossen.
 
+**Die Kategorie setzt der Core: `category = plugin_name`.** Sie steht bewusst
+**nicht** in der Spec. Die Kategorie ist der Routing-Schlüssel der Zustellung —
+`get_routed_user_ids(db, notification.category)` stellt an Nicht-Admins zu,
+denen ein Admin diese Kategorie geroutet hat (`service.py`), und die
+category_preferences der Nutzer hängen ebenfalls daran. Ein Plugin, das
+`category="backup"` deklarieren dürfte, würde seine Events an jeden Nutzer
+liefern, dem Backup-Notifications geroutet sind — Reichweiten-Ausweitung über
+einen frei wählbaren String. Vom Core abgeleitet ist die Kategorie pro Plugin
+eindeutig und kann keine Core-Kategorie kapern.
+
 Die Registry liefert für eine gegebene öffentliche ID ein `EventConfig`
 (gebaut aus der Spec) plus den Cooldown und das Target. Damit muss der
 Emit-Pfad die beiden Core-Dicts nicht umbauen.
@@ -122,21 +131,47 @@ Emit-Pfad die beiden Core-Dicts nicht umbauen.
 `EventEmitter.emit()` bekommt **eine** Änderung: findet es die ID nicht in
 `EVENT_CONFIGS`, fragt es die Plugin-Registry, bevor es die
 „unbekanntes Event"-Warnung ausgibt. Ab da ist der Pfad identisch — dasselbe
-`service.create()`, dieselbe Persistierung, dasselbe Routing, derselbe
-Cooldown, dieselbe Zustellung. Analog erhält `_check_cooldown` /`_set_cooldown`
-den Cooldown-Wert aus der Registry, wenn die ID nicht in `_COOLDOWN_SECONDS`
-steht.
+`service.create()`, dieselbe Persistierung, dasselbe Routing, dieselbe
+Zustellung.
+
+**Der Cooldown ist die Ausnahme und liegt im Helper, nicht im Emit-Pfad.**
+Nachgemessen: `_check_cooldown`/`_set_cooldown` werden heute ausschließlich in
+`emit_sync()` aufgerufen (`events.py:577`, `:651`) — der **async**
+`emit()`-Pfad, den der Poller über `emit_for_admins()` nimmt, trägt **keine**
+Cooldown-Maschinerie. Ein bloßer Registry-Fallback für den Cooldown-Wert wäre
+also ein Cooldown, den nie jemand prüft. Deshalb erzwingt `emit_plugin_event()`
+ihn selbst: `_check_cooldown` vor der Zustellung (bei Treffer stilles Return),
+`_set_cooldown` danach.
 
 Das Plugin emittiert nicht direkt, sondern über einen Core-Helper:
 
 ```python
-async def emit_plugin_event(plugin_name: str, event_id: str, **kwargs) -> None:
+async def emit_plugin_event(
+    plugin_name: str, event_id: str, entity_id: str = "", **kwargs
+) -> None:
     """Namespaced die ID zu plugin:<plugin_name>:<event_id>, zieht Config und
-    Target aus der Registry und stellt an das deklarierte default_target zu."""
+    Target aus der Registry, erzwingt den deklarierten Cooldown (entity_id
+    unterscheidet z. B. Spiele) und stellt an das deklarierte default_target zu."""
 ```
 
 Damit liefert das Plugin **Daten** (welches Ereignis, welche kwargs), nie das
 Zustellziel zur Laufzeit — `default_target` steht in der Deklaration.
+
+### Zustellung bei unbekannter Kategorie (verifiziert, tragend)
+
+Die Behauptungen „Zustellung unverändert" und „nur Admins" stehen auf dem
+Verhalten der vorhandenen Maschine gegenüber einer ihr unbekannten Kategorie.
+Gegen den Code geprüft:
+
+- `is_channel_enabled_for_category()` defaultet für eine Kategorie ohne
+  Preference-Eintrag auf **True** (`models/notification.py`,
+  `cat_prefs.get(channel, True)`) — Plugin-Events werden zugestellt, nicht
+  still verschluckt.
+- `broadcast_to_admins` ist ungefiltert; Admins sehen das Event in-App.
+- `get_routed_user_ids()` liefert für eine nie geroutete Kategorie `[]` —
+  kein Nicht-Admin erhält es. **Nuance:** ein Admin kann die Plugin-Kategorie
+  später bewusst an Nicht-Admins routen; das ist dieselbe admin-kontrollierte
+  Erweiterbarkeit wie die änderbare Pill-Sichtbarkeit, keine Plugin-Fähigkeit.
 
 ### Der Poller
 
@@ -176,7 +211,7 @@ melden also unabhängig.
 | Template-Platzhalter fehlt | Bereits im Core abgefangen (`emit()` fällt auf das rohe Template zurück, `events.py:524`) |
 | Firebase/Push nicht verfügbar | Bereits Core-Sache: In-App-Notification wird persistiert und per WebSocket zugestellt |
 | Dev-Modus (kein `/proc`) | Poller findet nie ein Spiel → nie eine Flanke → nie ein Event |
-| Plugin deaktiviert | Background-Task wird bei `disable_plugin()` gecancelt (vorhandener Mechanismus); die Registry-Einträge fallen mit dem Plugin aus dem Katalog |
+| Plugin deaktiviert | Background-Task wird bei `disable_plugin()` gecancelt (vorhandener Mechanismus) — wirksam, sobald der **Primary** vom Toggle erfährt (direkt oder über den #448-Reconcile beim nächsten Request auf ihm); bis dahin pollt er weiter, emittiert aber höchstens noch eine Flanke. Die Registry-Einträge fallen mit dem Plugin aus dem Katalog |
 
 Leitlinie: ein Plugin-Fehler stört niemals die Zustellung anderer Events oder
 den Worker.
@@ -184,9 +219,14 @@ den Worker.
 ## Sicherheit
 
 - Empfänger **admin-fix** (`default_target="admins"`), serverseitig über
-  `emit_for_admins` durchgesetzt. Der Spielname erreicht keinen Nicht-Admin.
+  `emit_for_admins` durchgesetzt. Der Spielname erreicht keinen Nicht-Admin
+  (verifiziert inkl. Routing-Verhalten, siehe „Zustellung bei unbekannter
+  Kategorie").
 - Das Plugin liefert **Daten**, nie das Zustellziel zur Laufzeit — es kann seine
-  Reichweite nicht ausweiten.
+  Reichweite nicht ausweiten. Das gilt auch für die **Kategorie**: sie ist der
+  Routing-Schlüssel und wird vom Core auf den Plugin-Namen gesetzt — ein Plugin
+  kann keine Core-Kategorie (z. B. `backup`, `security`) kapern und darüber
+  fremd-geroutete Nutzer erreichen.
 - Event-ID regexbeschränkt (`^[a-z0-9_]+$`) **und** vom Core namespaced —
   keine Kollision mit Core-IDs.
 - Kein `subprocess`, kein sudo, keine neuen Sudoers-Regeln. Der Poller liest nur
@@ -214,7 +254,13 @@ anschließendes Y→None, das ein Ende liefert); werfender Poll wird geloggt, de
 nächste Tick läuft; dauerhaft kein Spiel → nie ein Event.
 
 **Cooldown:** zweimal Start desselben Spiels binnen 60 s → nur eine
-Notification; zwei verschiedene Spiele → beide.
+Notification; zwei verschiedene Spiele → beide. Der Test läuft über
+`emit_plugin_event()` — er pinnt damit, dass der Helper den Cooldown selbst
+erzwingt (der async Emit-Pfad tut es nicht, siehe Architektur).
+
+**Kategorie-Ableitung:** die persistierte Notification trägt
+`category == plugin_name`; ein Spec-Feld, das eine Core-Kategorie nennt,
+existiert nicht (Modell-Assertion auf `PluginEventSpec.model_fields`).
 
 **Frontend:** keine Änderung — Notifications laufen durch die vorhandene
 In-App-Liste + WebSocket. Nur gegenprüfen, dass die Notification-API-Form
