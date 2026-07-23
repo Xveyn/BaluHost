@@ -22,6 +22,10 @@ vi.mock('../../api/desktop', () => ({
   enableDesktop: vi.fn(),
 }));
 
+vi.mock('../../contexts/PluginContext', () => ({
+  usePlugins: () => ({ pluginMenuItems: [] }),
+}));
+
 import PowerMenu from '../../components/PowerMenu';
 import { getSleepStatus } from '../../api/sleep';
 import { getDesktopStatus, disableDesktop, enableDesktop } from '../../api/desktop';

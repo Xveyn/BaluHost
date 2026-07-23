@@ -1,9 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Power, PowerOff, RotateCcw, LogOut, Moon, Pause, MonitorOff, Monitor } from 'lucide-react';
+import { Power, PowerOff, RotateCcw, LogOut, Moon, Pause, MonitorOff, Monitor, Plug } from 'lucide-react';
 import { ConfirmDialog } from './ui/ConfirmDialog';
 import { getSleepStatus, enterSoftSleep, enterSuspend } from '../api/sleep';
 import { getDesktopStatus, disableDesktop, enableDesktop, type DesktopState } from '../api/desktop';
+import { usePlugins } from '../contexts/PluginContext';
+import { runPluginMenuAction } from '../api/plugins';
+import { resolvePluginString } from '../lib/pluginI18n';
+import { resolveIcon } from './topbar/iconMap';
 import toast from 'react-hot-toast';
 
 interface PowerMenuProps {
@@ -19,6 +23,8 @@ export default function PowerMenu({ isAdmin, onShutdown, onRestart, onLogout }: 
   const [confirmAction, setConfirmAction] = useState<'shutdown' | 'restart' | 'sleep' | 'suspend' | null>(null);
   const [sleepAvailable, setSleepAvailable] = useState(false);
   const [desktopState, setDesktopState] = useState<DesktopState | null>(null);
+  const { pluginMenuItems } = usePlugins();
+  const [runningAction, setRunningAction] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Check sleep + desktop availability when dropdown opens. Both states are
@@ -102,6 +108,29 @@ export default function PowerMenu({ isAdmin, onShutdown, onRestart, onLogout }: 
       }
     } catch {
       toast.error(t('powerMenu.desktopEnableFailed', 'Failed to enable desktop'));
+    }
+  };
+
+  const handlePluginAction = async (item: (typeof pluginMenuItems)[number]) => {
+    const key = `${item._pluginName}:${item.id}`;
+    setRunningAction(key);
+    try {
+      const result = await runPluginMenuAction(item._pluginName, item.id);
+      const message = resolvePluginString(
+        item._translations,
+        result.message_key ?? '',
+        result.message_text,
+      );
+      if (result.ok) {
+        toast.success(message);
+        setIsOpen(false);
+      } else {
+        toast.error(message);
+      }
+    } catch {
+      toast.error(t('powerMenu.pluginActionFailed', 'Action failed'));
+    } finally {
+      setRunningAction(null);
     }
   };
 
@@ -209,6 +238,31 @@ export default function PowerMenu({ isAdmin, onShutdown, onRestart, onLogout }: 
                       </div>
                     </button>
                   )}
+
+                  {pluginMenuItems.map((item) => {
+                    const Icon = resolveIcon(item.icon) ?? Plug;
+                    const key = `${item._pluginName}:${item.id}`;
+                    const label = resolvePluginString(item._translations, item.label_key, item.label_text);
+                    const description = item.description_key
+                      ? resolvePluginString(item._translations, item.description_key, item.description_text ?? '')
+                      : item.description_text;
+                    return (
+                      <button
+                        key={key}
+                        onClick={() => { void handlePluginAction(item); }}
+                        disabled={runningAction !== null}
+                        className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition hover:bg-sky-500/10 disabled:opacity-50"
+                      >
+                        <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-sky-500/30 bg-sky-500/10">
+                          <Icon className="h-4 w-4 text-sky-400" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-slate-100">{label}</p>
+                          {description && <p className="text-xs text-slate-400">{description}</p>}
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
 
                 <div className="mx-3 border-t border-slate-800" />

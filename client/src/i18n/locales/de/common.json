@@ -263,7 +263,8 @@
     "desktopEnable": "Desktop aktivieren",
     "desktopEnableDesc": "Bildschirme wieder einschalten",
     "desktopEnabled": "Desktop aktiviert",
-    "desktopEnableFailed": "Desktop konnte nicht aktiviert werden"
+    "desktopEnableFailed": "Desktop konnte nicht aktiviert werden",
+    "pluginActionFailed": "Aktion fehlgeschlagen"
   },
   "adminOnly": "Nur für Admins",
   "local_only_action_hint": "Nur über die BaluHost-Companion-App am Server selbst möglich.",
