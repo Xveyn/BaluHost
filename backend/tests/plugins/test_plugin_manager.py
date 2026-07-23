@@ -5,6 +5,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from fastapi import APIRouter
 from sqlalchemy.orm import Session
 
 from app.plugins.manager import PluginLoadError, PluginManager
@@ -251,3 +252,100 @@ class TestIterEnabledPlugins:
     def test_empty_when_nothing_enabled(self, empty_plugins_dir: Path):
         mgr = PluginManager(plugins_dir=empty_plugins_dir)
         assert list(mgr.iter_enabled_plugins()) == []
+
+
+class TestIsLoaded:
+    """is_loaded() answers "did THIS worker start it", distinct from
+    is_enabled() (the DB's answer). #448 review finding 1."""
+
+    @pytest.mark.asyncio
+    async def test_true_once_enable_plugin_succeeds(
+        self, plugins_dir_with_plugin: Path, db_session: Session
+    ):
+        mgr = PluginManager(plugins_dir=plugins_dir_with_plugin)
+        await mgr.enable_plugin("test_plugin", [], db_session)
+        assert mgr.is_loaded("test_plugin") is True
+
+    def test_false_for_a_name_never_enabled(self, empty_plugins_dir: Path):
+        mgr = PluginManager(plugins_dir=empty_plugins_dir)
+        assert mgr.is_loaded("nope") is False
+
+    def test_false_when_the_instance_is_loaded_but_on_startup_never_finished(
+        self, empty_plugins_dir: Path
+    ):
+        """The exact #448 scenario: enable_plugin() put the instance in
+        _plugins before calling on_startup(), which then raised - so the
+        name never reached _enabled. is_loaded() must say False even though
+        get_plugin() still returns the instance."""
+        mgr = PluginManager(plugins_dir=empty_plugins_dir)
+        mgr._plugins["broken"] = MagicMock()
+
+        assert mgr.get_plugin("broken") is not None
+        assert mgr.is_loaded("broken") is False
+
+
+class TestRouterRestartRequired:
+    """router_restart_required(): a plugin whose router was not mounted at
+    startup needs a process restart before its endpoints exist (#448)."""
+
+    def test_false_for_a_plugin_without_a_router(self, empty_plugins_dir: Path):
+        mgr = PluginManager(plugins_dir=empty_plugins_dir)
+        plugin = MagicMock()
+        plugin.get_router.return_value = None
+        mgr._plugins["demo"] = plugin
+        mgr._enabled.add("demo")
+
+        assert mgr.router_restart_required("demo") is False
+
+    def test_false_for_an_unknown_plugin(self, empty_plugins_dir: Path):
+        mgr = PluginManager(plugins_dir=empty_plugins_dir)
+        assert mgr.router_restart_required("nope") is False
+
+    def test_true_when_get_router_raises(self, empty_plugins_dir: Path):
+        """Fail toward telling the admin to restart.
+
+        The flag exists so the UI does not feign readiness. A plugin whose
+        get_router() throws is precisely the case where we cannot claim its
+        endpoints are up - answering False there would be the one wrong
+        direction this field must never take.
+        """
+        mgr = PluginManager(plugins_dir=empty_plugins_dir)
+        plugin = MagicMock()
+        plugin.get_router.side_effect = RuntimeError("boom")
+        mgr._plugins["broken"] = plugin
+        mgr._enabled.add("broken")
+
+        assert mgr.router_restart_required("broken") is True
+
+    def test_true_when_enabled_after_the_startup_router_snapshot(self, empty_plugins_dir: Path):
+        """The startup mount (get_router()) ran before this plugin existed -
+        it has a router, but it is not in the mounted-at-startup set."""
+        mgr = PluginManager(plugins_dir=empty_plugins_dir)
+
+        # Simulate the startup mount with nothing enabled yet.
+        mgr.get_router()
+        assert mgr._routes_mounted_at_startup == set()
+
+        # A plugin is enabled afterwards, at runtime, and it ships a router.
+        # A real APIRouter, not a MagicMock: get_router() (the combined one)
+        # feeds it into router.include_router(), whose circularity check
+        # (FastAPI >=0.115.x) rejects a mock.
+        plugin = MagicMock()
+        plugin.get_router.return_value = APIRouter()
+        mgr._plugins["late"] = plugin
+        mgr._enabled.add("late")
+
+        assert mgr.router_restart_required("late") is True
+
+    def test_false_when_the_router_was_part_of_the_startup_mount(self, empty_plugins_dir: Path):
+        mgr = PluginManager(plugins_dir=empty_plugins_dir)
+        plugin = MagicMock()
+        plugin.get_router.return_value = APIRouter()
+        mgr._plugins["early"] = plugin
+        mgr._enabled.add("early")
+
+        # Startup mount runs with the plugin already enabled - it is captured.
+        mgr.get_router()
+        assert "early" in mgr._routes_mounted_at_startup
+
+        assert mgr.router_restart_required("early") is False

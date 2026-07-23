@@ -135,6 +135,13 @@ class PluginManager:
         self._sandboxes: Dict[str, Any] = {}
         self._routers_mounted = False
         self._discovered: Optional[Dict[str, DiscoveredPlugin]] = None
+        # Names whose plugin.get_router() contributed a sub-router the one
+        # time get_router() was called (lifespan startup). Bundled plugin
+        # HTTP routes are mounted onto the app exactly once at startup - a
+        # plugin enabled later never gets its endpoints wired in until a
+        # restart, and this set is how a later request can tell which
+        # plugins are in that boat (#448 restart_required).
+        self._routes_mounted_at_startup: Set[str] = set()
 
     @classmethod
     def get_instance(
@@ -751,7 +758,17 @@ class PluginManager:
             return []
 
     def get_router(self) -> APIRouter:
-        """Combined router: bundled plugin routes + a catch-all for sandboxed ones."""
+        """Combined router: bundled plugin routes + a catch-all for sandboxed ones.
+
+        Called exactly once in practice, from ``lifespan.py`` right after
+        startup loads the enabled plugins, and the result is mounted onto the
+        app with ``include_router()`` - there is no later re-mount. That makes
+        this the natural place to snapshot which plugin names actually got a
+        router wired in: ``_routes_mounted_at_startup`` records them here
+        rather than lifespan calling a separate ``mark_routers_mounted()``
+        afterwards, which would require lifespan to duplicate the same
+        "does this plugin have a router" check to build the argument.
+        """
         from fastapi import Request  # noqa: PLC0415
         from app.api.deps import get_current_user  # noqa: PLC0415
         from app.plugins.sandbox.proxy import proxy_request  # noqa: PLC0415
@@ -767,6 +784,7 @@ class PluginManager:
                     router.include_router(
                         plugin_router, prefix=f"/{name}", tags=[f"plugin:{name}"]
                     )
+                    self._routes_mounted_at_startup.add(name)
 
         # Catch-all for external/sandboxed plugins, registered LAST.
         manager = self
@@ -861,8 +879,24 @@ class PluginManager:
             if plugin is not None:
                 yield name, plugin
 
+    def _effective_enabled(self) -> Set[str]:
+        """Names the database says are enabled, falling back to local state.
+
+        The database is the only state shared across the production workers;
+        ``_enabled`` only says what THIS worker loaded. Falling back to it when
+        the cache has no data keeps a DB outage from blanking the plugin list -
+        the gate fails closed instead, which is the opposite direction on
+        purpose (see services/plugin_enablement).
+        """
+        from app.services import plugin_enablement
+
+        cached = plugin_enablement.enabled_plugins()
+        if cached is None:
+            return set(self._enabled)
+        return set(cached)
+
     def is_enabled(self, name: str) -> bool:
-        """Check if a plugin is enabled.
+        """Check if a plugin is enabled per the database (not per this worker).
 
         Args:
             name: Plugin name
@@ -870,7 +904,46 @@ class PluginManager:
         Returns:
             True if plugin is enabled
         """
+        return name in self._effective_enabled()
+
+    def is_loaded(self, name: str) -> bool:
+        """Whether THIS worker has the plugin loaded and started.
+
+        Distinct from is_enabled(), which answers the database's question.
+        A plugin whose on_startup() threw stays in _plugins but never enters
+        _enabled - executing endpoints must require this, not enablement.
+        """
         return name in self._enabled
+
+    def router_restart_required(self, name: str) -> bool:
+        """True if ``name`` ships an HTTP router that was NOT mounted at startup.
+
+        Plugin routers are wired onto the app once, in ``get_router()``
+        (called from lifespan). A plugin enabled after that moment - even
+        though ``enable_plugin()`` ran its startup hook successfully in this
+        worker - never gets its endpoints registered until the process
+        restarts. Plugins without a router are unaffected: their method-based
+        contributions (menu items, status pills, dashboard panels, ...) work
+        immediately, so this only ever returns True for the router case.
+        """
+        plugin = self._plugins.get(name)
+        if plugin is None:
+            return False
+        try:
+            has_router = plugin.get_router() is not None
+        except Exception:
+            # Fail toward "tell the admin to restart". This flag exists so the
+            # UI does not feign readiness; a plugin whose get_router() throws
+            # is exactly the case where we cannot claim its endpoints are up.
+            logger.warning(
+                "plugin %s: get_router() raised while computing restart_required",
+                name,
+                exc_info=True,
+            )
+            return True
+        if not has_router:
+            return False
+        return name not in self._routes_mounted_at_startup
 
     def get_required_permissions(self, name: str) -> List[str]:
         """Get required permissions for a loaded plugin.
@@ -894,6 +967,7 @@ class PluginManager:
         """
         discovered = self.discover_plugins()
         result = {}
+        effective = self._effective_enabled()
 
         for name in discovered:
             info = self.get_discovered(name)
@@ -907,7 +981,7 @@ class PluginManager:
                     "author": m.author,
                     "category": m.category,
                     "required_permissions": list(m.required_permissions),
-                    "is_enabled": name in self._enabled,
+                    "is_enabled": name in effective,
                     "has_ui": m.ui is not None,
                     "has_routes": True,
                     "is_external": True,
@@ -931,7 +1005,7 @@ class PluginManager:
                     "author": meta.author,
                     "category": meta.category,
                     "required_permissions": meta.required_permissions,
-                    "is_enabled": name in self._enabled,
+                    "is_enabled": name in effective,
                     "has_ui": plugin.get_ui_manifest() is not None,
                     "has_routes": plugin.get_router() is not None,
                     "is_external": False,

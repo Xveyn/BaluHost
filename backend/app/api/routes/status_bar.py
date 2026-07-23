@@ -34,6 +34,7 @@ async def get_statusbar_config(
     response: Response,
     db: Session = Depends(deps.get_db),
     current_user: UserPublic = Depends(deps.get_current_admin),
+    _reconciled: None = Depends(deps.reconciled_plugin_state),
 ) -> StatusBarConfigResponse:
     """Full catalog + persisted config (admin only)."""
     return StatusBarService(db).get_config()
@@ -83,6 +84,7 @@ async def get_statusbar_state(
     response: Response,
     db: Session = Depends(deps.get_db),
     current_user: UserPublic = Depends(deps.get_current_user),
+    _reconciled: None = Depends(deps.reconciled_plugin_state),
 ) -> StatusBarStateResponse:
     """Aggregated pill payload, filtered by the caller's role."""
     return await StatusBarService(db).collect_state(role=current_user.role)

@@ -6,7 +6,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Request, Response
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, get_db
+from app.api.deps import get_current_user, get_db, reconciled_plugin_state
 from app.core.rate_limiter import user_limiter, get_limit
 from app.models.user import User
 from app.plugins.manager import PluginManager
@@ -25,6 +25,7 @@ async def get_plugin_panel(
     response: Response,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    _reconciled: None = Depends(reconciled_plugin_state),
 ) -> Optional[DashboardPanelResponse]:
     """Get the active Dashboard plugin panel with current data.
 

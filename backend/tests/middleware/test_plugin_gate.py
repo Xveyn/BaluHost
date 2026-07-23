@@ -1,6 +1,5 @@
 """Tests for the PluginGateMiddleware."""
 
-import time
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -8,12 +7,22 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.middleware.plugin_gate import (
-    CACHE_TTL_SECONDS,
     PluginGateMiddleware,
     _is_management_route,
-    _plugin_cache,
     invalidate_plugin_cache,
 )
+from app.services import plugin_enablement
+from app.services.plugin_enablement import CACHE_TTL_SECONDS
+
+
+def _grant(permissions=None) -> dict:
+    """Build a ``_fetch()``-shaped cache entry for one plugin.
+
+    The cache also carries ``granted_api_scopes`` (Task 3); the gate only
+    ever consumes ``granted_permissions`` via ``enabled_plugins()``, so tests
+    here only need to populate that half.
+    """
+    return {"granted_permissions": list(permissions or []), "granted_api_scopes": []}
 
 
 # ---------------------------------------------------------------------------
@@ -73,9 +82,9 @@ def _make_app() -> FastAPI:
 @pytest.fixture(autouse=True)
 def _clear_cache():
     """Ensure the module-level cache is empty before each test."""
-    _plugin_cache.clear()
+    plugin_enablement.invalidate()
     yield
-    _plugin_cache.clear()
+    plugin_enablement.invalidate()
 
 
 # ---------------------------------------------------------------------------
@@ -95,7 +104,7 @@ def test_non_plugin_path_passes_through():
 # ---------------------------------------------------------------------------
 
 
-@patch("app.middleware.plugin_gate._fetch_plugin_status")
+@patch("app.services.plugin_enablement._fetch")
 def test_plugin_list_not_gated(mock_fetch):
     """GET /api/plugins (list) should never be gated."""
     client = TestClient(_make_app())
@@ -104,7 +113,7 @@ def test_plugin_list_not_gated(mock_fetch):
     mock_fetch.assert_not_called()
 
 
-@patch("app.middleware.plugin_gate._fetch_plugin_status")
+@patch("app.services.plugin_enablement._fetch")
 def test_permissions_endpoint_not_gated(mock_fetch):
     """GET /api/plugins/permissions should never be gated."""
     client = TestClient(_make_app())
@@ -128,7 +137,7 @@ def test_permissions_endpoint_not_gated(mock_fetch):
         ("GET", "/api/plugins/my_plugin/ui/bundle.js"),  # ui asset
     ],
 )
-@patch("app.middleware.plugin_gate._fetch_plugin_status")
+@patch("app.services.plugin_enablement._fetch")
 def test_management_routes_not_gated(mock_fetch, method, path):
     """Management routes must pass through even if plugin is disabled."""
     client = TestClient(_make_app())
@@ -143,7 +152,10 @@ def test_management_routes_not_gated(mock_fetch, method, path):
 
 
 @patch("app.plugins.manager.PluginManager.get_instance")
-@patch("app.middleware.plugin_gate._fetch_plugin_status", return_value=(True, ["files:read"]))
+@patch(
+    "app.services.plugin_enablement._fetch",
+    return_value={"my_plugin": _grant(["files:read"])},
+)
 def test_enabled_plugin_passes(mock_fetch, mock_get_instance):
     """An enabled plugin with sufficient permissions -> 200."""
     mock_manager = MagicMock()
@@ -161,7 +173,7 @@ def test_enabled_plugin_passes(mock_fetch, mock_get_instance):
 # ---------------------------------------------------------------------------
 
 
-@patch("app.middleware.plugin_gate._fetch_plugin_status", return_value=(False, []))
+@patch("app.services.plugin_enablement._fetch", return_value={})
 def test_disabled_plugin_blocked(mock_fetch):
     """A disabled plugin -> 403."""
     client = TestClient(_make_app())
@@ -177,8 +189,8 @@ def test_disabled_plugin_blocked(mock_fetch):
 
 @patch("app.plugins.manager.PluginManager.get_instance")
 @patch(
-    "app.middleware.plugin_gate._fetch_plugin_status",
-    return_value=(True, ["files:read"]),
+    "app.services.plugin_enablement._fetch",
+    return_value={"my_plugin": _grant(["files:read"])},
 )
 def test_missing_permissions_blocked(mock_fetch, mock_get_instance):
     """Plugin is enabled but granted permissions don't cover required -> 403."""
@@ -202,7 +214,10 @@ def test_missing_permissions_blocked(mock_fetch, mock_get_instance):
 
 
 @patch("app.plugins.manager.PluginManager.get_instance")
-@patch("app.middleware.plugin_gate._fetch_plugin_status", return_value=(True, []))
+@patch(
+    "app.services.plugin_enablement._fetch",
+    return_value={"my_plugin": _grant()},
+)
 def test_cache_hit_no_repeat_db_query(mock_fetch, mock_get_instance):
     """Second request within TTL should use cache, not call DB again."""
     mock_manager = MagicMock()
@@ -227,7 +242,10 @@ def test_cache_hit_no_repeat_db_query(mock_fetch, mock_get_instance):
 
 
 @patch("app.plugins.manager.PluginManager.get_instance")
-@patch("app.middleware.plugin_gate._fetch_plugin_status", return_value=(True, []))
+@patch(
+    "app.services.plugin_enablement._fetch",
+    return_value={"my_plugin": _grant()},
+)
 def test_invalidate_cache_forces_db_query(mock_fetch, mock_get_instance):
     """After invalidate_plugin_cache(), the next request must hit the DB."""
     mock_manager = MagicMock()
@@ -251,22 +269,30 @@ def test_invalidate_cache_forces_db_query(mock_fetch, mock_get_instance):
 
 
 @patch("app.plugins.manager.PluginManager.get_instance")
-@patch("app.middleware.plugin_gate._fetch_plugin_status", return_value=(True, []))
-def test_cache_expires_after_ttl(mock_fetch, mock_get_instance):
-    """After TTL seconds the cached entry is considered stale."""
+@patch(
+    "app.services.plugin_enablement._fetch",
+    return_value={"my_plugin": _grant()},
+)
+def test_cache_expires_after_ttl(mock_fetch, mock_get_instance, monkeypatch):
+    """After TTL seconds the cached entry is considered stale.
+
+    The new cache is global (not per-name): advance the shared clock past
+    the TTL, the same way test_plugin_enablement.py's own TTL test does,
+    rather than reaching into a per-name timestamp that no longer exists.
+    """
     mock_manager = MagicMock()
     mock_manager.get_required_permissions.return_value = []
     mock_get_instance.return_value = mock_manager
+
+    clock = {"now": 1000.0}
+    monkeypatch.setattr(plugin_enablement, "_monotonic", lambda: clock["now"])
 
     client = TestClient(_make_app())
 
     client.get("/api/plugins/my_plugin/data")
     assert mock_fetch.call_count == 1
 
-    # Manually expire the cache entry
-    name = "my_plugin"
-    is_enabled, perms, _ts = _plugin_cache[name]
-    _plugin_cache[name] = (is_enabled, perms, time.monotonic() - CACHE_TTL_SECONDS - 1)
+    clock["now"] += CACHE_TTL_SECONDS + 0.1
 
     client.get("/api/plugins/my_plugin/data")
     assert mock_fetch.call_count == 2
@@ -277,7 +303,7 @@ def test_cache_expires_after_ttl(mock_fetch, mock_get_instance):
 # ---------------------------------------------------------------------------
 
 
-@patch("app.middleware.plugin_gate._fetch_plugin_status", return_value=(False, []))
+@patch("app.services.plugin_enablement._fetch", return_value={})
 def test_unknown_plugin_returns_403(mock_fetch):
     """A plugin name that doesn't exist in the DB -> disabled -> 403."""
     client = TestClient(_make_app())
@@ -291,7 +317,7 @@ def test_unknown_plugin_returns_403(mock_fetch):
 
 
 @patch(
-    "app.middleware.plugin_gate._fetch_plugin_status",
+    "app.services.plugin_enablement._fetch",
     side_effect=Exception("DB connection failed"),
 )
 def test_db_error_returns_500(mock_fetch):
@@ -308,7 +334,10 @@ def test_db_error_returns_500(mock_fetch):
 
 
 @patch("app.plugins.manager.PluginManager.get_instance")
-@patch("app.middleware.plugin_gate._fetch_plugin_status", return_value=(True, []))
+@patch(
+    "app.services.plugin_enablement._fetch",
+    return_value={"my_plugin": _grant()},
+)
 def test_no_required_permissions_passes(mock_fetch, mock_get_instance):
     """If a plugin has no required permissions, just being enabled is enough."""
     mock_manager = MagicMock()

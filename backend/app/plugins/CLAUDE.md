@@ -78,13 +78,27 @@ Two plugin trust tiers with different isolation:
    or hangs silences only its own pill, never the whole strip. Labels come
    from `get_translations()`, resolved client-side via `resolvePluginString`,
    with `name_text`/`label_text` as literal fallbacks.
-   **Operator note:** `PluginManager._enabled` is process-local, populated at
-   startup. Toggling a pill- or menu-contributing plugin on/off through the UI
-   only updates the worker that handled that request — in production (4 Uvicorn
-   workers) the pill then appears on roughly one in four status-strip polls, and
-   a menu action fails with 404 on the three workers that never loaded it, until
-   the backend is restarted. Restart `baluhost-backend` after enabling or
-   disabling such a plugin so all workers agree (#448).
+   **Operator note:** plugin enablement lives in the database and every worker
+   reconciles itself against it on the next request that needs the state
+   (`services/plugin_enablement.py`), so a toggle now takes effect within a few
+   seconds across all four production workers — no restart needed for status
+   pills, menu actions or the plugin list itself (#448). The reconcile is
+   wired to five routes via `Depends(deps.reconciled_plugin_state)`:
+   `list_plugins`, `get_ui_manifest`, `run_plugin_menu_action`,
+   `get_statusbar_config` and `get_statusbar_state`. The Dashboard plugin
+   panel (`GET /api/dashboard/plugin-panel`) is **not** one of them — it reads
+   `PluginManager.get_plugin()` directly with no DB fallback, so it only
+   catches up once some other reconciled route has run on the same worker.
+   **One exception:** plugin HTTP routes are mounted once at startup
+   (`core/lifespan.py`), so a plugin that ships its own router still needs a
+   `baluhost-backend` restart before its endpoints exist. Its
+   method-based contributions work immediately. `GET /api/plugins/{name}`
+   surfaces this as `PluginDetailResponse.restart_required` — true when the
+   plugin contributes a router that was not part of the set
+   `PluginManager.get_router()` mounted at startup
+   (`PluginManager.router_restart_required()`); always false for plugins
+   without a router and for external (sandboxed) plugins, whose requests are
+   routed dynamically through the catch-all proxy with no restart needed.
 7. Override `get_ui_manifest()` with `menu_items` + `run_menu_action()` to
    contribute an action to the system (power) menu. `get_menu_items()` is not
    a separate override point: its default implementation derives the list
