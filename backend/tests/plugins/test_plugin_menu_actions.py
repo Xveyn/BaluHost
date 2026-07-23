@@ -115,36 +115,17 @@ class TestManifestCarriesMenuItems:
 
 
 import asyncio
+import inspect
+import time
 from unittest.mock import AsyncMock, patch
 
 from fastapi import HTTPException
 
+from app.api.deps import get_current_admin
 from app.api.routes.plugins import (
     PLUGIN_MENU_ACTION_TIMEOUT_SECONDS,
     run_plugin_menu_action,
 )
-
-
-@pytest.fixture(autouse=True)
-def _bypass_limiter_request_check():
-    """Allow calling the decorated route function directly with a MagicMock request.
-
-    These tests call ``run_plugin_menu_action`` as a plain coroutine (no
-    TestClient/ASGI stack), matching this repo's established direct-call
-    pattern for route-level unit tests. slowapi's ``@user_limiter.limit(...)``
-    wrapper requires an actual ``starlette.requests.Request`` instance
-    whenever ``Limiter.enabled`` is True - unrelated to the behaviour under
-    test here. Disabling it for the duration of these tests only bypasses
-    that isinstance check, not any assertion in the tests below.
-    """
-    from app.core.rate_limiter import user_limiter
-
-    original = user_limiter.enabled
-    user_limiter.enabled = False
-    try:
-        yield
-    finally:
-        user_limiter.enabled = original
 
 
 def _declaring_plugin(action_id: str = "do_it") -> MagicMock:
@@ -158,22 +139,42 @@ def _declaring_plugin(action_id: str = "do_it") -> MagicMock:
 async def _call(plugin, name: str = "demo", action_id: str = "do_it"):
     manager = MagicMock()
     manager.get_plugin.return_value = plugin
-    return await run_plugin_menu_action(
-        request=MagicMock(client=MagicMock(host="127.0.0.1")),
-        response=MagicMock(),
-        name=name,
-        action_id=action_id,
-        db=MagicMock(),
-        current_user=MagicMock(username="admin"),
-        plugin_manager=manager,
-    )
+    # Bypass slowapi's isinstance(Request) check for direct (non-ASGI)
+    # coroutine calls - see test_dashboard_panel.py for the established
+    # per-call pattern this mirrors.
+    with patch("app.api.routes.plugins.user_limiter.enabled", False):
+        return await run_plugin_menu_action(
+            request=MagicMock(client=MagicMock(host="127.0.0.1")),
+            response=MagicMock(),
+            name=name,
+            action_id=action_id,
+            db=MagicMock(),
+            current_user=MagicMock(username="admin"),
+            plugin_manager=manager,
+        )
+
+
+class TestMenuActionRouteRequiresAdmin:
+    def test_current_user_dependency_is_get_current_admin(self):
+        """Pin the admin gate on the route signature itself.
+
+        Every other test here calls the route function directly with a
+        fabricated ``current_user``, so FastAPI's dependency injection is
+        never exercised - a downgrade to ``get_current_user`` would leave
+        every other test green. Assert the ``Depends`` object actually
+        wraps ``get_current_admin``.
+        """
+        sig = inspect.signature(run_plugin_menu_action)
+        dependency = sig.parameters["current_user"].default
+        assert dependency.dependency is get_current_admin
 
 
 class TestMenuActionRoute:
     async def test_unknown_plugin_is_404(self):
         manager = MagicMock()
         manager.get_plugin.return_value = None
-        with pytest.raises(HTTPException) as exc:
+        with patch("app.api.routes.plugins.user_limiter.enabled", False), \
+             pytest.raises(HTTPException) as exc:
             await run_plugin_menu_action(
                 request=MagicMock(), response=MagicMock(),
                 name="nope", action_id="do_it", db=MagicMock(),
@@ -186,6 +187,19 @@ class TestMenuActionRoute:
         plugin.run_menu_action = AsyncMock()
         with pytest.raises(HTTPException) as exc:
             await _call(plugin, action_id="something_else")
+        assert exc.value.status_code == 404
+        plugin.run_menu_action.assert_not_awaited()
+
+    async def test_get_menu_items_raising_is_404_and_never_dispatches(self):
+        """A plugin that cannot even declare its actions must not 500.
+
+        Fails closed the same way an unknown action does: 404, no dispatch.
+        """
+        plugin = MagicMock()
+        plugin.get_menu_items.side_effect = RuntimeError("boom")
+        plugin.run_menu_action = AsyncMock()
+        with pytest.raises(HTTPException) as exc:
+            await _call(plugin)
         assert exc.value.status_code == 404
         plugin.run_menu_action.assert_not_awaited()
 
@@ -219,9 +233,19 @@ class TestMenuActionRoute:
         plugin = _declaring_plugin()
         plugin.run_menu_action = _hang
         with patch("app.api.routes.plugins.PLUGIN_MENU_ACTION_TIMEOUT_SECONDS", 0.01), \
-             patch("app.api.routes.plugins.get_audit_logger_db"):
+             patch("app.api.routes.plugins.get_audit_logger_db") as audit:
+            started = time.monotonic()
             result = await _call(plugin)
+            elapsed = time.monotonic() - started
+        # Discriminating against a deleted wait_for(): without it, _hang
+        # would run its full 60s sleep, return None, and fall into the
+        # "returned None" branch - also ok=False, but slow and with a
+        # different message. Pin both the message only the timeout branch
+        # produces and a wall-clock bound well under the 60s sleep.
+        assert result.message_text == "Action timed out"
         assert result.ok is False
+        assert elapsed < 5.0
+        assert audit.return_value.log_event.call_args.kwargs["success"] is False
 
     async def test_plugin_returning_none_despite_declaration_is_not_ok(self):
         plugin = _declaring_plugin()
@@ -230,9 +254,22 @@ class TestMenuActionRoute:
             result = await _call(plugin)
         assert result.ok is False
 
-    def test_timeout_is_generous_enough_for_kscreen_doctor(self):
+    async def test_plugin_returning_non_result_type_is_not_ok_and_no_500(self):
+        """A plugin returning a dict/str instead of MenuActionResult must not 500.
+
+        model_dump() on a plain dict/str would raise inside the route -
+        guard against any non-MenuActionResult return, not only None.
+        """
+        plugin = _declaring_plugin()
+        plugin.run_menu_action = AsyncMock(return_value={"ok": True, "message_text": "not a model"})
+        with patch("app.api.routes.plugins.get_audit_logger_db") as audit:
+            result = await _call(plugin)
+        assert result.ok is False
+        assert audit.return_value.log_event.call_args.kwargs["success"] is False
+
+    def test_timeout_pins_the_spec_value(self):
         """kscreen-doctor carries a 30s subprocess timeout of its own."""
-        assert PLUGIN_MENU_ACTION_TIMEOUT_SECONDS >= 10.0
+        assert PLUGIN_MENU_ACTION_TIMEOUT_SECONDS == 20.0
 
 
 from app.middleware.plugin_gate import _is_management_route

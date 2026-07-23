@@ -838,8 +838,19 @@ async def run_plugin_menu_action(
         )
 
     # Only declared actions are dispatchable - never call through on an
-    # arbitrary path segment.
-    declared = {item.id for item in plugin.get_menu_items()}
+    # arbitrary path segment. A plugin that cannot even declare its actions
+    # must not 5xx the request - treat it the same as a failing action:
+    # log and fail closed (no action is dispatchable).
+    try:
+        declared = {item.id for item in plugin.get_menu_items()}
+    except Exception:  # noqa: BLE001 - a plugin fault must not 5xx the endpoint
+        logger.warning(
+            "plugin %s failed to list menu items", name, exc_info=True
+        )
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Unknown menu action",
+        )
     if action_id not in declared:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -883,10 +894,15 @@ async def _execute_menu_action(
         )
         return MenuActionResult(ok=False, message_text="Action failed")
 
-    if result is None:
-        # Declared but not handled - a plugin bug, not a user error.
+    if not isinstance(result, MenuActionResult):
+        # Declared but not handled correctly (None, or some other type
+        # entirely) - a plugin bug, not a user error. Guard against any
+        # non-MenuActionResult return, not only None: calling .model_dump()
+        # on a plain dict/str would 500 the request instead of failing closed.
         logger.warning(
-            "plugin %s declared menu action %s but returned None", name, action_id
+            "plugin %s declared menu action %s but returned %r instead of "
+            "MenuActionResult",
+            name, action_id, type(result).__name__,
         )
         return MenuActionResult(ok=False, message_text="Action failed")
     return result
