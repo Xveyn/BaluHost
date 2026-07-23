@@ -5,6 +5,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from fastapi import APIRouter
 from sqlalchemy.orm import Session
 
 from app.plugins.manager import PluginLoadError, PluginManager
@@ -326,8 +327,11 @@ class TestRouterRestartRequired:
         assert mgr._routes_mounted_at_startup == set()
 
         # A plugin is enabled afterwards, at runtime, and it ships a router.
+        # A real APIRouter, not a MagicMock: get_router() (the combined one)
+        # feeds it into router.include_router(), whose circularity check
+        # (FastAPI >=0.115.x) rejects a mock.
         plugin = MagicMock()
-        plugin.get_router.return_value = MagicMock()
+        plugin.get_router.return_value = APIRouter()
         mgr._plugins["late"] = plugin
         mgr._enabled.add("late")
 
@@ -336,7 +340,7 @@ class TestRouterRestartRequired:
     def test_false_when_the_router_was_part_of_the_startup_mount(self, empty_plugins_dir: Path):
         mgr = PluginManager(plugins_dir=empty_plugins_dir)
         plugin = MagicMock()
-        plugin.get_router.return_value = MagicMock()
+        plugin.get_router.return_value = APIRouter()
         mgr._plugins["early"] = plugin
         mgr._enabled.add("early")
 

@@ -9,6 +9,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import pytest
+from fastapi import APIRouter
 
 from app.api.routes.plugins import get_plugin_details
 from app.plugins.base import PluginMetadata
@@ -22,7 +23,11 @@ def _plugin(has_router: bool) -> MagicMock:
         description="", author="test",
     )
     plugin.get_ui_manifest.return_value = None
-    plugin.get_router.return_value = MagicMock() if has_router else None
+    # A real APIRouter, not a MagicMock: get_router() feeds the value straight
+    # into router.include_router(), whose circularity check (FastAPI >=0.115.x)
+    # rejects a mock. The mock only passed on the older local FastAPI that
+    # lacked that check - exactly the local-green / CI-red gap here.
+    plugin.get_router.return_value = APIRouter() if has_router else None
     plugin.get_background_tasks.return_value = []
     plugin.get_dashboard_panel.return_value = None
     plugin.get_translations.return_value = None
