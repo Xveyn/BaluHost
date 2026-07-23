@@ -16,7 +16,11 @@ from dataclasses import dataclass
 from typing import Iterator, Optional, Tuple
 
 from app.services.notifications.events import (
+    _COOLDOWN_SECONDS,
+    _check_cooldown,
+    _set_cooldown,
     EventConfig,
+    get_event_emitter,
 )
 
 logger = logging.getLogger(__name__)
@@ -76,3 +80,49 @@ def lookup_plugin_event(public_id: str) -> Optional[PluginEventEntry]:
                 default_target=spec.default_target,
             )
     return None
+
+
+async def emit_plugin_event(
+    plugin_name: str, event_id: str, entity_id: str = "", **kwargs
+) -> None:
+    """Fire a plugin-declared notification event.
+
+    Namespaces the id, resolves it against the registry, enforces the declared
+    cooldown (the async emit() path carries none - only emit_sync does), and
+    delivers to the declared target. Never raises: a plugin firing an event
+    must not take down its caller.
+    """
+    public_id = f"{_PREFIX}{plugin_name}:{event_id}"
+    entry = lookup_plugin_event(public_id)
+    if entry is None:
+        logger.warning("emit_plugin_event: unknown event %s", public_id)
+        return
+
+    # _check_cooldown/_set_cooldown read the window from _COOLDOWN_SECONDS -
+    # a plugin id is never in that dict, so without seeding it here both calls
+    # would be silent no-ops and the declared cooldown would be dead. Seeding
+    # reuses the core machinery (cache, monotonic clock, entity keying) instead
+    # of duplicating it.
+    if entry.cooldown_seconds > 0:
+        _COOLDOWN_SECONDS[public_id] = entry.cooldown_seconds
+        if _check_cooldown(public_id, entity_id):
+            return
+
+    emitter = get_event_emitter()
+    try:
+        if entry.default_target == "all_users":
+            # emit_for_all_users needs a session to enumerate users; the async
+            # emit() each user triggers opens its own via the factory. Reaching
+            # the factory here is fine - same package as EventEmitter.
+            db = emitter._db_session_factory()
+            try:
+                await emitter.emit_for_all_users(public_id, db, **kwargs)
+            finally:
+                db.close()
+        else:
+            await emitter.emit_for_admins(public_id, **kwargs)
+    except Exception:  # broad on purpose: an emit failure must not crash the poller
+        logger.warning("emit_plugin_event %s failed", public_id, exc_info=True)
+        return
+
+    _set_cooldown(public_id, entity_id)
