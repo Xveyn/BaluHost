@@ -1,9 +1,11 @@
 """The Steam gaming plugin's status pill."""
 
+import threading
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from app.api.routes.plugins import run_plugin_menu_action
 from app.plugins.installed import steam_gaming as plugin_module
 from app.plugins.installed.steam_gaming import SteamGamingPlugin
 
@@ -176,3 +178,76 @@ class TestGamingModeAction:
 
         assert result.ok is False
         assert result.message_key == "menu_steam_failed"
+
+
+class TestManifestAndRouteAgreeOnDeclaredActions:
+    """Regression test for the manifest/get_menu_items split.
+
+    The plugin only declares ``gaming_mode`` in get_ui_manifest() - that is
+    what makes the entry render in the frontend menu. get_menu_items() is
+    what the route validates the clicked action_id against. If those two
+    ever disagree again, the entry renders and the click 404s - invisible to
+    every test that drives run_menu_action() directly or mocks
+    get_menu_items(). Use the real plugin and the real route function.
+    """
+
+    def test_every_manifest_menu_item_id_is_declared(self):
+        plugin = SteamGamingPlugin()
+        manifest_ids = {item.id for item in plugin.get_ui_manifest().menu_items}
+        declared_ids = {item.id for item in plugin.get_menu_items()}
+
+        assert manifest_ids, "the manifest must actually declare something for this test to mean anything"
+        assert manifest_ids == declared_ids
+
+    async def test_route_does_not_404_the_action_the_manifest_advertises(self):
+        plugin = SteamGamingPlugin()
+        manager = MagicMock()
+        manager.get_plugin.return_value = plugin
+
+        desktop_patch, _service = _patch_desktop(True, "ok")
+        with desktop_patch, patch(
+            "app.plugins.installed.steam_gaming.open_big_picture",
+            return_value=(True, "requested"),
+        ), patch("app.api.routes.plugins.user_limiter.enabled", False), patch(
+            "app.api.routes.plugins.get_audit_logger_db"
+        ):
+            result = await run_plugin_menu_action(
+                request=MagicMock(client=MagicMock(host="127.0.0.1")),
+                response=MagicMock(),
+                name="steam_gaming",
+                action_id=_ACTION,
+                db=MagicMock(),
+                current_user=MagicMock(username="admin"),
+                plugin_manager=manager,
+            )
+
+        assert result.ok is True
+
+
+class TestGamingModeRunsLauncherOffTheEventLoop:
+    """asyncio.wait_for() in the route can only interrupt awaits, not a
+    blocking call made directly on the event loop thread - the launcher must
+    run via asyncio.to_thread() or the route's timeout is decorative.
+    """
+
+    async def test_open_big_picture_runs_on_a_worker_thread(self):
+        caller_thread_idents: list[int] = []
+
+        def _record_ident_and_launch():
+            caller_thread_idents.append(threading.get_ident())
+            return True, "requested"
+
+        desktop_patch, _service = _patch_desktop(True, "ok")
+        with desktop_patch, patch(
+            "app.plugins.installed.steam_gaming.open_big_picture",
+            side_effect=_record_ident_and_launch,
+        ):
+            result = await SteamGamingPlugin().run_menu_action(_ACTION, db=None)
+
+        assert result.ok is True
+        assert caller_thread_idents, "open_big_picture was never called"
+        assert caller_thread_idents[0] != threading.get_ident(), (
+            "open_big_picture ran on the event loop's own thread - "
+            "asyncio.to_thread() is missing, so the route's wait_for timeout "
+            "cannot interrupt it"
+        )

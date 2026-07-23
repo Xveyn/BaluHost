@@ -286,8 +286,15 @@ class PluginBase(ABC):
         return None
 
     def get_menu_items(self) -> List["PluginMenuItem"]:
-        """System-menu actions this plugin contributes. Default: none."""
-        return []
+        """System-menu actions this plugin contributes. Default: none.
+
+        Derived from get_ui_manifest() so a plugin declares its items once: the
+        manifest is what reaches the frontend, and this is what the core
+        validates an incoming action_id against. Two declaration sites would
+        drift, and the drift is invisible - the entry renders and the click 404s.
+        """
+        manifest = self.get_ui_manifest()
+        return list(manifest.menu_items) if manifest is not None else []
 
     async def run_menu_action(
         self, action_id: str, db: "Session"
