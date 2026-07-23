@@ -79,11 +79,35 @@ Two plugin trust tiers with different isolation:
    from `get_translations()`, resolved client-side via `resolvePluginString`,
    with `name_text`/`label_text` as literal fallbacks.
    **Operator note:** `PluginManager._enabled` is process-local, populated at
-   startup. Toggling a pill-contributing plugin on/off through the UI only
-   updates the worker that handled that request — in production (4 Uvicorn
-   workers) the pill then appears on roughly one in four status-strip polls
-   until the backend is restarted. Restart `baluhost-backend` after enabling
-   or disabling a plugin that contributes a status pill so all workers agree.
+   startup. Toggling a pill- or menu-contributing plugin on/off through the UI
+   only updates the worker that handled that request — in production (4 Uvicorn
+   workers) the pill then appears on roughly one in four status-strip polls, and
+   a menu action fails with 404 on the three workers that never loaded it, until
+   the backend is restarted. Restart `baluhost-backend` after enabling or
+   disabling such a plugin so all workers agree (#448).
+7. Override `get_ui_manifest()` with `menu_items` + `run_menu_action()` to
+   contribute an action to the system (power) menu. `get_menu_items()` is not
+   a separate override point: its default implementation derives the list
+   from `get_ui_manifest().menu_items`, so a plugin declares its items in
+   exactly one place. That single declaration is what the manifest endpoint
+   (`GET /api/plugins/ui/manifest`) serves to the frontend *and* what the
+   route validates an incoming `action_id` against — two declaration sites
+   would drift silently, and the drift is invisible: the entry still
+   renders, the click just 404s. The plugin picks only a local `id`
+   (validated against `^[a-z0-9_]+$`); the core enforces the admin gate, the
+   rate limit, the audit entry, the declaration check (an `action_id` not
+   present in `get_menu_items()` is a 404 and never dispatches — a plugin
+   whose `get_menu_items()` itself throws is treated the same way, fail
+   closed, not a 500) and a `PLUGIN_MENU_ACTION_TIMEOUT_SECONDS` (20s)
+   timeout. `PluginMenuItem` deliberately has **no** `admin_only` field —
+   unlike `PluginNavItem`, an action executes something, so its audience is
+   not the plugin's call. Failures and timeouts become `ok=false` with a
+   generic message; details stay in the log. Labels come from
+   `get_translations()`, resolved client-side via `resolvePluginString`.
+   Blocking work belongs in `asyncio.to_thread`, otherwise the timeout
+   cannot take effect. Disabled plugins are rejected by
+   `PluginGateMiddleware` (403, DB-backed) — `menu-actions` is
+   intentionally **not** a management route.
 
 ## SmartDevice Framework (`smart_device/`)
 

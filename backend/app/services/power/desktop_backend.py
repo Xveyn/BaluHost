@@ -14,12 +14,14 @@ docs/superpowers/plans/2026-05-30-desktop-toggle.md.
 """
 from __future__ import annotations
 
+import asyncio
 import os
 import subprocess
 from typing import Optional, Protocol, Tuple
 
 from app.schemas.desktop import DesktopState, DesktopStatus
 from app.services.power.gpu.display_detector import get_active_display_count
+from app.services.power.session_env import wayland_session_env
 
 
 class DesktopBackend(Protocol):
@@ -65,15 +67,8 @@ class LinuxDesktopBackend:
         self._uid = uid if uid is not None else os.getuid()
 
     def _session_env(self) -> dict:
-        """Env so kscreen-doctor can reach the user's Wayland session.
-
-        The backend runs as the session user (uid match) but outside the
-        graphical session, so XDG_RUNTIME_DIR/WAYLAND_DISPLAY must be set.
-        """
-        env = dict(os.environ)
-        env.setdefault("XDG_RUNTIME_DIR", f"/run/user/{self._uid}")
-        env.setdefault("WAYLAND_DISPLAY", "wayland-0")
-        return env
+        """Env so kscreen-doctor can reach the user's Wayland session."""
+        return wayland_session_env(self._uid)
 
     def _run(self, cmd: list[str], timeout: int = 30) -> subprocess.CompletedProcess:
         return subprocess.run(
@@ -94,10 +89,10 @@ class LinuxDesktopBackend:
         return DesktopStatus(state=DesktopState.STOPPED, display_manager=name, detail="displays off")
 
     async def enable(self) -> Tuple[bool, str]:
-        return self._exec(["kscreen-doctor", "--dpms", "on"])
+        return await asyncio.to_thread(self._exec, ["kscreen-doctor", "--dpms", "on"])
 
     async def disable(self) -> Tuple[bool, str]:
-        return self._exec(["kscreen-doctor", "--dpms", "off"])
+        return await asyncio.to_thread(self._exec, ["kscreen-doctor", "--dpms", "off"])
 
     def _exec(self, cmd: list[str]) -> Tuple[bool, str]:
         try:

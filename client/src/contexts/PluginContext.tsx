@@ -6,6 +6,8 @@ import type {
   PluginInfo,
   PluginUIInfo,
   PluginNavItem,
+  PluginMenuItem,
+  PluginTranslations,
 } from '../api/plugins';
 import {
   listPlugins,
@@ -14,10 +16,16 @@ import {
 import { useAuth } from './AuthContext';
 import { isPi } from '../lib/features';
 
+export interface PluginMenuItemWithSource extends PluginMenuItem {
+  _pluginName: string;
+  _translations?: PluginTranslations;
+}
+
 interface PluginContextType {
   plugins: PluginInfo[];
   enabledPlugins: PluginUIInfo[];
   pluginNavItems: PluginNavItem[];
+  pluginMenuItems: PluginMenuItemWithSource[];
   isLoading: boolean;
   error: string | null;
   refreshPlugins: () => Promise<void>;
@@ -84,10 +92,23 @@ export function PluginProvider({ children }: PluginProviderProps) {
     )
     .sort((a, b) => a.order - b.order);
 
+  // Flatten menu items from all enabled plugins, sorted by order.
+  // menu_items may be absent when talking to an older backend.
+  const pluginMenuItems: PluginMenuItemWithSource[] = (enabledPlugins ?? [])
+    .flatMap((plugin) =>
+      (plugin.menu_items ?? []).map((item) => ({
+        ...item,
+        _pluginName: plugin.name,
+        _translations: plugin.translations ?? undefined,
+      }))
+    )
+    .sort((a, b) => a.order - b.order);
+
   const value: PluginContextType = {
     plugins,
     enabledPlugins,
     pluginNavItems,
+    pluginMenuItems,
     isLoading,
     error,
     refreshPlugins: loadPlugins,

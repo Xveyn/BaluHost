@@ -1,4 +1,5 @@
 """API routes for plugin management."""
+import asyncio
 import html
 import logging
 
@@ -10,6 +11,7 @@ from app.api.deps import get_current_admin, get_current_user, get_db, require_lo
 from app.core.rate_limiter import user_limiter, get_limit
 from app.models.user import User
 from app.middleware.plugin_gate import invalidate_plugin_cache
+from app.plugins.base import MenuActionResult, PluginBase
 from app.plugins.manifest import load_manifest
 from app.plugins.manager import PluginManager, PluginLoadError
 from app.plugins.permissions import PermissionManager
@@ -26,6 +28,7 @@ from app.schemas.plugin import (
     PluginDetailResponse,
     PluginInfo,
     PluginListResponse,
+    PluginMenuActionResponse,
     PluginNavItemSchema,
     PluginStorageSetRequest,
     PluginToggleRequest,
@@ -40,6 +43,13 @@ from app.schemas.plugin import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/plugins", tags=["plugins"])
+
+# Generous compared to the 2s pill-collector timeout: a menu action may shell
+# out (kscreen-doctor carries a 30s subprocess timeout of its own). Note that
+# wait_for cannot preempt work already running inside asyncio.to_thread - it
+# frees the request, the thread finishes on its own. That is acceptable: it
+# occupies a thread, not the event loop.
+PLUGIN_MENU_ACTION_TIMEOUT_SECONDS = 20.0
 
 
 def get_plugin_manager() -> PluginManager:
@@ -802,3 +812,103 @@ async def uninstall_plugin(
         status_code=status.HTTP_404_NOT_FOUND,
         detail="Plugin not installed",
     )
+
+
+@router.post("/{name}/menu-actions/{action_id}", response_model=PluginMenuActionResponse)
+@user_limiter.limit(get_limit("admin_operations"))
+async def run_plugin_menu_action(
+    request: Request,
+    response: Response,
+    name: str,
+    action_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin),
+    plugin_manager: PluginManager = Depends(get_plugin_manager),
+) -> PluginMenuActionResponse:
+    """Run a menu action a plugin declared in its UI manifest. Admin only.
+
+    Requests for a disabled plugin should never reach this handler -
+    PluginGateMiddleware rejects them with 403 based on the DB (see
+    middleware/plugin_gate.py). This is only the first line of defense
+    though: PluginManager.disable_plugin() drops the name from ``_enabled``
+    but leaves the instance in ``_plugins``, so get_plugin() alone would
+    still return it. Check is_enabled() too, so this endpoint does not rely
+    solely on the middleware (a prefix change or router move must not
+    silently defeat the enabled-check).
+    """
+    plugin = plugin_manager.get_plugin(name)
+    if plugin is None or not plugin_manager.is_enabled(name):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Plugin not found or not enabled",
+        )
+
+    # Only declared actions are dispatchable - never call through on an
+    # arbitrary path segment. A plugin that cannot even declare its actions
+    # must not 5xx the request - treat it the same as a failing action:
+    # log and fail closed (no action is dispatchable).
+    try:
+        declared = {item.id for item in plugin.get_menu_items()}
+    except Exception:  # broad on purpose: a plugin fault must not 5xx the endpoint
+        logger.warning(
+            "plugin %s failed to list menu items", name, exc_info=True
+        )
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Unknown menu action",
+        )
+    if action_id not in declared:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Unknown menu action",
+        )
+
+    result = await _execute_menu_action(plugin, name, action_id, db)
+
+    get_audit_logger_db().log_event(
+        event_type="PLUGIN",
+        user=current_user.username,
+        action="menu_action",
+        resource=f"{name}:{action_id}",
+        details={"ok": result.ok, "message_key": result.message_key},
+        success=result.ok,
+        ip_address=request.client.host if request.client else None,
+    )
+    return PluginMenuActionResponse(**result.model_dump())
+
+
+async def _execute_menu_action(
+    plugin: PluginBase, name: str, action_id: str, db: Session
+) -> MenuActionResult:
+    """Run the action under a timeout and an exception guard.
+
+    A plugin fault must never become a 5xx and must never leak internals into
+    the response - the detail goes to the log, the caller gets a generic
+    failure. Mirrors the pill-collector guard in services/status_bar/service.py.
+    """
+    try:
+        result = await asyncio.wait_for(
+            plugin.run_menu_action(action_id, db),
+            timeout=PLUGIN_MENU_ACTION_TIMEOUT_SECONDS,
+        )
+    except asyncio.TimeoutError:
+        logger.warning("plugin %s menu action %s timed out", name, action_id)
+        return MenuActionResult(ok=False, message_text="Action timed out")
+    except Exception:  # broad on purpose: a plugin fault must not 5xx the endpoint
+        logger.warning(
+            "plugin %s menu action %s failed", name, action_id, exc_info=True
+        )
+        return MenuActionResult(ok=False, message_text="Action failed")
+
+    if not isinstance(result, MenuActionResult):
+        # Declared but not handled correctly (None, or some other type
+        # entirely) - a plugin bug, not a user error. Guard against any
+        # non-MenuActionResult return, not only None: calling .model_dump()
+        # on a plain dict/str would 500 the request instead of failing closed.
+        logger.warning(
+            "plugin %s declared menu action %s but returned %r instead of "
+            "MenuActionResult",
+            name, action_id, type(result).__name__,
+        )
+        return MenuActionResult(ok=False, message_text="Action failed")
+    return result

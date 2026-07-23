@@ -263,7 +263,8 @@
     "desktopEnable": "Enable desktop",
     "desktopEnableDesc": "Turn displays back on",
     "desktopEnabled": "Desktop enabled",
-    "desktopEnableFailed": "Failed to enable desktop"
+    "desktopEnableFailed": "Failed to enable desktop",
+    "pluginActionFailed": "Action failed"
   },
   "adminOnly": "Admin only",
   "local_only_action_hint": "Only available via the BaluHost Companion app running on the server itself.",

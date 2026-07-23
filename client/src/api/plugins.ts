@@ -12,6 +12,23 @@ export interface PluginNavItem {
   order: number;
 }
 
+export interface PluginMenuItem {
+  id: string;
+  icon: string;
+  label_key: string;
+  label_text: string;
+  description_key?: string | null;
+  description_text?: string | null;
+  tone: 'neutral' | 'info' | 'success' | 'warning' | 'danger';
+  order: number;
+}
+
+export interface PluginMenuActionResult {
+  ok: boolean;
+  message_key?: string | null;
+  message_text: string;
+}
+
 export interface ScopeInfo {
   key: string;
   tier: 'frontend' | 'backend';
@@ -50,6 +67,7 @@ export interface PluginUIInfo {
   name: string;
   display_name: string;
   nav_items: PluginNavItem[];
+  menu_items: PluginMenuItem[];
   bundle_path: string;
   styles_path?: string;
   dashboard_widgets: string[];
@@ -226,4 +244,20 @@ export async function uninstallPlugin(name: string): Promise<{ message: string }
  */
 export function getPluginBundleUrl(pluginName: string, bundlePath: string): string {
   return `/api/plugins/${pluginName}/ui/${bundlePath}`;
+}
+
+/**
+ * Run a plugin-contributed system-menu action. Admin only (server-enforced).
+ *
+ * Resolves with the plugin's own outcome — a failed action is a normal `ok:
+ * false` response, not an HTTP error.
+ */
+export async function runPluginMenuAction(
+  pluginName: string,
+  actionId: string,
+): Promise<PluginMenuActionResult> {
+  const res = await apiClient.post<PluginMenuActionResult>(
+    `/api/plugins/${encodeURIComponent(pluginName)}/menu-actions/${encodeURIComponent(actionId)}`,
+  );
+  return res.data;
 }
