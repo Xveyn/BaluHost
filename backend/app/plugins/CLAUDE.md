@@ -122,6 +122,20 @@ Two plugin trust tiers with different isolation:
    cannot take effect. Disabled plugins are rejected by
    `PluginGateMiddleware` (403, DB-backed) — `menu-actions` is
    intentionally **not** a management route.
+8. Override `get_notification_events()` to contribute notification events, and
+   `get_background_tasks()` if something needs to emit them on an interval. Each
+   `PluginEventSpec` picks only a local `id` (`^[a-z0-9_]+$`); the core
+   namespaces it to `plugin:<name>:<suffix>`, **derives the category from the
+   plugin name** (the category is the delivery routing key — a plugin-chosen one
+   would reach users routed for that category), and delivers through the
+   existing machine (persistence, routing, push, WebSocket). Fire an event with
+   `services.notifications.plugin_events.emit_plugin_event(plugin_name, event_id,
+   entity_id="", **kwargs)`; it enforces the declared `cooldown_seconds` itself
+   (the async emit path has none) and delivers to `default_target` (`admins` by
+   default — a plugin cannot widen its own reach). Texts are server-rendered in
+   one language (like the core events), so they are plain templates, not
+   `resolvePluginString` keys. Background tasks run **primary-only** (#448), so a
+   poller needs no cross-worker guard.
 
 ## SmartDevice Framework (`smart_device/`)
 
