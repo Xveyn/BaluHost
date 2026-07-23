@@ -245,7 +245,7 @@ Import-Zeile am Dateikopf prüfen: `Literal` muss aus `typing` importiert sein (
 - [ ] **Step 5: Run tests to verify they pass**
 
 Run: `cd backend && python -m pytest tests/plugins/test_plugin_menu_actions.py -q --no-cov`
-Expected: PASS (8 Tests)
+Expected: PASS (13 Tests — die 6 Parametrize-Fälle zählen einzeln)
 
 - [ ] **Step 6: Lint + commit**
 
@@ -303,8 +303,8 @@ def _plugin_with_menu(name: str = "demo") -> MagicMock:
 
 
 class TestManifestCarriesMenuItems:
-    def test_enabled_plugin_menu_items_reach_the_manifest(self):
-        manager = PluginManager()
+    def test_enabled_plugin_menu_items_reach_the_manifest(self, tmp_path):
+        manager = PluginManager(plugins_dir=tmp_path)
         manager._plugins = {"demo": _plugin_with_menu()}
         manager._enabled = {"demo"}
 
@@ -317,10 +317,10 @@ class TestManifestCarriesMenuItems:
             "tone": "neutral", "order": 100,
         }]
 
-    def test_plugin_without_menu_items_yields_empty_list(self):
+    def test_plugin_without_menu_items_yields_empty_list(self, tmp_path):
         plugin = _plugin_with_menu()
         plugin.get_ui_manifest.return_value = PluginUIManifest(enabled=True)
-        manager = PluginManager()
+        manager = PluginManager(plugins_dir=tmp_path)
         manager._plugins = {"demo": plugin}
         manager._enabled = {"demo"}
 
@@ -331,7 +331,7 @@ class TestManifestCarriesMenuItems:
         assert info.menu_items == []
 ```
 
-Hinweis für die Umsetzung: `PluginManager()` direkt zu instanziieren umgeht das Singleton bewusst — die vorhandenen Tests in `tests/plugins/test_plugin_manager.py` machen das genauso. Falls der Konstruktor Argumente verlangt, dort abschauen.
+Hinweis für die Umsetzung: `PluginManager(plugins_dir=tmp_path)` umgeht das Singleton und zeigt auf ein leeres Verzeichnis statt auf das echte `installed/` — dasselbe Muster wie `tests/plugins/test_plugin_manager.py:78`. Das direkte Setzen von `_plugins`/`_enabled` entspricht den internen Typen (`Dict[str, PluginBase]` / `Set[str]`, `manager.py:130-131`); auch die Sandbox-Tests legen Einträge direkt in `_enabled` ab.
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -377,7 +377,7 @@ Der externe (sandboxed) Zweig weiter unten bleibt **unverändert**: externe Plug
 - [ ] **Step 5: Run tests to verify they pass**
 
 Run: `cd backend && python -m pytest tests/plugins/test_plugin_menu_actions.py -q --no-cov`
-Expected: PASS (11 Tests)
+Expected: PASS (16 Tests)
 
 - [ ] **Step 6: Run the neighbouring suites for regressions**
 
@@ -544,7 +544,7 @@ In `backend/app/api/routes/plugins.py`:
 Imports ergänzen — `import asyncio` oben bei `import html`, und im Schema-Import-Block (Zeile 20-37) alphabetisch `PluginMenuActionResponse` einfügen. Zusätzlich am Kopf:
 
 ```python
-from app.plugins.base import MenuActionResult
+from app.plugins.base import MenuActionResult, PluginBase
 ```
 
 Konstante direkt unter `router = APIRouter(...)` (Zeile 42):
@@ -608,7 +608,7 @@ async def run_plugin_menu_action(
 
 
 async def _execute_menu_action(
-    plugin, name: str, action_id: str, db: Session
+    plugin: PluginBase, name: str, action_id: str, db: Session
 ) -> MenuActionResult:
     """Run the action under a timeout and an exception guard.
 
@@ -642,7 +642,7 @@ async def _execute_menu_action(
 - [ ] **Step 5: Run tests to verify they pass**
 
 Run: `cd backend && python -m pytest tests/plugins/test_plugin_menu_actions.py -q --no-cov`
-Expected: PASS (18 Tests)
+Expected: PASS (23 Tests)
 
 - [ ] **Step 6: Pin the middleware gate (no production code changes)**
 
@@ -1131,7 +1131,7 @@ Methoden in der Klasse ergänzen (nach `collect_status_pill`):
             )],
         )
 
-    async def run_menu_action(self, action_id: str, db) -> Optional[MenuActionResult]:
+    async def run_menu_action(self, action_id: str, db: Session) -> Optional[MenuActionResult]:
         if action_id != _MENU_ACTION_ID:
             return None
 
@@ -1536,7 +1536,10 @@ vi.mock('../../api/desktop', () => ({
 }));
 vi.mock('../../api/plugins', () => ({ runPluginMenuAction: vi.fn() }));
 
-const menuItems: unknown[] = [];
+// vi.mock factories are hoisted above this file's const declarations — a plain
+// top-level array would hit the temporal dead zone. vi.hoisted lifts the state
+// alongside the mock.
+const menuItems = vi.hoisted(() => [] as unknown[]);
 vi.mock('../../contexts/PluginContext', () => ({
   usePlugins: () => ({ pluginMenuItems: menuItems }),
 }));
@@ -1631,6 +1634,22 @@ describe('PowerMenu — plugin menu actions', () => {
     openMenu();
     expect(screen.queryByText('Gaming Mode')).not.toBeInTheDocument();
   });
+
+  it('locks the plugin actions while one is running', async () => {
+    let resolveAction!: (value: unknown) => void;
+    (runPluginMenuAction as ReturnType<typeof vi.fn>).mockReturnValue(
+      new Promise((resolve) => { resolveAction = resolve; }),
+    );
+    render(<PowerMenu {...baseProps} />);
+    openMenu();
+    const button = (await screen.findByText('Gaming Mode')).closest('button')!;
+    fireEvent.click(button);
+
+    await waitFor(() => expect(button).toBeDisabled());
+
+    resolveAction({ ok: true, message_key: null, message_text: 'done' });
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('done'));
+  });
 });
 ```
 
@@ -1664,8 +1683,9 @@ import { usePlugins } from '../contexts/PluginContext';
 import { runPluginMenuAction } from '../api/plugins';
 import { resolvePluginString } from '../lib/pluginI18n';
 import { resolveIcon } from './topbar/iconMap';
-import { Plug } from 'lucide-react';
 ```
+
+und `Plug` in den **vorhandenen** `lucide-react`-Import (Zeile 3) aufnehmen — keinen zweiten Import derselben Quelle anlegen.
 
 State und Handler in der Komponente (nach `const [desktopState, ...]`):
 
@@ -1728,14 +1748,22 @@ Rendering im Admin-Block, direkt **nach** dem `desktopState === 'stopped'`-Butto
 
 Der Block steht innerhalb von `{isAdmin && (...)}` — Nicht-Admins sehen ihn dadurch gar nicht, und die Route lehnt sie ohnehin ab.
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [ ] **Step 5: Fix the existing PowerMenu suite — it WILL break**
+
+`PowerMenu` ruft nach diesem Task `usePlugins()` unconditional auf; die bestehende Suite `src/__tests__/components/PowerMenu.test.tsx` rendert ohne Provider und wirft „usePlugins must be used within a PluginProvider". In dieser Datei nach den vorhandenen `vi.mock`-Blöcken (Zeile 19-23) ergänzen:
+
+```tsx
+vi.mock('../../contexts/PluginContext', () => ({
+  usePlugins: () => ({ pluginMenuItems: [] }),
+}));
+```
+
+- [ ] **Step 6: Run tests to verify they pass**
 
 Run: `cd client && npx vitest run src/__tests__/components/PowerMenu.pluginActions.test.tsx src/__tests__/components/PowerMenu.test.tsx`
-Expected: PASS (6 neue Tests + die bestehende PowerMenu-Suite).
+Expected: PASS (7 neue Tests + die bestehende PowerMenu-Suite unverändert grün).
 
-Falls die bestehende Suite mit „usePlugins must be used within a PluginProvider" bricht: dort denselben `vi.mock('../../contexts/PluginContext', ...)`-Block ergänzen wie in der neuen Datei — der Test rendert `PowerMenu` ohne Provider.
-
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add client/src/components/PowerMenu.tsx client/src/i18n/locales/de/common.json client/src/i18n/locales/en/common.json client/src/__tests__/components/PowerMenu.pluginActions.test.tsx client/src/__tests__/components/PowerMenu.test.tsx
