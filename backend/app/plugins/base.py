@@ -159,6 +159,32 @@ class StatusPillSpec(BaseModel):
     silent_when_ok: bool = True
 
 
+class PluginEventSpec(BaseModel):
+    """A notification event a plugin contributes.
+
+    The public event id is namespaced by the core as
+    ``plugin:<plugin_name>:<id>`` - the plugin only picks the suffix. The
+    category is deliberately NOT here: it is the delivery routing key, so the
+    core derives it from the plugin name. A plugin free to set category="backup"
+    would reach every user an admin routed for backups.
+    """
+
+    id: str = Field(
+        pattern=r"^[a-z0-9_]+$",
+        description="Plugin-local suffix, e.g. 'session_started'",
+    )
+    notification_type: Literal["info", "warning", "critical"] = "info"
+    priority: int = Field(default=0, ge=0, le=3)
+    title_template: str = Field(description="Server-rendered, one language")
+    message_template: str = Field(description="Server-rendered, one language")
+    action_url: Optional[str] = None
+    cooldown_seconds: int = Field(
+        default=0, ge=0,
+        description="Suppress a repeat of the same event+entity within this window",
+    )
+    default_target: Literal["admins", "all_users"] = "admins"
+
+
 @dataclass
 class BackgroundTaskSpec:
     """Specification for a plugin background task."""
@@ -284,6 +310,15 @@ class PluginBase(ABC):
         ``kind``, ``tone`` and ``label_key``/``label_text``.
         """
         return None
+
+    def get_notification_events(self) -> List["PluginEventSpec"]:
+        """Notification events this plugin contributes. Default: none.
+
+        The core namespaces each id to ``plugin:<name>:<suffix>``, derives the
+        category from the plugin name, and owns delivery. The plugin emits an
+        event via ``services.notifications.plugin_events.emit_plugin_event``.
+        """
+        return []
 
     def get_menu_items(self) -> List["PluginMenuItem"]:
         """System-menu actions this plugin contributes. Default: none.
