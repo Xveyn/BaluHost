@@ -403,18 +403,31 @@ class TestMenuActionThroughTheRealStack:
     real: middleware dispatch, path matching, routing, auth, the route.
     """
 
+    @pytest.fixture(autouse=True)
+    def _reset_enablement_state(self):
+        """The enablement cache is module state that survives file boundaries
+        in the same pytest process. These tests warm the cache (``{"demo": ...}``);
+        without cleanup, any alphabetically later file that consults
+        ``manager.is_enabled()`` would read this stale state instead of its own.
+        """
+        from app.services import plugin_enablement as pe
+
+        pe.invalidate()
+        pe._failed_until.clear()
+        yield
+        pe.invalidate()
+        pe._failed_until.clear()
+
     def _post(self, client, headers):
         return client.post(
             "/api/plugins/demo/menu-actions/do_it", headers=headers
         )
 
     def test_disabled_plugin_is_refused_by_the_stack(self, client, admin_headers):
-        from app.middleware import plugin_gate
+        from app.services import plugin_enablement
 
-        plugin_gate._plugin_cache.clear()
-        with patch.object(
-            plugin_gate, "_fetch_plugin_status", return_value=(False, [])
-        ):
+        plugin_enablement.invalidate()
+        with patch.object(plugin_enablement, "_fetch", return_value={}):
             response = self._post(client, admin_headers)
 
         assert response.status_code == 403
@@ -424,22 +437,26 @@ class TestMenuActionThroughTheRealStack:
         """Discriminates the 403 above: with the same request and an enabled
         plugin the gate lets it through, and the 404 comes from the route
         itself (no such plugin loaded in this process)."""
-        from app.middleware import plugin_gate
+        from app.services import plugin_enablement
 
-        plugin_gate._plugin_cache.clear()
+        plugin_enablement.invalidate()
         with patch.object(
-            plugin_gate, "_fetch_plugin_status", return_value=(True, [])
+            plugin_enablement,
+            "_fetch",
+            return_value={"demo": {"granted_permissions": [], "granted_api_scopes": []}},
         ):
             response = self._post(client, admin_headers)
 
         assert response.status_code == 404
 
     def test_non_admin_is_refused_on_an_enabled_plugin(self, client, user_headers):
-        from app.middleware import plugin_gate
+        from app.services import plugin_enablement
 
-        plugin_gate._plugin_cache.clear()
+        plugin_enablement.invalidate()
         with patch.object(
-            plugin_gate, "_fetch_plugin_status", return_value=(True, [])
+            plugin_enablement,
+            "_fetch",
+            return_value={"demo": {"granted_permissions": [], "granted_api_scopes": []}},
         ):
             response = self._post(client, user_headers)
 

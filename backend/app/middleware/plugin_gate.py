@@ -9,20 +9,16 @@ Management routes (toggle, config, details, ui assets) are excluded so
 admins can still manage plugins that are currently disabled.
 """
 
-import asyncio
 import logging
-import time
-from typing import Dict, List, Tuple
 
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
-logger = logging.getLogger(__name__)
+from app.plugins.manager import PluginManager
+from app.services import plugin_enablement
 
-# TTL-based in-memory cache: {plugin_name: (is_enabled, granted_perms, timestamp)}
-_plugin_cache: Dict[str, Tuple[bool, List[str], float]] = {}
-CACHE_TTL_SECONDS = 5.0
+logger = logging.getLogger(__name__)
 
 # Path suffixes for management routes that should NOT be gated.
 # These are the admin endpoints defined in api/routes/plugins.py.
@@ -46,33 +42,13 @@ def _is_management_route(sub_path: str) -> bool:
     return False
 
 
-def _fetch_plugin_status(name: str) -> Tuple[bool, List[str]]:
-    """Synchronous DB lookup -- designed to run in a worker thread via
-    ``asyncio.to_thread()``.
-
-    Returns ``(is_enabled, granted_permissions)``."""
-    from app.core.database import SessionLocal
-    from app.models.plugin import InstalledPlugin
-
-    db = SessionLocal()
-    try:
-        record = (
-            db.query(InstalledPlugin)
-            .filter(InstalledPlugin.name == name)
-            .first()
-        )
-        if record and record.is_enabled:
-            return (True, record.granted_permissions or [])
-        return (False, [])
-    finally:
-        db.close()
-
-
 def invalidate_plugin_cache(name: str) -> None:
-    """Drop the cached entry for *name* so the next request triggers a
-    fresh DB lookup.  Call this from the local worker after toggling a
-    plugin."""
-    _plugin_cache.pop(name, None)
+    """Drop the cached enablement state after a local toggle.
+
+    Kept as a named function because routes/plugins.py calls it; the state now
+    lives in services/plugin_enablement, shared with the manager's readers.
+    """
+    plugin_enablement.invalidate()
 
 
 class PluginGateMiddleware(BaseHTTPMiddleware):
@@ -120,39 +96,25 @@ class PluginGateMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         # --- Gate: check plugin status ---
-        now = time.monotonic()
-        cached = _plugin_cache.get(name)
+        try:
+            await plugin_enablement.refresh()
+        except Exception:
+            logger.exception("Failed to fetch plugin status for %s", name)
+            return JSONResponse(
+                status_code=500,
+                content={"detail": "Internal error checking plugin status"},
+            )
 
-        if cached is not None:
-            is_enabled, granted_perms, ts = cached
-            if (now - ts) >= CACHE_TTL_SECONDS:
-                cached = None  # expired
-
-        if cached is None:
-            try:
-                is_enabled, granted_perms = await asyncio.to_thread(
-                    _fetch_plugin_status, name
-                )
-            except Exception:
-                logger.exception("Failed to fetch plugin status for %s", name)
-                return JSONResponse(
-                    status_code=500,
-                    content={"detail": "Internal error checking plugin status"},
-                )
-            _plugin_cache[name] = (is_enabled, granted_perms, now)
-        else:
-            is_enabled, granted_perms, _ = cached
-
-        if not is_enabled:
+        enabled = plugin_enablement.enabled_plugins() or {}
+        if name not in enabled:
             return JSONResponse(
                 status_code=403,
                 content={"detail": f"Plugin '{name}' is disabled"},
             )
+        granted_perms = enabled[name]
 
         # Check permissions: granted must be a superset of required
         try:
-            from app.plugins.manager import PluginManager
-
             manager = PluginManager.get_instance()
             required = manager.get_required_permissions(name)
         except Exception:
