@@ -209,7 +209,7 @@ def _fetch() -> Dict[str, List[str]]:
     try:
         rows = (
             db.query(InstalledPlugin)
-            .filter(InstalledPlugin.is_enabled == True)  # noqa: E712 - SQL boolean
+            .filter(InstalledPlugin.is_enabled == True)  # SQL boolean filter - `is True` would break the query (E712 is globally ignored for this reason)
             .all()
         )
         return {row.name: list(row.granted_permissions or []) for row in rows}
@@ -564,7 +564,12 @@ class TestReconcile:
              patch.object(pe, "_get_manager", return_value=manager):
             first = asyncio.create_task(pe.reconcile_worker())
             await started.wait()
-            await pe.reconcile_worker()      # must return immediately, not enable again
+            # wait_for is what makes this test fail CLEANLY under mutation:
+            # without the single-flight guard the second call queues on the
+            # lock, release.set() is never reached, and the test would hang
+            # forever instead of going red (no pytest timeout is configured).
+            # With the guard it returns immediately; without it, TimeoutError.
+            await asyncio.wait_for(pe.reconcile_worker(), timeout=1.0)
             release.set()
             await first
 
@@ -622,7 +627,7 @@ async def reconcile_worker() -> None:
     async with _reconcile_lock:
         try:
             await refresh()
-        except Exception:  # noqa: BLE001 - a DB blip must not fail the request
+        except Exception:  # broad on purpose: a DB blip must not fail the request
             logger.warning("plugin enablement refresh failed", exc_info=True)
             return
 
@@ -653,7 +658,7 @@ async def reconcile_worker() -> None:
                         db,
                         start_background_tasks=lifespan.IS_PRIMARY_WORKER,
                     )
-            except Exception:  # noqa: BLE001 - one bad plugin must not stop the rest
+            except Exception:  # broad on purpose: one bad plugin must not stop the rest
                 logger.warning("lazy enable of plugin %s failed", name, exc_info=True)
                 ok = False
             if not ok:
@@ -662,7 +667,7 @@ async def reconcile_worker() -> None:
         for name in loaded - set(desired):
             try:
                 await manager.disable_plugin(name)
-            except Exception:  # noqa: BLE001 - same reasoning as above
+            except Exception:  # broad on purpose: same reasoning as above
                 logger.warning("lazy disable of plugin %s failed", name, exc_info=True)
 ```
 
@@ -673,7 +678,7 @@ Expected: PASS (16 Tests)
 
 - [ ] **Step 5: Prove the single-flight test discriminates**
 
-Entferne testweise die beiden Zeilen `if _reconcile_lock.locked(): return`, führe `python -m pytest tests/services/test_plugin_enablement.py -q --no-cov -k concurrent` aus — der Test **muss** fehlschlagen (`await_count == 2`). Danach zurückbauen und erneut laufen lassen.
+Entferne testweise die beiden Zeilen `if _reconcile_lock.locked(): return`, führe `python -m pytest tests/services/test_plugin_enablement.py -q --no-cov -k concurrent` aus — der Test **muss** nach ~1 s mit `asyncio.TimeoutError` fehlschlagen (der zweite Aufruf hängt am Lock, das `wait_for` schneidet ihn ab). Danach zurückbauen und erneut laufen lassen.
 
 - [ ] **Step 6: Lint + commit**
 
@@ -842,6 +847,22 @@ Mechanische Übersetzung, Assertions bleiben unangetastet:
 Achtung beim Plugin-Namen: die alten Patches lieferten den Zustand **für jeden** Namen zurück; der neue Cache ist ein Mapping, also muss der im Test verwendete Name (`my_plugin`) als Schlüssel auftauchen, sonst gilt das Plugin als deaktiviert.
 
 Ebenso in `backend/tests/plugins/test_plugin_menu_actions.py`: `TestMenuActionThroughTheRealStack` patcht `plugin_gate._fetch_plugin_status` → auf `plugin_enablement._fetch` umstellen (`{"demo": []}` für aktiviert, `{}` für deaktiviert) und `plugin_gate._plugin_cache.clear()` → `plugin_enablement.invalidate()`.
+
+**Zusätzlich in dieser Datei eine Autouse-Reset-Fixture ergänzen** (auf `TestMenuActionThroughTheRealStack` scoped oder modulweit):
+
+```python
+@pytest.fixture(autouse=True)
+def _reset_enablement_state():
+    from app.services import plugin_enablement as pe
+
+    pe.invalidate()
+    pe._failed_until.clear()
+    yield
+    pe.invalidate()
+    pe._failed_until.clear()
+```
+
+Grund: Der Helper-Zustand ist Modulzustand und überlebt Dateigrenzen im selben pytest-Prozess. Die Stack-Tests wärmen den Cache (`{"demo": []}`); ohne Abräumen liest jede alphabetisch spätere Datei, die `manager.is_enabled()` konsultiert, fremden Cache statt lokalen Zustand. Heute überlebt `test_plugins.py:356` das nur, weil es zufällig `is False` assertiert — das ist Glück, keine Isolation.
 
 - [ ] **Step 6: Run the ported suites**
 
