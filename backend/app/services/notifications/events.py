@@ -511,8 +511,13 @@ class EventEmitter:
         """
         logger.info(f"Event emitted: {event_type}, user_id={user_id}, data={kwargs}")
 
-        # Get event configuration
+        # Get event configuration (built-in first, then plugin registry)
         config = EVENT_CONFIGS.get(event_type)
+        if config is None:
+            from app.services.notifications.plugin_events import lookup_plugin_event
+
+            entry = lookup_plugin_event(event_type)
+            config = entry.config if entry is not None else None
         if not config:
             logger.warning(f"Unknown event type: {event_type}")
             return
