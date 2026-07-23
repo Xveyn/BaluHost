@@ -281,3 +281,40 @@ class TestReconcile:
         with patch.object(pe, "_fetch", return_value={"demo": _grant()}), \
              patch.object(pe, "_get_manager", side_effect=RuntimeError("boom")):
             await pe.reconcile_worker()  # must not raise
+
+
+class TestReconcileDependency:
+    async def test_dependency_runs_the_reconcile(self):
+        from app.api.deps import reconciled_plugin_state
+
+        with patch.object(pe, "reconcile_worker", new=AsyncMock()) as reconcile:
+            await reconciled_plugin_state()
+
+        reconcile.assert_awaited_once()
+
+    def test_every_entry_point_declares_the_dependency(self):
+        """The routes that must not report stale state.
+
+        A route added later without the dependency would silently reintroduce
+        the bug for its own view, so the list is asserted rather than trusted.
+        """
+        import inspect
+
+        from app.api.deps import reconciled_plugin_state
+        from app.api.routes import plugins as plugins_routes
+        from app.api.routes import status_bar as status_bar_routes
+
+        expected = [
+            (plugins_routes.list_plugins, "list_plugins"),
+            (plugins_routes.get_ui_manifest, "get_ui_manifest"),
+            (plugins_routes.run_plugin_menu_action, "run_plugin_menu_action"),
+            (status_bar_routes.get_statusbar_config, "get_statusbar_config"),
+            (status_bar_routes.get_statusbar_state, "get_statusbar_state"),
+        ]
+        for func, label in expected:
+            deps = [
+                param.default.dependency
+                for param in inspect.signature(func).parameters.values()
+                if hasattr(param.default, "dependency")
+            ]
+            assert reconciled_plugin_state in deps, f"{label} misses the reconcile dependency"

@@ -480,6 +480,19 @@ async def require_local_or_setup_secret(
     )
 
 
+async def reconciled_plugin_state() -> None:
+    """Align this worker's loaded plugins with the database before answering.
+
+    Plugin enablement lives in the database; a runtime toggle only reaches the
+    worker that handled it. Routes whose answer depends on which plugins are
+    enabled declare this so their view does not depend on which of the four
+    workers replied (#448). Best-effort: it never raises.
+    """
+    from app.services.plugin_enablement import reconcile_worker
+
+    await reconcile_worker()
+
+
 async def require_sync_allowed(request: Request) -> None:
     """Dependency that blocks automatic sync requests during sleep mode.
 

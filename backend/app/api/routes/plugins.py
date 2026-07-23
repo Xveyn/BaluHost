@@ -7,7 +7,13 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_admin, get_current_user, get_db, require_local_admin
+from app.api.deps import (
+    get_current_admin,
+    get_current_user,
+    get_db,
+    reconciled_plugin_state as deps_reconciled_plugin_state,
+    require_local_admin,
+)
 from app.core.rate_limiter import user_limiter, get_limit
 from app.models.user import User
 from app.middleware.plugin_gate import invalidate_plugin_cache
@@ -63,6 +69,7 @@ async def list_plugins(
     request: Request, response: Response,
     current_user: User = Depends(get_current_user),
     plugin_manager: PluginManager = Depends(get_plugin_manager),
+    _reconciled: None = Depends(deps_reconciled_plugin_state),
 ) -> PluginListResponse:
     """List all available plugins.
 
@@ -138,6 +145,7 @@ async def get_ui_manifest(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     plugin_manager: PluginManager = Depends(get_plugin_manager),
+    _reconciled: None = Depends(deps_reconciled_plugin_state),
 ) -> PluginUIManifestResponse:
     """Get UI manifest for frontend integration.
 
@@ -824,6 +832,7 @@ async def run_plugin_menu_action(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin),
     plugin_manager: PluginManager = Depends(get_plugin_manager),
+    _reconciled: None = Depends(deps_reconciled_plugin_state),
 ) -> PluginMenuActionResponse:
     """Run a menu action a plugin declared in its UI manifest. Admin only.
 
