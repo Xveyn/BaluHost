@@ -17,8 +17,10 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.plugins.base import (
+    BackgroundTaskSpec,
     MenuActionResult,
     PluginBase,
+    PluginEventSpec,
     PluginMenuItem,
     PluginMetadata,
     PluginUIManifest,
@@ -27,12 +29,16 @@ from app.plugins.base import (
 from app.plugins.installed.steam_gaming.detector import detect_running_app_id
 from app.plugins.installed.steam_gaming.launcher import open_big_picture
 from app.plugins.installed.steam_gaming.names import resolve_name
+from app.plugins.installed.steam_gaming.poller import SteamSessionPoller
 from app.services.power.desktop import get_desktop_service
 
 logger = logging.getLogger(__name__)
 
 _PILL_ID = "session"
 _MENU_ACTION_ID = "gaming_mode"
+_EVENT_STARTED = "session_started"
+_EVENT_ENDED = "session_ended"
+_POLL_INTERVAL_SECONDS = 30.0
 _CACHE_TTL_SECONDS = 3.0
 _CACHE: Dict[str, object] = {}
 
@@ -156,6 +162,38 @@ class SteamGamingPlugin(PluginBase):
             message_key="menu_gaming_mode_started",
             message_text="Gaming mode started",
         )
+
+    def get_notification_events(self) -> List[PluginEventSpec]:
+        return [
+            PluginEventSpec(
+                id=_EVENT_STARTED,
+                notification_type="info",
+                priority=0,
+                title_template="Gaming-Session gestartet: {game}",
+                message_template="Auf BaluNode läuft jetzt {game}.",
+                action_url="/plugins",
+                cooldown_seconds=60,
+                default_target="admins",
+            ),
+            PluginEventSpec(
+                id=_EVENT_ENDED,
+                notification_type="info",
+                priority=0,
+                title_template="Gaming-Session beendet",
+                message_template="{game} wurde beendet.",
+                action_url="/plugins",
+                cooldown_seconds=60,
+                default_target="admins",
+            ),
+        ]
+
+    def get_background_tasks(self) -> List[BackgroundTaskSpec]:
+        poller = SteamSessionPoller()
+        return [BackgroundTaskSpec(
+            name="session_poller",
+            func=poller.tick,
+            interval_seconds=_POLL_INTERVAL_SECONDS,
+        )]
 
     def get_translations(self) -> Optional[Dict[str, Dict[str, str]]]:
         return {

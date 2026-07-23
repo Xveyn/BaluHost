@@ -251,3 +251,25 @@ class TestGamingModeRunsLauncherOffTheEventLoop:
             "asyncio.to_thread() is missing, so the route's wait_for timeout "
             "cannot interrupt it"
         )
+
+
+class TestNotificationEvents:
+    def test_declares_start_and_end(self):
+        events = SteamGamingPlugin().get_notification_events()
+        assert {e.id for e in events} == {"session_started", "session_ended"}
+
+    def test_events_carry_a_cooldown_and_admin_default(self):
+        for e in SteamGamingPlugin().get_notification_events():
+            assert e.cooldown_seconds == 60
+            assert e.default_target == "admins"
+            assert "{game}" in e.title_template or "{game}" in e.message_template
+
+
+class TestBackgroundTask:
+    def test_declares_the_session_poller(self):
+        specs = SteamGamingPlugin().get_background_tasks()
+        assert len(specs) == 1
+        spec = specs[0]
+        assert spec.interval_seconds == 30
+        # run_on_startup True is fine: the poller's first tick is a baseline.
+        assert callable(spec.func)
