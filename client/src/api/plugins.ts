@@ -257,7 +257,7 @@ export async function runPluginMenuAction(
   actionId: string,
 ): Promise<PluginMenuActionResult> {
   const res = await apiClient.post<PluginMenuActionResult>(
-    `/api/plugins/${pluginName}/menu-actions/${actionId}`,
+    `/api/plugins/${encodeURIComponent(pluginName)}/menu-actions/${encodeURIComponent(actionId)}`,
   );
   return res.data;
 }

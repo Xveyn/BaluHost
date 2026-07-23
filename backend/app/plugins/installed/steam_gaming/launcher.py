@@ -35,7 +35,7 @@ def open_big_picture() -> tuple[bool, str]:
         return True, "big picture requested (dev)"
 
     try:
-        subprocess.Popen(  # noqa: S603 - fixed argv, no shell, no user input
+        subprocess.Popen(  # fixed argv, no shell, no user input
             ["steam", BIG_PICTURE_URL],
             env=wayland_session_env(),
             start_new_session=True,

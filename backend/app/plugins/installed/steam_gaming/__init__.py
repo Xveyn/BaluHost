@@ -9,6 +9,7 @@ avoids sharing state between workers entirely.
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 from typing import Dict, List, Optional
 
@@ -27,6 +28,8 @@ from app.plugins.installed.steam_gaming.detector import detect_running_app_id
 from app.plugins.installed.steam_gaming.launcher import open_big_picture
 from app.plugins.installed.steam_gaming.names import resolve_name
 from app.services.power.desktop import get_desktop_service
+
+logger = logging.getLogger(__name__)
 
 _PILL_ID = "session"
 _MENU_ACTION_ID = "gaming_mode"
@@ -128,6 +131,9 @@ class SteamGamingPlugin(PluginBase):
         # core's wait_for stays effective.
         ok, detail = await get_desktop_service().enable()
         if not ok:
+            # The user only ever sees the translated key, so without this line
+            # the reason kscreen-doctor refused is lost for good.
+            logger.warning("gaming mode: turning the displays on failed: %s", detail)
             return MenuActionResult(
                 ok=False,
                 message_key="menu_displays_failed",
@@ -136,6 +142,7 @@ class SteamGamingPlugin(PluginBase):
 
         launched, detail = await asyncio.to_thread(open_big_picture)
         if not launched:
+            logger.warning("gaming mode: Big Picture did not start: %s", detail)
             return MenuActionResult(
                 ok=False,
                 message_key="menu_steam_failed",

@@ -827,11 +827,17 @@ async def run_plugin_menu_action(
 ) -> PluginMenuActionResponse:
     """Run a menu action a plugin declared in its UI manifest. Admin only.
 
-    Requests for a disabled plugin never reach this handler - PluginGateMiddleware
-    rejects them with 403 based on the DB (see middleware/plugin_gate.py).
+    Requests for a disabled plugin should never reach this handler -
+    PluginGateMiddleware rejects them with 403 based on the DB (see
+    middleware/plugin_gate.py). This is only the first line of defense
+    though: PluginManager.disable_plugin() drops the name from ``_enabled``
+    but leaves the instance in ``_plugins``, so get_plugin() alone would
+    still return it. Check is_enabled() too, so this endpoint does not rely
+    solely on the middleware (a prefix change or router move must not
+    silently defeat the enabled-check).
     """
     plugin = plugin_manager.get_plugin(name)
-    if plugin is None:
+    if plugin is None or not plugin_manager.is_enabled(name):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Plugin not found or not enabled",
@@ -843,7 +849,7 @@ async def run_plugin_menu_action(
     # log and fail closed (no action is dispatchable).
     try:
         declared = {item.id for item in plugin.get_menu_items()}
-    except Exception:  # noqa: BLE001 - a plugin fault must not 5xx the endpoint
+    except Exception:  # broad on purpose: a plugin fault must not 5xx the endpoint
         logger.warning(
             "plugin %s failed to list menu items", name, exc_info=True
         )
@@ -864,7 +870,7 @@ async def run_plugin_menu_action(
         user=current_user.username,
         action="menu_action",
         resource=f"{name}:{action_id}",
-        details={"ok": result.ok},
+        details={"ok": result.ok, "message_key": result.message_key},
         success=result.ok,
         ip_address=request.client.host if request.client else None,
     )
@@ -888,7 +894,7 @@ async def _execute_menu_action(
     except asyncio.TimeoutError:
         logger.warning("plugin %s menu action %s timed out", name, action_id)
         return MenuActionResult(ok=False, message_text="Action timed out")
-    except Exception:  # noqa: BLE001 - a plugin fault must not 5xx the endpoint
+    except Exception:  # broad on purpose: a plugin fault must not 5xx the endpoint
         logger.warning(
             "plugin %s menu action %s failed", name, action_id, exc_info=True
         )

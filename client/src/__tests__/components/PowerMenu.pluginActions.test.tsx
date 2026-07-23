@@ -96,7 +96,34 @@ describe('PowerMenu — plugin menu actions', () => {
     openMenu();
     fireEvent.click(await screen.findByText('Gaming Mode'));
 
-    await waitFor(() => expect(toast.error).toHaveBeenCalled());
+    // Assert the text, not just that a toast happened: without it the test
+    // passes on an empty string or a raw axios message leaking to the user.
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Action failed'));
+  });
+
+  it('colours the entry by its declared tone', async () => {
+    setItems([{ ...gamingItem, tone: 'danger' }]);
+    const { unmount } = render(<PowerMenu {...baseProps} />);
+    openMenu();
+    const dangerClasses = (await screen.findByText('Gaming Mode')).closest('button')!.className;
+    unmount();
+
+    setItems([{ ...gamingItem, tone: 'success' }]);
+    render(<PowerMenu {...baseProps} />);
+    openMenu();
+    const successClasses = (await screen.findByText('Gaming Mode')).closest('button')!.className;
+
+    expect(dangerClasses).not.toBe(successClasses);
+    expect(dangerClasses).toContain('rose');
+    expect(successClasses).toContain('emerald');
+  });
+
+  it('falls back to the neutral tone for an unknown one', async () => {
+    setItems([{ ...gamingItem, tone: 'chartreuse' }]);
+    render(<PowerMenu {...baseProps} />);
+    openMenu();
+    const classes = (await screen.findByText('Gaming Mode')).closest('button')!.className;
+    expect(classes).toContain('slate');
   });
 
   it('renders an item whose icon is unknown instead of crashing', async () => {

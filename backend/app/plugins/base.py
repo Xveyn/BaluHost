@@ -292,9 +292,17 @@ class PluginBase(ABC):
         manifest is what reaches the frontend, and this is what the core
         validates an incoming action_id against. Two declaration sites would
         drift, and the drift is invisible - the entry renders and the click 404s.
+
+        Respects manifest.enabled the same way PluginManager.get_ui_manifest()
+        does: a manifest with enabled=False must not advertise a dispatchable
+        action just because it still lists menu_items - that would be the same
+        two-sites drift in the opposite direction (nothing shown, something
+        runnable).
         """
         manifest = self.get_ui_manifest()
-        return list(manifest.menu_items) if manifest is not None else []
+        if manifest is None or not manifest.enabled:
+            return []
+        return list(manifest.menu_items)
 
     async def run_menu_action(
         self, action_id: str, db: "Session"
@@ -306,6 +314,15 @@ class PluginBase(ABC):
         admin gate, and applies a timeout - implementations only do the work.
         Blocking work belongs in ``asyncio.to_thread`` so the timeout can
         actually take effect.
+
+        ``db`` is the route's request-scoped SQLAlchemy Session - it is not
+        thread-safe. Do not hand it into ``asyncio.to_thread`` (or any other
+        thread): a slow action that outlives the request's timeout continues
+        running in its own thread with a Session that may already be torn
+        down, which is a use-after-close bug waiting to happen, not a
+        performance question. If a menu action needs blocking work AND
+        database access, open a fresh Session inside the thread instead of
+        reusing this one.
         """
         return None
 

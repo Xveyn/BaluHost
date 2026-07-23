@@ -69,7 +69,7 @@ class TestPluginBaseDefaults:
 from unittest.mock import MagicMock
 
 from app.plugins.manager import PluginManager
-from app.schemas.plugin import PluginUIInfo
+from app.schemas.plugin import PluginUIInfo, PluginUIManifestResponse
 
 
 def _plugin_with_menu(name: str = "demo") -> MagicMock:
@@ -288,3 +288,160 @@ class TestMenuActionIsGatedByMiddleware:
     def test_management_routes_still_bypass(self):
         assert _is_management_route("/toggle") is True
         assert _is_management_route("/config") is True
+
+
+class TestDisabledPluginIsRefusedInTheRouteToo:
+    """The route must not lean on PluginGateMiddleware alone.
+
+    disable_plugin() drops the name from _enabled but leaves the instance in
+    _plugins, so get_plugin() still hands one back. Without a local check the
+    only thing standing between a disabled plugin and execution is a path
+    prefix in middleware plus a 5s DB cache - and a router move or prefix
+    change would defeat it with every test still green.
+    """
+
+    async def test_loaded_but_disabled_plugin_is_refused(self):
+        plugin = _declaring_plugin()
+        plugin.run_menu_action = AsyncMock()
+        manager = MagicMock()
+        manager.get_plugin.return_value = plugin
+        manager.is_enabled.return_value = False
+
+        with patch("app.api.routes.plugins.user_limiter.enabled", False):
+            with pytest.raises(HTTPException) as exc:
+                await run_plugin_menu_action(
+                    request=MagicMock(), response=MagicMock(),
+                    name="demo", action_id="do_it", db=MagicMock(),
+                    current_user=MagicMock(username="admin"), plugin_manager=manager,
+                )
+
+        assert exc.value.status_code == 404
+        plugin.run_menu_action.assert_not_awaited()
+
+    async def test_enabled_plugin_still_runs(self):
+        """Pins that the new check refuses only the disabled case."""
+        plugin = _declaring_plugin()
+        plugin.run_menu_action = AsyncMock(
+            return_value=MenuActionResult(ok=True, message_text="done")
+        )
+        manager = MagicMock()
+        manager.get_plugin.return_value = plugin
+        manager.is_enabled.return_value = True
+
+        with patch("app.api.routes.plugins.user_limiter.enabled", False), \
+             patch("app.api.routes.plugins.get_audit_logger_db"):
+            result = await run_plugin_menu_action(
+                request=MagicMock(client=MagicMock(host="127.0.0.1")),
+                response=MagicMock(), name="demo", action_id="do_it",
+                db=MagicMock(), current_user=MagicMock(username="admin"),
+                plugin_manager=manager,
+            )
+
+        assert result.ok is True
+
+
+class TestManifestEnabledFlagIsRespected:
+    def test_disabled_manifest_declares_no_actions(self):
+        """A manifest with enabled=False advertises nothing to the frontend.
+
+        PluginManager.get_ui_manifest() filters on that flag, so if the
+        derivation ignored it, a plugin could have a dispatchable action that
+        is invisible in the UI - the same two-sites drift in reverse.
+        """
+        class _Plugin(_BarePlugin):
+            def get_ui_manifest(self):
+                return PluginUIManifest(
+                    enabled=False,
+                    menu_items=[PluginMenuItem(
+                        id="hidden", icon="Zap", label_key="k", label_text="Hidden",
+                    )],
+                )
+
+        assert _Plugin().get_menu_items() == []
+
+    def test_enabled_manifest_declares_its_actions(self):
+        class _Plugin(_BarePlugin):
+            def get_ui_manifest(self):
+                return PluginUIManifest(
+                    enabled=True,
+                    menu_items=[PluginMenuItem(
+                        id="shown", icon="Zap", label_key="k", label_text="Shown",
+                    )],
+                )
+
+        assert [item.id for item in _Plugin().get_menu_items()] == ["shown"]
+
+
+class TestManifestResponseModelCarriesMenuItems:
+    def test_menu_items_survive_the_response_model(self, tmp_path):
+        """Nothing else asserts this leg.
+
+        The manager test checks its raw dict and the frontend tests feed
+        hand-written objects - so dropping menu_items from PluginUIInfo would
+        keep every test green while the menu entry vanishes in production.
+        """
+        manager = PluginManager(plugins_dir=tmp_path)
+        manager._plugins = {"demo": _plugin_with_menu()}
+        manager._enabled = {"demo"}
+
+        response = PluginUIManifestResponse(**manager.get_ui_manifest())
+
+        assert [item.id for item in response.plugins[0].menu_items] == ["do_it"]
+
+
+class TestMenuActionThroughTheRealStack:
+    """The one test that goes through the ASGI stack instead of around it.
+
+    Every other route test here calls the endpoint function directly, so the
+    middleware never runs. That is exactly where the "a disabled plugin cannot
+    run actions" invariant lives - and it was asserted only against
+    _is_management_route()'s return value, a helper, not the gate.
+
+    What is stubbed: PluginGateMiddleware reads plugin state through its own
+    SessionLocal(), which points at the app's database, not the in-memory one
+    the test fixtures build - so the DB lookup is replaced. Everything else is
+    real: middleware dispatch, path matching, routing, auth, the route.
+    """
+
+    def _post(self, client, headers):
+        return client.post(
+            "/api/plugins/demo/menu-actions/do_it", headers=headers
+        )
+
+    def test_disabled_plugin_is_refused_by_the_stack(self, client, admin_headers):
+        from app.middleware import plugin_gate
+
+        plugin_gate._plugin_cache.clear()
+        with patch.object(
+            plugin_gate, "_fetch_plugin_status", return_value=(False, [])
+        ):
+            response = self._post(client, admin_headers)
+
+        assert response.status_code == 403
+        assert "disabled" in response.json()["detail"]
+
+    def test_enabled_plugin_reaches_the_route(self, client, admin_headers):
+        """Discriminates the 403 above: with the same request and an enabled
+        plugin the gate lets it through, and the 404 comes from the route
+        itself (no such plugin loaded in this process)."""
+        from app.middleware import plugin_gate
+
+        plugin_gate._plugin_cache.clear()
+        with patch.object(
+            plugin_gate, "_fetch_plugin_status", return_value=(True, [])
+        ):
+            response = self._post(client, admin_headers)
+
+        assert response.status_code == 404
+
+    def test_non_admin_is_refused_on_an_enabled_plugin(self, client, user_headers):
+        from app.middleware import plugin_gate
+
+        plugin_gate._plugin_cache.clear()
+        with patch.object(
+            plugin_gate, "_fetch_plugin_status", return_value=(True, [])
+        ):
+            response = self._post(client, user_headers)
+
+        assert response.status_code == 403
+        assert "disabled" not in response.json()["detail"]
