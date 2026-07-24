@@ -1,55 +1,80 @@
-"""Steam session poller: detect play/not-play edges and emit notifications.
+"""Steam session poller: detect, book, announce (Teilprojekt 3+4/4).
 
 Runs as a plugin background task, which thanks to #448 executes primary-only -
-so exactly one instance polls, and its last-seen state can live in the object
-(no cross-worker sharing). The first tick only establishes a baseline: a game
-already running when the backend starts must not be reported as 'started', or
-every restart would false-alarm mid-session.
+so exactly one instance polls. It keeps no state of its own: the open session
+in the database is the state (see ledger.py), which is what makes a restart
+mid-session harmless.
+
+Order matters: book and commit first, announce afterwards. A failed push must
+never roll back a booking.
 """
 from __future__ import annotations
 
 import asyncio
-from typing import Callable, Optional
+from datetime import datetime, timezone
+from typing import Awaitable, Callable, List, Optional
 
-from app.plugins.installed.steam_gaming.detector import detect_running_app_id
-from app.plugins.installed.steam_gaming.names import resolve_name
+from sqlalchemy.orm import Session
+
+from app.core.database import SessionLocal
+from app.plugins.installed.steam_gaming import ledger
+from app.plugins.installed.steam_gaming.detection import current_app_id, resolve_game_name
 from app.services.notifications.plugin_events import emit_plugin_event
 
 _PLUGIN = "steam_gaming"
+_CLEANUP_INTERVAL_SECONDS = 24 * 60 * 60.0
+
+
+def _utc_now() -> datetime:
+    """Indirection so tests can control the clock."""
+    return datetime.now(timezone.utc)
 
 
 class SteamSessionPoller:
+    """Books what the detector sees and announces the edges worth announcing."""
+
     def __init__(
         self,
-        detect: Callable[[], Optional[str]] = detect_running_app_id,
-        resolve: Callable[[str], Optional[str]] = resolve_name,
-        emit=emit_plugin_event,
+        detect: Callable[[], Optional[str]] = current_app_id,
+        resolve: Callable[[str], Optional[str]] = resolve_game_name,
+        emit: Callable[..., Awaitable[None]] = emit_plugin_event,
+        session_factory: Callable[[], Session] = SessionLocal,
+        clock: Callable[[], datetime] = _utc_now,
     ) -> None:
         self._detect = detect
         self._resolve = resolve
         self._emit = emit
-        self._initialized = False
-        self._last_app_id: Optional[str] = None
+        self._session_factory = session_factory
+        self._clock = clock
+        self._last_cleanup: Optional[datetime] = None
 
     async def tick(self) -> None:
-        # Blocking /proc + manifest reads off the event loop, same convention
-        # as the menu action and the pill collector.
+        """One poll: detect, book, then deliver whatever the ledger returned."""
+        # Blocking /proc + manifest + DB work stays off the event loop.
         app_id = await asyncio.to_thread(self._detect)
+        now = self._clock()
+        events = await asyncio.to_thread(self._book, app_id, now)
 
-        if not self._initialized:
-            self._last_app_id = app_id
-            self._initialized = True
-            return
+        for event in events:
+            await self._emit(
+                _PLUGIN, event.event_id, entity_id=event.app_id, game=event.game
+            )
 
-        prev = self._last_app_id
-        self._last_app_id = app_id
+    def _book(self, app_id: Optional[str], now: datetime) -> List[ledger.LedgerEvent]:
+        """Blocking: owns the database session for this tick."""
+        db = self._session_factory()
+        try:
+            events = ledger.record(db, app_id, now=now, resolve_name=self._resolve)
+            if self._due_for_cleanup(now):
+                ledger.cleanup_old_sessions(db, now=now)
+                self._last_cleanup = now
+            return events
+        finally:
+            db.close()
 
-        if prev is None and app_id is not None:
-            await self._fire("session_started", app_id)
-        elif prev is not None and app_id is None:
-            await self._fire("session_ended", prev)
-        # prev == app_id, or a direct X->Y switch: no event; state already moved.
-
-    async def _fire(self, event_id: str, app_id: str) -> None:
-        name = await asyncio.to_thread(self._resolve, app_id) or app_id
-        await self._emit(_PLUGIN, event_id, entity_id=app_id, game=name)
+    def _due_for_cleanup(self, now: datetime) -> bool:
+        """Once a day. The marker lives in the process - a restart costs at most
+        one extra DELETE that finds nothing."""
+        if self._last_cleanup is None:
+            return True
+        return (now - self._last_cleanup).total_seconds() >= _CLEANUP_INTERVAL_SECONDS

@@ -26,7 +26,7 @@ SQLAlchemy 2.0 ORM models. All models inherit from `Base` (declarative base in `
 
 **Versioning**: `vcl.py` (FileVersion, VersionBlob, VCLSettings, VCLStats)
 
-**Plugins & Integrations**: `plugin.py`, `plugin_storage.py`, `pihole.py`, `dns_queries.py`, `ad_discovery.py`, `cloud.py`, `cloud_export.py`, `benchmark.py`, `energy_price_config.py`
+**Plugins & Integrations**: `plugin.py`, `plugin_storage.py`, `steam_session.py`, `pihole.py`, `dns_queries.py`, `ad_discovery.py`, `cloud.py`, `cloud_export.py`, `benchmark.py`, `energy_price_config.py`
 
 **Desktop Sync**: `desktop_sync_folder.py`, `sync_progress.py`, `sync_state.py`
 

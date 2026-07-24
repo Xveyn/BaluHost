@@ -543,3 +543,167 @@ class TestPluginDetailResponsePanelFields:
         )
         assert resp.has_dashboard_panel is False
         assert resp.dashboard_panel_enabled is False
+
+
+class TestAdminOnlyPanels:
+    def test_spec_defaults_to_public(self):
+        spec = DashboardPanelSpec(panel_type="status", title="Any")
+        assert spec.admin_only is False
+
+    def test_spec_can_be_admin_only(self):
+        spec = DashboardPanelSpec(panel_type="status", title="Any", admin_only=True)
+        assert spec.admin_only is True
+
+    @pytest.mark.asyncio
+    async def test_route_hides_an_admin_only_panel_from_a_normal_user(self):
+        mock_record = MagicMock()
+        mock_record.name = "steam_gaming"
+        mock_db = MagicMock()
+        mock_db.query.return_value.filter.return_value.first.return_value = mock_record
+
+        mock_plugin = MagicMock()
+        mock_plugin.get_dashboard_panel.return_value = DashboardPanelSpec(
+            panel_type="status", title="Steam Gaming", admin_only=True,
+        )
+        mock_plugin.get_dashboard_data = AsyncMock(return_value={"items": []})
+        mock_pm = MagicMock()
+        mock_pm.get_plugin.return_value = mock_plugin
+
+        with patch("app.api.routes.dashboard.user_limiter.enabled", False), patch(
+            "app.api.routes.dashboard.PluginManager.get_instance", return_value=mock_pm
+        ):
+            result = await get_plugin_panel(
+                request=MagicMock(),
+                response=MagicMock(),
+                db=mock_db,
+                current_user=MagicMock(role="user"),
+            )
+
+        assert result is None
+        mock_plugin.get_dashboard_data.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_route_serves_an_admin_only_panel_to_an_admin(self):
+        mock_record = MagicMock()
+        mock_record.name = "steam_gaming"
+        mock_db = MagicMock()
+        mock_db.query.return_value.filter.return_value.first.return_value = mock_record
+
+        mock_plugin = MagicMock()
+        mock_plugin.get_dashboard_panel.return_value = DashboardPanelSpec(
+            panel_type="status", title="Steam Gaming", admin_only=True,
+        )
+        mock_plugin.get_dashboard_data = AsyncMock(return_value={"items": []})
+        mock_plugin.get_translations.return_value = None
+        mock_pm = MagicMock()
+        mock_pm.get_plugin.return_value = mock_plugin
+
+        with patch("app.api.routes.dashboard.user_limiter.enabled", False), patch(
+            "app.api.routes.dashboard.PluginManager.get_instance", return_value=mock_pm
+        ):
+            result = await get_plugin_panel(
+                request=MagicMock(),
+                response=MagicMock(),
+                db=mock_db,
+                current_user=MagicMock(role="admin"),
+            )
+
+        assert result is not None
+        assert result.plugin_name == "steam_gaming"
+
+
+class TestAdminOnlyBroadcast:
+    @pytest.mark.asyncio
+    async def test_broadcast_typed_can_skip_non_admins(self):
+        manager = WebSocketManager()
+        admin_ws, user_ws = AsyncMock(), AsyncMock()
+        await manager.connect(admin_ws, user_id=1, is_admin=True)
+        await manager.connect(user_ws, user_id=2, is_admin=False)
+
+        count = await manager.broadcast_typed(
+            "dashboard_panel_update", {"data": {}}, admins_only=True
+        )
+
+        assert count == 1
+        admin_ws.send_json.assert_called_once()
+        user_ws.send_json.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_bridge_payload_carries_the_admin_only_flag(self):
+        mock_record = MagicMock()
+        mock_record.name = "steam_gaming"
+        mock_db = MagicMock()
+        mock_db.query.return_value.filter.return_value.first.return_value = mock_record
+
+        mock_plugin = MagicMock()
+        mock_plugin.get_dashboard_panel.return_value = DashboardPanelSpec(
+            panel_type="status", title="Steam Gaming", admin_only=True,
+        )
+        mock_plugin.get_dashboard_data = AsyncMock(return_value={"items": []})
+        mock_pm = MagicMock()
+        mock_pm.get_plugin.return_value = mock_plugin
+
+        with patch(
+            "app.services.dashboard_panel_bridge.PluginManager.get_instance",
+            return_value=mock_pm,
+        ):
+            payload = await _build_panel_update(mock_db)
+
+        assert payload is not None
+        assert payload["admin_only"] is True
+
+    @pytest.mark.asyncio
+    async def test_bridge_forwards_admin_only_into_the_broadcast_call(self):
+        """`_build_panel_update` carrying admin_only is necessary but not
+        sufficient: `dashboard_panel_ws_bridge()` must actually forward it as
+        `admins_only=` into `broadcast_typed()`, or the REST gate is
+        decorative (the whole reason this extension point exists).
+        """
+        from app.services.dashboard_panel_bridge import dashboard_panel_ws_bridge
+
+        mock_record = MagicMock()
+        mock_record.name = "steam_gaming"
+        mock_db = MagicMock()
+        mock_db.query.return_value.filter.return_value.first.return_value = mock_record
+
+        mock_plugin = MagicMock()
+        mock_plugin.get_dashboard_panel.return_value = DashboardPanelSpec(
+            panel_type="status", title="Steam Gaming", admin_only=True,
+        )
+        mock_plugin.get_dashboard_data = AsyncMock(return_value={"items": []})
+        mock_pm = MagicMock()
+        mock_pm.get_plugin.return_value = mock_plugin
+
+        mock_ws = MagicMock()
+        mock_ws.broadcast_typed = AsyncMock(return_value=1)
+
+        sleep_calls = {"n": 0}
+
+        async def fake_sleep(_seconds):
+            sleep_calls["n"] += 1
+            if sleep_calls["n"] > 1:
+                raise asyncio.CancelledError()
+
+        with patch(
+            "app.services.dashboard_panel_bridge.PluginManager.get_instance",
+            return_value=mock_pm,
+        ), patch("app.core.database.SessionLocal", return_value=mock_db), patch(
+            "app.services.monitoring.shm.read_shm",
+            return_value={"timestamp": 1.0},
+        ), patch(
+            "app.services.websocket_manager.get_websocket_manager",
+            return_value=mock_ws,
+        ), patch("asyncio.sleep", side_effect=fake_sleep):
+            with pytest.raises(asyncio.CancelledError):
+                await dashboard_panel_ws_bridge()
+
+        mock_ws.broadcast_typed.assert_awaited_once_with(
+            "dashboard_panel_update",
+            {
+                "panel_type": "status",
+                "plugin_name": "steam_gaming",
+                "admin_only": True,
+                "data": {"items": []},
+            },
+            admins_only=True,
+        )

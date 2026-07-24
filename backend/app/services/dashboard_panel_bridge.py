@@ -51,6 +51,7 @@ async def _build_panel_update(db: Session) -> Optional[Dict[str, Any]]:
     return {
         "panel_type": spec.panel_type,
         "plugin_name": record.name,
+        "admin_only": spec.admin_only,
         "data": data,
     }
 
@@ -96,7 +97,13 @@ async def dashboard_panel_ws_bridge() -> None:
 
             ws = get_websocket_manager()
             if ws:
-                await ws.broadcast_typed("dashboard_panel_update", payload)
+                # An admin_only panel must not reach every socket - the REST
+                # gate would be decorative otherwise.
+                await ws.broadcast_typed(
+                    "dashboard_panel_update",
+                    payload,
+                    admins_only=bool(payload.get("admin_only")),
+                )
 
         except Exception as exc:
             logger.debug("Dashboard panel WS bridge error: %s", exc)

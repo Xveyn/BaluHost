@@ -65,7 +65,16 @@ Two plugin trust tiers with different isolation:
 2. Create `__init__.py` exporting a class that extends `PluginBase`
 3. Implement `metadata` property returning `PluginMetadata`
 4. Override `get_router()` for API routes, `get_background_tasks()` for periodic work
-5. Override `get_dashboard_panel()` + `get_dashboard_data()` for dashboard integration
+5. Override `get_dashboard_panel()` + `get_dashboard_data()` for dashboard integration.
+   `DashboardPanelSpec.admin_only=True` beschränkt ein Panel auf privilegierte
+   Nutzer. Durchgesetzt wird das **im Core** an zwei Stellen, nicht im Plugin:
+   in `api/routes/dashboard.py` (`is_privileged`) und in
+   `services/dashboard_panel_bridge.py`, das seinen WebSocket-Broadcast dann
+   mit `broadcast_typed(..., admins_only=True)` fährt. Beides ist nötig — der
+   Bridge schiebt dieselben Daten unabhängig von der Route an verbundene
+   Clients. Panel-Icons werden im Frontend dynamisch aus lucide aufgelöst
+   (kebab-case → PascalCase, Fallback `Plug`), ein neues Icon braucht also
+   keine Core-Änderung.
 6. Override `get_status_pills()` + `collect_status_pill()` to contribute a
    topbar status-strip pill. Only pick the plugin-local suffix (validated
    against `^[a-z0-9_]+$` on `StatusPillSpec.id`) — the core composes the
@@ -85,10 +94,10 @@ Two plugin trust tiers with different isolation:
    pills, menu actions or the plugin list itself (#448). The reconcile is
    wired to five routes via `Depends(deps.reconciled_plugin_state)`:
    `list_plugins`, `get_ui_manifest`, `run_plugin_menu_action`,
-   `get_statusbar_config` and `get_statusbar_state`. The Dashboard plugin
-   panel (`GET /api/dashboard/plugin-panel`) is **not** one of them — it reads
-   `PluginManager.get_plugin()` directly with no DB fallback, so it only
-   catches up once some other reconciled route has run on the same worker.
+   `get_statusbar_config` and `get_statusbar_state`. The Dashboard plugin panel
+   (`GET /api/dashboard/plugin-panel`) is one of them as well
+   (`api/routes/dashboard.py`), so it catches up on the same request like the
+   other five.
    **One exception:** plugin HTTP routes are mounted once at startup
    (`core/lifespan.py`), so a plugin that ships its own router still needs a
    `baluhost-backend` restart before its endpoints exist. Its

@@ -223,8 +223,10 @@ class WebSocketManager:
 
         return sent_count
 
-    async def broadcast_typed(self, msg_type: str, payload: dict[str, Any]) -> int:
-        """Broadcast a typed message to all connected users.
+    async def broadcast_typed(
+        self, msg_type: str, payload: dict[str, Any], admins_only: bool = False
+    ) -> int:
+        """Broadcast a typed message to connected users.
 
         Unlike broadcast_to_all() which wraps in {"type": "notification"},
         this method sends {"type": msg_type, "payload": payload} directly.
@@ -232,6 +234,16 @@ class WebSocketManager:
         Args:
             msg_type: Message type string (e.g. "dashboard_panel_update").
             payload: Message payload dict.
+            admins_only: Skip non-admin connections. Needed for payloads that a
+                REST route would gate behind is_privileged() - without it the
+                gate would be decorative. "Admin" here means conn.is_admin,
+                set at connect time from `role == "admin"` in
+                api/routes/notifications.py - NOT is_privileged(). A
+                PRIVILEGED_ROLES config extended beyond "admin" (e.g. adding
+                "operator") widens REST visibility for admin_only panels
+                without widening this broadcast, so the two enforcement
+                points drift apart. That's fail-closed (no leak), just a trap
+                for the next reader.
 
         Returns:
             Number of connections the message was sent to.
@@ -242,6 +254,8 @@ class WebSocketManager:
                 disconnected = []
 
                 for conn in connections:
+                    if admins_only and not conn.is_admin:
+                        continue
                     try:
                         await conn.websocket.send_json({
                             "type": msg_type,
