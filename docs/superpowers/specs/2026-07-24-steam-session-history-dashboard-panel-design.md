@@ -342,8 +342,8 @@ NEU   backend/tests/test_steam_gaming_ledger.py         ~250 Z.
 
 ## Folgearbeiten
 
-- **Retention konfigurierbar machen** — 365 Tage sind hier fest verdrahtet;
-  Issue wird mit dieser Spec angelegt.
+- **Retention konfigurierbar machen** — 365 Tage sind hier fest verdrahtet:
+  **#464**.
 - **#462** wird von diesem Teilprojekt geschlossen.
 - **#451 M-3** (Pill-`href` auf eine gegatete Route) bleibt offen — ohne eigene
   Steam-Seite gibt es kein besseres Ziel.
