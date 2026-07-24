@@ -55,7 +55,11 @@ class TestRoundTrip:
 
         assert get_permissions(db_session, regular_user.id).can_unlock_session is True
 
-    def test_revoking_works_too(self, db_session, regular_user, admin_user):
+    def test_implication_logic_leaves_the_new_permission_alone(
+        self, db_session, regular_user, admin_user
+    ):
+        """soft_sleep implies wake, suspend implies wol - unlock_session takes
+        part in neither and must survive an unrelated update untouched."""
         from app.schemas.power_permissions import UserPowerPermissionsUpdate
         from app.services.power_permissions import get_permissions, update_permissions
 
@@ -63,6 +67,28 @@ class TestRoundTrip:
             db_session, regular_user.id,
             UserPowerPermissionsUpdate(can_unlock_session=True), granted_by=admin_user.id,
         )
+        update_permissions(
+            db_session, regular_user.id,
+            UserPowerPermissionsUpdate(can_soft_sleep=True), granted_by=admin_user.id,
+        )
+
+        perms = get_permissions(db_session, regular_user.id)
+        assert perms.can_wake is True, "sanity: the implication itself still fires"
+        assert perms.can_unlock_session is True
+
+    def test_revoking_works_too(self, db_session, regular_user, admin_user):
+        """Asserting only the final False would pass even with a broken write
+        path - False is also the column default. The intermediate assertion is
+        what makes this test mean anything."""
+        from app.schemas.power_permissions import UserPowerPermissionsUpdate
+        from app.services.power_permissions import get_permissions, update_permissions
+
+        update_permissions(
+            db_session, regular_user.id,
+            UserPowerPermissionsUpdate(can_unlock_session=True), granted_by=admin_user.id,
+        )
+        assert get_permissions(db_session, regular_user.id).can_unlock_session is True
+
         update_permissions(
             db_session, regular_user.id,
             UserPowerPermissionsUpdate(can_unlock_session=False), granted_by=admin_user.id,
@@ -91,3 +117,6 @@ class TestRoundTrip:
 
         details = logger.log_security_event.call_args.kwargs["details"]
         assert details["new"]["can_unlock_session"] is True
+        assert "can_unlock_session" in details["old"], (
+            "a missing entry in old_values would hide the previous state"
+        )
