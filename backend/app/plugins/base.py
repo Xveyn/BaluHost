@@ -378,8 +378,14 @@ class PluginBase(ABC):
         ``user`` and ``client_host`` describe the CALLER, so an action can ask
         the core for a privileged side effect under the core's own rules (see
         services/power/session_lock.unlock_if_permitted). Both are keyword-only
-        with defaults: an older implementation keeps working, it just cannot
-        request anything caller-dependent.
+        with defaults on THIS signature, so a call site that only passes
+        ``action_id`` and ``db`` still works.
+
+        The defaults apply to the CALL, not to an override: a plugin that
+        overrides this method MUST accept the new keyword parameters (``**kwargs``
+        is enough), otherwise the dispatch raises TypeError. That break is
+        deliberate - see plugins/CLAUDE.md for why a compatibility fallback was
+        rejected.
         """
         return None
 

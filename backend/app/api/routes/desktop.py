@@ -112,11 +112,15 @@ async def desktop_enable(
             await emit_desktop_enabled(current_user.username)
         except Exception as exc:  # best-effort: never break the toggle
             logger.warning("Desktop-enabled notification failed: %s", exc)
-    session_unlocked, unlock_message = await unlock_if_permitted(
-        user=current_user,
-        client_host=request.client.host if request.client else None,
-        db=db,
-    )
+    try:
+        session_unlocked, unlock_message = await unlock_if_permitted(
+            user=current_user,
+            client_host=request.client.host if request.client else None,
+            db=db,
+        )
+    except Exception:  # belt and braces: the displays are already on
+        logger.exception("Session unlock failed unexpectedly")
+        session_unlocked, unlock_message = False, "unlock failed unexpectedly"
     return {
         "success": ok,
         "message": message,

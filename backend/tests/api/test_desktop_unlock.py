@@ -59,3 +59,21 @@ class TestEnableUnlocksTheSession:
             client.post("/api/system/sleep/desktop/enable", headers=admin_headers)
 
         assert gate.await_args.kwargs["client_host"] is not None
+
+    def test_a_raising_unlock_does_not_500_the_route(
+        self, client, admin_headers, desktop_enabled
+    ):
+        """Before the guard, an OSError from the unlock path propagated to the
+        global handler - a 500 on a call whose displays were already on."""
+        from unittest.mock import AsyncMock, patch
+
+        with patch(
+            "app.api.routes.desktop.unlock_if_permitted",
+            AsyncMock(side_effect=OSError("boom")),
+        ):
+            response = client.post(
+                "/api/system/sleep/desktop/enable", headers=admin_headers
+            )
+
+        assert response.status_code == 200, response.text
+        assert response.json()["success"] is True

@@ -174,3 +174,37 @@ class TestAuditTrail:
         kwargs = _silent_audit.log_event.call_args.kwargs
         assert kwargs["success"] is False
         assert kwargs["ip_address"] == LAN
+
+
+class TestNeverRaises:
+    """The whole feature rests on this: unlocking is an add-on and must never
+    take down the caller that only wanted the displays on."""
+
+    async def test_a_raising_backend_is_swallowed_and_audited(
+        self, db_session, unlock_called, _silent_audit
+    ):
+        unlock_called.unlock.side_effect = OSError("fork failed under memory pressure")
+
+        ok, detail = await session_lock.unlock_if_permitted(
+            user=_admin(), client_host=LAN, db=db_session
+        )
+
+        assert ok is False
+        assert "unexpectedly" in detail
+        assert _silent_audit.log_event.call_args.kwargs["success"] is False
+
+    async def test_a_failing_permission_check_is_swallowed_without_audit(
+        self, db_session, unlock_called, _silent_audit
+    ):
+        """A database hiccup is not an unlock attempt - no trail entry."""
+        with patch.object(
+            session_lock, "check_permission", side_effect=RuntimeError("db gone")
+        ):
+            ok, detail = await session_lock.unlock_if_permitted(
+                user=_user(1234), client_host=LAN, db=db_session
+            )
+
+        assert ok is False
+        assert "permission check failed" in detail
+        _silent_audit.log_event.assert_not_called()
+        unlock_called.unlock.assert_not_called()

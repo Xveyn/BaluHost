@@ -218,7 +218,7 @@ class TestManifestAndRouteAgreeOnDeclaredActions:
                 name="steam_gaming",
                 action_id=_ACTION,
                 db=MagicMock(),
-                current_user=MagicMock(username="admin"),
+                current_user=MagicMock(username="admin", role="admin"),
                 plugin_manager=manager,
             )
 

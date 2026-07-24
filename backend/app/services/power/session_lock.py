@@ -197,10 +197,27 @@ async def unlock_if_permitted(
     # Cheap gate first: a WAN request should not cost a database query.
     if not is_private_or_local_ip(client_host):
         return False, "not permitted from this network"
-    if not _may_unlock(user, db):
+
+    try:
+        permitted = _may_unlock(user, db)
+    except Exception:
+        # A database hiccup must not turn "displays on" into a 500, and it is
+        # not an unlock attempt - so it stays out of the audit trail, like any
+        # other refused gate.
+        logger.exception("session unlock: permission check failed for %s", user.username)
+        return False, "permission check failed"
+    if not permitted:
         return False, "permission required: power:unlock_session"
 
-    ok, detail = await asyncio.to_thread(get_session_lock_backend().unlock)
+    try:
+        ok, detail = await asyncio.to_thread(get_session_lock_backend().unlock)
+    except Exception:
+        # The backend catches FileNotFoundError and TimeoutExpired itself, but
+        # not an OSError from a failing fork, a PermissionError or a decode
+        # error. Neither caller may die of it: the route already reported the
+        # displays as on, and the gaming mode still has to launch Big Picture.
+        logger.exception("session unlock raised for %s", user.username)
+        ok, detail = False, "unlock failed unexpectedly"
 
     # A REFUSED gate above stays unaudited on purpose - that is the normal case
     # for anyone without the permission and would drown the real entries. An
@@ -227,5 +244,6 @@ async def unlock_if_permitted(
             resource="unlock_session",
             details={"action": "desktop_unlock_session", "client_host": client_host},
             success=True,
+            ip_address=client_host,
         )
     return True, detail
