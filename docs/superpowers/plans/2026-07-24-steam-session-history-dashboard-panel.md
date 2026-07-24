@@ -42,6 +42,7 @@
 | `tests/plugins/test_steam_gaming_ledger.py` (neu) | Ledger-Regeln |
 | `tests/plugins/test_steam_gaming_panel.py` (neu) | Panel-Spec, Formatierung, Gate |
 | `tests/plugins/test_steam_gaming_poller.py` (ändern) | Poller gegen den Ledger |
+| `tests/plugins/test_steam_gaming_plugin.py` (ändern) | Pill-Tests patchen `detection.py` statt der weggezogenen `__init__`-Namen |
 
 **Warum ein Sicherheits-Task, der nicht in der Spec steht (Task 7):** Beim Planen gefunden — `dashboard_panel_ws_bridge()` broadcastet Panel-Daten mit `broadcast_typed()` an **alle** verbundenen WebSocket-Clients. Ein `admin_only`-Gate allein in der REST-Route wäre wirkungslos, sobald der Bridge feuert (er triggert auf Smart-Device-SHM-Änderungen, und Tapo-Geräte laufen auf dieser Box). Ohne Task 7 leakt das Panel die Spielnamen an jeden angemeldeten Nutzer — genau das, was `admin_only` verhindern soll.
 
@@ -1441,6 +1442,7 @@ git commit -m "feat(plugins): admin_only dashboard panels, enforced by the core"
 - Create: `app/plugins/installed/steam_gaming/detection.py`
 - Modify: `app/plugins/installed/steam_gaming/__init__.py`
 - Modify: `app/plugins/installed/steam_gaming/poller.py` (Defaults auf `detection` umstellen)
+- Modify: `tests/plugins/test_steam_gaming_plugin.py` (Patches ziehen auf `detection.py` um — Step 7)
 - Test: `tests/plugins/test_steam_gaming_panel.py` (neu)
 
 **Interfaces:**
@@ -1616,7 +1618,7 @@ und die Defaults in `__init__` anpassen:
 
 In `app/plugins/installed/steam_gaming/__init__.py`:
 
-(a) Importblock — `detector`/`names`-Importe ersetzen und die neuen ergänzen:
+(a) Importblock — **nur** die `detector`/`names`-Importe ersetzen und die neuen ergänzen. `import asyncio`, `import logging`, `import time`, `from typing import …` und `from sqlalchemy.orm import Session` bleiben unangetastet — der Block unten zeigt ausschließlich die `from app…`/`from datetime`-Zeilen, wie sie danach aussehen:
 
 ```python
 from datetime import datetime, timezone
@@ -1755,16 +1757,65 @@ def _panel_value(row: SteamSession, now: datetime) -> str:
 Run: `python -m pytest tests/plugins/test_steam_gaming_panel.py -v --no-cov`
 Expected: PASS (7 passed)
 
-- [ ] **Step 7: Verify nothing else in the plugin broke**
+- [ ] **Step 7: Repoint the existing pill tests at detection.py**
+
+**Ohne diesen Schritt sind sechs bestehende Tests rot.** `tests/plugins/test_steam_gaming_plugin.py` patcht `plugin_module.detect_running_app_id`, `plugin_module.resolve_name` und `plugin_module.settings` — alle drei Namen existieren nach Step 5 in `__init__.py` nicht mehr, und `monkeypatch.setattr` auf ein fehlendes Attribut wirft `AttributeError` (dieselbe Falle wie in der Ruff-F401-Episode: Patch-Ziele verschwinden beim Umzug). Die Patches wandern eine Ebene tiefer auf `detection.py` — dort liegen Detector, Resolver und der `settings`-Import jetzt.
+
+In `tests/plugins/test_steam_gaming_plugin.py`:
+
+(a) Import ergänzen (unter die bestehenden `from app…`-Importe):
+
+```python
+from app.plugins.installed.steam_gaming import detection as detection_module
+```
+
+(b) Die beiden Fixtures ersetzen:
+
+```python
+@pytest.fixture
+def prod_mode(monkeypatch):
+    """`is_dev_mode` is its own settings FIELD, not derived from nas_mode."""
+    monkeypatch.setattr(detection_module.settings, "is_dev_mode", False)
+
+
+@pytest.fixture
+def dev_mode(monkeypatch):
+    monkeypatch.setattr(detection_module.settings, "is_dev_mode", True)
+```
+
+(c) In diesen fünf Tests jedes `monkeypatch.setattr(plugin_module, "detect_running_app_id", …)` durch `monkeypatch.setattr(detection_module, "detect_running_app_id", …)` ersetzen und jedes `monkeypatch.setattr(plugin_module, "resolve_name", …)` durch `monkeypatch.setattr(detection_module, "resolve_name", …)`:
+
+- `test_stays_silent_when_no_game_runs`
+- `test_reports_the_game_name_when_resolvable`
+- `test_falls_back_to_the_bare_label_for_an_unknown_game`
+- `test_repeated_polls_within_the_ttl_scan_once` (das `_monotonic`-Patch bleibt auf `plugin_module` — der TTL-Cache lebt weiterhin dort)
+- `test_dev_mode_shows_a_mock_game`
+
+Bewusst wird `detection_module` gepatcht und nicht `plugin_module.current_app_id`: `test_dev_mode_shows_a_mock_game` soll den Dev-Zweig **in** `detection.py` durchlaufen (Detector liefert `None`, `dev_mode` an → „Dev Mode Game"), nicht an ihm vorbei.
+
+(d) In `TestBackgroundTask.test_declares_the_session_poller` den veralteten Kommentar ersetzen — aus
+
+```python
+        # run_on_startup True is fine: the poller's first tick is a baseline.
+```
+
+wird
+
+```python
+        # run_on_startup True is fine: the first tick books against the DB
+        # state and the gap rules keep it silent after a restart (TP4).
+```
+
+- [ ] **Step 8: Verify nothing else in the plugin broke**
 
 Run: `python -m pytest tests/plugins/ -k steam -v --no-cov`
-Expected: PASS — insbesondere `test_steam_gaming_plugin.py` (Pill-Collector, jetzt ohne eigenen Dev-Zweig)
+Expected: PASS — alle `test_steam_gaming_*`-Dateien, insbesondere die fünf umgezogenen Pill-Tests
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
-git add app/plugins/installed/steam_gaming/ tests/plugins/test_steam_gaming_panel.py
-git commit -m "feat(steam-gaming): admin-only dashboard panel with the last five sessions" -m "detection.py becomes the single source pill, ledger and panel share, including the dev-mode stand-in that used to live in the pill collector only." -m "Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
+git add app/plugins/installed/steam_gaming/ tests/plugins/test_steam_gaming_panel.py tests/plugins/test_steam_gaming_plugin.py
+git commit -m "feat(steam-gaming): admin-only dashboard panel with the last five sessions" -m "detection.py becomes the single source pill, ledger and panel share, including the dev-mode stand-in that used to live in the pill collector only. Existing pill tests repoint their patches at detection.py - the old targets no longer exist in __init__.py." -m "Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 ```
 
 ---
@@ -1832,20 +1883,20 @@ Expected: PASS
 
 - [ ] **Step 5: Verify the migration once more against a fresh database**
 
-Run: `python -c "import os; os.remove('baluhost.db') if os.path.exists('baluhost.db') else None"`
+Die Dev-DB bleibt unangetastet: `alembic/env.py:25` setzt `sqlalchemy.url` aus `DATABASE_URL` (über `settings.database_url`), also läuft die volle Kette gegen eine Scratch-Datei. **Bash-Tool verwenden** — PowerShell kennt das `VAR=x cmd`-Präfix nicht.
 
-**Achtung:** Das löscht die lokale Dev-DB. Wer sie behalten will, vorher kopieren:
-`python -c "import shutil,os; shutil.copy('baluhost.db','baluhost.db.bak') if os.path.exists('baluhost.db') else None"`
-
-Run: `python -m alembic upgrade head`
+Run: `DATABASE_URL="sqlite:///./migration_check.db" python -m alembic upgrade head`
 Expected: läuft von der ersten Revision bis zur neuen durch, ohne Fehler
 
-Run: `python -c "import sqlite3; print([r[0] for r in sqlite3.connect('baluhost.db').execute(\"select name from sqlite_master where type='table' and name='steam_sessions'\")])"`
+Run: `python -c "import sqlite3; print([r[0] for r in sqlite3.connect('migration_check.db').execute(\"select name from sqlite_master where type='table' and name='steam_sessions'\")])"`
 Expected: `['steam_sessions']`
+
+Run: `python -c "import os; os.remove('migration_check.db')"`
+Expected: kein Output (Scratch-Datei aufgeräumt; sie darf nicht committet werden)
 
 - [ ] **Step 6: PostgreSQL check (Handarbeit, nicht überspringen)**
 
-CI hat keinen Alembic-Smoke-Test (#450). Gegen eine PostgreSQL-Instanz — lokal oder auf der Box vor dem Merge:
+CI hat keinen Alembic-Smoke-Test (#450). Gegen eine PostgreSQL-Instanz — lokal oder auf der Box vor dem Merge (**Bash-Tool**, gleiche Präfix-Syntax wie Step 5):
 
 Run: `DATABASE_URL=postgresql://…/baluhost_test python -m alembic upgrade head`
 Expected: `Running upgrade 71fe791d28d6 -> <rev>, add steam_sessions table`
