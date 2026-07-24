@@ -112,3 +112,68 @@ class TestLiveEdges:
 
         assert db_session.query(SteamSession).one().game_name is None
         assert events[0].game == "999"
+
+
+class TestGapRules:
+    def test_stale_end_is_booked_at_the_last_heartbeat(self, db_session):
+        """The process was away: `now` would book the outage as playtime."""
+        _record(db_session, "111", T0)
+        _record(db_session, "111", T0 + timedelta(seconds=30))  # last heartbeat
+
+        _record(db_session, None, T0 + timedelta(hours=2))
+
+        row = db_session.query(SteamSession).one()
+        assert ledger.as_utc(row.ended_at) == T0 + timedelta(seconds=30)
+
+    def test_stale_end_is_not_announced(self, db_session):
+        """A deploy must not push 'session ended' for a game that ended hours ago."""
+        _record(db_session, "111", T0)
+
+        events = _record(db_session, None, T0 + timedelta(hours=2))
+
+        assert events == []
+
+    def test_stale_switch_books_both_but_announces_nothing(self, db_session):
+        _record(db_session, "111", T0)
+
+        events = _record(db_session, "222", T0 + timedelta(hours=2))
+
+        rows = db_session.query(SteamSession).order_by(SteamSession.started_at).all()
+        assert len(rows) == 2
+        assert ledger.as_utc(rows[0].ended_at) == T0
+        assert rows[1].app_id == "222" and rows[1].ended_at is None
+        assert events == []
+
+    def test_same_game_across_a_short_gap_continues_the_session(self, db_session):
+        """A deploy mid-game is the normal case on this box."""
+        _record(db_session, "111", T0)
+        resumed = T0 + timedelta(minutes=5)
+
+        events = _record(db_session, "111", resumed)
+
+        row = db_session.query(SteamSession).one()
+        assert ledger.as_utc(row.started_at) == T0
+        assert ledger.as_utc(row.last_seen_at) == resumed
+        assert row.ended_at is None
+        assert events == []
+
+    def test_same_game_across_a_long_gap_splits_into_two_sessions(self, db_session):
+        """Off overnight and restarted in the morning is not a 14h session."""
+        _record(db_session, "111", T0)
+        next_day = T0 + timedelta(hours=14)
+
+        events = _record(db_session, "111", next_day)
+
+        rows = db_session.query(SteamSession).order_by(SteamSession.started_at).all()
+        assert len(rows) == 2
+        assert ledger.as_utc(rows[0].ended_at) == T0
+        assert ledger.as_utc(rows[1].started_at) == next_day
+        assert rows[1].ended_at is None
+        assert events == []
+
+    def test_the_adopt_window_boundary_still_continues(self, db_session):
+        _record(db_session, "111", T0)
+
+        _record(db_session, "111", T0 + timedelta(seconds=ledger.ADOPT_WINDOW_SECONDS))
+
+        assert db_session.query(SteamSession).count() == 1

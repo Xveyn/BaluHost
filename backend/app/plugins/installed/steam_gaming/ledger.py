@@ -78,6 +78,11 @@ def _current_session(db: Session) -> Optional[SteamSession]:
     )
 
 
+def _gap_seconds(session: SteamSession, now: datetime) -> float:
+    """How long the poller was away, measured from the session's last heartbeat."""
+    return (now - as_utc(session.last_seen_at)).total_seconds()
+
+
 def record(
     db: Session,
     app_id: Optional[str],
@@ -105,16 +110,33 @@ def record(
 
         if current is None:
             if app_id is not None:
+                # Nothing open: either nothing was running, or this is the very
+                # first tick after deploying the ledger. Both look identical
+                # here - see the accepted deviation in the design doc.
                 opened = _open(db, app_id, now, resolve_name)
                 events.append(LedgerEvent(EVENT_STARTED, opened.app_id, _label(opened)))
-        elif app_id == current.app_id:
-            current.last_seen_at = now
         else:
-            current.ended_at = now
-            events.append(LedgerEvent(EVENT_ENDED, current.app_id, _label(current)))
-            if app_id is not None:
-                opened = _open(db, app_id, now, resolve_name)
-                events.append(LedgerEvent(EVENT_STARTED, opened.app_id, _label(opened)))
+            gap = _gap_seconds(current, now)
+            live = gap <= STALE_AFTER_SECONDS
+
+            if app_id == current.app_id:
+                if gap <= ADOPT_WINDOW_SECONDS:
+                    current.last_seen_at = now
+                else:
+                    # Same game, but far too long ago to be one session.
+                    current.ended_at = as_utc(current.last_seen_at)
+                    _open(db, app_id, now, resolve_name)  # after a gap: book, never announce
+            else:
+                # `now` is only a truthful end time while the poller was there.
+                current.ended_at = now if live else as_utc(current.last_seen_at)
+                if live:
+                    events.append(LedgerEvent(EVENT_ENDED, current.app_id, _label(current)))
+                if app_id is not None:
+                    opened = _open(db, app_id, now, resolve_name)
+                    if live:
+                        events.append(
+                            LedgerEvent(EVENT_STARTED, opened.app_id, _label(opened))
+                        )
 
         db.commit()
     except Exception:  # broad on purpose: a booking failure must not kill the poller
