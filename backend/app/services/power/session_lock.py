@@ -14,8 +14,11 @@ import subprocess
 import time
 from typing import Callable, List, Optional, Protocol, Tuple
 
+from sqlalchemy.orm import Session
+
 from app.core.config import settings
 from app.core.network_utils import is_private_or_local_ip
+from app.schemas.user import UserPublic
 from app.services.audit.logger_db import get_audit_logger_db
 from app.services.power_permissions import check_permission
 
@@ -165,14 +168,16 @@ def get_session_lock_backend() -> SessionLockBackend:
     return _backend
 
 
-def _may_unlock(user, db) -> bool:
+def _may_unlock(user: UserPublic, db: Session) -> bool:
     """Admins pass by role, like every other power permission."""
-    if getattr(user, "role", None) == "admin":
+    if user.role == "admin":
         return True
     return check_permission(db, user.id, "unlock_session")
 
 
-async def unlock_if_permitted(*, user, client_host: Optional[str], db) -> Tuple[bool, str]:
+async def unlock_if_permitted(
+    *, user: UserPublic, client_host: Optional[str], db: Session
+) -> Tuple[bool, str]:
     """Unlock the desktop session if BOTH gates allow it.
 
     This is the only place the gates are evaluated and the only place the audit
@@ -180,7 +185,7 @@ async def unlock_if_permitted(*, user, client_host: Optional[str], db) -> Tuple[
     even a plugin.
 
     Args:
-        user: The authenticated caller (needs .id, .username, .role).
+        user: The authenticated caller.
         client_host: The request's client IP, or None.
         db: SQLAlchemy session.
 
@@ -189,31 +194,38 @@ async def unlock_if_permitted(*, user, client_host: Optional[str], db) -> Tuple[
         refused gate loginctl is never called and the real lock state is
         unknown, so it is False with the reason in ``detail``.
     """
-    if not _may_unlock(user, db):
-        return False, "permission required: power:unlock_session"
+    # Cheap gate first: a WAN request should not cost a database query.
     if not is_private_or_local_ip(client_host):
         return False, "not permitted from this network"
+    if not _may_unlock(user, db):
+        return False, "permission required: power:unlock_session"
 
     ok, detail = await asyncio.to_thread(get_session_lock_backend().unlock)
-    if not ok:
-        logger.warning("session unlock failed for %s: %s", user.username, detail)
-        return False, detail
 
+    # A REFUSED gate above stays unaudited on purpose - that is the normal case
+    # for anyone without the permission and would drown the real entries. An
+    # ATTEMPTED unlock is different: the gates were passed, so both outcomes
+    # belong in the trail, same as the sibling desktop routes.
     audit_logger = get_audit_logger_db()
     audit_logger.log_event(
         event_type="POWER",
         action="desktop_unlock_session",
         user=user.username,
         resource="desktop",
-        success=True,
+        success=ok,
+        ip_address=client_host,
         details={"message": detail},
     )
-    if getattr(user, "role", None) != "admin":
+    if not ok:
+        logger.warning("session unlock failed for %s: %s", user.username, detail)
+        return False, detail
+
+    if user.role != "admin":
         audit_logger.log_security_event(
             action="delegated_power_action",
             user=user.username,
             resource="unlock_session",
-            details={"action": "desktop_unlock_session"},
+            details={"action": "desktop_unlock_session", "client_host": client_host},
             success=True,
         )
     return True, detail

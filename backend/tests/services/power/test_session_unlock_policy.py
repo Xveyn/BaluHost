@@ -67,6 +67,7 @@ class TestPermissionGate:
         )
 
         assert ok is True
+        unlock_called.unlock.assert_called_once()
 
     async def test_user_without_the_permission_is_refused(
         self, db_session, regular_user, unlock_called
@@ -146,3 +147,30 @@ class TestAuditTrail:
         )
 
         _silent_audit.log_security_event.assert_called_once()
+
+    async def test_an_admin_gets_no_delegated_security_event(
+        self, db_session, unlock_called, _silent_audit
+    ):
+        """The security event marks a DELEGATED user exercising a privileged
+        action - for an admin it would just be noise."""
+        await session_lock.unlock_if_permitted(
+            user=_admin(), client_host=LAN, db=db_session
+        )
+
+        _silent_audit.log_security_event.assert_not_called()
+
+    async def test_a_failed_unlock_is_audited_as_a_failure(
+        self, db_session, unlock_called, _silent_audit
+    ):
+        """Gates passed, loginctl did not deliver. Without this the function
+        would report success=True over a still-locked screen."""
+        unlock_called.unlock.return_value = (False, "session 2 still reports LockedHint=yes")
+
+        ok, _detail = await session_lock.unlock_if_permitted(
+            user=_admin(), client_host=LAN, db=db_session
+        )
+
+        assert ok is False
+        kwargs = _silent_audit.log_event.call_args.kwargs
+        assert kwargs["success"] is False
+        assert kwargs["ip_address"] == LAN
