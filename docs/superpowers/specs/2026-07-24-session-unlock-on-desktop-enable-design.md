@@ -55,6 +55,16 @@ Teilprojekt 1 des Steam-Tracks nachgemessen, dort steht auch, dass es keinen
 Daraus folgt: **keine sudoers-Regel, kein Wrapper, kein Privilegienzuwachs auf
 Systemebene.** Das ist der Grund, warum dieses Feature überhaupt vertretbar ist.
 
+**Grenze dieser Messung, ehrlich benannt:** Sie lief aus einer SSH-Verbindung —
+die ist selbst eine logind-Session. Das Backend ist dagegen ein **session-loser
+Systemdienst** unter `system.slice`. Sehr wahrscheinlich greift loginds
+Owner-Regel (Caller-UID == Session-Owner-UID, per D-Bus-Credentials), die vom
+Session-Status des Callers unabhängig ist — aber das ist eine Annahme über
+logind-Interna, kein Messwert. Der Dienst-Kontext wird deshalb vor der
+Implementierung separat gemessen (siehe Offene Punkte); fällt die Messung
+negativ aus, braucht das Design einen sudoers-Eintrag im Muster von
+`sudoers-baluhost-power` und ist neu abzuwägen.
+
 ### Bestehendes Rechtemodell
 
 `UserPowerPermission` (`models/power_permissions.py`) hat eine Boolean-Spalte je
@@ -147,6 +157,15 @@ eine Falle, die im Repo bereits einmal zugeschlagen hat. WireGuard-Clients haben
 private Adressen und gelten damit als erlaubt; das ist beabsichtigt, denn wer im
 VPN ist, hat sich bereits mit einem Schlüssel ausgewiesen.
 
+**Tragende Annahme, benannt:** `request.client.host` ist hinter Nginx nur
+deshalb die echte Client-IP, weil Uvicorn mit dem bestehenden
+Proxy-Headers-Pin läuft (X-Forwarded-For, nur vom lokalen Nginx akzeptiert).
+Ohne diesen Pin sähe jeder Request wie 127.0.0.1 aus und das Ortsgate wäre
+dauerhaft offen. Der Pin existiert und trägt bereits die anderen LAN-Gates —
+aber wer ihn je entfernt, entfernt damit auch diesen Riegel. Ein Test prüft
+deshalb, dass eine öffentliche IP abgelehnt wird (nicht nur, dass eine private
+durchkommt).
+
 ### Session-Ermittlung
 
 Die Session-ID ist nicht stabil (die gemessene `2` gilt bis zum nächsten
@@ -177,6 +196,14 @@ so ruft das Plugin dieselbe `unlock_if_permitted()` wie die Route, statt sich au
 den impliziten Vertrag „der Core hat Admin schon geprüft" zu verlassen. Solche
 Verträge reißen beim nächsten Umbau, und zwar lautlos.
 
+**Reihenfolge im Gaming-Modus:** Displays an → **Unlock** → Big Picture. Der
+Unlock sitzt zwischen den beiden bestehenden Schritten — Big Picture auf einen
+Sperrbildschirm zu öffnen ist genau das Szenario, das dieses Feature beseitigen
+soll. Ein fehlgeschlagener Unlock bricht die Aktion nicht ab (Big Picture
+startet trotzdem; es wird eben erst nach manuellem Entsperren sichtbar). Das
+Zeitbudget bleibt eingehalten: Enable + Unlock-Polling (max. 3 s) + Spawn
+liegen deutlich unter dem 20-s-Timeout der Menüaktionen.
+
 ### Kein neues Route-Gate
 
 Das Recht wird **innerhalb** der Enable-Route geprüft, nicht als `Depends`. Ein
@@ -195,8 +222,24 @@ keine `require_power_unlock_session`-Dependency.
 }
 ```
 
-`session_unlocked` beschreibt den **Zustand danach**, nicht ob etwas verändert
-wurde: eine ohnehin unversperrte Session meldet `true`.
+Präzise Semantik von `session_unlocked`, damit sie nicht zweideutig wird:
+
+- **`true`** — beide Gates passiert, und die Session ist danach nachweislich
+  entsperrt (`LockedHint=no`). Eine ohnehin unversperrte Session meldet `true`.
+- **`false`** — alles andere: Gate verweigert (dann wurde `loginctl` nie
+  gerufen und der tatsächliche Sperrzustand ist unbekannt), keine Session
+  gefunden, Kommando fehlgeschlagen oder `LockedHint` blieb `yes`.
+  `unlock_message` nennt den Grund.
+
+Das Feld behauptet also nie mehr, als geprüft wurde — bei verweigerten Gates
+sagt es nichts über den Sperrzustand aus, sondern nur, dass nicht entsperrt
+wurde.
+
+**Frontend-Verhalten:** `unlock_message` ist ein serverseitig englischer
+Debug-String und wird **nicht** wörtlich gerendert — das wäre der nächste
+Eintrag in #406. Die UI zeigt bei `session_unlocked=false` einen übersetzten,
+generischen Hinweis (i18n-Key, de/en) und loggt `unlock_message` höchstens in
+die Konsole.
 
 ## Fehlerbehandlung
 
@@ -216,6 +259,15 @@ anderen Blatt. Deshalb wird nach dem Unlock `LockedHint` zurückgelesen und nur
 bei `no` ein Erfolg gemeldet. Ohne diesen Schritt würde die API „entsperrt"
 behaupten, während der Bildschirm gesperrt bleibt — eine Lüge, die man erst
 bemerkt, wenn man vor dem Rechner steht.
+
+**Das Nachlesen braucht ein Zeitfenster, kein Einzelread.** kscreenlocker
+verarbeitet das Signal asynchron; die Messung auf der Box hatte zwischen Signal
+und Nachlesen bewusst zwei Sekunden Pause. Ein sofortiger Read liefert
+sporadisch noch `yes` und würde fälschlich „nicht entsperrt" melden — ein
+flackernder Fehlbericht, der schwerer zu debuggen ist als ein ehrlicher.
+Vorgabe: **Polling auf `LockedHint`, 200-ms-Schritte, Abbruch bei `no`,
+Obergrenze 3 s.** Erst nach Ablauf der Obergrenze gilt der Unlock als
+fehlgeschlagen.
 
 ## Sicherheit
 
@@ -257,7 +309,13 @@ nein; Audit-Eintrag genau im Erfolgsfall.
 
 **Route:** ein fehlgeschlagener Unlock lässt `enable` weiterhin `success=true`
 liefern — der Test, der die Grundregel festnagelt. Dazu die beiden neuen
-Antwortfelder.
+Antwortfelder, und ein Test, der eine **öffentliche** IP explizit ablehnt
+(nicht nur eine private akzeptiert — sonst bliebe ein kaputtes Ortsgate
+unsichtbar grün).
+
+**Nachlese-Polling:** `LockedHint` wird erst nach mehreren Reads `no` →
+Erfolg; bleibt es über die Obergrenze `yes` → `false`. Uhr und Runner
+injiziert, kein echtes Warten im Test.
 
 **Gaming-Modus:** reicht `user` und `client_host` durch und entsperrt unter
 denselben Regeln.
@@ -268,9 +326,26 @@ gestampt und nur das Delta gefahren — wie bei der `steam_sessions`-Migration.
 
 ## Offene Punkte
 
-- Die **Session-Ermittlung** ist der einzige ungemessene Teil (siehe oben). Sie
-  wird als erste Aufgabe des Implementierungsplans gegen die Box geprüft.
-- Eine visuelle Bestätigung, dass der Sperrbildschirm bei `unlock-session`
-  tatsächlich verschwindet, steht noch aus. `LockedHint` sprang auf `no`, was
-  stark dafür spricht — dieser Wert wird von kscreenlocker selbst gesetzt —,
-  aber gesehen hat es noch niemand.
+Drei Messungen stehen aus; die erste ist tragend und läuft als Aufgabe 1 des
+Implementierungsplans, **bevor** Code entsteht:
+
+1. **Funktioniert der Unlock aus einem session-losen Dienst-Kontext?** Die
+   bisherige Messung lief aus einer SSH-Session; das Backend hat keine. Die
+   ehrliche Simulation (transiente Unit unter `system.slice`, UID 1000, keine
+   logind-Session):
+
+   ```bash
+   loginctl list-sessions   # grafische ID: seat0, Klasse user
+   sudo systemd-run --uid=1000 --pipe --wait loginctl lock-session <ID>
+   loginctl show-session <ID> -p LockedHint     # erwartet: yes
+   sudo systemd-run --uid=1000 --pipe --wait loginctl unlock-session <ID>
+   loginctl show-session <ID> -p LockedHint     # erwartet: no
+   ```
+
+   Fällt sie negativ aus, ist das Design neu abzuwägen (sudoers-Weg).
+2. **Session-Ermittlung:** liefert `loginctl show-user 1000 -p Display --value`
+   auf der Box die grafische Session? Sonst greift der Fallback über
+   `list-sessions`.
+3. **Visuelle Bestätigung**, dass der Sperrbildschirm wirklich verschwindet.
+   `LockedHint` sprang auf `no`, und diesen Hint pflegt die Session-Software
+   selbst — aber gesehen hat es noch niemand.
