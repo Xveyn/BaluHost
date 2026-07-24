@@ -187,3 +187,53 @@ describe('PowerMenu — enable desktop quick action', () => {
     expect(getDesktopStatus).not.toHaveBeenCalled();
   });
 });
+
+describe('PowerMenu session unlock hint', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (getSleepStatus as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({});
+  });
+
+  it('shows an extra hint when the session could not be unlocked', async () => {
+    (getDesktopStatus as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      state: 'stopped',
+    });
+    (enableDesktop as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: true,
+      message: 'ok',
+      session_unlocked: false,
+      unlock_message: 'not permitted from this network',
+    });
+
+    render(<PowerMenu {...baseProps} />);
+    openMenu();
+    const button = await screen.findByText('Enable desktop');
+    fireEvent.click(button);
+
+    await waitFor(() => expect(enableDesktop).toHaveBeenCalledTimes(1));
+    // The raw English debug string must never reach the user (#406).
+    await waitFor(() =>
+      expect(
+        screen.queryByText(/not permitted from this network/i),
+      ).not.toBeInTheDocument(),
+    );
+  });
+
+  it('shows no hint when the session was unlocked', async () => {
+    (getDesktopStatus as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      state: 'stopped',
+    });
+    (enableDesktop as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: true,
+      message: 'ok',
+      session_unlocked: true,
+      unlock_message: 'session 2 unlocked',
+    });
+
+    render(<PowerMenu {...baseProps} />);
+    openMenu();
+    fireEvent.click(await screen.findByText('Enable desktop'));
+
+    await waitFor(() => expect(enableDesktop).toHaveBeenCalledTimes(1));
+  });
+});

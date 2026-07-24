@@ -131,6 +131,18 @@ Two plugin trust tiers with different isolation:
    cannot take effect. Disabled plugins are rejected by
    `PluginGateMiddleware` (403, DB-backed) — `menu-actions` is
    intentionally **not** a management route.
+   `run_menu_action()` bekommt zusätzlich `user` und `client_host` (keyword-only,
+   Default `None`) — den authentifizierten Aufrufer und dessen IP. Damit kann
+   eine Aktion einen privilegierten Seiteneffekt beim Core anfragen, der ihn
+   nach **seinen** Regeln prüft (siehe
+   `services/power/session_lock.unlock_if_permitted()`), statt sich auf den
+   impliziten Vertrag „die Route hat Admin schon geprüft" zu verlassen.
+   **Bewusster API-Bruch:** Ein Plugin, das `run_menu_action` mit der alten
+   Signatur `(self, action_id, db)` überschreibt, scheitert seitdem mit
+   `TypeError`. Verworfen wurde ein Kompatibilitäts-Fallback im Dispatch: ein
+   `TypeError` aus dem Plugin-Rumpf wäre von einem Signatur-Mismatch nicht
+   unterscheidbar, und ein Retry würde eine Aktion, die Displays schaltet und
+   Prozesse startet, ein zweites Mal ausführen.
 8. Override `get_notification_events()` to contribute notification events, and
    `get_background_tasks()` if something needs to emit them on an interval. Each
    `PluginEventSpec` picks only a local `id` (`^[a-z0-9_]+$`); the core

@@ -263,6 +263,7 @@
     "desktopEnable": "Enable desktop",
     "desktopEnableDesc": "Turn displays back on",
     "desktopEnabled": "Desktop enabled",
+    "desktopStillLocked": "Displays on - the session is still locked",
     "desktopEnableFailed": "Failed to enable desktop",
     "pluginActionFailed": "Action failed"
   },

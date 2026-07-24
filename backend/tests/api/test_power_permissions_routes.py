@@ -168,6 +168,51 @@ class TestToggleDesktopPermission:
         assert resp.json()["can_toggle_desktop"] is False
 
 
+class TestUnlockSessionPermission:
+    """The mobile my-permissions endpoint hand-lists every field twice - once
+    in the admin short-circuit, once in the regular-user branch. Removing
+    either passthrough would leave no test red, so this pins both plus the
+    False case that actually distinguishes "value is passed through" from
+    "the field happens to always read true"."""
+
+    def test_admin_gets_true(self, client: TestClient, admin_token: str):
+        resp = client.get(
+            "/api/system/sleep/my-permissions",
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["can_unlock_session"] is True
+
+    def test_user_with_permission_gets_true(
+        self, client: TestClient, admin_token: str, user_token: str, regular_user: User,
+    ):
+        client.put(
+            f"/api/users/{regular_user.id}/power-permissions",
+            json={"can_unlock_session": True},
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+        resp = client.get(
+            "/api/system/sleep/my-permissions",
+            headers={"Authorization": f"Bearer {user_token}"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["can_unlock_session"] is True
+        # Reset so later tests reading this shared regular_user row see the default.
+        client.put(
+            f"/api/users/{regular_user.id}/power-permissions",
+            json={"can_unlock_session": False},
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+
+    def test_user_without_permission_gets_false(self, client: TestClient, user_token: str):
+        resp = client.get(
+            "/api/system/sleep/my-permissions",
+            headers={"Authorization": f"Bearer {user_token}"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["can_unlock_session"] is False
+
+
 class TestDelegatedDesktopAccess:
     @pytest.fixture(autouse=True)
     def _dev_desktop(self):

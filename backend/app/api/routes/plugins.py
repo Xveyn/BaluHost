@@ -880,7 +880,7 @@ async def run_plugin_menu_action(
             detail="Unknown menu action",
         )
 
-    result = await _execute_menu_action(plugin, name, action_id, db)
+    result = await _execute_menu_action(plugin, name, action_id, db, current_user, request)
 
     get_audit_logger_db().log_event(
         event_type="PLUGIN",
@@ -895,17 +895,27 @@ async def run_plugin_menu_action(
 
 
 async def _execute_menu_action(
-    plugin: PluginBase, name: str, action_id: str, db: Session
+    plugin: PluginBase, name: str, action_id: str, db: Session, current_user: User, request: Request
 ) -> MenuActionResult:
     """Run the action under a timeout and an exception guard.
 
     A plugin fault must never become a 5xx and must never leak internals into
     the response - the detail goes to the log, the caller gets a generic
     failure. Mirrors the pill-collector guard in services/status_bar/service.py.
+
+    ``current_user`` and ``request`` are passed through to the plugin so an
+    action can ask the core for a privileged side effect (e.g. unlocking the
+    desktop session) under the core's own rules, instead of relying on the
+    implicit contract that this route already checked admin.
     """
     try:
         result = await asyncio.wait_for(
-            plugin.run_menu_action(action_id, db),
+            plugin.run_menu_action(
+                action_id,
+                db,
+                user=current_user,
+                client_host=request.client.host if request.client else None,
+            ),
             timeout=PLUGIN_MENU_ACTION_TIMEOUT_SECONDS,
         )
     except asyncio.TimeoutError:

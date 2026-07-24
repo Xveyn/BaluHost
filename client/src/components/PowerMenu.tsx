@@ -120,6 +120,10 @@ export default function PowerMenu({ isAdmin, onShutdown, onRestart, onLogout }: 
       const result = await enableDesktop();
       if (result.success) {
         toast.success(t('powerMenu.desktopEnabled', 'Desktop enabled'));
+        // unlock_message is an English debug string and stays out of the UI (#406).
+        if (result.session_unlocked === false) {
+          toast(t('powerMenu.desktopStillLocked', 'Displays on - the session is still locked'));
+        }
       } else {
         toast.error(result.message || t('powerMenu.desktopEnableFailed', 'Failed to enable desktop'));
       }

@@ -90,7 +90,11 @@
         "wake": { "label": "Wake", "desc": "Wake the server from soft sleep" },
         "suspend": { "label": "Suspend", "desc": "System suspend (S3 sleep)" },
         "wol": { "label": "Wake-on-LAN", "desc": "Send a WoL magic packet" },
-        "toggleDesktop": { "label": "Desktop", "desc": "Enable/disable the desktop (saves GPU power)" }
+        "toggleDesktop": { "label": "Desktop", "desc": "Enable/disable the desktop (saves GPU power)" },
+        "unlockSession": {
+          "label": "Unlock session",
+          "desc": "Also unlock the desktop session when turning the displays on (home network or VPN only)"
+        }
       }
     }
   },

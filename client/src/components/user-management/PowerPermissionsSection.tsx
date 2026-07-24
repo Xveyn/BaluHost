@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Moon, Sun, Power, Wifi, MonitorOff, Loader2 } from 'lucide-react';
+import { Moon, Sun, Power, Wifi, MonitorOff, LockOpen, Loader2 } from 'lucide-react';
 import {
   getUserPowerPermissions,
   updateUserPowerPermissions,
@@ -30,6 +30,7 @@ const FIELD_TO_I18N: Record<keyof UserPowerPermissionsUpdate, string> = {
   can_suspend: 'suspend',
   can_wol: 'wol',
   can_toggle_desktop: 'toggleDesktop',
+  can_unlock_session: 'unlockSession',
 };
 
 const PERMISSION_TOGGLES: PermissionToggle[] = [
@@ -38,6 +39,7 @@ const PERMISSION_TOGGLES: PermissionToggle[] = [
   { key: 'can_suspend', icon: <Power className="h-4 w-4" />, implies: 'can_wol' },
   { key: 'can_wol', icon: <Wifi className="h-4 w-4" />, impliedBy: 'can_suspend' },
   { key: 'can_toggle_desktop', icon: <MonitorOff className="h-4 w-4" /> },
+  { key: 'can_unlock_session', icon: <LockOpen className="h-4 w-4" /> },
 ];
 
 export function PowerPermissionsSection({ userId, userRole }: PowerPermissionsSectionProps) {

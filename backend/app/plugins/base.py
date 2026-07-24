@@ -351,7 +351,12 @@ class PluginBase(ABC):
         return list(manifest.menu_items)
 
     async def run_menu_action(
-        self, action_id: str, db: "Session"
+        self,
+        action_id: str,
+        db: "Session",
+        *,
+        user: Optional[Any] = None,
+        client_host: Optional[str] = None,
     ) -> Optional["MenuActionResult"]:
         """Execute one menu action, or None if this plugin does not know it.
 
@@ -369,6 +374,18 @@ class PluginBase(ABC):
         performance question. If a menu action needs blocking work AND
         database access, open a fresh Session inside the thread instead of
         reusing this one.
+
+        ``user`` and ``client_host`` describe the CALLER, so an action can ask
+        the core for a privileged side effect under the core's own rules (see
+        services/power/session_lock.unlock_if_permitted). Both are keyword-only
+        with defaults on THIS signature, so a call site that only passes
+        ``action_id`` and ``db`` still works.
+
+        The defaults apply to the CALL, not to an override: a plugin that
+        overrides this method MUST accept the new keyword parameters (``**kwargs``
+        is enough), otherwise the dispatch raises TypeError. That break is
+        deliberate - see plugins/CLAUDE.md for why a compatibility fallback was
+        rejected.
         """
         return None
 

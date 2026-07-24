@@ -15,6 +15,7 @@ class UserPowerPermissionsResponse(BaseModel):
     can_suspend: bool = False
     can_wol: bool = False
     can_toggle_desktop: bool = False
+    can_unlock_session: bool = False
     granted_by: Optional[int] = None
     granted_by_username: Optional[str] = None
     granted_at: Optional[datetime] = None
@@ -30,6 +31,7 @@ class UserPowerPermissionsUpdate(BaseModel):
     can_suspend: Optional[bool] = Field(default=None, description="Allow system suspend")
     can_wol: Optional[bool] = Field(default=None, description="Allow sending Wake-on-LAN")
     can_toggle_desktop: Optional[bool] = Field(default=None, description="Allow toggling the desktop (DPMS on/off)")
+    can_unlock_session: Optional[bool] = Field(default=None, description="Allow unlocking the desktop session from the web app")
 
 
 class MyPowerPermissionsResponse(BaseModel):
@@ -40,3 +42,4 @@ class MyPowerPermissionsResponse(BaseModel):
     can_suspend: bool = False
     can_wol: bool = False
     can_toggle_desktop: bool = False
+    can_unlock_session: bool = False

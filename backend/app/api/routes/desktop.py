@@ -5,11 +5,13 @@ Registered under the /system/sleep/desktop prefix in routes/__init__.py.
 import logging
 
 from fastapi import APIRouter, Depends, Request, Response
+from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, require_power_toggle_desktop
+from app.api.deps import get_current_user, get_db, require_power_toggle_desktop
 from app.core.rate_limiter import user_limiter, get_limit
 from app.schemas.desktop import DesktopStatus
 from app.services.power.desktop import get_desktop_service
+from app.services.power.session_lock import unlock_if_permitted
 from app.services.notifications.events import emit_desktop_disabled, emit_desktop_enabled
 from app.services.audit.logger_db import get_audit_logger_db
 
@@ -76,10 +78,14 @@ async def desktop_enable(
     request: Request,
     response: Response,
     current_user=Depends(require_power_toggle_desktop),
+    db: Session = Depends(get_db),
 ) -> dict:
-    """Turn the desktop displays back on (DPMS).
+    """Turn the desktop displays back on (DPMS) and unlock the session.
 
-    Admin or a delegated user with the can_toggle_desktop permission.
+    Admin or a delegated user with the can_toggle_desktop permission. The
+    unlock is an ADD-ON: it needs its own permission plus a request from
+    LAN/VPN, and failing it never fails the call - the displays are on either
+    way.
     """
     ok, message = await get_desktop_service().enable()
     audit_logger = get_audit_logger_db()
@@ -106,4 +112,18 @@ async def desktop_enable(
             await emit_desktop_enabled(current_user.username)
         except Exception as exc:  # best-effort: never break the toggle
             logger.warning("Desktop-enabled notification failed: %s", exc)
-    return {"success": ok, "message": message}
+    try:
+        session_unlocked, unlock_message = await unlock_if_permitted(
+            user=current_user,
+            client_host=request.client.host if request.client else None,
+            db=db,
+        )
+    except Exception:  # belt and braces: the displays are already on
+        logger.exception("Session unlock failed unexpectedly")
+        session_unlocked, unlock_message = False, "unlock failed unexpectedly"
+    return {
+        "success": ok,
+        "message": message,
+        "session_unlocked": session_unlocked,
+        "unlock_message": unlock_message,
+    }
