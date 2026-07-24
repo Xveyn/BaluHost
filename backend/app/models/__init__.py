@@ -102,6 +102,7 @@ from app.models.notification_routing import UserNotificationRouting
 from app.models.sync_progress import ChunkedUpload, SyncBandwidthLimit, SyncSchedule, SelectiveSync
 from app.models.sync_state import SyncState, SyncMetadata, SyncFileVersion
 from app.models.status_bar import StatusBarPillConfig, StatusBarSettings
+from app.models.steam_session import SteamSession
 from app.models.auth_policy import AuthPolicy
 
 __all__ = [
@@ -217,4 +218,5 @@ __all__ = [
     "SyncFileVersion",
     "StatusBarPillConfig",
     "StatusBarSettings",
+    "SteamSession",
 ]
