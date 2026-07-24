@@ -18,8 +18,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
 from app.plugins.installed.steam_gaming import ledger
-from app.plugins.installed.steam_gaming.detector import detect_running_app_id
-from app.plugins.installed.steam_gaming.names import resolve_name
+from app.plugins.installed.steam_gaming.detection import current_app_id, resolve_game_name
 from app.services.notifications.plugin_events import emit_plugin_event
 
 _PLUGIN = "steam_gaming"
@@ -36,8 +35,8 @@ class SteamSessionPoller:
 
     def __init__(
         self,
-        detect: Callable[[], Optional[str]] = detect_running_app_id,
-        resolve: Callable[[str], Optional[str]] = resolve_name,
+        detect: Callable[[], Optional[str]] = current_app_id,
+        resolve: Callable[[str], Optional[str]] = resolve_game_name,
         emit: Callable[..., Awaitable[None]] = emit_plugin_event,
         session_factory: Callable[[], Session] = SessionLocal,
         clock: Callable[[], datetime] = _utc_now,

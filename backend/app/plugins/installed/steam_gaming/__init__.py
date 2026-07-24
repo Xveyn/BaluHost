@@ -11,13 +11,14 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
 from app.plugins.base import (
     BackgroundTaskSpec,
+    DashboardPanelSpec,
     MenuActionResult,
     PluginBase,
     PluginEventSpec,
@@ -26,9 +27,11 @@ from app.plugins.base import (
     PluginUIManifest,
     StatusPillSpec,
 )
-from app.plugins.installed.steam_gaming.detector import detect_running_app_id
+from app.models.steam_session import SteamSession
+from app.plugins.dashboard_panel import StatusItem, StatusPanelData
+from app.plugins.installed.steam_gaming import ledger
+from app.plugins.installed.steam_gaming.detection import current_app_id, resolve_game_name
 from app.plugins.installed.steam_gaming.launcher import open_big_picture
-from app.plugins.installed.steam_gaming.names import resolve_name
 from app.plugins.installed.steam_gaming.poller import SteamSessionPoller
 from app.services.power.desktop import get_desktop_service
 
@@ -36,11 +39,12 @@ logger = logging.getLogger(__name__)
 
 _PILL_ID = "session"
 _MENU_ACTION_ID = "gaming_mode"
-_EVENT_STARTED = "session_started"
-_EVENT_ENDED = "session_ended"
+_EVENT_STARTED = ledger.EVENT_STARTED
+_EVENT_ENDED = ledger.EVENT_ENDED
 _POLL_INTERVAL_SECONDS = 30.0
 _CACHE_TTL_SECONDS = 3.0
 _CACHE: Dict[str, object] = {}
+_PANEL_ROWS = 5
 
 
 def _monotonic() -> float:
@@ -55,11 +59,29 @@ def _current_game() -> Optional[tuple[str, Optional[str]]]:
     if isinstance(checked_at, float) and now - checked_at < _CACHE_TTL_SECONDS:
         return _CACHE.get("game")  # type: ignore[return-value]
 
-    app_id = detect_running_app_id()
-    game = (app_id, resolve_name(app_id)) if app_id else None
+    app_id = current_app_id()
+    game = (app_id, resolve_game_name(app_id)) if app_id else None
     _CACHE["checked_at"] = now
     _CACHE["game"] = game
     return game
+
+
+def _format_duration(seconds: float) -> str:
+    """``3h 04m`` / ``12m`` - digits only, so no string needs translating."""
+    total = int(seconds)
+    hours, remainder = divmod(total, 3600)
+    minutes = remainder // 60
+    if hours:
+        return f"{hours}h {minutes:02d}m"
+    return f"{minutes}m"
+
+
+def _panel_value(row: SteamSession, now: datetime) -> str:
+    """Running sessions show the bare duration; finished ones prepend the date."""
+    duration = _format_duration(ledger.duration_seconds(row, now))
+    if row.ended_at is None:
+        return duration
+    return f"{ledger.as_utc(row.started_at):%d.%m.} · {duration}"
 
 
 class SteamGamingPlugin(PluginBase):
@@ -95,13 +117,11 @@ class SteamGamingPlugin(PluginBase):
         # code, so a slow/spun-down Steam library mount would otherwise stall
         # the whole worker's event loop instead of being cut off by the
         # PLUGIN_COLLECTOR_TIMEOUT_SECONDS timeout in the status bar service.
+        # The dev-mode stand-in now lives in detection.py, so pill, ledger and
+        # panel agree on what is running.
         game = await asyncio.to_thread(_current_game)
         if game is None:
-            if settings.is_dev_mode:
-                # No /proc on a Windows dev box — render something anyway.
-                game = ("0", "Dev Mode Game")
-            else:
-                return None
+            return None
 
         _app_id, name = game
         return {
@@ -162,6 +182,43 @@ class SteamGamingPlugin(PluginBase):
             message_key="menu_gaming_mode_started",
             message_text="Gaming mode started",
         )
+
+    def get_dashboard_panel(self) -> Optional[DashboardPanelSpec]:
+        return DashboardPanelSpec(
+            panel_type="status",
+            title="Steam Gaming",
+            icon="gamepad-2",
+            accent="from-indigo-500 to-purple-500",
+            # The game name is information about the box owner - same call as
+            # the pill's default visibility in Teilprojekt 1.
+            admin_only=True,
+        )
+
+    async def get_dashboard_data(self, db: Session) -> Optional[dict]:
+        """The five newest sessions; the running one sorts to the top.
+
+        Returns None when nothing was ever recorded - a placeholder line would
+        be a translatable string, and StatusItem has no key fields.
+        """
+        rows = (
+            db.query(SteamSession)
+            .order_by(SteamSession.started_at.desc())
+            .limit(_PANEL_ROWS)
+            .all()
+        )
+        if not rows:
+            return None
+
+        now = datetime.now(timezone.utc)
+        items = [
+            StatusItem(
+                label=row.game_name or f"AppID {row.app_id}",
+                value=_panel_value(row, now),
+                tone="ok" if row.ended_at is None else "neutral",
+            )
+            for row in rows
+        ]
+        return StatusPanelData(items=items).model_dump()
 
     def get_notification_events(self) -> List[PluginEventSpec]:
         return [

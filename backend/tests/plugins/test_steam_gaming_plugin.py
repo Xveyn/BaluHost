@@ -7,7 +7,8 @@ import pytest
 
 from app.api.routes.plugins import run_plugin_menu_action
 from app.plugins.installed import steam_gaming as plugin_module
-from app.plugins.installed.steam_gaming import SteamGamingPlugin
+from app.plugins.installed.steam_gaming import SteamGamingPlugin, ledger
+from app.plugins.installed.steam_gaming import detection as detection_module
 
 
 @pytest.fixture(autouse=True)
@@ -25,12 +26,12 @@ def plugin():
 @pytest.fixture
 def prod_mode(monkeypatch):
     """`is_dev_mode` is its own settings FIELD, not derived from nas_mode."""
-    monkeypatch.setattr(plugin_module.settings, "is_dev_mode", False)
+    monkeypatch.setattr(detection_module.settings, "is_dev_mode", False)
 
 
 @pytest.fixture
 def dev_mode(monkeypatch):
-    monkeypatch.setattr(plugin_module.settings, "is_dev_mode", True)
+    monkeypatch.setattr(detection_module.settings, "is_dev_mode", True)
 
 
 def test_declares_one_namespaced_pill(plugin):
@@ -46,14 +47,14 @@ def test_declares_one_namespaced_pill(plugin):
 
 
 async def test_stays_silent_when_no_game_runs(plugin, monkeypatch, prod_mode):
-    monkeypatch.setattr(plugin_module, "detect_running_app_id", lambda: None)
+    monkeypatch.setattr(detection_module, "detect_running_app_id", lambda: None)
 
     assert await plugin.collect_status_pill("session", None) is None
 
 
 async def test_reports_the_game_name_when_resolvable(plugin, monkeypatch, prod_mode):
-    monkeypatch.setattr(plugin_module, "detect_running_app_id", lambda: "1449560")
-    monkeypatch.setattr(plugin_module, "resolve_name", lambda _id: "Metro Exodus")
+    monkeypatch.setattr(detection_module, "detect_running_app_id", lambda: "1449560")
+    monkeypatch.setattr(detection_module, "resolve_name", lambda _id: "Metro Exodus")
 
     pill = await plugin.collect_status_pill("session", None)
 
@@ -64,8 +65,8 @@ async def test_reports_the_game_name_when_resolvable(plugin, monkeypatch, prod_m
 
 async def test_falls_back_to_the_bare_label_for_an_unknown_game(plugin, monkeypatch, prod_mode):
     """Non-Steam shortcuts have no manifest — the pill still shows up."""
-    monkeypatch.setattr(plugin_module, "detect_running_app_id", lambda: "3000000000")
-    monkeypatch.setattr(plugin_module, "resolve_name", lambda _id: None)
+    monkeypatch.setattr(detection_module, "detect_running_app_id", lambda: "3000000000")
+    monkeypatch.setattr(detection_module, "resolve_name", lambda _id: None)
 
     pill = await plugin.collect_status_pill("session", None)
 
@@ -80,8 +81,8 @@ async def test_repeated_polls_within_the_ttl_scan_once(plugin, monkeypatch, prod
         calls.append(1)
         return "1449560"
 
-    monkeypatch.setattr(plugin_module, "detect_running_app_id", _counting_detect)
-    monkeypatch.setattr(plugin_module, "resolve_name", lambda _id: "Metro Exodus")
+    monkeypatch.setattr(detection_module, "detect_running_app_id", _counting_detect)
+    monkeypatch.setattr(detection_module, "resolve_name", lambda _id: "Metro Exodus")
 
     clock = {"now": 500.0}
     monkeypatch.setattr(plugin_module, "_monotonic", lambda: clock["now"])
@@ -97,7 +98,7 @@ async def test_repeated_polls_within_the_ttl_scan_once(plugin, monkeypatch, prod
 
 async def test_dev_mode_shows_a_mock_game(plugin, monkeypatch, dev_mode):
     """Windows dev boxes have no /proc — the strip should still render."""
-    monkeypatch.setattr(plugin_module, "detect_running_app_id", lambda: None)
+    monkeypatch.setattr(detection_module, "detect_running_app_id", lambda: None)
 
     pill = await plugin.collect_status_pill("session", None)
 
@@ -256,7 +257,7 @@ class TestGamingModeRunsLauncherOffTheEventLoop:
 class TestNotificationEvents:
     def test_declares_start_and_end(self):
         events = SteamGamingPlugin().get_notification_events()
-        assert {e.id for e in events} == {"session_started", "session_ended"}
+        assert {e.id for e in events} == {ledger.EVENT_STARTED, ledger.EVENT_ENDED}
 
     def test_events_carry_a_cooldown_and_admin_default(self):
         for e in SteamGamingPlugin().get_notification_events():
@@ -271,5 +272,6 @@ class TestBackgroundTask:
         assert len(specs) == 1
         spec = specs[0]
         assert spec.interval_seconds == 30
-        # run_on_startup True is fine: the poller's first tick is a baseline.
+        # run_on_startup True is fine: the first tick books against the DB
+        # state and the gap rules keep it silent after a restart (TP4).
         assert callable(spec.func)
