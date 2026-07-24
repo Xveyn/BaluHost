@@ -29,7 +29,12 @@ logger = logging.getLogger(__name__)
 # would sporadically still say "yes" and report a failure that never happened.
 _POLL_INTERVAL_SECONDS = 0.2
 _POLL_TIMEOUT_SECONDS = 3.0
-_COMMAND_TIMEOUT_SECONDS = 10
+# Per COMMAND, and one unlock runs up to four of them (show-user, optionally
+# list-sessions, unlock-session, the first show-session). At 10s that is a
+# 40s worst case, which would blow the 20s budget of a plugin menu action and
+# leave Big Picture unstarted. loginctl answers in milliseconds; anything that
+# needs three seconds will not become useful at ten.
+_COMMAND_TIMEOUT_SECONDS = 3
 
 
 class SessionLockBackend(Protocol):

@@ -269,6 +269,15 @@ Vorgabe: **Polling auf `LockedHint`, 200-ms-Schritte, Abbruch bei `no`,
 Obergrenze 3 s.** Erst nach Ablauf der Obergrenze gilt der Unlock als
 fehlgeschlagen.
 
+**Gesamtschranke, nicht nur Polling-Schranke.** Die 3 s oben begrenzen das
+Nachlesen; hinzu kommt das Kommando-Timeout, und zwar **je Aufruf**. Ein Unlock
+fährt bis zu vier: `show-user`, ggf. `list-sessions`, `unlock-session` und das
+erste `show-session`. Bei 10 s je Kommando läge der Worst Case bei 40 s — jenseits
+des 20-Sekunden-Budgets einer Plugin-Menüaktion, sodass der Gaming-Modus dann
+abbräche, bevor Big Picture startet. Deshalb `_COMMAND_TIMEOUT_SECONDS = 3`:
+maximal 12 s Kommandozeit plus 3 s Polling, also unter 15 s. `loginctl` antwortet
+real in Millisekunden; was drei Sekunden braucht, wird in zehn nicht brauchbar.
+
 ## Sicherheit
 
 - Kein sudo, keine sudoers-Änderung, kein neuer Rootpfad. Das Backend nutzt
