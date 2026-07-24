@@ -247,3 +247,66 @@ class TestFailureContract:
 
         assert events == []
         broken.rollback.assert_called_once()
+
+
+class TestHousekeeping:
+    def test_orphaned_open_sessions_are_closed_silently(self, db_session):
+        """The invariant says one open session; a crash can still leave more."""
+        db_session.add_all([
+            SteamSession(app_id="111", started_at=T0, last_seen_at=T0),
+            SteamSession(
+                app_id="222",
+                started_at=T0 + timedelta(hours=1),
+                last_seen_at=T0 + timedelta(hours=1),
+            ),
+        ])
+        db_session.commit()
+
+        events = _record(db_session, "222", T0 + timedelta(hours=1, seconds=30))
+
+        older = db_session.query(SteamSession).filter_by(app_id="111").one()
+        newer = db_session.query(SteamSession).filter_by(app_id="222").one()
+        assert ledger.as_utc(older.ended_at) == T0
+        assert newer.ended_at is None
+        assert events == []
+
+    def test_missing_game_name_is_resolved_on_a_later_heartbeat(self, db_session):
+        """A game started during its own install has no appmanifest yet."""
+        ledger.record(db_session, "111", now=T0, resolve_name=lambda _app_id: None)
+        assert db_session.query(SteamSession).one().game_name is None
+
+        _record(db_session, "111", T0 + timedelta(seconds=30))
+
+        assert db_session.query(SteamSession).one().game_name == "Metro"
+
+    def test_a_resolved_name_is_not_overwritten(self, db_session):
+        _record(db_session, "111", T0)
+
+        ledger.record(
+            db_session, "111", now=T0 + timedelta(seconds=30), resolve_name=lambda _a: None
+        )
+
+        assert db_session.query(SteamSession).one().game_name == "Metro"
+
+
+class TestDuration:
+    def test_closed_session_duration(self, db_session):
+        session = SteamSession(
+            app_id="111",
+            started_at=T0,
+            last_seen_at=T0 + timedelta(minutes=90),
+            ended_at=T0 + timedelta(minutes=90),
+        )
+
+        assert ledger.duration_seconds(session, T0 + timedelta(hours=5)) == 5400.0
+
+    def test_open_session_counts_up_to_now(self, db_session):
+        session = SteamSession(app_id="111", started_at=T0, last_seen_at=T0)
+
+        assert ledger.duration_seconds(session, T0 + timedelta(minutes=12)) == 720.0
+
+    def test_clock_stepping_backwards_clamps_at_zero(self, db_session):
+        """An NTP step backwards must not produce a negative duration."""
+        session = SteamSession(app_id="111", started_at=T0, last_seen_at=T0)
+
+        assert ledger.duration_seconds(session, T0 - timedelta(minutes=5)) == 0.0

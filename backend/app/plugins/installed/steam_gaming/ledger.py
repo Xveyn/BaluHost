@@ -69,14 +69,22 @@ def _open(
     return session
 
 
-def _current_session(db: Session) -> Optional[SteamSession]:
-    """The newest open session, if any."""
-    return (
+def _claim_current_session(db: Session) -> Optional[SteamSession]:
+    """The newest open session; any older open one is an orphan and gets closed.
+
+    The invariant is "at most one open session". A crash at the wrong moment can
+    still leave more behind, so every tick cleans up instead of trusting it.
+    """
+    open_sessions = (
         db.query(SteamSession)
         .filter(SteamSession.ended_at.is_(None))
         .order_by(SteamSession.started_at.desc())
-        .first()
+        .all()
     )
+    for orphan in open_sessions[1:]:
+        orphan.ended_at = as_utc(orphan.last_seen_at)
+        logger.warning("steam ledger: closed orphaned session id=%s", orphan.id)
+    return open_sessions[0] if open_sessions else None
 
 
 def _gap_seconds(session: SteamSession, now: datetime) -> float:
@@ -115,7 +123,7 @@ def record(
     """
     events: List[LedgerEvent] = []
     try:
-        current = _current_session(db)
+        current = _claim_current_session(db)
 
         if current is None:
             if app_id is not None:
@@ -131,6 +139,10 @@ def record(
             if app_id == current.app_id:
                 if gap <= ADOPT_WINDOW_SECONDS:
                     current.last_seen_at = now
+                    if current.game_name is None:
+                        # A game started during its own install has no manifest
+                        # yet; resolve_name() retries misses after 60s anyway.
+                        current.game_name = resolve_name(app_id)
                 else:
                     # Same game, but far too long ago to be one session.
                     current.ended_at = as_utc(current.last_seen_at)
@@ -164,3 +176,13 @@ def record(
         return []
 
     return events
+
+
+def duration_seconds(session: SteamSession, now: datetime) -> float:
+    """Seconds played. An open session counts up to *now*.
+
+    Clamped at 0: an NTP step backwards would otherwise produce a negative
+    duration, which is worse in the panel than a flattering zero.
+    """
+    end = as_utc(session.ended_at) if session.ended_at is not None else now
+    return max(0.0, (end - as_utc(session.started_at)).total_seconds())
