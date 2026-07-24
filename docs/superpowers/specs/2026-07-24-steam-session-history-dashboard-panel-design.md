@@ -193,10 +193,40 @@ Darüber liegen drei Lückenregeln. `_STALE_AFTER_SECONDS = 60` (zwei Ticks),
    eröffnet. Über Nacht aus und morgens dasselbe Spiel wieder gestartet ist
    nicht eine 14-Stunden-Session.
 
-Beim Start räumt der Schreiber zusätzlich auf: **mehrere offene Sessions**
-(nach der Invariante unmöglich, aber ein Crash zur Unzeit kann sie erzeugen)
-werden bis auf die neueste stillschweigend bei ihrem `last_seen_at`
-geschlossen.
+Die Regeln erledigen den **Suspend** nebenbei richtig: die Box hat Sleep-Modi,
+beim Aufwachen ist die Lücke = Schlafdauer → Regel 1 schließt bei
+`last_seen_at`, Regel 2 hält still — **Schlafzeit zählt nicht als Spielzeit.**
+Das begründet auch die 60 s: die einzige Fehlklassifikation wäre ein komplett
+verpasster Tick bei gesundem Prozess, und deren Preis ist nur eine
+unterdrückte Push-Meldung, nie eine falsche Buchung.
+
+Findet ein Tick **mehrere offene Sessions** vor (nach der Invariante unmöglich,
+aber ein Crash zur Unzeit kann sie erzeugen), schließt er alle bis auf die
+neueste stillschweigend bei ihrem `last_seen_at`. „Beim Start" gibt es hier
+nicht — der Poller hat keinen Initialisierungszustand mehr, genau das ist der
+Punkt des Designs.
+
+**Namens-Nachauflösung:** ist `game_name` beim INSERT `None` (ein Spiel wird
+während der laufenden Installation gestartet, das `appmanifest` existiert noch
+nicht), versucht der Heartbeat die Auflösung erneut — `resolve_name()` retried
+Misses nach 60 s ohnehin von selbst (`names.py`, `_MISS_TTL_SECONDS`), der
+Ledger muss das Ergebnis nur nachtragen.
+
+**Zwei akzeptierte Abweichungen**, bewusst nicht wegregelt:
+
+- **Erster Tick nach dem allerersten TP4-Deploy, während gerade gespielt
+  wird:** die Tabelle ist leer, es gibt kein `last_seen_at`, an dem eine Lücke
+  messbar wäre → das laufende Spiel wird als frischer Start gebucht **und
+  gemeldet**, mit `started_at = now`. Einmalige Falschmeldung. Die
+  Gegenmaßnahme („der erste Tick eines Prozesses meldet nie") hätte einen
+  dauerhaften Preis — ein Spiel, das während eines Deploy-Fensters gestartet
+  wird, würde für immer stumm verbucht. Einmal falsch schlägt dauerhaft stumm.
+- **Der TP3-Cooldown kann Meldungen schlucken, die die Historie bucht:**
+  Spiel starten, nach 20 s beenden, sofort neu starten — der zweite
+  `session_started` fällt ins 60-s-Cooldown-Fenster (gleicher `entity_id`)
+  und wird verschluckt; der Ledger bucht beide Sessions. Der Cooldown ist
+  Spam-Schutz für die Zustellung; **die Historie ist die Quelle der
+  Wahrheit**, nicht der Notification-Verlauf.
 
 **Reihenfolge, verbindlich: erst buchen und committen, dann melden.** Eine
 fehlgeschlagene Zustellung darf keine Buchung zurückrollen.
@@ -258,11 +288,13 @@ Cyberpunk 2077                  20.07. · 1h 02m   tone=neutral
 
 `label` ist der Spielname, ersatzweise `AppID <n>`. `value` ist Datum + Dauer.
 
-**Bewusst sprachneutral, keine Wörter.** `StatusItem` hat nur
-`label`/`value`/`tone`, keine Key-Felder — der Renderer löst nichts auf. Ein
-serverseitig festgetackertes „läuft · 1h 12m" wäre ein neuer Eintrag in #406.
-Stattdessen trägt `tone=ok` die Information „läuft"; Datum und Dauer sind in
-beiden Sprachen lesbar.
+**Bewusst ohne Wörter.** `StatusItem` hat nur `label`/`value`/`tone`, keine
+Key-Felder — der Renderer löst nichts auf. Ein serverseitig festgetackertes
+„läuft · 1h 12m" wäre ein neuer Eintrag in #406. Stattdessen trägt `tone=ok`
+die Information „läuft". Das Datumsformat `TT.MM.` ist die deutsche
+Konvention — konsistent mit den ohnehin deutschen, serverseitig gerenderten
+Notification-Texten aus TP3, aber keine echte Sprachneutralität; die gäbe es
+erst mit clientseitigem Rendern, das der Panel-Extension-Point nicht hergibt.
 
 **Leerer Zustand:** noch keine Session verbucht → `get_dashboard_data()` gibt
 `None`, das Panel erscheint nicht. Kein Platzhaltertext, der wieder übersetzt
@@ -272,7 +304,11 @@ werden müsste.
 Pill-Collector. Er wandert eine Ebene tiefer in die gemeinsame
 Erkennungsfunktion, sodass Pill, Ledger und Panel dieselbe Quelle benutzen —
 sonst schreibt der Ledger auf einer Windows-Kiste nie eine Zeile und das Panel
-ist lokal nicht testbar.
+ist lokal nicht testbar. Bewusste Folge: auf einer Dev-Kiste läuft damit eine
+**ewig offene Session**, die bei Backend-Neustarts mit mehr als
+`_ADOPT_WINDOW_SECONDS` Pause splittert — die Dev-DB sammelt also
+Mock-Sessions an. Das ist der Zweck (das Panel hat lokal etwas zu zeigen),
+kein Versehen.
 
 **Betriebshinweis:** Es kann nur *ein* Plugin-Panel gleichzeitig aktiv sein;
 `set_dashboard_panel_enabled()` schaltet beim Einschalten alle anderen ab. Läuft
@@ -311,6 +347,8 @@ aber hier zum ersten Mal spürbar.
 - nach einer Lücke wird **nichts** gemeldet;
 - dasselbe Spiel über 5 min → eine Session; über 30 min → zwei;
 - mehrere offene Sessions werden bis auf die neueste geschlossen;
+- `game_name IS NULL` wird vom Heartbeat nachgelöst, sobald `resolve_name()`
+  einen Namen liefert;
 - Retention löscht nur `ended_at < now - 365 d` und lässt die offene Session in
   Ruhe;
 - Uhr-Rücksprung ergibt Dauer 0, keine negative Zahl.
