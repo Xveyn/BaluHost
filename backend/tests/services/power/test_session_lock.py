@@ -13,13 +13,15 @@ from app.services.power.session_lock import (
 SHOW_USER = ["loginctl", "show-user", "1000", "-p", "Display", "--value"]
 LIST_SESSIONS = ["loginctl", "list-sessions", "--no-legend"]
 
-# Real output shape measured on the box (2026-07-24):
+# Real output shape measured on the box (2026-07-24), reordered so the rows
+# that MUST be skipped come first: with session 2 in front, the test would
+# pass even without the seat/class filter.
 # SESSION UID USER SEAT LEADER CLASS TTY IDLE SINCE
 LIST_OUTPUT = (
     "         1  993 ci-runner -     1975 manager-early -    no   -\n"
-    "         2 1000 sven      seat0 2023 user          tty2 no   -\n"
     "        27 1000 sven      -    88823 user          -    no   -\n"
     "         3 1000 sven      -     2115 manager       -    no   -\n"
+    "         2 1000 sven      seat0 2023 user          tty2 no   -\n"
 )
 
 
@@ -174,6 +176,20 @@ class TestUnlockVerification:
 
         assert ok is False
         assert "timed out" in detail
+
+    def test_an_unreadable_hint_is_reported_as_such(self):
+        """A failing show-session must not be logged as 'still locked' - the
+        lock state is unknown in that case, and the log should say so."""
+        runner = FakeRunner({
+            tuple(SHOW_USER): _proc(stdout="2\n"),
+            ("loginctl", "unlock-session", "2"): _proc(),
+            "locked_hint": _proc(returncode=1, stderr="no such session"),
+        })
+
+        ok, detail = _backend(runner, monotonic_values=[0.0, 0.0, 9.0]).unlock()
+
+        assert ok is False
+        assert "could not be read" in detail
 
 
 class TestDevBackend:

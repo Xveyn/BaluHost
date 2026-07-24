@@ -26,7 +26,11 @@ _COMMAND_TIMEOUT_SECONDS = 10
 
 
 class SessionLockBackend(Protocol):
-    def unlock(self) -> Tuple[bool, str]: ...
+    """Anything that can unlock the user's graphical session."""
+
+    def unlock(self) -> Tuple[bool, str]:
+        """Unlock the session; returns (ok, detail)."""
+        ...
 
 
 class DevSessionLockBackend:
@@ -36,6 +40,7 @@ class DevSessionLockBackend:
         self._locked = True
 
     def unlock(self) -> Tuple[bool, str]:
+        """Pretend to unlock - there is no logind on a dev box."""
         self._locked = False
         return True, "session unlocked (dev)"
 
@@ -124,13 +129,18 @@ class LinuxSessionLockBackend:
                 return False, detail
 
             deadline = self._monotonic() + _POLL_TIMEOUT_SECONDS
+            last_hint: Optional[bool] = None
             while True:
-                if self._locked_hint(session_id) is False:
+                last_hint = self._locked_hint(session_id)
+                if last_hint is False:
                     return True, f"session {session_id} unlocked"
                 if self._monotonic() >= deadline:
-                    return False, (
-                        f"session {session_id} still reports LockedHint=yes"
+                    reason = (
+                        "still reports LockedHint=yes"
+                        if last_hint is True
+                        else "LockedHint could not be read"
                     )
+                    return False, f"session {session_id} {reason}"
                 self._sleep(_POLL_INTERVAL_SECONDS)
         except FileNotFoundError:
             return False, "loginctl not found"
