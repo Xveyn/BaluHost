@@ -11,9 +11,8 @@ never roll back a booking.
 from __future__ import annotations
 
 import asyncio
-import logging
 from datetime import datetime, timezone
-from typing import Callable, List, Optional
+from typing import Awaitable, Callable, List, Optional
 
 from sqlalchemy.orm import Session
 
@@ -22,8 +21,6 @@ from app.plugins.installed.steam_gaming import ledger
 from app.plugins.installed.steam_gaming.detector import detect_running_app_id
 from app.plugins.installed.steam_gaming.names import resolve_name
 from app.services.notifications.plugin_events import emit_plugin_event
-
-logger = logging.getLogger(__name__)
 
 _PLUGIN = "steam_gaming"
 _CLEANUP_INTERVAL_SECONDS = 24 * 60 * 60.0
@@ -41,7 +38,7 @@ class SteamSessionPoller:
         self,
         detect: Callable[[], Optional[str]] = detect_running_app_id,
         resolve: Callable[[str], Optional[str]] = resolve_name,
-        emit=emit_plugin_event,
+        emit: Callable[..., Awaitable[None]] = emit_plugin_event,
         session_factory: Callable[[], Session] = SessionLocal,
         clock: Callable[[], datetime] = _utc_now,
     ) -> None:

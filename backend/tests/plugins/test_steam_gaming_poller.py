@@ -129,3 +129,34 @@ class TestRetentionSchedule:
         await poller.tick()
 
         assert calls == [T0, later]
+
+
+class TestSessionLifetime:
+    """The DB session belongs to ONE tick. Hoisting it into __init__ would keep
+    a transaction open for hours and hand PostgreSQL a stale connection after
+    pool_recycle - and every other test in this file would stay green."""
+
+    async def test_each_tick_opens_and_closes_its_own_session(self, db_session):
+        opened: list[MagicMock] = []
+
+        def _factory():
+            handle = MagicMock(wraps=db_session)
+            handle.close = MagicMock()
+            opened.append(handle)
+            return handle
+
+        clock_values = iter([T0, T0 + timedelta(seconds=30)])
+        poller = SteamSessionPoller(
+            detect=MagicMock(return_value=None),
+            resolve=MagicMock(return_value=None),
+            emit=AsyncMock(),
+            session_factory=_factory,
+            clock=lambda: next(clock_values),
+        )
+
+        await poller.tick()
+        await poller.tick()
+
+        assert len(opened) == 2, "each tick must open its own session"
+        for handle in opened:
+            handle.close.assert_called_once()
