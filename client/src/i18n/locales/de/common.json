@@ -263,6 +263,7 @@
     "desktopEnable": "Desktop aktivieren",
     "desktopEnableDesc": "Bildschirme wieder einschalten",
     "desktopEnabled": "Desktop aktiviert",
+    "desktopStillLocked": "Displays an - die Sitzung ist weiterhin gesperrt",
     "desktopEnableFailed": "Desktop konnte nicht aktiviert werden",
     "pluginActionFailed": "Aktion fehlgeschlagen"
   },

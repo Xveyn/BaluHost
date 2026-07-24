@@ -23,6 +23,8 @@ export interface DesktopStatus {
 export interface DesktopActionResult {
   success: boolean;
   message: string;
+  session_unlocked?: boolean;
+  unlock_message?: string;
 }
 
 // ============================================================================

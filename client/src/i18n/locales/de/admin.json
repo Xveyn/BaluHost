@@ -90,7 +90,11 @@
         "wake": { "label": "Wake", "desc": "Server aus Soft Sleep aufwecken" },
         "suspend": { "label": "Suspend", "desc": "System Suspend (S3 Sleep)" },
         "wol": { "label": "Wake-on-LAN", "desc": "WoL Magic Packet senden" },
-        "toggleDesktop": { "label": "Desktop", "desc": "Desktop aktivieren/deaktivieren (spart GPU-Strom)" }
+        "toggleDesktop": { "label": "Desktop", "desc": "Desktop aktivieren/deaktivieren (spart GPU-Strom)" },
+        "unlockSession": {
+          "label": "Session entsperren",
+          "desc": "Beim Einschalten der Displays die Desktop-Sitzung mit entsperren (nur aus dem Heimnetz oder VPN)"
+        }
       }
     }
   },
