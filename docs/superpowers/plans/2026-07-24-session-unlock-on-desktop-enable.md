@@ -473,10 +473,13 @@ git commit -m "feat(power): logind-based session unlock with verified LockedHint
 
 **Files:**
 - Modify: `app/models/power_permissions.py`
-- Modify: `app/services/power_permissions.py`
+- Modify: `app/services/power_permissions.py` (**vier** Stellen: Map, `get_permissions`, `update_permissions`, Audit-Diff)
 - Modify: `app/schemas/power_permissions.py`
+- Modify: `app/api/routes/sleep.py:357-370`
 - Create: `alembic/versions/<generiert>_add_can_unlock_session.py`
 - Test: `tests/services/power/test_unlock_session_permission.py`
+
+**Warnung vorweg:** Dieses Repo reicht Power-Rechte **nirgends generisch** durch — jede der vier Stellen listet die Felder einzeln auf. Wer nur Spalte, Map und Schema ergänzt, bekommt eine Checkbox, die sich anklicken lässt, **nie speichert** und nach jedem Reload wieder aus steht. Kein Fehler, keine Warnung. Der Round-Trip-Test in Step 1 ist genau dagegen gebaut.
 
 **Interfaces:**
 - Produces: Spalte `UserPowerPermission.can_unlock_session`, Aktionsschlüssel `"unlock_session"` für `check_permission()`, Feld in `UserPowerPermissionsResponse`, `UserPowerPermissionsUpdate`, `MyPowerPermissionsResponse`.
@@ -521,6 +524,64 @@ class TestCheckPermission:
     def test_default_is_off(self, db_session, regular_user):
         """No row at all must not grant anything."""
         assert check_permission(db_session, regular_user.id, "unlock_session") is False
+
+
+class TestRoundTrip:
+    """Nothing in this repo passes power permissions through generically -
+    every read and write lists the fields one by one. A column plus a schema
+    field yields a checkbox that saves nothing and reports itself as off."""
+
+    def test_update_then_get_returns_the_granted_permission(
+        self, db_session, regular_user, admin_user
+    ):
+        from app.schemas.power_permissions import UserPowerPermissionsUpdate
+        from app.services.power_permissions import get_permissions, update_permissions
+
+        update_permissions(
+            db_session,
+            regular_user.id,
+            UserPowerPermissionsUpdate(can_unlock_session=True),
+            granted_by=admin_user.id,
+        )
+
+        assert get_permissions(db_session, regular_user.id).can_unlock_session is True
+
+    def test_revoking_works_too(self, db_session, regular_user, admin_user):
+        from app.schemas.power_permissions import UserPowerPermissionsUpdate
+        from app.services.power_permissions import get_permissions, update_permissions
+
+        update_permissions(
+            db_session, regular_user.id,
+            UserPowerPermissionsUpdate(can_unlock_session=True), granted_by=admin_user.id,
+        )
+        update_permissions(
+            db_session, regular_user.id,
+            UserPowerPermissionsUpdate(can_unlock_session=False), granted_by=admin_user.id,
+        )
+
+        assert get_permissions(db_session, regular_user.id).can_unlock_session is False
+
+    def test_the_change_reaches_the_audit_diff(
+        self, db_session, regular_user, admin_user
+    ):
+        """old/new are built from explicit dicts - a missing entry hides the
+        grant from the security trail."""
+        from unittest.mock import MagicMock, patch
+
+        from app.schemas.power_permissions import UserPowerPermissionsUpdate
+        from app.services import power_permissions as svc
+
+        with patch.object(svc, "get_audit_logger_db") as factory:
+            logger = MagicMock()
+            factory.return_value = logger
+            svc.update_permissions(
+                db_session, regular_user.id,
+                UserPowerPermissionsUpdate(can_unlock_session=True),
+                granted_by=admin_user.id,
+            )
+
+        details = logger.log_security_event.call_args.kwargs["details"]
+        assert details["new"]["can_unlock_session"] is True
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -573,7 +634,55 @@ In `MyPowerPermissionsResponse` nach `can_toggle_desktop`:
     can_unlock_session: bool = False
 ```
 
-- [ ] **Step 6: Generate the migration**
+- [ ] **Step 6: Pass the field through `get_permissions()`**
+
+In `app/services/power_permissions.py`, im `return UserPowerPermissionsResponse(...)` nach `can_toggle_desktop=perm.can_toggle_desktop,`:
+
+```python
+        can_unlock_session=perm.can_unlock_session,
+```
+
+Ohne diese Zeile liest die API immer `false`, egal was in der DB steht.
+
+- [ ] **Step 7: Make `update_permissions()` write the field**
+
+In derselben Datei, nach dem `if update.can_toggle_desktop is not None:`-Block:
+
+```python
+    if update.can_unlock_session is not None:
+        perm.can_unlock_session = update.can_unlock_session
+```
+
+**Das ist die Zeile, ohne die die Checkbox nie speichert.** Sie gehört bewusst *nicht* in `_apply_implications` — das neue Recht impliziert nichts und wird von nichts impliziert.
+
+Außerdem beide Audit-Dictionaries erweitern, jeweils nach `"can_toggle_desktop": perm.can_toggle_desktop,`:
+
+```python
+        "can_unlock_session": perm.can_unlock_session,
+```
+
+(einmal in `old_values`, einmal in `new_values` — sonst fehlt die Rechteänderung im Sicherheits-Audit).
+
+- [ ] **Step 8: Pass the field through the mobile endpoint**
+
+In `app/api/routes/sleep.py` beide `MyPowerPermissionsResponse(...)`-Konstruktionen erweitern — im Admin-Kurzschluss:
+
+```python
+        return MyPowerPermissionsResponse(
+            can_soft_sleep=True, can_wake=True, can_suspend=True, can_wol=True,
+            can_toggle_desktop=True, can_unlock_session=True,
+        )
+```
+
+und im Zweig für normale Nutzer:
+
+```python
+        can_toggle_desktop=perms.can_toggle_desktop,
+        can_unlock_session=perms.can_unlock_session,
+    )
+```
+
+- [ ] **Step 9: Generate the migration**
 
 Run: `python -m alembic revision -m "add can_unlock_session permission"`
 
@@ -595,20 +704,31 @@ def downgrade() -> None:
     op.drop_column('user_power_permissions', 'can_unlock_session')
 ```
 
-- [ ] **Step 7: Run test to verify it passes**
+- [ ] **Step 10: Run test to verify it passes**
 
 Run: `python -m pytest tests/services/power/test_unlock_session_permission.py -v --no-cov`
-Expected: PASS (4 passed)
+Expected: PASS (7 passed)
 
-- [ ] **Step 8: Verify the map entry is load-bearing**
+- [ ] **Step 11: Verify the map entry is load-bearing**
 
-Entferne die Zeile `"unlock_session": "can_unlock_session",` testweise, lass die Datei laufen: **drei** Tests müssen rot werden (der Mapping-Test und beide `check_permission`-Tests, die `True` erwarten bzw. das Mapping durchlaufen). Zurücksetzen. Ergebnis berichten.
+Entferne die Zeile `"unlock_session": "can_unlock_session",` testweise, lass die Datei laufen: der Mapping-Test und der `check_permission`-Test mit erteiltem Recht **müssen rot werden**. Zurücksetzen.
 
-- [ ] **Step 9: Commit**
+- [ ] **Step 12: Verify the write-through is load-bearing**
+
+Entferne den `if update.can_unlock_session is not None:`-Block aus Step 7 testweise, lass die Datei laufen: **beide Round-Trip-Tests und der Audit-Test müssen rot werden**. Zurücksetzen.
+
+Das ist die wichtigste der drei Proben: ohne sie sähe die fertige UI genauso aus wie eine funktionierende — Häkchen setzbar, Speichern ohne Fehler, Recht wirkungslos. Ergebnis beider Proben im Report festhalten.
+
+- [ ] **Step 13: Check the existing permission tests**
+
+Run: `python -m pytest tests/ -k "power_permission or powerPermission" -v --no-cov`
+Expected: PASS — die bestehenden Tests der Implikationslogik bleiben grün (das neue Feld nimmt an keiner Implikation teil)
+
+- [ ] **Step 14: Commit**
 
 ```bash
-git add app/models/power_permissions.py app/services/power_permissions.py app/schemas/power_permissions.py alembic/versions tests/services/power/test_unlock_session_permission.py
-git commit -m "feat(power): separate can_unlock_session permission" -m "Keeps can_toggle_desktop a pure power permission instead of silently turning it into a desktop key. The _ACTION_FIELD_MAP entry is load-bearing: check_permission returns False for unknown actions, so forgetting it fails closed and invisibly." -m "Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
+git add app/models/power_permissions.py app/services/power_permissions.py app/schemas/power_permissions.py app/api/routes/sleep.py alembic/versions tests/services/power/test_unlock_session_permission.py
+git commit -m "feat(power): separate can_unlock_session permission" -m "Keeps can_toggle_desktop a pure power permission instead of silently turning it into a desktop key." -m "Two silent traps this closes: check_permission returns False for unknown actions, so a missing _ACTION_FIELD_MAP entry fails closed and invisibly; and nothing in this repo passes permissions through generically - get_permissions, update_permissions, both audit dicts and the mobile endpoint each list every field by hand, so a column alone yields a checkbox that never saves." -m "Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 ```
 
 ---
@@ -1513,7 +1633,8 @@ Zwei Nachweise, die nur am Gerät zu führen sind und deshalb in die PR-Beschrei
 | `LockedHint`-Polling statt Einzelread | 2 |
 | Dev-Backend ohne `loginctl` | 2 |
 | Recht `can_unlock_session` + Migration | 3 |
-| `_ACTION_FIELD_MAP`-Eintrag (stille Falle) | 3 |
+| `_ACTION_FIELD_MAP`-Eintrag (stille Falle 1) | 3 |
+| Vier Durchreich-Stellen: get/update/Audit/Mobile (stille Falle 2) | 3 |
 | Beide Gates in genau einer Funktion | 4 |
 | Audit-Eintrag nur im Erfolgsfall, geschrieben von der Policy | 4 |
 | Öffentliche IP wird abgelehnt (nicht nur private akzeptiert) | 4 |
