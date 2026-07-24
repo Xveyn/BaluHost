@@ -236,7 +236,14 @@ class WebSocketManager:
             payload: Message payload dict.
             admins_only: Skip non-admin connections. Needed for payloads that a
                 REST route would gate behind is_privileged() - without it the
-                gate would be decorative.
+                gate would be decorative. "Admin" here means conn.is_admin,
+                set at connect time from `role == "admin"` in
+                api/routes/notifications.py - NOT is_privileged(). A
+                PRIVILEGED_ROLES config extended beyond "admin" (e.g. adding
+                "operator") widens REST visibility for admin_only panels
+                without widening this broadcast, so the two enforcement
+                points drift apart. That's fail-closed (no leak), just a trap
+                for the next reader.
 
         Returns:
             Number of connections the message was sent to.
