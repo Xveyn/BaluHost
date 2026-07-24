@@ -86,3 +86,47 @@ class TestPanelData:
         data = await SteamGamingPlugin().get_dashboard_data(db_session)
 
         assert data["items"][0]["value"] == "24.07. · 12m"
+
+    async def test_running_session_duration_counts_up_to_now(self, db_session, monkeypatch):
+        """The only now-dependent formatting in the panel - without a fixed
+        clock the assertion could only check that the string ends in 'm'."""
+        import app.plugins.installed.steam_gaming as plugin_module
+
+        db_session.add(SteamSession(app_id="111", game_name="Metro", started_at=T0, last_seen_at=T0))
+        db_session.commit()
+        monkeypatch.setattr(plugin_module, "_utc_now", lambda: T0 + timedelta(hours=2, minutes=5))
+
+        data = await SteamGamingPlugin().get_dashboard_data(db_session)
+
+        assert data["items"][0]["value"] == "2h 05m"
+
+    async def test_a_running_session_sorts_above_the_finished_ones(self, db_session):
+        finished = T0 - timedelta(hours=5)
+        db_session.add_all([
+            SteamSession(
+                app_id="222", game_name="Cyberpunk", started_at=finished,
+                last_seen_at=finished + timedelta(hours=1),
+                ended_at=finished + timedelta(hours=1),
+            ),
+            SteamSession(app_id="111", game_name="Metro", started_at=T0, last_seen_at=T0),
+        ])
+        db_session.commit()
+
+        data = await SteamGamingPlugin().get_dashboard_data(db_session)
+
+        assert [(i["label"], i["tone"]) for i in data["items"]] == [
+            ("Metro", "ok"),
+            ("Cyberpunk", "neutral"),
+        ]
+
+
+class TestDurationFormat:
+    def test_the_boundaries_that_the_panel_relies_on(self):
+        from app.plugins.installed.steam_gaming import _format_duration
+
+        assert _format_duration(0) == "0m"
+        assert _format_duration(59) == "0m"
+        assert _format_duration(720) == "12m"
+        assert _format_duration(3600) == "1h 00m"
+        assert _format_duration(3659) == "1h 00m"
+        assert _format_duration(3660) == "1h 01m"

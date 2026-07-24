@@ -223,6 +223,15 @@ class TestConstants:
         behaviour that the rest of this file only pins relative to itself."""
         assert (ledger.STALE_AFTER_SECONDS, ledger.ADOPT_WINDOW_SECONDS) == (60.0, 600.0)
 
+    def test_the_event_ids_are_the_wire_format_they_must_stay(self):
+        """These strings are persisted as plugin:steam_gaming:<id> in
+        notifications and routing preferences - renaming the constant is free,
+        renaming the value orphans existing rows."""
+        assert (ledger.EVENT_STARTED, ledger.EVENT_ENDED) == (
+            "session_started",
+            "session_ended",
+        )
+
 
 class TestFailureContract:
     """record() must never raise at its caller - the poller has to survive."""

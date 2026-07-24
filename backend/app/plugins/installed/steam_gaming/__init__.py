@@ -52,6 +52,11 @@ def _monotonic() -> float:
     return time.monotonic()
 
 
+def _utc_now() -> datetime:
+    """Indirection so tests can control the clock, like the poller's."""
+    return datetime.now(timezone.utc)
+
+
 def _current_game() -> Optional[tuple[str, Optional[str]]]:
     """``(app_id, name)`` of the running game, or None. Cached for a few seconds."""
     now = _monotonic()
@@ -209,7 +214,7 @@ class SteamGamingPlugin(PluginBase):
         if not rows:
             return None
 
-        now = datetime.now(timezone.utc)
+        now = _utc_now()
         items = [
             StatusItem(
                 label=row.game_name or f"AppID {row.app_id}",
