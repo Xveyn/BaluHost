@@ -56,6 +56,13 @@ verify_mobile_device_token — Validates JWT + X-Device-ID header + device expir
 - Roles: `admin`, `user`
 - `is_privileged(user)` checks against `settings.privileged_roles` (configurable)
 - Admin-only endpoints use `Depends(deps.get_current_admin)`
+- `can_unlock_session` (power permission) entsperrt die grafische Desktop-Session
+  beim Einschalten der Displays. Doppelt gegated: Recht **und**
+  `is_private_or_local_ip(request.client.host)` — die Web-App ist von außen
+  erreichbar, und ein gestohlenes Web-Konto darf keinen physischen Desktop
+  öffnen. Durchgesetzt ausschließlich in
+  `services/power/session_lock.unlock_if_permitted()`, die auch den
+  Audit-Eintrag schreibt.
 
 ### Password Policy (`schemas/auth.py:20-59`)
 - Length: 8-128 characters
