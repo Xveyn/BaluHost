@@ -7,6 +7,7 @@ user, so this needs no sudoers rule and no new root path.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import subprocess
@@ -14,6 +15,9 @@ import time
 from typing import Callable, List, Optional, Protocol, Tuple
 
 from app.core.config import settings
+from app.core.network_utils import is_private_or_local_ip
+from app.services.audit.logger_db import get_audit_logger_db
+from app.services.power_permissions import check_permission
 
 logger = logging.getLogger(__name__)
 
@@ -159,3 +163,57 @@ def get_session_lock_backend() -> SessionLockBackend:
             DevSessionLockBackend() if settings.is_dev_mode else LinuxSessionLockBackend()
         )
     return _backend
+
+
+def _may_unlock(user, db) -> bool:
+    """Admins pass by role, like every other power permission."""
+    if getattr(user, "role", None) == "admin":
+        return True
+    return check_permission(db, user.id, "unlock_session")
+
+
+async def unlock_if_permitted(*, user, client_host: Optional[str], db) -> Tuple[bool, str]:
+    """Unlock the desktop session if BOTH gates allow it.
+
+    This is the only place the gates are evaluated and the only place the audit
+    entry is written - so no caller can unlock without leaving a trace, not
+    even a plugin.
+
+    Args:
+        user: The authenticated caller (needs .id, .username, .role).
+        client_host: The request's client IP, or None.
+        db: SQLAlchemy session.
+
+    Returns:
+        (unlocked, detail). ``unlocked`` describes the state afterwards; on a
+        refused gate loginctl is never called and the real lock state is
+        unknown, so it is False with the reason in ``detail``.
+    """
+    if not _may_unlock(user, db):
+        return False, "permission required: power:unlock_session"
+    if not is_private_or_local_ip(client_host):
+        return False, "not permitted from this network"
+
+    ok, detail = await asyncio.to_thread(get_session_lock_backend().unlock)
+    if not ok:
+        logger.warning("session unlock failed for %s: %s", user.username, detail)
+        return False, detail
+
+    audit_logger = get_audit_logger_db()
+    audit_logger.log_event(
+        event_type="POWER",
+        action="desktop_unlock_session",
+        user=user.username,
+        resource="desktop",
+        success=True,
+        details={"message": detail},
+    )
+    if getattr(user, "role", None) != "admin":
+        audit_logger.log_security_event(
+            action="delegated_power_action",
+            user=user.username,
+            resource="unlock_session",
+            details={"action": "desktop_unlock_session"},
+            success=True,
+        )
+    return True, detail
