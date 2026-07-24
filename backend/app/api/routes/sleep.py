@@ -357,7 +357,7 @@ async def get_my_power_permissions(
     if current_user.role == "admin":
         return MyPowerPermissionsResponse(
             can_soft_sleep=True, can_wake=True, can_suspend=True, can_wol=True,
-            can_toggle_desktop=True,
+            can_toggle_desktop=True, can_unlock_session=True,
         )
     from app.services.power_permissions import get_permissions
     perms = get_permissions(db, current_user.id)
@@ -367,6 +367,7 @@ async def get_my_power_permissions(
         can_suspend=perms.can_suspend,
         can_wol=perms.can_wol,
         can_toggle_desktop=perms.can_toggle_desktop,
+        can_unlock_session=perms.can_unlock_session,
     )
 
 
