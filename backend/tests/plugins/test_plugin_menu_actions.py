@@ -227,7 +227,10 @@ class TestMenuActionRoute:
         assert audit.return_value.log_event.call_args.kwargs["success"] is False
 
     async def test_hanging_action_is_cut_off_by_the_timeout(self):
-        async def _hang(action_id, db):
+        # Accepts the caller context the route now passes (user, client_host);
+        # without it the TypeError would arrive before wait_for starts timing
+        # and this test would assert a signature error instead of the timeout.
+        async def _hang(action_id, db, **_kwargs):
             await asyncio.sleep(60)
 
         plugin = _declaring_plugin()

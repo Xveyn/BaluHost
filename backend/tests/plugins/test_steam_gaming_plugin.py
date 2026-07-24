@@ -275,3 +275,67 @@ class TestBackgroundTask:
         # run_on_startup True is fine: the first tick books against the DB
         # state and the gap rules keep it silent after a restart (TP4).
         assert callable(spec.func)
+
+
+class TestGamingModeUnlocksTheSession:
+    """Big Picture on a lock screen helps nobody - the gaming mode runs the
+    same gates as the enable route, between displays-on and Big Picture."""
+
+    async def test_unlock_runs_between_displays_and_big_picture(self):
+        order: list[str] = []
+
+        desktop_patch, service = _patch_desktop(True, "ok")
+        service.enable = AsyncMock(side_effect=lambda: order.append("displays") or (True, "ok"))
+
+        async def _unlock(**_kwargs):
+            order.append("unlock")
+            return True, "session 2 unlocked"
+
+        with desktop_patch, patch(
+            "app.plugins.installed.steam_gaming.unlock_if_permitted", _unlock
+        ), patch(
+            "app.plugins.installed.steam_gaming.open_big_picture",
+            side_effect=lambda: order.append("bigpicture") or (True, "requested"),
+        ):
+            result = await SteamGamingPlugin().run_menu_action(
+                _ACTION, db=None, user=MagicMock(role="admin"), client_host="192.168.178.29"
+            )
+
+        assert result.ok is True
+        assert order == ["displays", "unlock", "bigpicture"]
+
+    async def test_a_failed_unlock_does_not_stop_big_picture(self):
+        desktop_patch, _service = _patch_desktop(True, "ok")
+
+        async def _unlock(**_kwargs):
+            return False, "not permitted from this network"
+
+        with desktop_patch, patch(
+            "app.plugins.installed.steam_gaming.unlock_if_permitted", _unlock
+        ), patch(
+            "app.plugins.installed.steam_gaming.open_big_picture",
+            return_value=(True, "requested"),
+        ) as launcher:
+            result = await SteamGamingPlugin().run_menu_action(
+                _ACTION, db=None, user=MagicMock(role="admin"), client_host="203.0.113.7"
+            )
+
+        launcher.assert_called_once()
+        assert result.ok is True
+
+    async def test_without_a_user_no_unlock_is_attempted(self):
+        """Older callers pass neither user nor client_host - the action must
+        still work, just without unlocking."""
+        desktop_patch, _service = _patch_desktop(True, "ok")
+        gate = AsyncMock(return_value=(True, "unlocked"))
+
+        with desktop_patch, patch(
+            "app.plugins.installed.steam_gaming.unlock_if_permitted", gate
+        ), patch(
+            "app.plugins.installed.steam_gaming.open_big_picture",
+            return_value=(True, "requested"),
+        ):
+            result = await SteamGamingPlugin().run_menu_action(_ACTION, db=None)
+
+        gate.assert_not_awaited()
+        assert result.ok is True

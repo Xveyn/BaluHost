@@ -34,6 +34,7 @@ from app.plugins.installed.steam_gaming.detection import current_app_id, resolve
 from app.plugins.installed.steam_gaming.launcher import open_big_picture
 from app.plugins.installed.steam_gaming.poller import SteamSessionPoller
 from app.services.power.desktop import get_desktop_service
+from app.services.power.session_lock import unlock_if_permitted
 
 logger = logging.getLogger(__name__)
 
@@ -153,7 +154,14 @@ class SteamGamingPlugin(PluginBase):
             )],
         )
 
-    async def run_menu_action(self, action_id: str, db: Session) -> Optional[MenuActionResult]:
+    async def run_menu_action(
+        self,
+        action_id: str,
+        db: Session,
+        *,
+        user=None,
+        client_host: Optional[str] = None,
+    ) -> Optional[MenuActionResult]:
         if action_id != _MENU_ACTION_ID:
             return None
 
@@ -170,6 +178,16 @@ class SteamGamingPlugin(PluginBase):
                 message_key="menu_displays_failed",
                 message_text=f"Displays could not be turned on: {detail}",
             )
+
+        # Then the lock screen - Big Picture behind it would be just as useless
+        # as behind a dark monitor. Same gates as the enable route; a refusal
+        # is not a failure of the action.
+        if user is not None:
+            unlocked, unlock_detail = await unlock_if_permitted(
+                user=user, client_host=client_host, db=db
+            )
+            if not unlocked:
+                logger.info("gaming mode: session not unlocked: %s", unlock_detail)
 
         launched, detail = await asyncio.to_thread(open_big_picture)
         if not launched:
