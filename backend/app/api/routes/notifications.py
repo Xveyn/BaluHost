@@ -20,7 +20,6 @@ from app.schemas.notification import (
     MarkReadResponse,
     NotificationPreferencesUpdate,
     NotificationPreferencesResponse,
-    NotificationCategoryEnum,
 )
 from app.schemas.notification_routing import MyNotificationRoutingResponse
 from app.services.notifications import get_notification_service
@@ -35,7 +34,10 @@ router = APIRouter(prefix="/notifications", tags=["notifications"])
 async def get_notifications(
     request: Request, response: Response,
     unread_only: bool = Query(False, description="Only return unread notifications"),
-    category: Optional[NotificationCategoryEnum] = Query(None, description="Filter by category"),
+    # Plain str, not NotificationCategoryEnum: plugin-contributed notifications
+    # carry the plugin name as their category (an open set), so a closed Literal
+    # would 422 any attempt to filter for them.
+    category: Optional[str] = Query(None, description="Filter by category (core category or plugin name)"),
     notification_type: Optional[str] = Query(None, description="Filter by type (info, warning, critical)"),
     created_after: Optional[datetime] = Query(None, description="Only return notifications after this time"),
     created_before: Optional[datetime] = Query(None, description="Only return notifications before this time"),
@@ -422,7 +424,7 @@ async def get_my_notification_routing(
 @user_limiter.limit(get_limit("admin_operations"))
 async def get_trash(
     request: Request, response: Response,
-    category: Optional[NotificationCategoryEnum] = Query(None),
+    category: Optional[str] = Query(None),  # open set, see get_notifications
     notification_type: Optional[str] = Query(None),
     created_after: Optional[datetime] = Query(None),
     created_before: Optional[datetime] = Query(None),

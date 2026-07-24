@@ -57,6 +57,16 @@ class NotificationResponse(NotificationBase):
     """Schema for notification API responses."""
 
     id: int
+    # Deliberately widened from NotificationCategoryEnum. Since plugins can
+    # contribute notification events, the core derives their category from the
+    # PLUGIN NAME (never plugin-chosen, so a plugin cannot widen its own
+    # delivery reach) - which makes the category an open set at runtime.
+    # A response must report what is stored: with the closed Literal, a single
+    # plugin notification raised ValidationError inside from_db() and turned
+    # every read endpoint into a 500, hiding all other notifications with it.
+    category: str = Field(
+        description="Core category, or the name of the contributing plugin"
+    )
     created_at: datetime
     user_id: Optional[int] = None
     is_read: bool = False
@@ -140,9 +150,12 @@ class MarkReadRequest(BaseModel):
         default=None,
         description="Specific notification IDs (None = mark all)"
     )
-    category: Optional[NotificationCategoryEnum] = Field(
+    category: Optional[str] = Field(
         default=None,
-        description="Filter by category when marking all"
+        # Open set: plugin categories are the plugin's name (see
+        # NotificationResponse.category), so a closed Literal would make plugin
+        # notifications unaddressable.
+        description="Filter by category when marking all (core category or plugin name)"
     )
 
 
