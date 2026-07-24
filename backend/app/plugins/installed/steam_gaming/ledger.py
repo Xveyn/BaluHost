@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Callable, List, Optional
 
 from sqlalchemy.exc import SQLAlchemyError
@@ -31,6 +31,8 @@ EVENT_ENDED = "session_ended"
 STALE_AFTER_SECONDS = 60.0
 # The same game across a gap this short is one session (a deploy mid-game).
 ADOPT_WINDOW_SECONDS = 600.0
+# Hard-wired on purpose; configurability is tracked in #464.
+RETENTION_DAYS = 365
 
 
 @dataclass(frozen=True)
@@ -186,3 +188,39 @@ def duration_seconds(session: SteamSession, now: datetime) -> float:
     """
     end = as_utc(session.ended_at) if session.ended_at is not None else now
     return max(0.0, (end - as_utc(session.started_at)).total_seconds())
+
+
+def cleanup_old_sessions(db: Session, *, now: datetime) -> int:
+    """Delete ended sessions older than RETENTION_DAYS.
+
+    Deliberately not wired into monitoring/retention_manager.py: that one hangs
+    off the MetricType enum and monitoring_config rows, so putting a plugin
+    table there would couple the core to a plugin.
+
+    An open session (ended_at IS NULL) is never touched, however old - it is
+    the current one.
+
+    Returns:
+        Number of rows deleted; 0 if the delete failed.
+    """
+    cutoff = now - timedelta(days=RETENTION_DAYS)
+    try:
+        deleted = (
+            db.query(SteamSession)
+            .filter(SteamSession.ended_at.isnot(None), SteamSession.ended_at < cutoff)
+            .delete(synchronize_session=False)
+        )
+        db.commit()
+    except SQLAlchemyError:
+        _safe_rollback(db)
+        logger.warning("steam ledger: retention cleanup failed", exc_info=True)
+        return 0
+    except Exception:
+        # Not a database problem: a programming error. The poller must survive
+        # it, but this must not look like a briefly unreachable database in the
+        # log.
+        _safe_rollback(db)
+        logger.exception("steam ledger: unexpected retention cleanup failure (now=%s)", now)
+        return 0
+
+    return deleted

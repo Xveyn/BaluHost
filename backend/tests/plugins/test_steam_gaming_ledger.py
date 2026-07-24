@@ -310,3 +310,43 @@ class TestDuration:
         session = SteamSession(app_id="111", started_at=T0, last_seen_at=T0)
 
         assert ledger.duration_seconds(session, T0 - timedelta(minutes=5)) == 0.0
+
+
+class TestRetention:
+    def test_deletes_sessions_older_than_the_retention_window(self, db_session):
+        old_start = T0 - timedelta(days=400)
+        db_session.add(SteamSession(
+            app_id="111",
+            started_at=old_start,
+            last_seen_at=old_start + timedelta(hours=1),
+            ended_at=old_start + timedelta(hours=1),
+        ))
+        db_session.commit()
+
+        deleted = ledger.cleanup_old_sessions(db_session, now=T0)
+
+        assert deleted == 1
+        assert db_session.query(SteamSession).count() == 0
+
+    def test_keeps_sessions_inside_the_window(self, db_session):
+        recent = T0 - timedelta(days=364)
+        db_session.add(SteamSession(
+            app_id="111", started_at=recent, last_seen_at=recent, ended_at=recent,
+        ))
+        db_session.commit()
+
+        deleted = ledger.cleanup_old_sessions(db_session, now=T0)
+
+        assert deleted == 0
+        assert db_session.query(SteamSession).count() == 1
+
+    def test_never_deletes_an_open_session(self, db_session):
+        """An open session has no ended_at - however old, it is the current one."""
+        ancient = T0 - timedelta(days=500)
+        db_session.add(SteamSession(app_id="111", started_at=ancient, last_seen_at=ancient))
+        db_session.commit()
+
+        deleted = ledger.cleanup_old_sessions(db_session, now=T0)
+
+        assert deleted == 0
+        assert db_session.query(SteamSession).count() == 1
