@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from unittest.mock import MagicMock
 
 from app.models.steam_session import SteamSession
 
@@ -177,3 +178,72 @@ class TestGapRules:
         _record(db_session, "111", T0 + timedelta(seconds=ledger.ADOPT_WINDOW_SECONDS))
 
         assert db_session.query(SteamSession).count() == 1
+
+    def test_after_a_split_the_newest_open_session_is_the_one_that_continues(self, db_session):
+        """Third tick after a split: the query must pick the NEW session, not
+        the closed one and not the older row."""
+        _record(db_session, "111", T0)
+        split = T0 + timedelta(hours=14)
+        _record(db_session, "111", split)          # splits: old closed, new opened
+
+        _record(db_session, "111", split + timedelta(seconds=30))
+
+        rows = db_session.query(SteamSession).order_by(SteamSession.started_at).all()
+        assert len(rows) == 2
+        assert ledger.as_utc(rows[0].ended_at) == T0
+        assert rows[1].ended_at is None
+        assert ledger.as_utc(rows[1].last_seen_at) == split + timedelta(seconds=30)
+
+
+class TestStaleBoundary:
+    def test_a_gap_of_exactly_the_stale_window_still_counts_as_live(self, db_session):
+        _record(db_session, "111", T0)
+        end = T0 + timedelta(seconds=ledger.STALE_AFTER_SECONDS)
+
+        events = _record(db_session, None, end)
+
+        row = db_session.query(SteamSession).one()
+        assert ledger.as_utc(row.ended_at) == end
+        assert [e.event_id for e in events] == [ledger.EVENT_ENDED]
+
+    def test_one_second_past_the_stale_window_books_silently(self, db_session):
+        """The two-minute deploy during which the game ended - the common case."""
+        _record(db_session, "111", T0)
+
+        events = _record(db_session, None, T0 + timedelta(seconds=ledger.STALE_AFTER_SECONDS + 1))
+
+        row = db_session.query(SteamSession).one()
+        assert ledger.as_utc(row.ended_at) == T0
+        assert events == []
+
+
+class TestConstants:
+    def test_the_windows_are_the_values_the_design_fixed(self):
+        """Two poll intervals, and ten minutes - changing either changes
+        behaviour that the rest of this file only pins relative to itself."""
+        assert (ledger.STALE_AFTER_SECONDS, ledger.ADOPT_WINDOW_SECONDS) == (60.0, 600.0)
+
+
+class TestFailureContract:
+    """record() must never raise at its caller - the poller has to survive."""
+
+    def test_database_failure_rolls_back_and_returns_no_events(self, db_session):
+        from sqlalchemy.exc import OperationalError
+
+        broken = MagicMock(wraps=db_session)
+        broken.commit.side_effect = OperationalError("stmt", {}, Exception("gone"))
+
+        events = ledger.record(broken, "111", now=T0, resolve_name=_names)
+
+        assert events == []
+        broken.rollback.assert_called_once()
+
+    def test_unexpected_failure_also_rolls_back_and_returns_no_events(self, db_session):
+        """A throwing resolve_name() must not take the poller down either."""
+        broken = MagicMock(wraps=db_session)
+        broken.commit.side_effect = RuntimeError("boom")
+
+        events = ledger.record(broken, "111", now=T0, resolve_name=_names)
+
+        assert events == []
+        broken.rollback.assert_called_once()

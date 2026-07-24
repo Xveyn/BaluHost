@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Callable, List, Optional
 
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.models.steam_session import SteamSession
@@ -83,6 +84,14 @@ def _gap_seconds(session: SteamSession, now: datetime) -> float:
     return (now - as_utc(session.last_seen_at)).total_seconds()
 
 
+def _safe_rollback(db: Session) -> None:
+    """A rollback on a dead connection must not defeat the no-raise contract."""
+    try:
+        db.rollback()
+    except Exception:
+        logger.warning("steam ledger: rollback failed", exc_info=True)
+
+
 def record(
     db: Session,
     app_id: Optional[str],
@@ -139,9 +148,19 @@ def record(
                         )
 
         db.commit()
-    except Exception:  # broad on purpose: a booking failure must not kill the poller
-        db.rollback()
+    except SQLAlchemyError:
+        _safe_rollback(db)
         logger.warning("steam ledger: booking failed", exc_info=True)
+        return []
+    except Exception:
+        # Not a database problem: a programming error, or an injected
+        # resolve_name() that threw. The poller must survive it, but this must
+        # not look like a briefly unreachable database in the log - otherwise a
+        # permanently silent ledger is indistinguishable from a hiccup.
+        _safe_rollback(db)
+        logger.exception(
+            "steam ledger: unexpected failure (app_id=%s, now=%s)", app_id, now
+        )
         return []
 
     return events
