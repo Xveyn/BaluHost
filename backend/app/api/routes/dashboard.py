@@ -11,6 +11,7 @@ from app.core.rate_limiter import user_limiter, get_limit
 from app.models.user import User
 from app.plugins.manager import PluginManager
 from app.schemas.plugin import DashboardPanelResponse
+from app.services.permissions import is_privileged
 from app.services.plugin_service import get_dashboard_panel_plugin
 
 logger = logging.getLogger(__name__)
@@ -44,6 +45,12 @@ async def get_plugin_panel(
 
     spec = plugin.get_dashboard_panel()
     if spec is None:
+        return None
+
+    if spec.admin_only and not is_privileged(current_user):
+        # The game name in the Steam panel is information about the box owner -
+        # same privacy call as the status pill. Enforced here so no plugin has
+        # to implement its own gate.
         return None
 
     # Get current data

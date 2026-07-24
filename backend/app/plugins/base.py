@@ -125,7 +125,14 @@ PanelType = Literal["gauge", "stat", "status", "chart"]
 
 
 class DashboardPanelSpec(BaseModel):
-    """Specification for a plugin's Dashboard panel."""
+    """Specification for a plugin's Dashboard panel.
+
+    ``admin_only`` is enforced by the core - in the REST route and in the
+    WebSocket bridge - not by the plugin, so no plugin can get its own gate
+    wrong. Same pattern as PluginNavItem.admin_only. (PluginMenuItem
+    deliberately has no such field: an action executes something, a panel
+    displays something.)
+    """
 
     panel_type: PanelType = Field(
         ...,
@@ -136,6 +143,10 @@ class DashboardPanelSpec(BaseModel):
     accent: str = Field(
         default="from-sky-500 to-indigo-500",
         description="Tailwind gradient classes for icon background",
+    )
+    admin_only: bool = Field(
+        default=False,
+        description="Only serve this panel to privileged users",
     )
 
 
