@@ -369,14 +369,27 @@ prüfen. CI hat dafür keinen Smoke-Test (#450) — das ist Handarbeit.
 NEU   backend/app/models/steam_session.py                ~30 Z.
 NEU   backend/alembic/versions/<rev>_steam_sessions.py   ~40 Z.
 NEU   .../installed/steam_gaming/ledger.py              ~120 Z.
-NEU   backend/tests/test_steam_gaming_ledger.py         ~250 Z.
+NEU   .../installed/steam_gaming/detection.py            ~30 Z.
+NEU   backend/tests/plugins/test_steam_gaming_ledger.py ~250 Z.
+NEU   backend/tests/plugins/test_steam_gaming_panel.py  ~100 Z.
 ÄND   .../installed/steam_gaming/poller.py              Zustand entfällt
 ÄND   .../installed/steam_gaming/__init__.py            Panel + Dev-Mock
 ÄND   backend/app/plugins/base.py                       DashboardPanelSpec.admin_only
 ÄND   backend/app/api/routes/dashboard.py               admin_only-Gate
+ÄND   backend/app/services/websocket_manager.py         broadcast_typed(admins_only=…)
+ÄND   backend/app/services/dashboard_panel_bridge.py    admin-only-Panels nur an Admins
 ÄND   backend/app/models/__init__.py                    Registrierung
 ÄND   backend/app/plugins/CLAUDE.md                     Panel-Doku
 ```
+
+**Nachtrag aus der Planung (2026-07-24):** `dashboard_panel_ws_bridge()` schiebt
+Panel-Daten per `broadcast_typed()` an **alle** verbundenen WebSocket-Clients.
+Ein `admin_only`-Gate allein in der REST-Route wäre damit wirkungslos, sobald
+der Bridge feuert (er triggert auf Smart-Device-SHM-Änderungen, und Tapo läuft
+auf dieser Box). Der Gate muss deshalb an **beiden** Stellen sitzen; dafür
+bekommt `WebSocketManager.broadcast_typed()` einen `admins_only`-Parameter.
+Das erweitert den Umfang gegenüber dem ursprünglichen Entwurf um zwei Dateien —
+ohne diese Ergänzung wäre `admin_only` reine Dekoration.
 
 ## Folgearbeiten
 
