@@ -1883,13 +1883,36 @@ Expected: PASS
 
 - [ ] **Step 5: Verify the migration once more against a fresh database**
 
-Die Dev-DB bleibt unangetastet: `alembic/env.py:25` setzt `sqlalchemy.url` aus `DATABASE_URL` (über `settings.database_url`), also läuft die volle Kette gegen eine Scratch-Datei. **Bash-Tool verwenden** — PowerShell kennt das `VAR=x cmd`-Präfix nicht.
+**Befund aus Task 1 (verifiziert 2026-07-24, pre-existing):** Die volle Alembic-Kette repliziert **nicht** aus einer leeren Datenbank — sie bricht an uralten Revisionen ab (`sqlite3.OperationalError: no such table: users` beim `ALTER TABLE users ADD COLUMN is_active`), weit vor `71fe791d28d6`. Dev-Installationen bootstrappen über `Base.metadata.create_all()`, Produktion ist historisch gewachsen; ein Voll-Replay lief offenbar nie. **Das ist nicht Aufgabe dieses Branches** — der Schritt prüft deshalb die neue Migration isoliert, nicht die Kette.
+
+Die Dev-DB bleibt unangetastet: `alembic/env.py:25` setzt `sqlalchemy.url` aus `DATABASE_URL`, also läuft alles gegen eine Scratch-Datei. **Bash-Tool verwenden** — PowerShell kennt das `VAR=x cmd`-Präfix nicht.
+
+Run:
+```bash
+DATABASE_URL="sqlite:///./migration_check.db" python -c "
+from sqlalchemy import create_engine
+from alembic.config import Config
+from alembic import command
+from app.models.base import Base
+import app.models  # noqa: F401  - registers every model
+
+engine = create_engine('sqlite:///./migration_check.db')
+Base.metadata.drop_all(bind=engine)
+Base.metadata.create_all(bind=engine)
+Base.metadata.tables['steam_sessions'].drop(bind=engine)   # only our table is missing
+command.stamp(Config('alembic.ini'), '71fe791d28d6')
+"
+```
+Expected: läuft ohne Traceback durch (erzeugt das Schema wie vor dieser Migration)
 
 Run: `DATABASE_URL="sqlite:///./migration_check.db" python -m alembic upgrade head`
-Expected: läuft von der ersten Revision bis zur neuen durch, ohne Fehler
+Expected: `Running upgrade 71fe791d28d6 -> <rev>, add steam_sessions table`
 
 Run: `python -c "import sqlite3; print([r[0] for r in sqlite3.connect('migration_check.db').execute(\"select name from sqlite_master where type='table' and name='steam_sessions'\")])"`
 Expected: `['steam_sessions']`
+
+Run: `DATABASE_URL="sqlite:///./migration_check.db" python -m alembic downgrade -1`
+Expected: `Running downgrade <rev> -> 71fe791d28d6`, danach ist die Tabelle weg
 
 Run: `python -c "import os; os.remove('migration_check.db')"`
 Expected: kein Output (Scratch-Datei aufgeräumt; sie darf nicht committet werden)
