@@ -659,8 +659,6 @@ class TestAdminOnlyBroadcast:
         `admins_only=` into `broadcast_typed()`, or the REST gate is
         decorative (the whole reason this extension point exists).
         """
-        import asyncio
-
         from app.services.dashboard_panel_bridge import dashboard_panel_ws_bridge
 
         mock_record = MagicMock()
