@@ -1,0 +1,23 @@
+# Dependabot — GitHub Actions only (#333).
+#
+# The third-party actions in .github/workflows/ are pinned to full commit SHAs so
+# a compromised upstream tag cannot silently reach a job that holds
+# contents: write or a deploy key. Pinning trades "moving tag" risk for "stale
+# pin" risk, so this config exists to close the second half: Dependabot opens a
+# PR when a pinned action publishes a new release and rewrites both the SHA and
+# the trailing version comment.
+#
+# Not covered: dtolnay/rust-toolchain in tauri-build.yml. It is pinned to the tip
+# of its `stable` branch rather than a release tag, and Dependabot cannot bump a
+# branch pin by semver — that one needs a manual refresh.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(ci)"
+    labels:
+      - dependencies

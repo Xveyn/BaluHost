@@ -8,6 +8,16 @@ on:
 permissions:
   contents: read
 
+# Cancel superseded PR runs so a force-push does not leave stale jobs occupying
+# the two ci-sandbox runner instances (#335). cancel-in-progress is deliberately
+# limited to pull_request: on workflow_call this workflow runs as part of a
+# deploy-production run, and cancelling that would abort the gate in front of a
+# production deploy. The event name is part of the group key so a PR run and a
+# deploy's called run can never share a group.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   backend-tests:
     # Runner selection (#207): upstream ALWAYS uses the hardened ci-sandbox

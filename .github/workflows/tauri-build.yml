@@ -6,6 +6,11 @@ on:
     tags: ['v*']
   workflow_dispatch:
 
+# Least privilege by default; the build job re-grants contents: write for
+# tag-triggered release uploads.
+permissions:
+  contents: read
+
 jobs:
   build:
     # vars.ENABLE_TAURI_BUILD: fork toggle (#207), default on; unset upstream.
@@ -26,10 +31,15 @@ jobs:
           cache-dependency-path: client/package-lock.json
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        # SHA-pinned third-party action (#333): this job holds contents: write.
+        # Pinned to the tip of the `stable` branch — that branch is the action
+        # itself (a self-contained composite defaulting toolchain: stable), not a
+        # moving alias for a release, so Dependabot cannot bump it by semver.
+        # Refresh manually when the Rust setup needs it.
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable branch @ 2026-07-16
 
       - name: Cache Cargo
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
         with:
           workspaces: client/src-tauri
 
@@ -66,7 +76,7 @@ jobs:
 
       - name: Upload to release (tag)
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           files: |
             client/src-tauri/target/release/bundle/deb/*.deb

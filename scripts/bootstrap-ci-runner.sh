@@ -57,11 +57,11 @@ done
 # RUNNER_DIR is per-instance via --dir.
 RUNNER_DIR="${RUNNER_HOME}/${RUNNER_DIR_NAME}"
 
-# RUNNER_WORK is NOT what config.sh actually uses for the runner's work directory
-# (that's `--work "_work"` in Step 5, relative to $RUNNER_DIR — already per-instance
-# for free once RUNNER_DIR is). This variable only seeds the legacy `mkdir -p` below;
-# kept at its single pre-existing value for all instances.
-RUNNER_WORK="${RUNNER_HOME}/_work"
+# The runner's work directory is NOT configured here: config.sh gets
+# `--work "_work"` in Step 5, a path relative to $RUNNER_DIR, so the effective
+# work dir is ${RUNNER_DIR}/_work and is per-instance for free. The runner
+# creates it itself. A former RUNNER_WORK variable pre-created an unrelated
+# ${RUNNER_HOME}/_work that nothing ever used — removed in #421.
 
 if [[ "$EUID" -ne 0 ]]; then
   echo "ERROR: must be run as root (sudo)." >&2
@@ -101,7 +101,6 @@ for grp in docker sudo wheel baluhost; do
   fi
 done
 
-mkdir -p "$RUNNER_WORK"
 chown -R "$RUNNER_USER:$RUNNER_USER" "$RUNNER_HOME"
 chmod 0750 "$RUNNER_HOME"
 
