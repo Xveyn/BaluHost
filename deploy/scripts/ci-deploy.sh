@@ -57,9 +57,15 @@ load_env_production() {
     source <(grep -v '^\s*#' "$env_file" | grep -v '^\s*$')
     set +a
 
-    # Extract PGPASSWORD from DATABASE_URL for pg_dump
+    # Extract PGPASSWORD from DATABASE_URL for pg_dump.
+    # Parsed with python3 instead of sed (#339): the password inside a
+    # DATABASE_URL is percent-encoded, and SQLAlchemy decodes it on connect. A
+    # sed capture hands pg_dump the still-encoded string, so a password
+    # containing '@' (arriving as '%40') would fail authentication and take the
+    # pre-deploy backup with it. The URL is passed as argv, not interpolated
+    # into the Python source.
     export PGPASSWORD
-    PGPASSWORD=$(echo "$DATABASE_URL" | sed -n 's|.*://[^:]*:\([^@]*\)@.*|\1|p')
+    PGPASSWORD=$(python3 -c 'import sys, urllib.parse as u; print(u.unquote(u.urlsplit(sys.argv[1]).password or ""))' "$DATABASE_URL")
     if [[ -z "${PGPASSWORD:-}" ]]; then
         echo "ERROR: Could not extract database password from DATABASE_URL" >&2
         exit 1
