@@ -6,6 +6,11 @@ on:
     tags: ['v*']
   workflow_dispatch:
 
+# Least privilege by default; the build job re-grants contents: write for
+# tag-triggered release uploads.
+permissions:
+  contents: read
+
 jobs:
   build:
     # vars.ENABLE_TAURI_BUILD: fork toggle (#207), default on; unset upstream.
@@ -27,7 +32,7 @@ jobs:
 
       - name: Setup Rust
         # SHA-pinned third-party action (#333): this job holds contents: write.
-        # Pinned to the tip of the `stable` branch â€” that branch is the action
+        # Pinned to the tip of the `stable` branch — that branch is the action
         # itself (a self-contained composite defaulting toolchain: stable), not a
         # moving alias for a release, so Dependabot cannot bump it by semver.
         # Refresh manually when the Rust setup needs it.
