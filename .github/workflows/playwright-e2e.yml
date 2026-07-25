@@ -54,7 +54,7 @@ jobs:
     environment: ${{ (github.event_name == 'pull_request' && (github.repository == 'Xveyn/BaluHost' || contains(vars.E2E_RUNNER, 'self-hosted'))) && 'ci-tests' || '' }}
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: Assert runner identity (defense-in-depth tripwire)
         # Upstream-only: identical to the ci-check.yml tripwires.
@@ -136,7 +136,7 @@ jobs:
     needs: mock-e2e
     environment: live-e2e
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: Verify RUN_LIVE_E2E secret is enabled
         # Secret goes through env, not shell interpolation (#335): a value

@@ -18,7 +18,7 @@ jobs:
     if: github.repository == 'Xveyn/BaluHost' || vars.ENABLE_DEPLOY_PI == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v5
         with:
