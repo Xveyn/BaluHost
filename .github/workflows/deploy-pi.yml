@@ -44,7 +44,9 @@ jobs:
           fi
 
       - name: Push to BaluPi
-        uses: peaceiris/actions-gh-pages@v4
+        # SHA-pinned third-party action (#333): this step receives
+        # BALUPI_DEPLOY_KEY, a write key to a second repository.
+        uses: peaceiris/actions-gh-pages@84c30a85c19949d7eee79c4ff27748b70285e453 # v4.1.0
         with:
           deploy_key: ${{ secrets.BALUPI_DEPLOY_KEY }}
           external_repository: Xveyn/BaluPi
