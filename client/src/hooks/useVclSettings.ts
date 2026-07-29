@@ -122,18 +122,18 @@ export function useVclSettings(): UseVclSettingsResult {
       const preview = await getReconciliationPreview({});
       setReconPreview(preview);
       if (preview.total_mismatches === 0) {
-        setSuccessMessage('No ownership mismatches found');
+        setSuccessMessage(t('vcl.reconciliation.noMismatches'));
         setTimeout(() => setSuccessMessage(null), 3000);
       }
     } catch (err: unknown) {
-      setError(getApiErrorMessage(err, 'Failed to scan for mismatches'));
+      setError(getApiErrorMessage(err, t('vcl.errors.scanFailed')));
     } finally {
       setReconLoading(false);
     }
   };
 
   const handleApplyReconciliation = async () => {
-    if (!confirm('Apply ownership reconciliation? This will update version ownership to match file ownership.')) return;
+    if (!confirm(t('vcl.reconciliation.confirmApply'))) return;
     try {
       setReconLoading(true);
       setError(null);
@@ -143,7 +143,7 @@ export function useVclSettings(): UseVclSettingsResult {
       setReconPreview(null);
       loadData();
     } catch (err: unknown) {
-      setError(getApiErrorMessage(err, 'Failed to apply reconciliation'));
+      setError(getApiErrorMessage(err, t('vcl.errors.applyFailed')));
     } finally {
       setReconLoading(false);
     }

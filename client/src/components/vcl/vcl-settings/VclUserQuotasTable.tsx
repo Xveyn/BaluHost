@@ -29,7 +29,7 @@ export function VclUserQuotasTable({
               <th className="pb-3 text-slate-400 font-medium">{t('vcl.userQuotas.used')}</th>
               <th className="pb-3 text-slate-400 font-medium">{t('vcl.userQuotas.usage')}</th>
               <th className="pb-3 text-slate-400 font-medium">{t('vcl.userQuotas.versions')}</th>
-              <th className="pb-3 text-slate-400 font-medium">Mode</th>
+              <th className="pb-3 text-slate-400 font-medium">{t('vcl.userQuotas.mode')}</th>
               <th className="pb-3 text-slate-400 font-medium">{t('vcl.userQuotas.status')}</th>
               <th className="pb-3 text-slate-400 font-medium">{t('vcl.userQuotas.actions')}</th>
             </tr>
@@ -65,7 +65,7 @@ export function VclUserQuotasTable({
                         ? 'bg-violet-500/20 text-violet-300'
                         : 'bg-sky-500/20 text-sky-300'
                     }`}>
-                      {user.vcl_mode === 'manual' ? 'Manual' : 'Auto'}
+                      {user.vcl_mode === 'manual' ? t('vcl.userQuotas.modeManual') : t('vcl.userQuotas.modeAuto')}
                     </span>
                   </td>
                   <td className="py-3">

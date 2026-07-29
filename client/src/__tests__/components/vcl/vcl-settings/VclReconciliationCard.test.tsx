@@ -1,6 +1,13 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import type { ReconciliationPreview } from '../../../../types/vcl';
+// Keeps the interpolated value visible so the count assertions still mean something.
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({
+    t: (k: string, o?: { versions?: number; total?: number }) =>
+      (o?.versions ?? o?.total) != null ? `${k}:${o?.versions ?? o?.total}` : k,
+  }),
+}));
 import { VclReconciliationCard } from '../../../../components/vcl/vcl-settings/VclReconciliationCard';
 
 const preview = (over: Partial<ReconciliationPreview> = {}): ReconciliationPreview => ({
@@ -9,15 +16,15 @@ const preview = (over: Partial<ReconciliationPreview> = {}): ReconciliationPrevi
 const base = { reconLoading: false, forceOverQuota: false, onScan: () => {}, onForceChange: () => {}, onApply: () => {} };
 
 describe('VclReconciliationCard', () => {
-  it('fires onScan when Scan for Mismatches is clicked', () => {
+  it('fires onScan when the scan button is clicked', () => {
     const onScan = vi.fn();
     render(<VclReconciliationCard {...base} reconPreview={null} onScan={onScan} />);
-    fireEvent.click(screen.getByText('Scan for Mismatches'));
+    fireEvent.click(screen.getByText('vcl.reconciliation.scan'));
     expect(onScan).toHaveBeenCalledTimes(1);
   });
   it('hides Apply + force checkbox when there are no mismatches', () => {
     render(<VclReconciliationCard {...base} reconPreview={preview({ total_mismatches: 0 })} />);
-    expect(screen.queryByText(/^Apply \(/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^vcl\.reconciliation\.apply/)).not.toBeInTheDocument();
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
   });
   it('shows Apply with the mismatch count when there are mismatches', () => {
@@ -28,7 +35,7 @@ describe('VclReconciliationCard', () => {
       ],
       affected_users: [{ user_id: 2, username: 'bob', quota_delta: 100, current_usage: 0, max_size: 1000, would_exceed_quota: false }],
     })} />);
-    expect(screen.getByText('Apply (2 versions)')).toBeInTheDocument();
+    expect(screen.getByText('vcl.reconciliation.apply:2')).toBeInTheDocument();
     expect(screen.getByRole('checkbox')).toBeInTheDocument();
     expect(screen.getByText('b.txt')).toBeInTheDocument();
   });

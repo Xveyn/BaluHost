@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { Search, Check, ArrowRight, AlertTriangle } from 'lucide-react';
 import { formatBytes } from '../../../api/vcl';
 import type { ReconciliationPreview } from '../../../types/vcl';
@@ -17,14 +18,16 @@ export function VclReconciliationCard({
   onForceChange: (v: boolean) => void;
   onApply: () => void;
 }) {
+  const { t } = useTranslation('admin');
+
   return (
     <div className="card border-slate-800/60 bg-slate-900/55">
       <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
         <Search className="w-5 h-5 text-sky-400" />
-        Ownership Reconciliation
+        {t('vcl.reconciliation.title')}
       </h3>
       <p className="text-sm text-slate-400 mb-4">
-        Scan for version ownership mismatches (e.g. after file transfers) and fix them.
+        {t('vcl.reconciliation.description')}
       </p>
       <div className="flex flex-wrap items-center gap-3 mb-4">
         <button
@@ -33,7 +36,7 @@ export function VclReconciliationCard({
           className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
         >
           <Search className={`w-4 h-4 ${reconLoading ? 'animate-spin' : ''}`} />
-          Scan for Mismatches
+          {t('vcl.reconciliation.scan')}
         </button>
         {reconPreview && reconPreview.total_mismatches > 0 && (
           <>
@@ -44,7 +47,7 @@ export function VclReconciliationCard({
                 onChange={(e) => onForceChange(e.target.checked)}
                 className="w-4 h-4 rounded border-slate-700 bg-slate-800"
               />
-              Force even if quota exceeded
+              {t('vcl.reconciliation.forceOverQuota')}
             </label>
             <button
               onClick={onApply}
@@ -52,7 +55,7 @@ export function VclReconciliationCard({
               className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
             >
               <Check className="w-4 h-4" />
-              Apply ({reconPreview.total_mismatches} versions)
+              {t('vcl.reconciliation.apply', { versions: reconPreview.total_mismatches })}
             </button>
           </>
         )}
@@ -63,7 +66,7 @@ export function VclReconciliationCard({
           {/* Affected Users Summary */}
           {reconPreview.affected_users.length > 0 && (
             <div className="space-y-2">
-              <h4 className="text-sm font-medium text-slate-300">Quota Impact</h4>
+              <h4 className="text-sm font-medium text-slate-300">{t('vcl.reconciliation.quotaImpact')}</h4>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {reconPreview.affected_users.map((u) => (
                   <div
@@ -80,7 +83,7 @@ export function VclReconciliationCard({
                     </span>
                     {u.would_exceed_quota && (
                       <span className="ml-2 text-amber-400 text-xs flex items-center gap-1 inline-flex">
-                        <AlertTriangle className="w-3 h-3" /> exceeds quota
+                        <AlertTriangle className="w-3 h-3" /> {t('vcl.reconciliation.exceedsQuota')}
                       </span>
                     )}
                   </div>
@@ -94,12 +97,12 @@ export function VclReconciliationCard({
             <table className="w-full text-xs">
               <thead className="sticky top-0 bg-slate-900">
                 <tr className="text-left border-b border-slate-800">
-                  <th className="pb-2 text-slate-400 font-medium">File</th>
-                  <th className="pb-2 text-slate-400 font-medium">Version</th>
-                  <th className="pb-2 text-slate-400 font-medium">Current Owner</th>
+                  <th className="pb-2 text-slate-400 font-medium">{t('vcl.reconciliation.table.file')}</th>
+                  <th className="pb-2 text-slate-400 font-medium">{t('vcl.reconciliation.table.version')}</th>
+                  <th className="pb-2 text-slate-400 font-medium">{t('vcl.reconciliation.table.currentOwner')}</th>
                   <th className="pb-2 text-slate-400 font-medium"></th>
-                  <th className="pb-2 text-slate-400 font-medium">File Owner</th>
-                  <th className="pb-2 text-slate-400 font-medium">Size</th>
+                  <th className="pb-2 text-slate-400 font-medium">{t('vcl.reconciliation.table.fileOwner')}</th>
+                  <th className="pb-2 text-slate-400 font-medium">{t('vcl.reconciliation.table.size')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -119,7 +122,7 @@ export function VclReconciliationCard({
             </table>
             {reconPreview.total_mismatches > 100 && (
               <p className="text-xs text-slate-500 mt-2">
-                Showing 100 of {reconPreview.total_mismatches} mismatches
+                {t('vcl.reconciliation.showingLimited', { total: reconPreview.total_mismatches })}
               </p>
             )}
           </div>
