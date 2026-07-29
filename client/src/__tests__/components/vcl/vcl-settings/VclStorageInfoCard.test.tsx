@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import type { VCLStorageInfo } from '../../../../types/vcl';
-vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (_k: string, fb?: string) => fb ?? _k }) }));
+vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (k: string) => k }) }));
 import { VclStorageInfoCard } from '../../../../components/vcl/vcl-settings/VclStorageInfoCard';
 
 const info = (over: Partial<VCLStorageInfo> = {}): VCLStorageInfo => ({
@@ -17,8 +17,8 @@ describe('VclStorageInfoCard', () => {
   });
   it('shows the Custom Path badge only when is_custom_path', () => {
     const { rerender } = render(<VclStorageInfoCard storageInfo={info({ is_custom_path: false })} />);
-    expect(screen.queryByText('Custom Path')).not.toBeInTheDocument();
+    expect(screen.queryByText('vcl.storageInfo.customPath')).not.toBeInTheDocument();
     rerender(<VclStorageInfoCard storageInfo={info({ is_custom_path: true })} />);
-    expect(screen.getByText('Custom Path')).toBeInTheDocument();
+    expect(screen.getByText('vcl.storageInfo.customPath')).toBeInTheDocument();
   });
 });

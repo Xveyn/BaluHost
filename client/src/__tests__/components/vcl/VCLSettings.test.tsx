@@ -30,14 +30,14 @@ describe('VCLSettings', () => {
   it('renders the stats grid + user table for a populated fixture', () => {
     render(<VCLSettings />);
     expect(screen.getByText('alice')).toBeInTheDocument();           // user table
-    expect(screen.getByText('Ownership Reconciliation')).toBeInTheDocument(); // recon card
+    expect(screen.getByText('vcl.reconciliation.title')).toBeInTheDocument(); // recon card
   });
 
   it('renders none of the dashboard content while loading (early-return spinner)', () => {
     hookValue.loading = true;
     render(<VCLSettings />);
     expect(screen.queryByText('alice')).not.toBeInTheDocument();
-    expect(screen.queryByText('Ownership Reconciliation')).not.toBeInTheDocument();
+    expect(screen.queryByText('vcl.reconciliation.title')).not.toBeInTheDocument();
   });
 
   it('renders nothing when overview is null (and not loading)', () => {

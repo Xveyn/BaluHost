@@ -53,7 +53,7 @@ describe('useVclSettings', () => {
     const { result } = renderHook(() => useVclSettings());
     await waitFor(() => expect(result.current.overview).not.toBeNull());
     await act(async () => { await result.current.handleScanMismatches(); });
-    expect(result.current.successMessage).toBe('No ownership mismatches found');
+    expect(result.current.successMessage).toBe('vcl.reconciliation.noMismatches');
   });
 
   it('handleSaveUserSettings sends the edit form for the editing user', async () => {

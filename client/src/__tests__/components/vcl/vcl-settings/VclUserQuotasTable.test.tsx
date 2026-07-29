@@ -24,6 +24,6 @@ describe('VclUserQuotasTable', () => {
   });
   it('shows the Manual badge for manual-mode users', () => {
     render(<VclUserQuotasTable users={[user({ vcl_mode: 'manual' })]} onEditUser={() => {}} />);
-    expect(screen.getByText('Manual')).toBeInTheDocument();
+    expect(screen.getByText('vcl.userQuotas.modeManual')).toBeInTheDocument();
   });
 });

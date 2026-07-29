@@ -368,13 +368,24 @@
     "errors": {
       "loadFailed": "Failed to load VCL data",
       "cleanupFailed": "Cleanup failed",
-      "updateFailed": "Failed to update settings"
+      "updateFailed": "Failed to update settings",
+      "scanFailed": "Failed to scan for mismatches",
+      "applyFailed": "Failed to apply reconciliation"
     },
     "cleanup": {
       "dryRunResult": "Dry run: Would delete {{versions}} versions, freeing {{freed}}",
       "result": "Deleted {{versions}} versions, freed {{freed}}"
     },
     "settingsUpdated": "Settings updated for {{username}}",
+    "storageInfo": {
+      "title": "Storage Location",
+      "path": "Storage Path",
+      "customPath": "Custom Path",
+      "blobCount": "Blob Count",
+      "compressedSize": "Compressed Size",
+      "diskUsage": "Disk Usage",
+      "free": "free"
+    },
     "storageDetails": {
       "title": "Storage Details",
       "compressionRatio": "Compression Ratio",
@@ -397,6 +408,25 @@
       "dryRun": "Dry run: Would delete",
       "deleted": "Deleted"
     },
+    "reconciliation": {
+      "title": "Ownership Reconciliation",
+      "description": "Scan for version ownership mismatches (e.g. after file transfers) and fix them.",
+      "scan": "Scan for Mismatches",
+      "forceOverQuota": "Force even if quota exceeded",
+      "apply": "Apply ({{versions}} versions)",
+      "quotaImpact": "Quota Impact",
+      "exceedsQuota": "exceeds quota",
+      "noMismatches": "No ownership mismatches found",
+      "confirmApply": "Apply ownership reconciliation? This will update version ownership to match file ownership.",
+      "showingLimited": "Showing 100 of {{total}} mismatches",
+      "table": {
+        "file": "File",
+        "version": "Version",
+        "currentOwner": "Current Owner",
+        "fileOwner": "File Owner",
+        "size": "Size"
+      }
+    },
     "userQuotas": {
       "title": "User Quotas",
       "user": "User",
@@ -405,6 +435,9 @@
       "usage": "Usage",
       "usagePercent": "Usage %",
       "versions": "Versions",
+      "mode": "Mode",
+      "modeManual": "Manual",
+      "modeAuto": "Auto",
       "status": "Status",
       "actions": "Actions",
       "enabled": "Enabled",

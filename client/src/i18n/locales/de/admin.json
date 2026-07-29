@@ -368,13 +368,24 @@
     "errors": {
       "loadFailed": "VCL-Daten konnten nicht geladen werden",
       "cleanupFailed": "Bereinigung fehlgeschlagen",
-      "updateFailed": "Einstellungen konnten nicht aktualisiert werden"
+      "updateFailed": "Einstellungen konnten nicht aktualisiert werden",
+      "scanFailed": "Suche nach Abweichungen fehlgeschlagen",
+      "applyFailed": "Eigentümer-Abgleich fehlgeschlagen"
     },
     "cleanup": {
       "dryRunResult": "Simulation: Würde {{versions}} Versionen löschen, {{freed}} freigeben",
       "result": "{{versions}} Versionen gelöscht, {{freed}} freigegeben"
     },
     "settingsUpdated": "Einstellungen für {{username}} aktualisiert",
+    "storageInfo": {
+      "title": "Speicherort",
+      "path": "Speicherpfad",
+      "customPath": "Eigener Pfad",
+      "blobCount": "Blob-Anzahl",
+      "compressedSize": "Komprimierte Größe",
+      "diskUsage": "Speicherbelegung",
+      "free": "frei"
+    },
     "storageDetails": {
       "title": "Speicherdetails",
       "compressionRatio": "Komprimierungsverhältnis",
@@ -397,6 +408,25 @@
       "dryRun": "Simulation: Würde löschen",
       "deleted": "Gelöscht"
     },
+    "reconciliation": {
+      "title": "Eigentümer-Abgleich",
+      "description": "Sucht nach Versionen, deren Eigentümer nicht zur Datei passt (z. B. nach Dateiübertragungen), und korrigiert sie.",
+      "scan": "Abweichungen suchen",
+      "forceOverQuota": "Auch bei überschrittenem Kontingent erzwingen",
+      "apply": "Übernehmen ({{versions}} Versionen)",
+      "quotaImpact": "Auswirkung auf Kontingente",
+      "exceedsQuota": "Kontingent überschritten",
+      "noMismatches": "Keine Eigentümer-Abweichungen gefunden",
+      "confirmApply": "Eigentümer-Abgleich übernehmen? Damit wird der Eigentümer der Versionen an den Eigentümer der Datei angeglichen.",
+      "showingLimited": "Zeige 100 von {{total}} Abweichungen",
+      "table": {
+        "file": "Datei",
+        "version": "Version",
+        "currentOwner": "Aktueller Eigentümer",
+        "fileOwner": "Datei-Eigentümer",
+        "size": "Größe"
+      }
+    },
     "userQuotas": {
       "title": "Benutzer-Kontingente",
       "user": "Benutzer",
@@ -405,6 +435,9 @@
       "usage": "Nutzung",
       "usagePercent": "Nutzung %",
       "versions": "Versionen",
+      "mode": "Modus",
+      "modeManual": "Manuell",
+      "modeAuto": "Automatisch",
       "status": "Status",
       "actions": "Aktionen",
       "enabled": "Aktiviert",
