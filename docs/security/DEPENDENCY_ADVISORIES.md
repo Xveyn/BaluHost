@@ -1,41 +1,41 @@
-# Advisory-Register: bewusst nicht gefixte Meldungen
+# Advisory Register: findings we deliberately do not fix
 
-Begründungen zu Dependabot- und Code-Scanning-Meldungen, die **absichtlich** nicht
-durch ein Update geschlossen werden — weil sie uns nicht treffen, weil der Fix
-teurer wäre als das Risiko, oder weil er blockiert ist.
+Reasoning for Dependabot and Code Scanning findings that are **intentionally** not
+closed by an upgrade — because they do not apply to us, because the fix costs more
+than the risk, or because it is blocked on something external.
 
-## Wofür das hier ist — und wofür nicht
+## What this file is — and what it is not
 
-GitHub hält den **Zustand** (offen / dismissed / fixed). Diese Datei hält die
-**Begründung**. Beides getrennt zu führen hat einen konkreten Anlass: das
-`dismissed_comment`-Feld der Dependabot-API ist auf **280 Zeichen** begrenzt.
-Eine Begründung, die Fundstellen im Code nennt und sagt, wann sie ungültig wird,
-passt dort nicht hinein. In der UI ist sie außerdem nicht diffbar, taucht in
-keinem Review auf und ist weg, sobald der Alert neu aufgemacht wird.
+GitHub holds the **state** (open / dismissed / fixed). This file holds the
+**reasoning**. Keeping them apart has a concrete cause: Dependabot's
+`dismissed_comment` field is capped at **280 characters**. A justification that
+cites `file:line` and states the condition under which it expires does not fit
+there. In the UI it is also not diffable, never shows up in a review, and is gone
+the moment an alert is reopened.
 
-**Keine zweite Wahrheit über den Zustand.** Ob ein Alert offen ist, steht in
-GitHub, nicht hier. Wenn diese Datei und GitHub sich widersprechen, gewinnt
-GitHub — und der Eintrag hier gehört korrigiert.
+**This is not a second source of truth about state.** Whether an alert is open is
+recorded in GitHub, not here. If this file and GitHub disagree, GitHub wins and
+the entry below is the thing that needs fixing.
 
-## Die Regel, die das Register vor dem Verrotten schützt
+## The rule that keeps this register from rotting
 
-> **Jeder Eintrag braucht eine Re-Evaluierungsbedingung.**
+> **Every entry needs a re-evaluation condition.**
 
-Also einen überprüfbaren Satz, der beschreibt, wann die Entscheidung *aufhört zu
-gelten*. „Betrifft uns nicht" ohne diese Bedingung ist kein Befund, sondern eine
-Ausrede mit unbegrenzter Haltbarkeit — und genau die Sorte Notiz, die drei Jahre
-später niemand mehr anzufassen wagt.
+That is, a checkable sentence describing when the decision *stops being valid*.
+"Does not affect us" without that condition is not a finding — it is an excuse
+with unlimited shelf life, and exactly the kind of note nobody dares touch three
+years later.
 
-Ein Eintrag ohne Re-Evaluierungsbedingung ist unvollständig und soll im Review
-zurückgewiesen werden.
+An entry without a re-evaluation condition is incomplete and should be rejected in
+review.
 
-## Status-Werte
+## Status values
 
-| Status | Bedeutung |
+| Status | Meaning |
 |---|---|
-| `nicht zutreffend` | Der verwundbare Codepfad existiert bei uns nicht. In GitHub als `not_used` dismissed. |
-| `aufgeschoben` | Trifft uns, der Fix ist aber unverhältnismäßig teuer. Bleibt offen und sichtbar. |
-| `blockiert` | Fix ist gewollt, scheitert aktuell an etwas Externem (Toolchain, Major-Upgrade). |
+| `not applicable` | The vulnerable code path does not exist here. Dismissed in GitHub as `not_used`. |
+| `deferred` | It does affect us, but the fix is disproportionately expensive. Stays open and visible. |
+| `blocked` | The fix is wanted but currently fails on something external (toolchain, major upgrade). |
 
 ---
 
@@ -43,112 +43,112 @@ zurückgewiesen werden.
 
 | | |
 |---|---|
-| **Status** | `nicht zutreffend` |
-| **Entschieden** | 2026-07-29 |
-| **Paket** | `react-router` (transitiv über `react-router-dom`) |
-| **Betroffen** | `>= 7.12.0, < 8.3.0` — wir fahren 7.18.2 |
-| **Alert** | Dependabot #76, dismissed als `not_used` |
+| **Status** | `not applicable` |
+| **Decided** | 2026-07-29 |
+| **Package** | `react-router` (transitively via `react-router-dom`) |
+| **Affected** | `>= 7.12.0, < 8.3.0` — we run 7.18.2 |
+| **Alert** | Dependabot #76, dismissed as `not_used` |
 
-**Warum wir nicht betroffen sind.** Die Advisory beschreibt einen CSRF-Bypass im
-**RSC-Modus** von React Router. BaluHost ist ein reiner Client-SPA:
+**Why we are not affected.** The advisory describes a CSRF bypass in React
+Router's **RSC mode**. BaluHost is a pure client-side SPA:
 
-- `client/src/App.tsx:1` importiert `BrowserRouter` aus `react-router-dom` — der
-  deklarative Client-Router, kein Data-Router und kein Framework-Modus
-- kein einziges `@react-router/*`-Serverpaket ist installiert (weder
-  `@react-router/serve` noch `@react-router/express`)
-- kein SSR, kein RSC — der Build ist ein statisches Vite-Bundle, das Nginx ausliefert
+- `client/src/App.tsx:1` imports `BrowserRouter` from `react-router-dom` — the
+  declarative client router, not a data router and not framework mode
+- not a single `@react-router/*` server package is installed (neither
+  `@react-router/serve` nor `@react-router/express`)
+- no SSR, no RSC — the build is a static Vite bundle served by Nginx
 
-Der verwundbare Codepfad wird also nie erreicht.
+The vulnerable code path is therefore never reached.
 
-**Was der Fix kosten würde.** React Router **8.3.0** — ein Major. Für eine
-Advisory, die einen Modus betrifft, den wir nicht fahren, ist das der falsche
-Tausch: Major-Risiko gegen Null-Nutzen.
+**What the fix would cost.** React Router **8.3.0** — a major. For an advisory
+covering a mode we do not run, that is the wrong trade: major-upgrade risk for
+zero benefit.
 
-> **Re-Evaluierungsbedingung.** Diese Einschätzung fällt, sobald **eines** davon
-> zutrifft:
-> 1. ein `@react-router/*`-Paket taucht in `client/package.json` auf,
-> 2. `client/src/App.tsx` wechselt von `BrowserRouter` auf `createBrowserRouter`
->    mit Framework-/RSC-Modus, oder
-> 3. das Frontend bekommt überhaupt Server-Rendering.
+> **Re-evaluation condition.** This assessment falls as soon as **any** of the
+> following becomes true:
+> 1. a `@react-router/*` package appears in `client/package.json`,
+> 2. `client/src/App.tsx` moves from `BrowserRouter` to `createBrowserRouter` with
+>    framework/RSC mode, or
+> 3. the frontend gains server-side rendering at all.
 >
-> Dann ist der Alert neu zu bewerten und der Major fällig.
+> At that point the alert must be reassessed and the major becomes due.
 
 ---
 
-## brace-expansion — DoS über unbegrenzte Expansion (OOM)
+## brace-expansion — DoS via unbounded expansion (OOM)
 
 | | |
 |---|---|
-| **Status** | `aufgeschoben` |
-| **Entschieden** | 2026-07-29 |
-| **Paket** | `brace-expansion`, transitiv über `minimatch` → `eslint` / `typescript-eslint` |
-| **Betroffen** | `<= 5.0.7` — also **jede** existierende Version, auch die neueste |
-| **Quelle** | nur `npm audit`, kein GitHub-Alert |
+| **Status** | `deferred` |
+| **Decided** | 2026-07-29 |
+| **Package** | `brace-expansion`, transitively via `minimatch` → `eslint` / `typescript-eslint` |
+| **Affected** | `<= 5.0.7` — that is **every** released version, including the newest |
+| **Source** | `npm audit` only, no GitHub alert |
 
-**Warum aufgeschoben.** Die Advisory hat noch keine gefixte Version: der Bereich
-deckt alles bis einschließlich der aktuellen 5.0.7 ab. npms einziger
-Auflösungspfad ist `eslint@10.x` — ein Major der gesamten Lint-Toolchain.
+**Why deferred.** The advisory has no patched version yet: the range covers
+everything up to and including the current 5.0.7. npm's only resolution path is
+`eslint@10.x` — a major bump of the entire lint toolchain.
 
-Die Exposition ist gering: `brace-expansion` läuft ausschließlich zur Lint-Zeit
-über Glob-Muster, die **wir** in der ESLint-Konfiguration schreiben. Es
-verarbeitet keine Nutzereingaben und wird nicht ausgeliefert.
+Exposure is low: `brace-expansion` runs at lint time only, over glob patterns
+**we** write in the ESLint configuration. It processes no user input and is never
+shipped.
 
-**Was der Fix kosten würde.** ESLint 9 → 10 mit Konfigurationsanpassung, gegen
-einen CI-Gate, der auf `eslint .` mit **0 Errors** steht. Also ein eigener PR mit
-echtem Aufwand — nicht Teil eines Dependency-Bündels.
+**What the fix would cost.** ESLint 9 → 10 with configuration work, against a CI
+gate that requires `eslint .` to report **0 errors**. That is a PR of its own with
+real effort — not part of a dependency bundle.
 
-> **Re-Evaluierungsbedingung.** Sobald `brace-expansion` eine gefixte Version
-> veröffentlicht, die innerhalb unserer bestehenden Ranges erreichbar ist, wird
-> das ein normaler Bump. Unabhängig davon fällig, wenn ESLint 10 aus anderen
-> Gründen ansteht — dann fällt das hier als Nebeneffekt mit ab.
+> **Re-evaluation condition.** As soon as `brace-expansion` ships a patched
+> version reachable within our existing ranges, this becomes an ordinary bump.
+> Independently of that, it falls due whenever ESLint 10 is on the table for other
+> reasons — then this gets fixed as a side effect.
 
 ---
 
-## quinn-proto / glib — Tauri-Companion (Cargo)
+## quinn-proto / glib — Tauri companion (Cargo)
 
 | | |
 |---|---|
-| **Status** | `blockiert` |
-| **Festgehalten** | 2026-07-29 |
-| **Paket** | `quinn-proto` 0.11.14 → 0.11.15, `glib` 0.18.5 → 0.20.0 |
-| **Ort** | `client/src-tauri/Cargo.lock` |
-| **Alerts** | Dependabot, offen |
+| **Status** | `blocked` |
+| **Recorded** | 2026-07-29 |
+| **Package** | `quinn-proto` 0.11.14 → 0.11.15, `glib` 0.18.5 → 0.20.0 |
+| **Location** | `client/src-tauri/Cargo.lock` |
+| **Alerts** | Dependabot, open |
 
-**Warum noch offen.** Zwei verschiedene Gründe, die nicht zusammengehören:
+**Why still open.** Two unrelated reasons that happen to share a lockfile:
 
-- **`quinn-proto`** wäre ein reiner Patch (0.11.14 → 0.11.15) und damit
-  unkritisch. Er scheitert nur daran, dass auf der Entwicklungsmaschine keine
-  Rust-Toolchain installiert ist — ein `Cargo.lock` lässt sich ohne `cargo` weder
-  sauber erzeugen noch verifizieren.
-- **`glib`** ist etwas anderes: 0.18.5 → 0.20.0 sind **zwei Majors**, und die
-  Version hängt an den GTK-Abhängigkeiten von Tauri selbst. Das ist realistisch
-  kein Lockfile-Bump, sondern ein Tauri-Upgrade.
+- **`quinn-proto`** would be a plain patch (0.11.14 → 0.11.15) and is
+  uncontroversial. It fails only because the development machine has no Rust
+  toolchain installed — a `Cargo.lock` can be neither generated cleanly nor
+  verified without `cargo`.
+- **`glib`** is a different matter: 0.18.5 → 0.20.0 is **two majors**, and the
+  version is tied to Tauri's own GTK dependencies. Realistically that is not a
+  lockfile bump but a Tauri upgrade.
 
-Beide betreffen ausschließlich die Companion-App, nicht das Web-Frontend und
-nicht das Backend.
+Both affect only the companion app — not the web frontend and not the backend.
 
-> **Re-Evaluierungsbedingung.** `quinn-proto` fällt, sobald irgendjemand mit
-> Rust-Toolchain (oder ein CI-Job auf Basis von `tauri-build.yml`) den Bump
-> ausführen kann. `glib` fällt zusammen mit dem nächsten Tauri-Upgrade — bis
-> dahin nicht einzeln anfassen.
+> **Re-evaluation condition.** `quinn-proto` falls as soon as anyone with a Rust
+> toolchain (or a CI job based on `tauri-build.yml`) can run the bump. `glib`
+> falls together with the next Tauri upgrade — do not touch it separately before
+> then.
 
 ---
 
-## Einen Eintrag ergänzen
+## Adding an entry
 
-1. Meldung in GitHub dismissen (falls zutreffend) mit **Kurz**-Begründung und
-   Verweis auf diese Datei — 280 Zeichen sind das Limit.
-2. Hier einen Abschnitt nach obigem Muster anlegen: Kennung als Überschrift,
-   Status-Tabelle, Begründung mit **Fundstellen im Code** (`datei.ts:zeile`),
-   Kosten des Fixes.
-3. Die Re-Evaluierungsbedingung schreiben. Ohne sie ist der Eintrag nicht fertig.
-4. Wird eine Meldung später doch gefixt, den Abschnitt **löschen** statt ihn
-   umzuschreiben — die Historie steht im Git-Log, und ein Register, das auch
-   erledigte Fälle sammelt, wird unlesbar.
+1. Dismiss the finding in GitHub (where applicable) with a **short** justification
+   and a pointer to this file — 280 characters is the limit.
+2. Add a section here following the pattern above: identifier as the heading, the
+   status table, the reasoning with **references into the code**
+   (`file.ts:line`), and what the fix would cost.
+3. Write the re-evaluation condition. Without it the entry is not finished.
+4. If a finding does get fixed later, **delete** its section rather than rewriting
+   it — the history lives in the git log, and a register that also collects closed
+   cases becomes unreadable.
 
-## Hinweis zur Einsprachigkeit
+## Note on language and file layout
 
-`docs/security/` führt sonst `.de.md`/`.en.md`-Paare. Diese Datei bewusst nicht:
-sie wird bei jedem Dismiss fortgeschrieben, und ein Eintrag, der nur in einer der
-beiden Sprachfassungen landet, wäre schlimmer als eine einsprachige Datei — bei
-einem Sicherheitsregister ist Auseinanderlaufen der teuerste Fehlermodus.
+The rest of `docs/security/` ships `.de.md`/`.en.md` pairs. This file is
+deliberately a single English file: it is appended to on every dismissal, and an
+entry that lands in only one of two language versions would be worse than a
+monolingual file — for a security register, divergence is the expensive failure
+mode.
