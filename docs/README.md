@@ -37,6 +37,7 @@ Willkommen zur technischen Dokumentation des BaluHost NAS Managers.
 - **[AUDIT_LOGGING.de.md](security/AUDIT_LOGGING.de.md)** - Audit-Logging-System
 - **[API_RATE_LIMITING.de.md](security/API_RATE_LIMITING.de.md)** - Rate Limiting
 - **[RATE_LIMITING_QUICKSTART.de.md](security/RATE_LIMITING_QUICKSTART.de.md)** - Rate Limit Quick-Reference
+- **[DEPENDENCY_ADVISORIES.md](security/DEPENDENCY_ADVISORIES.md)** - Bewusst nicht gefixte Dependabot-/Code-Scanning-Meldungen mit Begründung
 
 ### [network/](network/) - Netzwerk & Zugriff
 - **[VPN_INTEGRATION.de.md](network/VPN_INTEGRATION.de.md)** - WireGuard VPN
