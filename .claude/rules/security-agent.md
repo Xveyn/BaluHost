@@ -193,7 +193,14 @@ verify_mobile_device_token — Validates JWT + X-Device-ID header + device expir
 
 ## Known Gaps & Accepted Risks
 
-Do NOT attempt to fix these without explicit discussion — they are documented trade-offs:
+Do NOT attempt to fix these without explicit discussion — they are documented trade-offs.
+
+**Scope note:** this list covers gaps in *our own* code. Dispositions for
+third-party **advisories** (Dependabot / Code Scanning) that are deliberately not
+fixed live in `docs/security/DEPENDENCY_ADVISORIES.md` — deliberately outside the
+auto-loaded rules, because that register grows with every dismissal and would
+otherwise cost context in every session. Before proposing a dependency bump to
+close an alert, check whether that file already rules on it.
 
 1. **CSP `unsafe-inline` / `unsafe-eval`** — Required by Vite dev server; production build could tighten this but currently uses same policy (`middleware/security_headers.py:29-30`)
 2. **CORS `allow_methods=["*"]` / `allow_headers=["*"]`** — Scoped to configured `cors_origins` list (`main.py:558-564`), not a wildcard origin
