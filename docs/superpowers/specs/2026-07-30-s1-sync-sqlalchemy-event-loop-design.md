@@ -85,7 +85,7 @@ Additiv, kein Verhaltenswechsel an bestehenden Routen.
 |---|---|---|
 | In-Flight-Zähler | `backend/app/middleware/inflight.py`, **pure ASGI** | Gleichzeitige Requests pro Worker, Ankunftsrate, Handler-Dauer |
 | Loop-Lag-Sonde | `backend/app/core/concurrency_probe.py` | `sleep(0.25)`-Überschuss → p50 / p95 / max |
-| Pool-Ableser | dito | `engine.pool.status()` → `checked_out`, `overflow`; Zähler für Pool-Timeouts |
+| Pool-Ableser | dito | `checked_out`, `overflow`, offene Verbindungen, plus Ticks mit voll ausgeschöpftem Pool (Vorläufer eines Checkout-Timeouts — ein echter Timeout-Zähler bräuchte einen Hook an jedem Checkout und damit einen Eingriff in `get_db`, den PR1 vermeidet) |
 | Threadpool-Ableser | dito | anyio `current_default_thread_limiter().statistics()` → `borrowed_tokens`, `tasks_waiting` |
 | Reporter | dito | Eine JSON-Logzeile pro 60 s auf Logger `baluhost.concurrency`, mit High-Water-Marks pro Fenster |
 
@@ -258,7 +258,10 @@ unberührt. Rate-Limiting bleibt wirksam (slowapi `sync_wrapper`).
 
 Die einzige neue Fehlerklasse ist Pool-Erschöpfung — `TimeoutError` nach
 `pool_timeout=30` beziehungsweise `FATAL: sorry, too many clients already` auf
-PG-Seite. Genau die verhindert Etappe D, und die Sonde aus PR1 zählt sie mit.
+PG-Seite. Genau die verhindert Etappe D. Die Sonde aus PR1 zählt nicht die
+Timeouts selbst, sondern ihren Vorläufer: Ticks, in denen der Pool voll
+ausgeschöpft war. Ein Fenster ohne solche Ticks belegt, dass kein Timeout
+möglich war.
 
 ---
 
