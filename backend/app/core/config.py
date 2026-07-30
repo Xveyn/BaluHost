@@ -265,6 +265,11 @@ class Settings(BaseSettings):
     plugin_sandbox_user: str = "baluhost-plugin"
     plugin_sandbox_wrapper_path: str = "/usr/local/sbin/baluhost-spawn-plugin-worker.sh"
 
+    # Concurrency-Probe (S1/#300): misst Event-Loop-Lag, In-Flight-Requests,
+    # DB-Pool- und Threadpool-Auslastung. Grundlage für die Grenzwerte in PR2.
+    concurrency_probe_enabled: bool = True
+    concurrency_probe_interval_seconds: int = 60
+
     model_config = SettingsConfigDict(
         env_file=(".env", "../.env", "../../.env"),
         env_file_encoding="utf-8",

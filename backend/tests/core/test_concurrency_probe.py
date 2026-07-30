@@ -1,4 +1,5 @@
 """Tests für die Concurrency-Probe (S1/#300, PR1)."""
+import asyncio
 import logging
 
 import pytest
@@ -9,6 +10,8 @@ from app.core.concurrency_probe import (
     PoolSample,
     RequestStats,
     ThreadPoolSample,
+    build_window_payload,
+    concurrency_probe_loop,
     get_request_stats,
     percentile,
     sample_pool,
@@ -210,3 +213,134 @@ class TestSampleThreadPool:
 
     def test_returns_none_outside_an_event_loop(self):
         assert sample_threadpool() is None
+
+
+# LogRecord-Attribute, die von `extra=` NICHT überschrieben werden dürfen —
+# logging wirft dann KeyError. Der Test hält die Payload-Keys davon frei.
+_RESERVED_LOGRECORD_KEYS = {
+    "args", "asctime", "created", "exc_info", "exc_text", "filename",
+    "funcName", "levelname", "levelno", "lineno", "message", "module",
+    "msecs", "msg", "name", "pathname", "process", "processName",
+    "relativeCreated", "stack_info", "thread", "threadName", "taskName",
+}
+
+
+class TestBuildWindowPayload:
+    def test_payload_keys_never_collide_with_logrecord_attributes(self):
+        stats = RequestStats()
+        stats.record_start()
+        stats.record_end(0.01)
+
+        payload = build_window_payload(
+            window_seconds=60.0,
+            lags_ms=[1.0, 2.0, 3.0],
+            request_window=stats.drain(),
+            pool=PoolSample(
+                checked_out=2,
+                overflow=0,
+                open_connections=3,
+                size=5,
+                max_overflow=10,
+            ),
+            threadpool=ThreadPoolSample(borrowed=1, waiting=0, total_tokens=40),
+        )
+
+        collisions = set(payload) & _RESERVED_LOGRECORD_KEYS
+        assert collisions == set(), f"würde logging sprengen: {collisions}"
+
+    def test_saturated_ticks_are_carried_through(self):
+        payload = build_window_payload(
+            window_seconds=60.0,
+            lags_ms=[],
+            request_window=RequestStats().drain(),
+            pool=None,
+            threadpool=None,
+            pool_saturated_ticks=17,
+        )
+
+        assert payload["pool_saturated_ticks"] == 17
+
+    def test_payload_carries_the_loop_lag_quantiles(self):
+        payload = build_window_payload(
+            window_seconds=60.0,
+            lags_ms=[float(v) for v in range(1, 101)],
+            request_window=RequestStats().drain(),
+            pool=None,
+            threadpool=None,
+        )
+
+        assert payload["loop_lag_p50_ms"] == 50.0
+        assert payload["loop_lag_p95_ms"] == 95.0
+        assert payload["loop_lag_max_ms"] == 100.0
+
+    def test_missing_samplers_degrade_to_none_not_crash(self):
+        payload = build_window_payload(
+            window_seconds=60.0,
+            lags_ms=[],
+            request_window=RequestStats().drain(),
+            pool=None,
+            threadpool=None,
+        )
+
+        assert payload["pool_checked_out_max"] is None
+        assert payload["threadpool_borrowed_max"] is None
+        assert payload["loop_lag_p95_ms"] is None
+
+    def test_payload_identifies_the_worker(self):
+        payload = build_window_payload(
+            window_seconds=60.0,
+            lags_ms=[],
+            request_window=RequestStats().drain(),
+            pool=None,
+            threadpool=None,
+        )
+
+        assert isinstance(payload["worker_pid"], int)
+
+
+class TestConcurrencyProbeLoop:
+    async def test_emits_one_log_line_per_window(self, caplog):
+        caplog.set_level(logging.INFO, logger="baluhost.concurrency")
+
+        task = asyncio.create_task(
+            concurrency_probe_loop(interval_seconds=0.1, tick_seconds=0.01)
+        )
+        await asyncio.sleep(0.35)
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+        records = [r for r in caplog.records if r.name == "baluhost.concurrency"]
+        assert len(records) >= 2, "mindestens zwei Fenster in 0,35 s bei 0,1 s Fenster"
+        assert hasattr(records[0], "loop_lag_max_ms")
+        assert hasattr(records[0], "req_in_flight_max")
+
+    async def test_stops_promptly_on_cancel(self):
+        task = asyncio.create_task(
+            concurrency_probe_loop(interval_seconds=60, tick_seconds=0.01)
+        )
+        await asyncio.sleep(0.05)
+        task.cancel()
+
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    async def test_a_blocked_loop_shows_up_as_lag(self, caplog):
+        """Der Kern der Messung: blockiert etwas den Loop, muss der Lag es zeigen."""
+        import time as _time
+
+        caplog.set_level(logging.INFO, logger="baluhost.concurrency")
+
+        task = asyncio.create_task(
+            concurrency_probe_loop(interval_seconds=0.3, tick_seconds=0.01)
+        )
+        await asyncio.sleep(0.02)
+        _time.sleep(0.15)  # synchron blockieren, genau wie eine sync DB-Query
+        await asyncio.sleep(0.35)
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+        records = [r for r in caplog.records if r.name == "baluhost.concurrency"]
+        assert records, "kein Fenster emittiert"
+        assert records[0].loop_lag_max_ms > 100, (
+            f"150 ms Blockade nicht sichtbar: {records[0].loop_lag_max_ms} ms"
+        )
