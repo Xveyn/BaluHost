@@ -1,10 +1,16 @@
 """Tests für die Concurrency-Probe (S1/#300, PR1)."""
 import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.pool import NullPool, StaticPool
 
 from app.core.concurrency_probe import (
+    PoolSample,
     RequestStats,
+    ThreadPoolSample,
     get_request_stats,
     percentile,
+    sample_pool,
+    sample_threadpool,
 )
 
 
@@ -90,3 +96,86 @@ class TestRequestStats:
 
     def test_get_request_stats_is_a_singleton(self):
         assert get_request_stats() is get_request_stats()
+
+
+class TestSamplePool:
+    def test_reads_a_queuepool(self, tmp_path):
+        engine = create_engine(f"sqlite:///{tmp_path / 'probe.db'}")
+        sample = sample_pool(engine)
+
+        assert isinstance(sample, PoolSample)
+        assert sample.size == 5
+        assert sample.checked_out == 0
+        assert sample.open_connections == 0
+
+    def test_counts_a_checked_out_connection(self, tmp_path):
+        engine = create_engine(f"sqlite:///{tmp_path / 'probe.db'}")
+        with engine.connect():
+            sample = sample_pool(engine)
+
+        assert sample is not None
+        assert sample.checked_out == 1
+        assert sample.open_connections == 1
+
+    def test_overflow_is_normalised_to_zero_or_more(self, tmp_path):
+        """QueuePool.overflow() startet bei -pool_size. Roh wäre das im Log
+        irreführend — gemeldet wird, wie viele Verbindungen über pool_size
+        hinaus existieren."""
+        engine = create_engine(f"sqlite:///{tmp_path / 'probe.db'}")
+        sample = sample_pool(engine)
+
+        assert sample is not None
+        assert sample.overflow == 0
+
+    def test_reports_the_overflow_ceiling(self, tmp_path):
+        """Ohne max_overflow lässt sich Sättigung nicht erkennen."""
+        engine = create_engine(
+            f"sqlite:///{tmp_path / 'probe.db'}", pool_size=3, max_overflow=7
+        )
+        sample = sample_pool(engine)
+
+        assert sample is not None
+        assert sample.size == 3
+        assert sample.max_overflow == 7
+
+    def test_is_saturated_only_when_the_ceiling_is_reached(self):
+        headroom = PoolSample(
+            checked_out=5, overflow=0, open_connections=5, size=3, max_overflow=7
+        )
+        full = PoolSample(
+            checked_out=10, overflow=7, open_connections=10, size=3, max_overflow=7
+        )
+        unknown = PoolSample(
+            checked_out=99, overflow=0, open_connections=99, size=3, max_overflow=None
+        )
+
+        assert headroom.is_saturated is False
+        assert full.is_saturated is True
+        assert unknown.is_saturated is False, "ohne Obergrenze keine Behauptung"
+
+    def test_returns_none_for_a_pool_without_counters(self, tmp_path):
+        engine = create_engine(
+            f"sqlite:///{tmp_path / 'probe.db'}", poolclass=NullPool
+        )
+        assert sample_pool(engine) is None
+
+    def test_returns_none_for_staticpool_used_in_tests(self):
+        engine = create_engine(
+            "sqlite://",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
+        assert sample_pool(engine) is None
+
+
+class TestSampleThreadPool:
+    async def test_reads_the_anyio_limiter(self):
+        sample = sample_threadpool()
+
+        assert isinstance(sample, ThreadPoolSample)
+        assert sample.total_tokens > 0
+        assert sample.borrowed >= 0
+        assert sample.waiting >= 0
+
+    def test_returns_none_outside_an_event_loop(self):
+        assert sample_threadpool() is None

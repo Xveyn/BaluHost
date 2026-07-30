@@ -9,6 +9,7 @@ Logzeile auf dem Logger `baluhost.concurrency`.
 """
 from __future__ import annotations
 
+import anyio.to_thread
 import math
 import threading
 from collections import deque
@@ -98,3 +99,93 @@ _request_stats = RequestStats()
 def get_request_stats() -> RequestStats:
     """Prozessweites Singleton — die Middleware und der Probe-Task teilen es."""
     return _request_stats
+
+
+@dataclass(frozen=True)
+class PoolSample:
+    """Momentaufnahme des SQLAlchemy-Connection-Pools."""
+
+    checked_out: int
+    overflow: int
+    open_connections: int
+    size: int
+    max_overflow: int | None
+
+    @property
+    def is_saturated(self) -> bool:
+        """True, wenn keine weitere Verbindung mehr vergeben werden kann.
+
+        Nur aus diesem Zustand heraus kann ein Checkout in den `pool_timeout`
+        laufen. Ist die Obergrenze unbekannt, wird nichts behauptet.
+        """
+        if self.max_overflow is None:
+            return False
+        return self.checked_out >= self.size + self.max_overflow
+
+
+@dataclass(frozen=True)
+class ThreadPoolSample:
+    """Momentaufnahme des anyio-Threadpools, in dem sync Endpoints laufen."""
+
+    borrowed: int
+    waiting: int
+    total_tokens: float
+
+
+def sample_pool(engine) -> PoolSample | None:
+    """Pool-Auslastung ablesen.
+
+    Gibt None zurück, wenn der Pool keine Zähler führt — NullPool und der in
+    den Tests verwendete StaticPool haben checkedout()/overflow() nicht.
+
+    `_max_overflow` ist privat, aber die einzige Quelle für die Obergrenze;
+    SQLAlchemy exponiert sie nicht öffentlich. Fehlt sie (andere Pool-Klasse,
+    andere SQLAlchemy-Version), degradiert `is_saturated` still zu False,
+    statt eine falsche Sättigung zu melden.
+    """
+    pool = getattr(engine, "pool", None)
+    if pool is None:
+        return None
+
+    checked_out = getattr(pool, "checkedout", None)
+    overflow = getattr(pool, "overflow", None)
+    checked_in = getattr(pool, "checkedin", None)
+    size = getattr(pool, "size", None)
+    if not all(callable(fn) for fn in (checked_out, overflow, checked_in, size)):
+        return None
+
+    try:
+        out = checked_out()
+        # QueuePool.overflow() startet bei -pool_size und wächst. Roh geloggt
+        # wäre "-5" nicht interpretierbar; gemeldet wird die Zahl der
+        # Verbindungen jenseits von pool_size.
+        raw_overflow = overflow()
+        max_overflow = getattr(pool, "_max_overflow", None)
+        return PoolSample(
+            checked_out=out,
+            overflow=max(0, raw_overflow),
+            open_connections=out + checked_in(),
+            size=size(),
+            max_overflow=max_overflow if isinstance(max_overflow, int) else None,
+        )
+    except Exception:
+        return None
+
+
+def sample_threadpool() -> ThreadPoolSample | None:
+    """anyio-Threadpool ablesen — dort laufen sync Endpoints.
+
+    Gibt None zurück, wenn kein Event-Loop läuft: der Limiter hängt an einer
+    RunVar und ist außerhalb des Loops nicht erreichbar.
+    """
+    try:
+        limiter = anyio.to_thread.current_default_thread_limiter()
+        stats = limiter.statistics()
+    except Exception:
+        return None
+
+    return ThreadPoolSample(
+        borrowed=stats.borrowed_tokens,
+        waiting=stats.tasks_waiting,
+        total_tokens=stats.total_tokens,
+    )
