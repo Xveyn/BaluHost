@@ -10,10 +10,13 @@ Logzeile auf dem Logger `baluhost.concurrency`.
 from __future__ import annotations
 
 import anyio.to_thread
+import logging
 import math
 import threading
 from collections import deque
 from dataclasses import dataclass
+
+logger = logging.getLogger("baluhost.concurrency")
 
 # Wie viele Request-Dauern pro Fenster für die Quantile vorgehalten werden.
 # Die Zähler (`started`/`completed`) sind davon unberührt — nur die Quantile
@@ -169,6 +172,7 @@ def sample_pool(engine) -> PoolSample | None:
             max_overflow=max_overflow if isinstance(max_overflow, int) else None,
         )
     except Exception:
+        logger.debug("Failed to sample pool; continuing without sample", exc_info=True)
         return None
 
 
@@ -182,6 +186,9 @@ def sample_threadpool() -> ThreadPoolSample | None:
         limiter = anyio.to_thread.current_default_thread_limiter()
         stats = limiter.statistics()
     except Exception:
+        logger.debug(
+            "Failed to sample threadpool; continuing without sample", exc_info=True
+        )
         return None
 
     return ThreadPoolSample(

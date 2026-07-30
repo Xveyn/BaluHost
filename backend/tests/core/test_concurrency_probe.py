@@ -1,4 +1,6 @@
 """Tests für die Concurrency-Probe (S1/#300, PR1)."""
+import logging
+
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.pool import NullPool, StaticPool
@@ -166,6 +168,35 @@ class TestSamplePool:
             poolclass=StaticPool,
         )
         assert sample_pool(engine) is None
+
+    def test_logs_on_exception_in_pool_methods(self, caplog):
+        """When pool methods raise, sample_pool logs at debug level and returns None."""
+
+        class FaultyPool:
+            def checkedout(self):
+                raise RuntimeError("Simulated pool error")
+
+            def overflow(self):
+                raise RuntimeError("Simulated pool error")
+
+            def checkedin(self):
+                raise RuntimeError("Simulated pool error")
+
+            def size(self):
+                raise RuntimeError("Simulated pool error")
+
+        class FaultyEngine:
+            pool = FaultyPool()
+
+        caplog.set_level(logging.DEBUG, logger="baluhost.concurrency")
+        result = sample_pool(FaultyEngine())
+
+        assert result is None
+        assert any(
+            "Failed to sample pool" in record.message
+            for record in caplog.records
+            if record.name == "baluhost.concurrency"
+        )
 
 
 class TestSampleThreadPool:
