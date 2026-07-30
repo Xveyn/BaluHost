@@ -299,7 +299,8 @@ persistierten Zustand. PR1 ist rein additiv und unabhängig zurücknehmbar.
 - **Die 105 `async def`-Handler ohne `Depends(get_db)`.** Sync-`subprocess.run`
   im async-Pfad ist S2 ([#302](https://github.com/Xveyn/BaluHost/issues/302)).
 - **Flächeneinbau von `commit_with_retry`** (siehe oben).
-- **Die übrigen toten Prometheus-Metriken.** `database_query_duration_seconds`,
-  `http_requests_total` und `users_active_sessions` sind ebenfalls deklariert und
-  werden nie gesetzt. Nur `database_connections` wird hier befüllt, weil es
-  dieselbe Messung ist; der Rest ist ein separater Befund.
+- **Die übrigen toten Prometheus-Metriken.** Ein AST-Scan zeigt: 12 der 37 in
+  `metrics.py` deklarierten Metriken werden nirgends je gesetzt. Nur
+  `database_connections` wird hier befüllt, weil es dieselbe Messung ist. Die
+  anderen 11 und die zugehörige Doku-Drift sind
+  [#494](https://github.com/Xveyn/BaluHost/issues/494).
