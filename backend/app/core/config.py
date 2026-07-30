@@ -267,8 +267,10 @@ class Settings(BaseSettings):
 
     # Concurrency-Probe (S1/#300): misst Event-Loop-Lag, In-Flight-Requests,
     # DB-Pool- und Threadpool-Auslastung. Grundlage für die Grenzwerte in PR2.
+    # `gt=0`: bei 0 schlösse jeder Tick ein Fenster — 4 Zeilen/s pro Worker in
+    # journald und in den Ring-Buffer des Admin-SSE-Streams.
     concurrency_probe_enabled: bool = True
-    concurrency_probe_interval_seconds: int = 60
+    concurrency_probe_interval_seconds: int = Field(default=60, gt=0)
 
     model_config = SettingsConfigDict(
         env_file=(".env", "../.env", "../../.env"),

@@ -673,7 +673,13 @@ async def _startup(app: FastAPI) -> None:
     # Concurrency-Probe (S1/#300): läuft auf JEDEM Worker, nicht nur dem
     # primären — der gesuchte Effekt (blockierter Event-Loop, Pool-Auslastung)
     # ist per Worker verschieden und wäre aus nur einem Prozess nicht ablesbar.
-    _start_concurrency_probe()
+    # Bewusst gekapselt wie jeder Nachbar-Block: eine temporäre Diagnose darf
+    # den Worker nicht am Starten hindern (der deferred Import kann auf einem
+    # halb ausgerollten Stand fehlschlagen).
+    try:
+        _start_concurrency_probe()
+    except Exception as e:
+        logger.warning(f"Concurrency probe could not start: {e}")
 
     # Start SmartDevice WebSocket bridge (primary worker only)
     if IS_PRIMARY_WORKER:

@@ -255,7 +255,13 @@ file_download_bytes_total = Counter(
 
 database_connections = Gauge(
     'baluhost_database_connections',
-    'Number of active database connections',
+    # Bewusst so wortreich: der Wert ist NICHT flottenweit. Jeder der 4 Uvicorn-
+    # Worker hat eine eigene Registry und einen eigenen Pool; welcher Worker den
+    # Scrape bedient, entscheidet der Reverse Proxy, aufeinanderfolgende Scrapes
+    # springen also zwischen Prozessen. Der Scrape selbst hält dabei eine der
+    # gezählten Verbindungen (die Route nimmt `Depends(get_db)`).
+    'Checked-out DB connections in the worker serving this scrape '
+    '(per-worker, includes the scrape\'s own connection)',
     registry=registry
 )
 

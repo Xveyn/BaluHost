@@ -63,3 +63,37 @@ async def test_disabled_returns_none_and_spawns_nothing(monkeypatch):
 
     assert task is None
     assert not _probe_tasks()
+
+
+def _middleware_classes(monkeypatch) -> list:
+    """App bauen und die registrierten Middleware-Klassen zurückgeben.
+
+    `setup_logging()` wird dabei stillgelegt: es entfernt sämtliche
+    Root-Handler und würde das Log-Capturing der restlichen Session
+    mitreißen."""
+    monkeypatch.setattr("app.core.logging_config.setup_logging", lambda: None)
+    from app.main import create_app
+
+    return [middleware.cls for middleware in create_app().user_middleware]
+
+
+async def test_middleware_is_registered_when_the_probe_is_enabled(monkeypatch):
+    from app.middleware.inflight import InFlightMiddleware
+
+    monkeypatch.setattr(settings, "concurrency_probe_enabled", True)
+
+    assert InFlightMiddleware in _middleware_classes(monkeypatch)
+
+
+async def test_disabled_also_removes_the_middleware_from_the_hot_path(monkeypatch):
+    """Der dokumentierte Aus-Schalter muss BEIDE Hälften abschalten.
+
+    Bliebe die Middleware registriert, liefe der Zähler auf dem Pfad jedes
+    Requests weiter — ohne dass je jemand `drain()` ruft, also mit unbegrenzt
+    wachsenden Zählern und einem `_in_flight_max`, das zum Allzeithoch wird.
+    """
+    from app.middleware.inflight import InFlightMiddleware
+
+    monkeypatch.setattr(settings, "concurrency_probe_enabled", False)
+
+    assert InFlightMiddleware not in _middleware_classes(monkeypatch)

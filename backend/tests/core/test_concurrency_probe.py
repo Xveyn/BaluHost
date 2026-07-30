@@ -1,17 +1,21 @@
 """Tests für die Concurrency-Probe (S1/#300, PR1)."""
 import asyncio
 import logging
+import threading
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.pool import NullPool, StaticPool
 
 from app.core.concurrency_probe import (
+    PoolCheckoutTracker,
     PoolSample,
+    PoolWindow,
     RequestStats,
     ThreadPoolSample,
     build_window_payload,
     concurrency_probe_loop,
+    get_pool_tracker,
     get_request_stats,
     percentile,
     sample_pool,
@@ -76,6 +80,56 @@ class TestRequestStats:
         window = stats.drain()
         assert window.duration_max_ms == pytest.approx(3.0)
         assert window.duration_p50_ms == pytest.approx(2.0)
+
+    def test_p95_is_the_high_tail_not_the_median(self):
+        """`duration_p95_ms` wird von der Auslegungsmethode gelesen. Ohne diese
+        Zusage bliebe ein vertauschtes p50/p95 oder ein `q=0.50` unbemerkt."""
+        stats = RequestStats()
+        for ms in range(1, 101):  # 1..100 ms
+            stats.record_start()
+            stats.record_end(ms / 1000.0)
+
+        window = stats.drain()
+        assert window.duration_p50_ms == pytest.approx(50.0)
+        assert window.duration_p95_ms == pytest.approx(95.0)
+        assert window.duration_max_ms == pytest.approx(100.0)
+
+    def test_mean_duration_is_reported(self):
+        """Little's Law ist auf der MITTLEREN Bedienzeit definiert — ohne
+        Mittelwert ist die dokumentierte Methode nicht ausführbar."""
+        stats = RequestStats()
+        for seconds in (0.001, 0.002, 0.006):
+            stats.record_start()
+            stats.record_end(seconds)
+
+        window = stats.drain()
+        assert window.duration_mean_ms == pytest.approx(3.0)
+
+    def test_mean_covers_all_requests_not_just_the_quantile_buffer(self):
+        """Der Quantil-Puffer ist gedeckelt; der Mittelwert darf es nicht sein,
+        sonst wäre er der Mittelwert der letzten N statt des Fensters."""
+        stats = RequestStats(max_samples=10)
+        for _ in range(90):
+            stats.record_start()
+            stats.record_end(0.001)  # 1 ms
+        for _ in range(10):
+            stats.record_start()
+            stats.record_end(0.011)  # 11 ms — füllt den Puffer allein
+
+        window = stats.drain()
+        assert window.completed == 100
+        # Mittelwert über alle 100: (90*1 + 10*11) / 100 = 2.0
+        assert window.duration_mean_ms == pytest.approx(2.0)
+        # Nur über den Puffer wären es 11.0 — der Unterschied ist der Test.
+        assert window.duration_p50_ms == pytest.approx(11.0)
+
+    def test_mean_resets_with_the_window(self):
+        stats = RequestStats()
+        stats.record_start()
+        stats.record_end(0.010)
+        stats.drain()
+
+        assert stats.drain().duration_mean_ms is None
 
     def test_drain_resets_counters_but_keeps_live_in_flight(self):
         stats = RequestStats()
@@ -143,21 +197,6 @@ class TestSamplePool:
         assert sample.size == 3
         assert sample.max_overflow == 7
 
-    def test_is_saturated_only_when_the_ceiling_is_reached(self):
-        headroom = PoolSample(
-            checked_out=5, overflow=0, open_connections=5, size=3, max_overflow=7
-        )
-        full = PoolSample(
-            checked_out=10, overflow=7, open_connections=10, size=3, max_overflow=7
-        )
-        unknown = PoolSample(
-            checked_out=99, overflow=0, open_connections=99, size=3, max_overflow=None
-        )
-
-        assert headroom.is_saturated is False
-        assert full.is_saturated is True
-        assert unknown.is_saturated is False, "ohne Obergrenze keine Behauptung"
-
     def test_returns_none_for_a_pool_without_counters(self, tmp_path):
         engine = create_engine(
             f"sqlite:///{tmp_path / 'probe.db'}", poolclass=NullPool
@@ -200,6 +239,256 @@ class TestSamplePool:
             for record in caplog.records
             if record.name == "baluhost.concurrency"
         )
+
+
+class _ExplodingLock:
+    """Simuliert einen Tracker, der beim Zählen wirft."""
+
+    def __enter__(self):
+        raise RuntimeError("tracker is broken")
+
+    def __exit__(self, *_exc):
+        return False
+
+
+class TestPoolCheckoutTracker:
+    """Die Checkout-Buchführung ersetzt das Point-Sampling der Belegung.
+
+    Warum: einen Checkout hält ein nicht-awaitender `async def` Handler,
+    während der Event-Loop blockiert ist — der Sampler-Task kommt dann gar
+    nicht dran. Der Listener läuft im Thread des Checkouts und sieht jeden.
+    """
+
+    def test_counts_checkouts_and_the_high_water_mark(self, tmp_path):
+        engine = create_engine(f"sqlite:///{tmp_path / 'probe.db'}")
+        tracker = PoolCheckoutTracker()
+        assert tracker.attach(engine) is True
+
+        first = engine.connect()
+        second = engine.connect()
+        first.close()
+        second.close()
+        third = engine.connect()
+        third.close()
+
+        window = tracker.drain()
+        assert window.checkouts == 3
+        assert window.in_use_max == 2
+
+    async def test_sees_what_point_sampling_structurally_cannot(self, tmp_path):
+        """Der Kern von C1: ein Sampler auf dem Loop sieht 0, der Tracker 1.
+
+        Nachgestellt wird exakt das Muster der 314 nicht-awaitenden Handler:
+        Verbindung nehmen, synchron arbeiten, freigeben — ohne den Loop
+        zwischendurch freizugeben.
+        """
+        import time as _time
+
+        engine = create_engine(f"sqlite:///{tmp_path / 'probe.db'}")
+        tracker = PoolCheckoutTracker()
+        assert tracker.attach(engine) is True
+
+        sampled: list[int] = []
+
+        async def sampler() -> None:
+            while True:
+                point = sample_pool(engine)
+                if point is not None:
+                    sampled.append(point.checked_out)
+                await asyncio.sleep(0.001)
+
+        task = asyncio.create_task(sampler())
+        await asyncio.sleep(0.02)  # Sampler läuft nachweislich
+
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+            _time.sleep(0.05)  # Loop blockiert, Verbindung gehalten
+
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+        window = tracker.drain()
+        assert window.checkouts == 1
+        assert window.in_use_max == 1
+        assert sampled, "Sampler lief nicht — der Vergleich wäre wertlos"
+        assert max(sampled) == 0, (
+            "Point-Sampling hat den Checkout gesehen — dann misst dieser Test "
+            "nicht mehr das Problem, das die Buchführung löst"
+        )
+
+    def test_saturation_events_count_checkouts_taking_the_last_connection(
+        self, tmp_path
+    ):
+        engine = create_engine(
+            f"sqlite:///{tmp_path / 'probe.db'}", pool_size=1, max_overflow=1
+        )
+        tracker = PoolCheckoutTracker()
+        assert tracker.attach(engine) is True
+
+        first = engine.connect()  # 1 von 2 — keine Sättigung
+        second = engine.connect()  # 2 von 2 — Sättigung
+        first.close()
+        second.close()
+        third = engine.connect()  # wieder 1 von 2
+        third.close()
+
+        window = tracker.drain()
+        assert window.checkouts == 3
+        assert window.saturation_events == 1
+
+    def test_saturation_is_none_when_the_ceiling_is_unknown(self):
+        """StaticPool (Testsuite) kennt kein max_overflow — dann wird über
+        Sättigung nichts behauptet. Gezählt wird trotzdem: die Events feuern
+        auch dort, wo `sample_pool()` mangels Zählern None liefert."""
+        engine = create_engine(
+            "sqlite://",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
+        tracker = PoolCheckoutTracker()
+        assert tracker.attach(engine) is True
+
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+
+        assert sample_pool(engine) is None, "Point-Sampling ist hier blind"
+        window = tracker.drain()
+        assert window.checkouts == 1
+        assert window.saturation_events is None
+
+    def test_attach_is_idempotent(self, tmp_path):
+        """Ein zweiter Listener-Satz würde jeden Checkout doppelt zählen."""
+        engine = create_engine(f"sqlite:///{tmp_path / 'probe.db'}")
+        tracker = PoolCheckoutTracker()
+
+        assert tracker.attach(engine) is True
+        assert tracker.attach(engine) is False
+
+        with engine.connect():
+            pass
+
+        assert tracker.drain().checkouts == 1
+
+    def test_drain_resets_counters_but_keeps_a_held_connection_visible(
+        self, tmp_path
+    ):
+        engine = create_engine(f"sqlite:///{tmp_path / 'probe.db'}")
+        tracker = PoolCheckoutTracker()
+        tracker.attach(engine)
+
+        conn = engine.connect()
+        first = tracker.drain()
+        second = tracker.drain()
+
+        assert first.checkouts == 1
+        assert first.in_use_max == 1
+        assert second.checkouts == 0, "Zähler muss zurückgesetzt sein"
+        assert second.in_use_max == 1, "gehaltene Verbindung bleibt sichtbar"
+
+        conn.close()
+
+    def test_counts_concurrent_checkouts_from_other_threads(self, tmp_path):
+        """Checkouts passieren auch in Threadpool-Threads — der Zähler muss
+        thread-sicher sein und gleichzeitige Belegung als solche zeigen."""
+        engine = create_engine(
+            f"sqlite:///{tmp_path / 'probe.db'}", pool_size=5, max_overflow=5
+        )
+        tracker = PoolCheckoutTracker()
+        tracker.attach(engine)
+
+        barrier = threading.Barrier(4)
+        errors: list[BaseException] = []
+
+        def hold() -> None:
+            try:
+                with engine.connect() as conn:
+                    conn.execute(text("SELECT 1"))
+                    barrier.wait(timeout=10)
+            except BaseException as exc:  # pragma: no cover - Diagnose
+                errors.append(exc)
+
+        threads = [threading.Thread(target=hold) for _ in range(4)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=15)
+
+        assert not errors, f"Worker-Thread scheiterte: {errors}"
+        window = tracker.drain()
+        assert window.checkouts == 4
+        assert window.in_use_max == 4
+
+    def test_a_failing_listener_never_propagates_into_a_checkout(
+        self, tmp_path, caplog
+    ):
+        """Die gefährlichste Stelle des Branches: der Listener hängt in
+        SQLAlchemys Checkout-Pfad. Würde er werfen, bräche JEDE
+        Datenbankoperation der Anwendung."""
+        engine = create_engine(f"sqlite:///{tmp_path / 'probe.db'}")
+        tracker = PoolCheckoutTracker()
+        assert tracker.attach(engine) is True
+
+        caplog.set_level(logging.DEBUG, logger="baluhost.concurrency")
+        tracker._lock = _ExplodingLock()  # jeder Listener-Aufruf wirft jetzt
+
+        with engine.connect() as conn:
+            assert conn.execute(text("SELECT 1")).scalar() == 1
+        # Zweiter Durchlauf: auch der Checkin-Listener ist schon geplatzt.
+        with engine.connect() as conn:
+            assert conn.execute(text("SELECT 1")).scalar() == 1
+
+        assert any(
+            "Pool checkout listener failed" in record.message
+            for record in caplog.records
+            if record.name == "baluhost.concurrency"
+        ), "Fehler wurde nicht einmal auf DEBUG sichtbar"
+
+        tracker._lock = threading.Lock()
+        assert tracker.drain().checkouts == 0, "kaputter Tracker zählt nichts"
+
+    def test_listeners_survive_pool_replacement(self, tmp_path):
+        """`engine.dispose()` ersetzt den Pool (passiert bei recycle/pre-ping).
+        Hingen die Listener am Pool statt am Engine, stünde die Buchführung
+        danach still auf null — ein Instrument, das aufhört zu messen, ohne es
+        zu sagen."""
+        engine = create_engine(f"sqlite:///{tmp_path / 'probe.db'}")
+        tracker = PoolCheckoutTracker()
+        tracker.attach(engine)
+
+        with engine.connect():
+            pass
+        tracker.drain()
+        engine.dispose()
+
+        with engine.connect():
+            pass
+
+        assert tracker.drain().checkouts == 1
+
+    def test_no_drift_when_a_connection_is_invalidated(self, tmp_path):
+        """Ein Checkin, das ausbleibt, hebt den In-Use-Zähler dauerhaft an und
+        vererbt den Fehler an jedes spätere Fenster."""
+        engine = create_engine(f"sqlite:///{tmp_path / 'probe.db'}")
+        tracker = PoolCheckoutTracker()
+        tracker.attach(engine)
+
+        with engine.connect() as conn:
+            conn.invalidate()
+        tracker.drain()
+
+        assert tracker.drain().in_use_max == 0, "Verbindung blieb als belegt hängen"
+
+    def test_attach_survives_an_engine_without_a_pool(self):
+        """Die Registrierung selbst darf den Start nicht kippen."""
+
+        class NotAnEngine:
+            pool = None
+
+        tracker = PoolCheckoutTracker()
+        assert tracker.attach(NotAnEngine()) is False
+
+    def test_get_pool_tracker_is_a_singleton(self):
+        assert get_pool_tracker() is get_pool_tracker()
 
 
 class TestSampleThreadPool:
@@ -248,17 +537,55 @@ class TestBuildWindowPayload:
         collisions = set(payload) & _RESERVED_LOGRECORD_KEYS
         assert collisions == set(), f"würde logging sprengen: {collisions}"
 
-    def test_saturated_ticks_are_carried_through(self):
+    def test_pool_accounting_is_carried_through(self):
         payload = build_window_payload(
             window_seconds=60.0,
             lags_ms=[],
             request_window=RequestStats().drain(),
             pool=None,
             threadpool=None,
-            pool_saturated_ticks=17,
+            pool_window=PoolWindow(
+                checkouts=421, in_use_max=9, saturation_events=17
+            ),
         )
 
-        assert payload["pool_saturated_ticks"] == 17
+        assert payload["pool_checkouts"] == 421
+        assert payload["pool_in_use_max"] == 9
+        assert payload["pool_saturation_events"] == 17
+
+    def test_unknown_pool_ceiling_reports_no_saturation_claim(self):
+        payload = build_window_payload(
+            window_seconds=60.0,
+            lags_ms=[],
+            request_window=RequestStats().drain(),
+            pool=None,
+            threadpool=None,
+            pool_window=PoolWindow(
+                checkouts=3, in_use_max=1, saturation_events=None
+            ),
+        )
+
+        assert payload["pool_checkouts"] == 3
+        assert payload["pool_saturation_events"] is None, (
+            "ohne bekannte Obergrenze darf keine 0 behauptet werden"
+        )
+
+    def test_mean_duration_reaches_the_payload(self):
+        """Die dokumentierte Auslegungsformel liest genau dieses Feld."""
+        stats = RequestStats()
+        for seconds in (0.002, 0.004):
+            stats.record_start()
+            stats.record_end(seconds)
+
+        payload = build_window_payload(
+            window_seconds=60.0,
+            lags_ms=[],
+            request_window=stats.drain(),
+            pool=None,
+            threadpool=None,
+        )
+
+        assert payload["req_duration_mean_ms"] == pytest.approx(3.0)
 
     def test_payload_carries_the_loop_lag_quantiles(self):
         payload = build_window_payload(
@@ -282,7 +609,9 @@ class TestBuildWindowPayload:
             threadpool=None,
         )
 
-        assert payload["pool_checked_out_max"] is None
+        assert payload["pool_in_use_max"] is None
+        assert payload["pool_checkouts"] is None
+        assert payload["pool_open_max"] is None
         assert payload["threadpool_borrowed_max"] is None
         assert payload["loop_lag_p95_ms"] is None
 
@@ -313,6 +642,30 @@ class TestConcurrencyProbeLoop:
         assert len(records) >= 2, "mindestens zwei Fenster in 0,35 s bei 0,1 s Fenster"
         assert hasattr(records[0], "loop_lag_max_ms")
         assert hasattr(records[0], "req_in_flight_max")
+
+    async def test_interval_falls_back_to_the_configured_setting(self, caplog):
+        """`interval_seconds=None` ist der einzige Produktionspfad — im
+        Lifespan wird `concurrency_probe_loop()` ohne Argument gestartet.
+        Käme dabei nicht der Settings-Wert an, liefe die Probe mit einer
+        anderen Fensterlänge als dokumentiert."""
+        from app.core.config import settings as app_settings
+
+        caplog.set_level(logging.INFO, logger="baluhost.concurrency")
+
+        with pytest.MonkeyPatch.context() as patch:
+            patch.setattr(app_settings, "concurrency_probe_interval_seconds", 0.1)
+            task = asyncio.create_task(
+                concurrency_probe_loop(interval_seconds=None, tick_seconds=0.01)
+            )
+            await asyncio.sleep(0.35)
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+
+        records = [r for r in caplog.records if r.name == "baluhost.concurrency"]
+        assert len(records) >= 2, (
+            "Bei Default 60s käme kein Fenster — der Settings-Wert wurde nicht gelesen"
+        )
+        assert records[0].window_seconds < 1.0
 
     async def test_stops_promptly_on_cancel(self):
         task = asyncio.create_task(
@@ -370,7 +723,10 @@ class TestConcurrencyProbeLoop:
         stats.record_start()
         stats.record_start()
         stats.record_start()
-        _time.sleep(0.05)  # ... und gleichzeitig Loop-Lag erzeugen
+        # 150 ms wie im Schwestertest: auf dem geteilten ci-sandbox-Runner
+        # kann die Grundlast von Fenster 2 schon 15-30 ms Lag erzeugen — ein
+        # 50-ms-Block ließe den Vergleich mehrdeutig werden.
+        _time.sleep(0.15)  # ... und gleichzeitig Loop-Lag erzeugen
         # ... und noch innerhalb von Fenster 1 wieder auf 0 zurückführen.
         stats.record_end(0.001)
         stats.record_end(0.001)

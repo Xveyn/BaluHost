@@ -38,7 +38,28 @@ def test_collect_survives_a_pool_without_counters(db_session, monkeypatch, caplo
     # Mit dem Guard ist keine Warning zu erwarten.
     # Ohne den Guard hätte None.checked_out einen AttributeError erzeugt,
     # der vom except Exception abgefangen und geloggt würde.
-    assert not caplog.records, (
+    # Nach Logger-Namen gefiltert: eine durchgereichte WARNING irgendeiner
+    # Abhängigkeit darf diesen Test nicht flaky machen.
+    own_records = [
+        record for record in caplog.records
+        if record.name == "app.api.routes.metrics"
+    ]
+    assert not own_records, (
         "No warning should be logged when pool is None and the guard is present. "
-        f"Got records: {caplog.records}"
+        f"Got records: {own_records}"
     )
+
+
+def test_gauge_help_text_states_the_per_worker_semantics():
+    """Die Zahl ist worker-lokal: 4 Uvicorn-Worker, je eigene Registry und
+    eigener Pool. Ein flottenweit klingender Hilfetext über einem
+    Einzelprozess-Wert führt bei der Auslegung gegen `max_connections` in die
+    Irre (#300)."""
+    help_text = next(
+        metric.documentation
+        for metric in registry.collect()
+        if metric.name == "baluhost_database_connections"
+    )
+
+    assert "worker" in help_text.lower()
+    assert "checked-out" in help_text.lower()

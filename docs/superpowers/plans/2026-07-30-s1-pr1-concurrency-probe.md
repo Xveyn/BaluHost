@@ -521,6 +521,22 @@ Ticks, in denen der Pool voll ausgeschöpft war (`pool_saturated_ticks`). Ein
 Timeout kann nur aus diesem Zustand entstehen; ein Fenster mit
 `pool_saturated_ticks == 0` beweist, dass kein Timeout möglich war.
 
+> **Korrektur nach dem Abschluss-Review (2026-07-30, Befund C1) — der Absatz
+> oben ist überholt.** Beide Aussagen waren falsch:
+> 1. Ein Checkout-Hook braucht `get_db` *nicht*. `event.listen(engine,
+>    "checkout"/"checkin", …)` hängt auf **Engine-Ebene** und lässt jeden
+>    Aufrufer unangetastet — dieselbe Bauform, die `core/database.py:92`/`:113`
+>    schon verwendet. Umgesetzt als `PoolCheckoutTracker`.
+> 2. `pool_saturated_ticks == 0` bewies gar nichts. Point-Sampling vom
+>    Event-Loop aus ist genau dann blind, wenn ein nicht-awaitender `async def`
+>    Handler eine Verbindung hält — denn dann kommt der Sampler-Task nicht
+>    dran. Sättigung kürzer als ein Tick war ohnehin unsichtbar.
+>
+> Ersetzt durch die exakte Buchführung `pool_checkouts` / `pool_in_use_max` /
+> `pool_saturation_events`. Die Beweis-Behauptung ist aus beiden Guides
+> entfernt. Der Test `test_sees_what_point_sampling_structurally_cannot`
+> hält den Unterschied fest.
+
 - [ ] **Step 1: Write the failing test**
 
 An `backend/tests/core/test_concurrency_probe.py` anhängen:

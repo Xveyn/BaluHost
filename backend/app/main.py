@@ -157,7 +157,12 @@ def create_app() -> FastAPI:
     # Concurrency-Probe (S1/#300): zählt laufende Requests und ihre Dauer.
     # Bewusst als letzte registriert = äußerste Schicht, damit die gemessene
     # Dauer den gesamten Middleware-Stack einschließt.
-    app.add_middleware(InFlightMiddleware)
+    # Am selben Schalter wie der Reporting-Task: CONCURRENCY_PROBE_ENABLED=false
+    # muss die Probe VOLLSTÄNDIG abschalten, gerade die Hälfte auf dem heißen
+    # Pfad. Ohne den Task würde ohnehin nie `drain()` gerufen, die Zähler
+    # wüchsen unbegrenzt.
+    if settings.concurrency_probe_enabled:
+        app.add_middleware(InFlightMiddleware)
 
     from app.api.versioned import create_versioned_router
     app.include_router(create_versioned_router(), prefix=settings.api_prefix)

@@ -6,6 +6,14 @@ Pool- und Threadpool-Grenzen in PR2 — ohne sie würden die Grenzen geraten.
 
 Emittiert alle `concurrency_probe_interval_seconds` eine strukturierte
 Logzeile auf dem Logger `baluhost.concurrency`.
+
+Zwei Messarten, bewusst getrennt:
+* **Gesampelt** (Loop-Lag, Threadpool, offene Verbindungen) — der Task tickt
+  alle 250 ms und liest ab.
+* **Gebucht** (Pool-Checkouts) — zwei SQLAlchemy-Listener auf Engine-Ebene
+  zählen jeden Checkout in dem Thread, der ihn ausführt. Sampeln reichte hier
+  nicht: Ein nicht-awaitender `async def` Handler hält die Verbindung, während
+  der Loop blockiert ist — der Sampler kommt genau dann nicht dran.
 """
 from __future__ import annotations
 
@@ -18,6 +26,9 @@ import threading
 import time
 from collections import deque
 from dataclasses import dataclass
+
+from sqlalchemy import event
+from sqlalchemy.engine import Engine
 
 logger = logging.getLogger("baluhost.concurrency")
 
@@ -44,6 +55,7 @@ class RequestWindow:
     completed: int
     in_flight_now: int
     in_flight_max: int
+    duration_mean_ms: float | None
     duration_p50_ms: float | None
     duration_p95_ms: float | None
     duration_max_ms: float | None
@@ -59,6 +71,12 @@ class RequestStats:
         self._started = 0
         self._completed = 0
         self._durations: deque[float] = deque(maxlen=max_samples)
+        # Summe/Anzahl laufen über ALLE Requests des Fensters, nicht nur über
+        # die im gedeckelten Quantil-Puffer verbliebenen: Little's Law ist auf
+        # der mittleren Bedienzeit definiert, und ein Mittelwert über die
+        # letzten N Requests wäre eine andere Größe.
+        self._duration_sum_ms = 0.0
+        self._duration_count = 0
 
     def record_start(self) -> None:
         with self._lock:
@@ -72,7 +90,10 @@ class RequestStats:
             self._completed += 1
             if self._in_flight > 0:
                 self._in_flight -= 1
-            self._durations.append(duration_s * 1000.0)
+            duration_ms = duration_s * 1000.0
+            self._durations.append(duration_ms)
+            self._duration_sum_ms += duration_ms
+            self._duration_count += 1
 
     def drain(self) -> RequestWindow:
         """Fenster abschließen: Aggregat zurückgeben und Zähler zurücksetzen.
@@ -83,11 +104,17 @@ class RequestStats:
         """
         with self._lock:
             durations = list(self._durations)
+            mean_ms = (
+                self._duration_sum_ms / self._duration_count
+                if self._duration_count
+                else None
+            )
             window = RequestWindow(
                 started=self._started,
                 completed=self._completed,
                 in_flight_now=self._in_flight,
                 in_flight_max=self._in_flight_max,
+                duration_mean_ms=mean_ms,
                 duration_p50_ms=percentile(durations, 0.50),
                 duration_p95_ms=percentile(durations, 0.95),
                 duration_max_ms=max(durations) if durations else None,
@@ -96,6 +123,8 @@ class RequestStats:
             self._completed = 0
             self._in_flight_max = self._in_flight
             self._durations.clear()
+            self._duration_sum_ms = 0.0
+            self._duration_count = 0
             return window
 
 
@@ -109,7 +138,13 @@ def get_request_stats() -> RequestStats:
 
 @dataclass(frozen=True)
 class PoolSample:
-    """Momentaufnahme des SQLAlchemy-Connection-Pools."""
+    """Momentaufnahme des SQLAlchemy-Connection-Pools.
+
+    Nur noch für die statische Konfiguration (`size`, `max_overflow`) und für
+    `open_connections` (belegt + leerlaufend) verwendet — die Belegung selbst
+    kommt aus `PoolCheckoutTracker`, weil Point-Sampling sie systematisch
+    verfehlt (siehe dort).
+    """
 
     checked_out: int
     overflow: int
@@ -117,16 +152,157 @@ class PoolSample:
     size: int
     max_overflow: int | None
 
-    @property
-    def is_saturated(self) -> bool:
-        """True, wenn keine weitere Verbindung mehr vergeben werden kann.
 
-        Nur aus diesem Zustand heraus kann ein Checkout in den `pool_timeout`
-        laufen. Ist die Obergrenze unbekannt, wird nichts behauptet.
+@dataclass(frozen=True)
+class PoolWindow:
+    """Exakte Checkout-Buchführung eines Fensters (Event-basiert)."""
+
+    checkouts: int
+    in_use_max: int
+    #: None, wenn die Obergrenze des Pools unbekannt ist — dann wird über
+    #: Sättigung nichts behauptet, statt "0" zu melden.
+    saturation_events: int | None
+
+
+def _pool_ceiling(engine: Engine) -> int | None:
+    """`size + max_overflow`, oder None wenn der Pool keine Obergrenze kennt.
+
+    Statische Konfiguration, einmal beim Anhängen gelesen — sie ändert sich
+    über die Lebenszeit des Engines nicht, auch nicht über `engine.dispose()`
+    hinweg (der neue Pool erbt dieselben Parameter).
+    """
+    pool = getattr(engine, "pool", None)
+    size = getattr(pool, "size", None)
+    max_overflow = getattr(pool, "_max_overflow", None)
+    if not callable(size) or not isinstance(max_overflow, int):
+        return None
+    try:
+        return int(size()) + max_overflow
+    except Exception:
+        logger.debug("Failed to read pool ceiling", exc_info=True)
+        return None
+
+
+class PoolCheckoutTracker:
+    """Zählt Pool-Checkouts über SQLAlchemy-Events statt per Point-Sampling.
+
+    Warum nicht sampeln: einen Checkout hält ein nicht-awaitender `async def`
+    Handler von der ersten Query bis zum Teardown — und währenddessen ist der
+    Event-Loop blockiert, der Probe-Task kommt also gar nicht dran. Genau die
+    Belegung, um die es in #300 geht, wäre unsichtbar. Der Listener dagegen
+    läuft synchron im Thread, der den Checkout ausführt, und sieht jeden
+    einzelnen, unabhängig vom Zustand des Loops.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._in_use = 0
+        self._in_use_max = 0
+        self._checkouts = 0
+        self._saturation_events = 0
+        self._ceiling: int | None = None
+        self._attached = False
+
+    # ---- Registrierung -------------------------------------------------
+
+    def attach(self, engine: Engine) -> bool:
+        """Listener anhängen. Gibt False zurück, wenn schon angehängt.
+
+        Idempotent: ein zweiter Aufruf (Probe zweimal gestartet, Tests) darf
+        keinen zweiten Satz Listener registrieren, sonst zählte jeder Checkout
+        doppelt. Auch ein FEHLGESCHLAGENER Versuch gilt als erledigt — sonst
+        könnte ein halb registriertes Paar beim nächsten Anlauf zu einem
+        doppelten Checkin-Listener werden.
         """
-        if self.max_overflow is None:
+        with self._lock:
+            if self._attached:
+                return False
+            self._attached = True
+
+        self._ceiling = _pool_ceiling(engine)
+        try:
+            # checkin zuerst: schlägt das Registrieren dazwischen fehl, bleibt
+            # höchstens ein Dekrement-Listener übrig (bei 0 abgefangen) statt
+            # eines Inkrement-Listeners, der unbegrenzt hochliefe.
+            event.listen(engine, "checkin", self._on_checkin)
+            event.listen(engine, "checkout", self._on_checkout)
+        except Exception:
+            logger.warning(
+                "Could not register pool checkout listeners; "
+                "pool accounting stays empty",
+                exc_info=True,
+            )
             return False
-        return self.checked_out >= self.size + self.max_overflow
+        return True
+
+    # ---- Listener ------------------------------------------------------
+    #
+    # Beide laufen INNERHALB von SQLAlchemys Checkout-/Checkin-Pfad. Eine
+    # Exception hier bräche jede Datenbankoperation der Anwendung. Deshalb
+    # fangen sie BaseException — bewusst breiter als `Exception`: eine
+    # Diagnose darf unter keinen Umständen die Anwendung mitreißen, und diese
+    # beiden Methoden tun nichts, wofür ein KeyboardInterrupt hier durchkommen
+    # müsste.
+
+    def _on_checkout(
+        self, _dbapi_connection, _connection_record, _connection_proxy
+    ) -> None:
+        try:
+            with self._lock:
+                self._checkouts += 1
+                self._in_use += 1
+                if self._in_use > self._in_use_max:
+                    self._in_use_max = self._in_use
+                # Sättigung ist jetzt exakt bestimmbar statt gesampelt: dieser
+                # Checkout hat die letzte freie Verbindung genommen — nur aus
+                # diesem Zustand heraus kann der nächste in pool_timeout laufen.
+                if self._ceiling is not None and self._in_use >= self._ceiling:
+                    self._saturation_events += 1
+        except BaseException:
+            _swallow_listener_error()
+
+    def _on_checkin(self, _dbapi_connection, _connection_record) -> None:
+        try:
+            with self._lock:
+                if self._in_use > 0:
+                    self._in_use -= 1
+        except BaseException:
+            _swallow_listener_error()
+
+    # ---- Auslesen ------------------------------------------------------
+
+    def drain(self) -> PoolWindow:
+        """Fenster abschließen. `in_use_max` startet beim aktuellen Stand,
+        damit eine dauerhaft gehaltene Verbindung nicht unsichtbar wird."""
+        with self._lock:
+            window = PoolWindow(
+                checkouts=self._checkouts,
+                in_use_max=self._in_use_max,
+                saturation_events=(
+                    self._saturation_events if self._ceiling is not None else None
+                ),
+            )
+            self._checkouts = 0
+            self._saturation_events = 0
+            self._in_use_max = self._in_use
+            return window
+
+
+def _swallow_listener_error() -> None:
+    """Fehler im Tracker dürfen nie in den Checkout-Pfad zurückschlagen —
+    auch das Loggen selbst nicht."""
+    try:
+        logger.debug("Pool checkout listener failed", exc_info=True)
+    except BaseException:
+        pass
+
+
+_pool_tracker = PoolCheckoutTracker()
+
+
+def get_pool_tracker() -> PoolCheckoutTracker:
+    """Prozessweites Singleton — ein Satz Listener pro Worker."""
+    return _pool_tracker
 
 
 @dataclass(frozen=True)
@@ -138,16 +314,22 @@ class ThreadPoolSample:
     total_tokens: float
 
 
-def sample_pool(engine) -> PoolSample | None:
-    """Pool-Auslastung ablesen.
+def sample_pool(engine: Engine) -> PoolSample | None:
+    """Pool-Zustand punktuell ablesen (statische Konfiguration + offene
+    Verbindungen).
 
     Gibt None zurück, wenn der Pool keine Zähler führt — NullPool und der in
     den Tests verwendete StaticPool haben checkedout()/overflow() nicht.
 
     `_max_overflow` ist privat, aber die einzige Quelle für die Obergrenze;
     SQLAlchemy exponiert sie nicht öffentlich. Fehlt sie (andere Pool-Klasse,
-    andere SQLAlchemy-Version), degradiert `is_saturated` still zu False,
-    statt eine falsche Sättigung zu melden.
+    andere SQLAlchemy-Version), wird `max_overflow=None` gemeldet, statt eine
+    Obergrenze zu erfinden.
+
+    Achtung: `open_connections` besteht aus zwei nicht-atomaren Lesevorgängen
+    (`checkedout()` + `checkedin()`). Eine Verbindung, die genau dazwischen
+    zurückgegeben wird, zählt in beiden — der Wert hat dadurch einen kleinen
+    systematischen Aufwärts-Bias.
     """
     pool = getattr(engine, "pool", None)
     if pool is None:
@@ -208,7 +390,7 @@ def build_window_payload(
     request_window: RequestWindow,
     pool: PoolSample | None,
     threadpool: ThreadPoolSample | None,
-    pool_saturated_ticks: int = 0,
+    pool_window: PoolWindow | None = None,
 ) -> dict[str, object]:
     """Ein Messfenster in flache, log-taugliche Felder überführen.
 
@@ -226,17 +408,24 @@ def build_window_payload(
         "req_completed": request_window.completed,
         "req_in_flight_now": request_window.in_flight_now,
         "req_in_flight_max": request_window.in_flight_max,
+        "req_duration_mean_ms": _rounded(request_window.duration_mean_ms),
         "req_duration_p50_ms": _rounded(request_window.duration_p50_ms),
         "req_duration_p95_ms": _rounded(request_window.duration_p95_ms),
         "req_duration_max_ms": _rounded(request_window.duration_max_ms),
-        "pool_checked_out_max": pool.checked_out if pool else None,
-        "pool_overflow_max": pool.overflow if pool else None,
+        # Aus der Checkout-Buchführung: vollständig, unabhängig davon, ob der
+        # Event-Loop während des Checkouts blockiert war.
+        "pool_checkouts": pool_window.checkouts if pool_window else None,
+        "pool_in_use_max": pool_window.in_use_max if pool_window else None,
+        # Vorläufer eines Pool-Timeouts: Checkouts, die die letzte freie
+        # Verbindung genommen haben.
+        "pool_saturation_events": (
+            pool_window.saturation_events if pool_window else None
+        ),
+        # Punktuell gesampelt (belegt + leerlaufend): die Event-Buchführung
+        # kennt leerlaufende Verbindungen nicht.
         "pool_open_max": pool.open_connections if pool else None,
         "pool_size": pool.size if pool else None,
         "pool_max_overflow": pool.max_overflow if pool else None,
-        # Vorläufer eines Pool-Timeouts: nur aus einem voll ausgeschöpften
-        # Pool heraus kann ein Checkout in den pool_timeout laufen.
-        "pool_saturated_ticks": pool_saturated_ticks,
         "threadpool_borrowed_max": threadpool.borrowed if threadpool else None,
         "threadpool_waiting_max": threadpool.waiting if threadpool else None,
         "threadpool_total_tokens": threadpool.total_tokens if threadpool else None,
@@ -296,10 +485,15 @@ async def concurrency_probe_loop(
         interval_seconds = float(settings.concurrency_probe_interval_seconds)
 
     stats = get_request_stats()
+    tracker = get_pool_tracker()
+    tracker.attach(engine)
+    # Alles, was vor dem ersten Fenster gezählt wurde (Startup-Queries),
+    # gehört in kein Fenster.
+    tracker.drain()
+
     lags_ms: list[float] = []
     pool_high: PoolSample | None = None
     threadpool_high: ThreadPoolSample | None = None
-    saturated_ticks = 0
     window_started = time.perf_counter()
 
     while True:
@@ -308,10 +502,7 @@ async def concurrency_probe_loop(
         elapsed = time.perf_counter() - tick_started
         lags_ms.append(max(0.0, (elapsed - tick_seconds) * 1000.0))
 
-        pool_sample = sample_pool(engine)
-        if pool_sample is not None and pool_sample.is_saturated:
-            saturated_ticks += 1
-        pool_high = _merge_pool_high_water(pool_high, pool_sample)
+        pool_high = _merge_pool_high_water(pool_high, sample_pool(engine))
         threadpool_high = _merge_threadpool_high_water(
             threadpool_high, sample_threadpool()
         )
@@ -326,18 +517,17 @@ async def concurrency_probe_loop(
             request_window=stats.drain(),
             pool=pool_high,
             threadpool=threadpool_high,
-            pool_saturated_ticks=saturated_ticks,
+            pool_window=tracker.drain(),
         )
         logger.info(
-            "concurrency window: loop_lag_p95=%sms in_flight_max=%s pool_out_max=%s",
+            "concurrency window: loop_lag_p95=%sms in_flight_max=%s pool_in_use_max=%s",
             payload["loop_lag_p95_ms"],
             payload["req_in_flight_max"],
-            payload["pool_checked_out_max"],
+            payload["pool_in_use_max"],
             extra=payload,
         )
 
         lags_ms = []
         pool_high = None
         threadpool_high = None
-        saturated_ticks = 0
         window_started = time.perf_counter()
