@@ -428,7 +428,7 @@ from __future__ import annotations
 
 import time
 
-from starlette.types import ASGIApp, Message, Receive, Scope, Send
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from app.core.concurrency_probe import get_request_stats
 
@@ -452,8 +452,6 @@ class InFlightMiddleware:
         finally:
             stats.record_end(time.perf_counter() - started_at)
 ```
-
-Der ungenutzte `Message`-Import wird von ruff moniert — importiere nur `ASGIApp`, `Receive`, `Scope`, `Send`.
 
 - [ ] **Step 4: Run test to verify it passes**
 
