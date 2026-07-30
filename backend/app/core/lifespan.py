@@ -414,6 +414,25 @@ async def _expiry_warning_catchup_on_startup() -> None:
         logger.warning("Startup expiration-warning catch-up failed: %s", exc)
 
 
+def _start_concurrency_probe() -> "asyncio.Task | None":
+    """Start the concurrency probe (S1/#300) unless it is switched off.
+
+    Extracted from `_startup()` so the wiring is testable without booting the
+    whole application: the test suite sets SKIP_APP_INIT=1, so `_startup()`
+    never runs there, and a test that drove it anyway would cost ~43s and leave
+    this module's globals set for every later test.
+    """
+    if not settings.concurrency_probe_enabled:
+        return None
+    from app.core.concurrency_probe import concurrency_probe_loop
+    task = _spawn_background(concurrency_probe_loop(), "concurrency_probe")
+    logger.info(
+        "Concurrency probe started (interval=%ss)",
+        settings.concurrency_probe_interval_seconds,
+    )
+    return task
+
+
 async def _startup(app: FastAPI) -> None:
     """Run all startup initialization steps."""
     global _discovery_service, _websocket_manager, _plugin_manager, IS_PRIMARY_WORKER, _smart_device_manager
@@ -654,13 +673,7 @@ async def _startup(app: FastAPI) -> None:
     # Concurrency-Probe (S1/#300): läuft auf JEDEM Worker, nicht nur dem
     # primären — der gesuchte Effekt (blockierter Event-Loop, Pool-Auslastung)
     # ist per Worker verschieden und wäre aus nur einem Prozess nicht ablesbar.
-    if settings.concurrency_probe_enabled:
-        from app.core.concurrency_probe import concurrency_probe_loop
-        _spawn_background(concurrency_probe_loop(), "concurrency_probe")
-        logger.info(
-            "Concurrency probe started (interval=%ss)",
-            settings.concurrency_probe_interval_seconds,
-        )
+    _start_concurrency_probe()
 
     # Start SmartDevice WebSocket bridge (primary worker only)
     if IS_PRIMARY_WORKER:
