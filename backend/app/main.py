@@ -28,6 +28,7 @@ from app.middleware.error_counter import ErrorCounterMiddleware
 from app.middleware.plugin_gate import PluginGateMiddleware
 from app.middleware.sleep_auto_wake import SleepAutoWakeMiddleware
 from app.middleware.api_version import ApiVersionMiddleware
+from app.middleware.inflight import InFlightMiddleware
 
 # Individual file size limit — class attribute, works correctly
 MultiPartParser.max_file_size = 10 * 1024 * 1024 * 1024  # 10 GB (matches nginx client_max_body_size)
@@ -152,6 +153,16 @@ def create_app() -> FastAPI:
         allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type", "X-Device-ID", "X-Requested-With", "Accept", "Origin", "X-Chunk-Index"],
     )
+
+    # Concurrency-Probe (S1/#300): zählt laufende Requests und ihre Dauer.
+    # Bewusst als letzte registriert = äußerste Schicht, damit die gemessene
+    # Dauer den gesamten Middleware-Stack einschließt.
+    # Am selben Schalter wie der Reporting-Task: CONCURRENCY_PROBE_ENABLED=false
+    # muss die Probe VOLLSTÄNDIG abschalten, gerade die Hälfte auf dem heißen
+    # Pfad. Ohne den Task würde ohnehin nie `drain()` gerufen, die Zähler
+    # wüchsen unbegrenzt.
+    if settings.concurrency_probe_enabled:
+        app.add_middleware(InFlightMiddleware)
 
     from app.api.versioned import create_versioned_router
     app.include_router(create_versioned_router(), prefix=settings.api_prefix)

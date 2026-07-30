@@ -1,6 +1,7 @@
 # Middleware
 
-Starlette `BaseHTTPMiddleware` classes applied to all requests. Registered in `main.py` — order matters. `add_middleware()` does `user_middleware.insert(0, ...)`, so **the last one registered is the outermost** and sees every request first (verified against starlette 0.41.3).
+Middleware applied to all requests. Most are Starlette `BaseHTTPMiddleware`;
+`inflight.py` is deliberately pure ASGI. Registered in `main.py` — order matters. `add_middleware()` does `user_middleware.insert(0, ...)`, so **the last one registered is the outermost** and sees every request first (verified against starlette 0.41.3).
 
 ## Files
 
@@ -14,10 +15,23 @@ Starlette `BaseHTTPMiddleware` classes applied to all requests. Registered in `m
 | `api_version.py` | Adds `X-API-Version` and `X-API-Min-Version` headers to all `/api/` responses | API responses |
 | `plugin_gate.py` | Enforces plugin enabled-status and permissions at runtime. Reads the shared TTL cache in `services/plugin_enablement.py` (5s `CACHE_TTL_SECONDS`) rather than keeping a cache of its own. Management routes (toggle, config, UI assets) bypass the gate | `/api/plugins/{name}/...` |
 | `sleep_auto_wake.py` | Counts HTTP requests for idle detection. Auto-wakes from soft sleep on non-whitelisted requests. Whitelisted: monitoring, health, docs, sleep status endpoints | All requests |
+| `inflight.py` | Counts in-flight HTTP requests and their service time (clock stops at `http.response.start`, so SSE/streaming lifetime is excluded) for the concurrency probe (S1/#300). **Pure ASGI, not `BaseHTTPMiddleware`** — it exists to measure overhead, so it must not add any itself. Registered last in `main.py`, making it the outermost layer. Only registered when `CONCURRENCY_PROBE_ENABLED` is true — the off-switch has to reach the hot-path half too | All HTTP requests |
 
 ## Adding Middleware
 
 1. Create file in `middleware/`
-2. Extend `BaseHTTPMiddleware`, implement `async dispatch(self, request, call_next)`
+2. Pick a style:
+   - **`BaseHTTPMiddleware`** (the default here, 8 of 9): extend it and implement
+     `async dispatch(self, request, call_next)`. You get a `Request`/`Response`
+     pair, so header rewriting, short-circuiting with a response, and
+     `request.state` are straightforward.
+   - **Pure ASGI** (`inflight.py`): implement
+     `async __call__(self, scope, receive, send)` and call `self.app(...)`.
+     Choose this when the per-request cost matters (BaseHTTPMiddleware wraps
+     every request in an extra task group and Request/Response objects), when
+     you must observe the raw ASGI messages (e.g. stop a timer at
+     `http.response.start`), or when buffering a streaming response would be
+     harmful. Cost: no `Request` convenience — you handle `scope` yourself and
+     must pass non-`http` scopes (`lifespan`, `websocket`) straight through.
 3. Register in `main.py` via `app.add_middleware(MyMiddleware)` or a `setup_*()` function
 4. Keep middleware lightweight — it runs on every request

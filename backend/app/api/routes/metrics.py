@@ -28,6 +28,7 @@ import time
 
 from app.api import deps
 from app.core.config import settings
+from app.core.concurrency_probe import sample_pool
 from app.services.hardware.sensors import get_cpu_sensor_data
 from app.core.rate_limiter import limiter, get_limit
 
@@ -254,7 +255,13 @@ file_download_bytes_total = Counter(
 
 database_connections = Gauge(
     'baluhost_database_connections',
-    'Number of active database connections',
+    # Bewusst so wortreich: der Wert ist NICHT flottenweit. Jeder der 4 Uvicorn-
+    # Worker hat eine eigene Registry und einen eigenen Pool; welcher Worker den
+    # Scrape bedient, entscheidet der Reverse Proxy, aufeinanderfolgende Scrapes
+    # springen also zwischen Prozessen. Der Scrape selbst hält dabei eine der
+    # gezählten Verbindungen (die Route nimmt `Depends(get_db)`).
+    'Checked-out DB connections in the worker serving this scrape '
+    '(per-worker, includes the scrape\'s own connection)',
     registry=registry
 )
 
@@ -458,6 +465,13 @@ def collect_database_metrics(db: Session):
 
         users_total.labels(role='admin').set(admin_count)
         users_total.labels(role='user').set(user_count)
+
+        # Connection-Pool-Auslastung (#300). Die Gauge war seit v1.2 deklariert,
+        # wurde aber nie gesetzt — die Doku versprach sie trotzdem.
+        from app.core.database import engine
+        pool = sample_pool(engine)
+        if pool is not None:
+            database_connections.set(pool.checked_out)
 
     except Exception as e:
         logger.warning("Error collecting database metrics: %s", e)
