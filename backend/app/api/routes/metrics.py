@@ -28,6 +28,7 @@ import time
 
 from app.api import deps
 from app.core.config import settings
+from app.core.concurrency_probe import sample_pool
 from app.services.hardware.sensors import get_cpu_sensor_data
 from app.core.rate_limiter import limiter, get_limit
 
@@ -458,6 +459,13 @@ def collect_database_metrics(db: Session):
 
         users_total.labels(role='admin').set(admin_count)
         users_total.labels(role='user').set(user_count)
+
+        # Connection-Pool-Auslastung (#300). Die Gauge war seit v1.2 deklariert,
+        # wurde aber nie gesetzt — die Doku versprach sie trotzdem.
+        from app.core.database import engine
+        pool = sample_pool(engine)
+        if pool is not None:
+            database_connections.set(pool.checked_out)
 
     except Exception as e:
         logger.warning("Error collecting database metrics: %s", e)
