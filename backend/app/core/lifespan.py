@@ -651,6 +651,17 @@ async def _startup(app: FastAPI) -> None:
     except Exception as e:
         logger.warning(f"SmartDeviceManager could not initialize: {e}")
 
+    # Concurrency-Probe (S1/#300): läuft auf JEDEM Worker, nicht nur dem
+    # primären — der gesuchte Effekt (blockierter Event-Loop, Pool-Auslastung)
+    # ist per Worker verschieden und wäre aus nur einem Prozess nicht ablesbar.
+    if settings.concurrency_probe_enabled:
+        from app.core.concurrency_probe import concurrency_probe_loop
+        _spawn_background(concurrency_probe_loop(), "concurrency_probe")
+        logger.info(
+            "Concurrency probe started (interval=%ss)",
+            settings.concurrency_probe_interval_seconds,
+        )
+
     # Start SmartDevice WebSocket bridge (primary worker only)
     if IS_PRIMARY_WORKER:
         _spawn_background(_smart_device_ws_bridge(), "smart_device_ws_bridge")
