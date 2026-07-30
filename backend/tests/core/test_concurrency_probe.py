@@ -344,3 +344,53 @@ class TestConcurrencyProbeLoop:
         assert records[0].loop_lag_max_ms > 100, (
             f"150 ms Blockade nicht sichtbar: {records[0].loop_lag_max_ms} ms"
         )
+
+    async def test_high_water_marks_do_not_survive_into_the_next_window(self, caplog):
+        """Der primäre Risikopunkt der Aufgabe: überlebt ein Accumulator das
+        Fenster-Ende, vererbt jedes spätere Fenster den ersten Peak weiter —
+        die Zahlen wären dauerhaft zu hoch (Richtung Über-Provisionierung).
+
+        Der Loop liest das Modul-Singleton, deshalb `get_request_stats()`
+        statt einer eigenen `RequestStats()`-Instanz. Der In-Flight-Zähler
+        wird bewusst noch innerhalb von Fenster 1 wieder auf 0 zurückgeführt,
+        damit am Fenster-Ende kein Live-Wert übrig bleibt, der die Aussage
+        verwässert.
+        """
+        import time as _time
+
+        caplog.set_level(logging.INFO, logger="baluhost.concurrency")
+        stats = get_request_stats()
+
+        task = asyncio.create_task(
+            concurrency_probe_loop(interval_seconds=0.2, tick_seconds=0.01)
+        )
+        await asyncio.sleep(0.02)
+
+        # Fenster 1: In-Flight-Peak erzeugen ...
+        stats.record_start()
+        stats.record_start()
+        stats.record_start()
+        _time.sleep(0.05)  # ... und gleichzeitig Loop-Lag erzeugen
+        # ... und noch innerhalb von Fenster 1 wieder auf 0 zurückführen.
+        stats.record_end(0.001)
+        stats.record_end(0.001)
+        stats.record_end(0.001)
+
+        # Zwei weitere Fenster ohne jede Last durchlaufen lassen.
+        await asyncio.sleep(0.45)
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+        records = [r for r in caplog.records if r.name == "baluhost.concurrency"]
+        assert len(records) >= 2, "Test braucht mindestens zwei Fenster"
+
+        assert records[0].req_in_flight_max >= 3, (
+            "Fenster 1 muss den erzeugten Peak zeigen"
+        )
+        assert records[1].req_in_flight_max < records[0].req_in_flight_max, (
+            "Fenster 2 erbt den In-Flight-Peak aus Fenster 1 — Reset fehlt"
+        )
+
+        assert records[1].loop_lag_max_ms < records[0].loop_lag_max_ms, (
+            "Fenster 2 erbt den Loop-Lag-Peak aus Fenster 1 — Reset fehlt"
+        )
