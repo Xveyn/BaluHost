@@ -1,6 +1,7 @@
 # Middleware
 
-Starlette `BaseHTTPMiddleware` classes applied to all requests. Registered in `main.py` — order matters. `add_middleware()` does `user_middleware.insert(0, ...)`, so **the last one registered is the outermost** and sees every request first (verified against starlette 0.41.3).
+Middleware applied to all requests. Die meisten sind Starlette-`BaseHTTPMiddleware`;
+`inflight.py` ist bewusst pure ASGI. Registriert in `main.py` — order matters. `add_middleware()` does `user_middleware.insert(0, ...)`, so **the last one registered is the outermost** and sees every request first (verified against starlette 0.41.3).
 
 ## Files
 
@@ -14,6 +15,7 @@ Starlette `BaseHTTPMiddleware` classes applied to all requests. Registered in `m
 | `api_version.py` | Adds `X-API-Version` and `X-API-Min-Version` headers to all `/api/` responses | API responses |
 | `plugin_gate.py` | Enforces plugin enabled-status and permissions at runtime. Reads the shared TTL cache in `services/plugin_enablement.py` (5s `CACHE_TTL_SECONDS`) rather than keeping a cache of its own. Management routes (toggle, config, UI assets) bypass the gate | `/api/plugins/{name}/...` |
 | `sleep_auto_wake.py` | Counts HTTP requests for idle detection. Auto-wakes from soft sleep on non-whitelisted requests. Whitelisted: monitoring, health, docs, sleep status endpoints | All requests |
+| `inflight.py` | Zählt laufende HTTP-Requests und ihre Gesamtdauer für die Concurrency-Probe (S1/#300). **Pure ASGI, kein `BaseHTTPMiddleware`** — sie soll Overhead messen, nicht erzeugen. Als letzte in `main.py` registriert und damit die äußerste Schicht | Alle HTTP-Requests |
 
 ## Adding Middleware
 
