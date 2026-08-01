@@ -18,7 +18,14 @@ export function ScopeGrantModal({
 }) {
   const { t } = useTranslation(['plugins', 'common']);
 
-  const descs = t('scopeDescriptions', { returnObjects: true }) as Record<
+  // nsSeparator: false is load-bearing. Scope keys contain colons
+  // ("read:power"), and i18next treats a colon as the namespace separator when
+  // it resolves the nested values of a returnObjects lookup — so read:power
+  // came back as the STRING "power" instead of its {label, description}, and
+  // the modal fell through to showing the raw key with no explanation. All
+  // three read:* scopes were affected. PluginDocumentation.tsx carries the
+  // same flag for the same reason.
+  const descs = t('scopeDescriptions', { returnObjects: true, nsSeparator: false }) as Record<
     string,
     { label: string; description: string }
   >;
