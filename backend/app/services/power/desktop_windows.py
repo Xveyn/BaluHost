@@ -6,25 +6,29 @@ be given, while the session bus is already in reach - the backend runs under
 the session user's uid (see session_env.py), so the same env that lets
 kscreen-doctor talk to the session works here too.
 
-Measured on BaluNode (2026-08-01): Plasma 6 on Debian 13 ships ``qdbus6`` and
-no plain ``qdbus``, and ``org.kde.KWin`` on ``/KWin`` exposes both halves this
-module needs::
+Measured on BaluNode (2026-08-01), Plasma 6 on Debian 13:
 
-    method Q_NOREPLY void org.kde.KWin.showDesktop(bool showing)
-    property read bool org.kde.KWin.showingDesktop
+- the binary is ``qdbus6``; there is no plain ``qdbus``
+- ``org.kde.KWin.showDesktop(bool)`` on ``/KWin`` minimizes every window and
+  exits 0. It takes a bool rather than toggling, so calling it twice leaves
+  the windows down - unlike kglobalaccel's "Show Desktop" shortcut, where a
+  second invocation brings them back.
+- ``org.kde.KWin.showingDesktop`` reads **false** one second after that same
+  successful call, with the windows visibly down. It tracks KWin's temporary
+  show-desktop MODE, not "are the windows minimized". **Do not use it to
+  verify this call** - the first version of this module did, and every
+  successful run reported "the windows stayed up" to the user.
 
-The setter is used deliberately instead of kglobalaccel's "Show Desktop"
-shortcut, which is a TOGGLE: a second invocation would bring the windows back,
-so a retry or a double click would undo the action. ``showDesktop(true)`` is
-idempotent. The property makes this the one step of ending gaming mode whose
-effect can actually be verified - Big Picture's own state cannot be (see the
-design doc from 2026-07-24).
+So there is no verification step here: like everything else in ending gaming
+mode, the effect is not observable (Big Picture's own state is not either, see
+the design doc from 2026-07-24). A non-zero exit is the only failure this
+module can honestly report.
 """
 from __future__ import annotations
 
 import logging
 import subprocess
-from typing import List, Optional, Tuple
+from typing import Tuple
 
 from app.core.config import settings
 from app.services.power.session_env import wayland_session_env
@@ -43,54 +47,26 @@ SHOW_DESKTOP_CMD = [
     "true",
 ]
 
-SHOWING_DESKTOP_CMD = [
-    "qdbus6",
-    "org.kde.KWin",
-    "/KWin",
-    "org.kde.KWin.showingDesktop",
-]
-
-
-def _run(cmd: List[str]) -> subprocess.CompletedProcess:
-    return subprocess.run(  # fixed argv, no shell, no user input
-        cmd,
-        capture_output=True,
-        text=True,
-        timeout=_TIMEOUT_SECONDS,
-        env=wayland_session_env(),
-    )
-
-
-def _showing_desktop() -> Optional[bool]:
-    """KWin's own answer, or None when it cannot be read."""
-    try:
-        result = _run(SHOWING_DESKTOP_CMD)
-    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
-        return None
-    if result.returncode != 0:
-        return None
-    value = (result.stdout or "").strip().lower()
-    if value == "true":
-        return True
-    if value == "false":
-        return False
-    return None
-
 
 def show_desktop() -> Tuple[bool, str]:
     """Minimize all windows. Blocking - call via asyncio.to_thread.
 
     Returns:
-        (ok, detail). ok=True means KWin accepted the call and did not
-        contradict it afterwards. Safe to call repeatedly: unlike the
-        "Show Desktop" shortcut this sets the state instead of toggling it.
+        (ok, detail). ok=True means KWin accepted the call. Safe to repeat:
+        the call sets the state instead of toggling it.
     """
     if settings.is_dev_mode:
         # No KWin, no session bus on a Windows dev box.
         return True, "show desktop requested (dev)"
 
     try:
-        result = _run(SHOW_DESKTOP_CMD)
+        result = subprocess.run(  # fixed argv, no shell, no user input
+            SHOW_DESKTOP_CMD,
+            capture_output=True,
+            text=True,
+            timeout=_TIMEOUT_SECONDS,
+            env=wayland_session_env(),
+        )
     except FileNotFoundError:
         return False, "qdbus6 not found (is the desktop session running?)"
     except subprocess.TimeoutExpired:
@@ -100,11 +76,4 @@ def show_desktop() -> Tuple[bool, str]:
         detail = (result.stderr or "").strip() or f"exit {result.returncode}"
         logger.warning("show desktop failed: %s", detail)
         return False, detail
-
-    # Only an explicit contradiction counts as a failure. A property that
-    # cannot be read says nothing about the windows, and turning that into a
-    # red toast would report a problem that may not exist.
-    if _showing_desktop() is False:
-        logger.warning("show desktop: KWin still reports showingDesktop=false")
-        return False, "KWin still reports the windows as visible"
     return True, "windows minimized"

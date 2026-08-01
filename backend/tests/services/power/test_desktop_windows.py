@@ -4,11 +4,8 @@ from __future__ import annotations
 import subprocess
 from unittest.mock import MagicMock, patch
 
-from app.services.power.desktop_windows import (
-    SHOW_DESKTOP_CMD,
-    SHOWING_DESKTOP_CMD,
-    show_desktop,
-)
+from app.services.power import desktop_windows
+from app.services.power.desktop_windows import SHOW_DESKTOP_CMD, show_desktop
 
 
 def _completed(returncode: int = 0, stdout: str = "", stderr: str = "") -> MagicMock:
@@ -19,18 +16,10 @@ def _completed(returncode: int = 0, stdout: str = "", stderr: str = "") -> Magic
     return result
 
 
-def _patch_run(*results):
-    """Patch subprocess.run; consecutive calls get consecutive *results*."""
-    if len(results) == 1:
-        return patch("subprocess.run", return_value=results[0])
-    return patch("subprocess.run", side_effect=list(results))
-
-
-class TestShowDesktopCommands:
+class TestShowDesktopCommand:
     def test_uses_qdbus6(self):
         """Measured on BaluNode: Plasma 6 on Debian 13 ships no plain qdbus."""
         assert SHOW_DESKTOP_CMD[0] == "qdbus6"
-        assert SHOWING_DESKTOP_CMD[0] == "qdbus6"
 
     def test_sets_the_state_instead_of_toggling_it(self):
         """kglobalaccel's "Show Desktop" shortcut is a TOGGLE - a second call
@@ -39,24 +28,40 @@ class TestShowDesktopCommands:
         assert SHOW_DESKTOP_CMD[-2:] == ["org.kde.KWin.showDesktop", "true"]
         assert "invokeShortcut" not in SHOW_DESKTOP_CMD
 
-    def test_reads_kwins_own_property_back(self):
-        assert SHOWING_DESKTOP_CMD[-1] == "org.kde.KWin.showingDesktop"
-
 
 class TestShowDesktop:
     def test_calls_the_setter_and_reports_success(self):
         with patch("app.services.power.desktop_windows.settings") as cfg, \
-             _patch_run(_completed(stdout=""), _completed(stdout="true")) as run, \
+             patch("subprocess.run", return_value=_completed()) as run, \
              patch("app.services.power.desktop_windows.wayland_session_env", return_value={}):
             cfg.is_dev_mode = False
             ok, _detail = show_desktop()
 
         assert ok is True
-        assert run.call_args_list[0].args[0] == SHOW_DESKTOP_CMD
+        assert run.call_args.args[0] == SHOW_DESKTOP_CMD
+
+    def test_does_not_second_guess_kwin_afterwards(self):
+        """Regression guard for the false alarm shipped in #497.
+
+        The obvious verification - reading org.kde.KWin.showingDesktop back -
+        is WRONG: measured on the box, it reads false right after a successful
+        call with the windows visibly down, because it tracks KWin's temporary
+        show-desktop mode. Every successful run reported failure to the user.
+        One call, no read-back.
+        """
+        with patch("app.services.power.desktop_windows.settings") as cfg, \
+             patch("subprocess.run", return_value=_completed()) as run, \
+             patch("app.services.power.desktop_windows.wayland_session_env", return_value={}):
+            cfg.is_dev_mode = False
+            ok, _detail = show_desktop()
+
+        assert ok is True
+        assert run.call_count == 1
+        assert "showingDesktop" not in " ".join(run.call_args.args[0])
 
     def test_passes_the_wayland_session_env(self):
         with patch("app.services.power.desktop_windows.settings") as cfg, \
-             _patch_run(_completed(), _completed(stdout="true")) as run, \
+             patch("subprocess.run", return_value=_completed()) as run, \
              patch(
                  "app.services.power.desktop_windows.wayland_session_env",
                  return_value={"XDG_RUNTIME_DIR": "/run/user/1000"},
@@ -64,25 +69,25 @@ class TestShowDesktop:
             cfg.is_dev_mode = False
             show_desktop()
 
-        assert run.call_args_list[0].kwargs["env"] == {"XDG_RUNTIME_DIR": "/run/user/1000"}
+        assert run.call_args.kwargs["env"] == {"XDG_RUNTIME_DIR": "/run/user/1000"}
 
     def test_never_uses_a_shell(self):
         with patch("app.services.power.desktop_windows.settings") as cfg, \
-             _patch_run(_completed(), _completed(stdout="true")) as run, \
+             patch("subprocess.run", return_value=_completed()) as run, \
              patch("app.services.power.desktop_windows.wayland_session_env", return_value={}):
             cfg.is_dev_mode = False
             show_desktop()
 
-        assert "shell" not in run.call_args_list[0].kwargs
+        assert "shell" not in run.call_args.kwargs
 
     def test_sets_a_timeout_so_a_stuck_session_cannot_hang_the_action(self):
         with patch("app.services.power.desktop_windows.settings") as cfg, \
-             _patch_run(_completed(), _completed(stdout="true")) as run, \
+             patch("subprocess.run", return_value=_completed()) as run, \
              patch("app.services.power.desktop_windows.wayland_session_env", return_value={}):
             cfg.is_dev_mode = False
             show_desktop()
 
-        assert run.call_args_list[0].kwargs["timeout"] > 0
+        assert run.call_args.kwargs["timeout"] > 0
 
     def test_missing_qdbus_binary_is_reported_not_raised(self):
         with patch("app.services.power.desktop_windows.settings") as cfg, \
@@ -106,7 +111,7 @@ class TestShowDesktop:
 
     def test_non_zero_exit_carries_the_stderr(self):
         with patch("app.services.power.desktop_windows.settings") as cfg, \
-             _patch_run(_completed(1, stderr="no such service")), \
+             patch("subprocess.run", return_value=_completed(1, stderr="no such service")), \
              patch("app.services.power.desktop_windows.wayland_session_env", return_value={}):
             cfg.is_dev_mode = False
             ok, detail = show_desktop()
@@ -124,39 +129,7 @@ class TestShowDesktop:
         run.assert_not_called()
 
 
-class TestVerificationAgainstKwinsProperty:
-    """The one step of ending gaming mode whose effect IS observable."""
-
-    def test_kwin_contradicting_the_call_is_a_failure(self):
-        with patch("app.services.power.desktop_windows.settings") as cfg, \
-             _patch_run(_completed(), _completed(stdout="false")), \
-             patch("app.services.power.desktop_windows.wayland_session_env", return_value={}):
-            cfg.is_dev_mode = False
-            ok, detail = show_desktop()
-
-        assert ok is False
-        assert "visible" in detail
-
-    def test_an_unreadable_property_does_not_invent_a_failure(self):
-        """A property that cannot be read says nothing about the windows -
-        reporting a red toast for it would announce a problem that may not
-        exist."""
-        with patch("app.services.power.desktop_windows.settings") as cfg, \
-             _patch_run(_completed(), _completed(1, stderr="boom")), \
-             patch("app.services.power.desktop_windows.wayland_session_env", return_value={}):
-            cfg.is_dev_mode = False
-            ok, _detail = show_desktop()
-
-        assert ok is True
-
-    def test_a_property_read_that_raises_does_not_escape(self):
-        with patch("app.services.power.desktop_windows.settings") as cfg, \
-             patch(
-                 "subprocess.run",
-                 side_effect=[_completed(), subprocess.TimeoutExpired("qdbus6", 10)],
-             ), \
-             patch("app.services.power.desktop_windows.wayland_session_env", return_value={}):
-            cfg.is_dev_mode = False
-            ok, _detail = show_desktop()
-
-        assert ok is True
+def test_the_module_no_longer_exposes_a_read_back_command():
+    """Belt and braces for the same regression: the constant is gone, so a
+    future edit cannot quietly wire the misleading property back in."""
+    assert not hasattr(desktop_windows, "SHOWING_DESKTOP_CMD")
