@@ -76,10 +76,12 @@ class Notification(Base):
     )
 
     # Monotonic write stamp for incremental sync (#504). SQLAlchemy fills it on
-    # INSERT via server_default and on every UPDATE via onupdate - measured to
-    # fire for bulk Query.update() as well, which is what mark_all_as_read and
-    # dismiss_all use. A no-op call writes nothing and therefore does NOT bump
-    # the stamp, which is what keeps an incremental fetch small.
+    # INSERT via server_default and on every UPDATE via onupdate - this also
+    # fires for bulk Query.update() (which is what mark_all_as_read and
+    # dismiss_all use), pinned by TestUpdatedAtSemantics in
+    # backend/tests/services/test_notification_service.py. A no-op call writes
+    # nothing and therefore does NOT bump the stamp, which is what keeps an
+    # incremental fetch small.
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

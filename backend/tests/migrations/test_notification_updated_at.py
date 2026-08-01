@@ -36,7 +36,13 @@ def test_stamp_is_exposed_in_to_dict(db_session):
 
 
 def test_stamp_survives_an_explicit_value(db_session):
-    """A caller-supplied value round-trips — the migration backfill relies on it."""
+    """A caller-supplied value round-trips through the ORM.
+
+    Note: the migration backfill itself is raw SQL (`UPDATE ... COALESCE(...)`)
+    and never goes through the ORM, so this test does not cover it. This suite
+    also never runs an Alembic migration — its tables come from
+    `Base.metadata.create_all()` — so the backfill has no test coverage here.
+    """
     fixed = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
     n = _make(db_session, updated_at=fixed)
 
