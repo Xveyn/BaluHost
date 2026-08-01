@@ -156,3 +156,228 @@ class TestTrashRoutes:
         )
         assert get_resp.status_code == 200
         assert get_resp.json()["trash_retention_days"] == 3
+
+
+class TestUpdatedAfterQuery:
+    """#504 problem 2, end to end.
+
+    Fix round 1: the first draft of this class never inserted a Notification,
+    so two of the four tests were trivially green against an empty DB — a
+    reviewer reverted the route's `updated_after` parameter and the same two
+    tests still passed. Every test that asserts on content now creates its
+    own row(s) first. Backdating follows the same no-sleep technique as
+    `TestUpdatedAtSemantics` in `tests/services/test_notification_service.py`:
+    `Query.update({...})` on `updated_at` in a separate statement.
+    """
+
+    def test_inbox_accepts_updated_after(self, client, auth_headers):
+        response = client.get(
+            "/api/notifications",
+            params={"updated_after": "2020-01-01T00:00:00Z"},
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+
+    def test_trash_accepts_updated_after(self, client, auth_headers):
+        response = client.get(
+            "/api/notifications/trash",
+            params={"updated_after": "2020-01-01T00:00:00Z"},
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+
+    def test_every_item_carries_the_stamp(
+        self, client, auth_headers, db_session, test_user
+    ):
+        from app.models.notification import Notification
+
+        db_session.add(Notification(
+            user_id=test_user.id,
+            category="system",
+            notification_type="info",
+            title="t",
+            message="m",
+        ))
+        db_session.commit()
+
+        response = client.get("/api/notifications", headers=auth_headers)
+
+        assert response.status_code == 200
+        items = response.json()["notifications"]
+        assert items  # non-empty, or the loop below checks nothing
+        for item in items:
+            assert item["updated_at"] is not None
+
+    def test_a_far_future_cutoff_returns_nothing(
+        self, client, auth_headers, db_session, test_user
+    ):
+        """Guards against the parameter being silently ignored — a filter that
+        does nothing would let the client think it is fully synced."""
+        from app.models.notification import Notification
+
+        db_session.add(Notification(
+            user_id=test_user.id,
+            category="system",
+            notification_type="info",
+            title="t",
+            message="m",
+        ))
+        db_session.commit()
+
+        # Baseline: without the filter the row is there, so the cutoff below
+        # is provably doing something rather than hitting an empty table.
+        baseline = client.get("/api/notifications", headers=auth_headers)
+        assert baseline.status_code == 200
+        assert baseline.json()["notifications"] != []
+
+        response = client.get(
+            "/api/notifications",
+            params={"updated_after": "2999-01-01T00:00:00Z"},
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        assert response.json()["notifications"] == []
+
+    def test_window_includes_recent_and_excludes_backdated(
+        self, client, auth_headers, db_session, test_user
+    ):
+        """Both directions in one run: a row inside the window comes back, a
+        row backdated to before it does not."""
+        from app.models.notification import Notification
+
+        recent = Notification(
+            user_id=test_user.id,
+            category="system",
+            notification_type="info",
+            title="recent",
+            message="m",
+        )
+        old = Notification(
+            user_id=test_user.id,
+            category="system",
+            notification_type="info",
+            title="old",
+            message="m",
+        )
+        db_session.add_all([recent, old])
+        db_session.commit()
+
+        db_session.query(Notification).filter_by(id=old.id).update(
+            {Notification.updated_at: datetime(2020, 1, 1, tzinfo=timezone.utc)},
+            synchronize_session=False,
+        )
+        db_session.commit()
+
+        response = client.get(
+            "/api/notifications",
+            params={"updated_after": "2025-01-01T00:00:00Z"},
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        titles = [n["title"] for n in response.json()["notifications"]]
+        assert titles == ["recent"]
+
+    def test_inbox_total_matches_filtered_list(
+        self, client, auth_headers, db_session, test_user
+    ):
+        """`total` must come from the same filtered query as the list, or
+        pagination breaks. `updated_after=updated_after` is easy to drop from
+        the count call by accident — FastAPI ignores unknown query params, so
+        a plain status_code==200 test would not catch that regression."""
+        from app.models.notification import Notification
+
+        recent = Notification(
+            user_id=test_user.id,
+            category="system",
+            notification_type="info",
+            title="recent",
+            message="m",
+        )
+        old = Notification(
+            user_id=test_user.id,
+            category="system",
+            notification_type="info",
+            title="old",
+            message="m",
+        )
+        db_session.add_all([recent, old])
+        db_session.commit()
+
+        db_session.query(Notification).filter_by(id=old.id).update(
+            {Notification.updated_at: datetime(2020, 1, 1, tzinfo=timezone.utc)},
+            synchronize_session=False,
+        )
+        db_session.commit()
+
+        # Baseline: without the filter both rows are there, so `total` below
+        # is provably narrowed by the filter rather than being 1 by default.
+        baseline = client.get("/api/notifications", headers=auth_headers)
+        assert baseline.status_code == 200
+        assert baseline.json()["total"] == 2
+
+        response = client.get(
+            "/api/notifications",
+            params={"updated_after": "2025-01-01T00:00:00Z"},
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total"] == 1
+        assert len(data["notifications"]) == data["total"]
+        assert [n["title"] for n in data["notifications"]] == ["recent"]
+
+    def test_trash_filters_by_updated_after(
+        self, client, auth_headers, db_session, test_user
+    ):
+        """Content-level check for the trash endpoint's updated_after filter,
+        covering both the list call and the count call — a dropped
+        `updated_after=updated_after` on either one would slip past a
+        status_code-only test."""
+        from app.models.notification import Notification
+
+        recent = Notification(
+            user_id=test_user.id,
+            category="system",
+            notification_type="info",
+            title="recent-trash",
+            message="m",
+            deleted_at=datetime.now(timezone.utc),
+        )
+        old = Notification(
+            user_id=test_user.id,
+            category="system",
+            notification_type="info",
+            title="old-trash",
+            message="m",
+            deleted_at=datetime.now(timezone.utc),
+        )
+        db_session.add_all([recent, old])
+        db_session.commit()
+
+        db_session.query(Notification).filter_by(id=old.id).update(
+            {Notification.updated_at: datetime(2020, 1, 1, tzinfo=timezone.utc)},
+            synchronize_session=False,
+        )
+        db_session.commit()
+
+        # Baseline: both trashed rows are visible without the filter.
+        baseline = client.get("/api/notifications/trash", headers=auth_headers)
+        assert baseline.status_code == 200
+        assert baseline.json()["total"] == 2
+
+        response = client.get(
+            "/api/notifications/trash",
+            params={"updated_after": "2025-01-01T00:00:00Z"},
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total"] == 1
+        assert len(data["notifications"]) == data["total"]
+        assert [n["title"] for n in data["notifications"]] == ["recent-trash"]

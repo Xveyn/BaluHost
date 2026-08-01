@@ -955,3 +955,195 @@ class TestTrashSemantics:
 
         count = notification_service.get_unread_count(db_session, test_user.id)
         assert count == 1
+
+
+class TestUpdatedAtInResponse:
+    """The stamp has to reach the client, or the sync cannot use it (#504)."""
+
+    def test_response_carries_the_stamp(self, db_session):
+        from app.models.notification import Notification
+        from app.schemas.notification import NotificationResponse
+
+        n = Notification(
+            user_id=None, category="system", notification_type="info",
+            title="T", message="M",
+        )
+        db_session.add(n)
+        db_session.commit()
+        db_session.refresh(n)
+
+        response = NotificationResponse.from_db(n)
+
+        assert response.updated_at is not None
+        assert response.updated_at == n.updated_at
+
+
+class TestUpdatedAtSemantics:
+    """Two properties the incremental sync depends on (#504).
+
+    No sleeps: the stamp is backdated explicitly before each action, so
+    "moved" and "did not move" are decidable regardless of clock resolution.
+    Wall-clock separators are a determinism risk (TQ5/#362) and cannot even
+    tell the two outcomes apart when a write lands in the same second.
+    """
+
+    OLD = datetime(2020, 1, 1, tzinfo=timezone.utc)
+
+    @classmethod
+    def _make(cls, db_session, **over):
+        """A notification whose stamp is old enough to be unmistakable."""
+        from app.models.notification import Notification
+        n = Notification(
+            user_id=1, category="system", notification_type="info",
+            title="T", message="M", **over,
+        )
+        db_session.add(n)
+        db_session.commit()
+        # Backdate in a separate statement so the starting point is explicit.
+        db_session.query(Notification).filter_by(id=n.id).update(
+            {Notification.updated_at: cls.OLD}, synchronize_session=False
+        )
+        db_session.commit()
+        db_session.expire_all()
+        return db_session.get(Notification, n.id)
+
+    @staticmethod
+    def _stamp(db_session, row_id):
+        from app.models.notification import Notification
+        db_session.expire_all()
+        return db_session.get(Notification, row_id).updated_at
+
+    @staticmethod
+    def _is_backdated(stamp) -> bool:
+        """Comparison that survives naive (SQLite) and aware (psycopg2) values."""
+        return stamp.year == 2020
+
+    def test_bulk_dismiss_all_stamps_every_row(self, db_session):
+        """dismiss_all writes via Query.update(); onupdate must still fire, or
+        a mass action would be invisible to an incremental fetch."""
+        from app.services.notifications.service import NotificationService
+
+        a = self._make(db_session)
+        b = self._make(db_session)
+
+        NotificationService().dismiss_all(db_session, user_id=1)
+
+        assert not self._is_backdated(self._stamp(db_session, a.id))
+        assert not self._is_backdated(self._stamp(db_session, b.id))
+
+    def test_bulk_mark_all_as_read_stamps_every_row(self, db_session):
+        from app.services.notifications.service import NotificationService
+
+        a = self._make(db_session)
+
+        NotificationService().mark_all_as_read(db_session, user_id=1)
+
+        assert not self._is_backdated(self._stamp(db_session, a.id))
+
+    def test_a_no_op_dismiss_does_not_move_the_stamp(self, db_session):
+        """Dismissing an already-trashed row changes nothing - stamping it
+        would drag the row into every later incremental fetch."""
+        from app.services.notifications.service import NotificationService
+
+        n = self._make(db_session, deleted_at=datetime.now(timezone.utc))
+
+        NotificationService().dismiss(db_session, n.id, user_id=1)
+
+        assert self._is_backdated(self._stamp(db_session, n.id))
+
+    def test_a_no_op_restore_does_not_move_the_stamp(self, db_session):
+        from app.services.notifications.service import NotificationService
+
+        n = self._make(db_session)  # already active
+
+        NotificationService().restore(db_session, n.id, user_id=1)
+
+        assert self._is_backdated(self._stamp(db_session, n.id))
+
+    def test_restore_moves_the_stamp_when_it_actually_restores(self, db_session):
+        """The case the whole issue is about: without a stamp the client cannot
+        tell a restore-after-dismiss from a stale server view."""
+        from app.models.notification import Notification
+        from app.services.notifications.service import NotificationService
+
+        n = self._make(db_session, deleted_at=datetime.now(timezone.utc))
+
+        NotificationService().restore(db_session, n.id, user_id=1)
+
+        db_session.expire_all()
+        restored = db_session.get(Notification, n.id)
+        assert restored.deleted_at is None
+        assert not self._is_backdated(restored.updated_at)
+
+
+class TestUpdatedAfterFilter:
+    """Problem 2 from #504: created_* filters cannot see a state change.
+
+    Same backdating as TestUpdatedAtSemantics - no sleeps, no clock resolution
+    to trip over.
+    """
+
+    OLD = datetime(2020, 1, 1, tzinfo=timezone.utc)
+    CUTOFF = datetime(2023, 1, 1, tzinfo=timezone.utc)
+
+    @classmethod
+    def _make(cls, db_session, title, backdate=False):
+        from app.models.notification import Notification
+        n = Notification(
+            user_id=1, category="system", notification_type="info",
+            title=title, message="M",
+        )
+        db_session.add(n)
+        db_session.commit()
+        if backdate:
+            db_session.query(Notification).filter_by(id=n.id).update(
+                {"updated_at": cls.OLD}, synchronize_session=False
+            )
+            db_session.commit()
+        db_session.expire_all()
+        return db_session.get(Notification, n.id)
+
+    def test_returns_only_rows_changed_after_the_cutoff(self, db_session):
+        from app.services.notifications.service import NotificationService
+
+        svc = NotificationService()
+        self._make(db_session, "alt", backdate=True)
+        self._make(db_session, "neu")
+
+        rows = svc.get_user_notifications(
+            db_session, user_id=1, updated_after=self.CUTOFF)
+
+        assert [r.title for r in rows] == ["neu"]
+
+    def test_a_state_change_pulls_an_old_row_back_into_the_window(self, db_session):
+        """The whole point: a three-week-old notification that was just read
+        must show up, which created_after can never do."""
+        from app.services.notifications.service import NotificationService
+
+        svc = NotificationService()
+        old = self._make(db_session, "alt", backdate=True)
+
+        svc.mark_as_read(db_session, old.id, user_id=1)
+
+        titles = [r.title for r in svc.get_user_notifications(
+            db_session, user_id=1, updated_after=self.CUTOFF)]
+        assert titles == ["alt"]
+
+    def test_count_applies_the_same_filter(self, db_session):
+        from app.services.notifications.service import NotificationService
+
+        svc = NotificationService()
+        self._make(db_session, "alt", backdate=True)
+        self._make(db_session, "neu")
+
+        assert svc.count_user_notifications(
+            db_session, user_id=1, updated_after=self.CUTOFF) == 1
+
+    def test_without_the_filter_nothing_changes(self, db_session):
+        from app.services.notifications.service import NotificationService
+
+        svc = NotificationService()
+        self._make(db_session, "a", backdate=True)
+        self._make(db_session, "b")
+
+        assert len(svc.get_user_notifications(db_session, user_id=1)) == 2
