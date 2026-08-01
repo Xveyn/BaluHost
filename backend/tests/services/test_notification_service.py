@@ -976,3 +976,101 @@ class TestUpdatedAtInResponse:
 
         assert response.updated_at is not None
         assert response.updated_at == n.updated_at
+
+
+class TestUpdatedAtSemantics:
+    """Two properties the incremental sync depends on (#504).
+
+    No sleeps: the stamp is backdated explicitly before each action, so
+    "moved" and "did not move" are decidable regardless of clock resolution.
+    Wall-clock separators are a determinism risk (TQ5/#362) and cannot even
+    tell the two outcomes apart when a write lands in the same second.
+    """
+
+    OLD = datetime(2020, 1, 1, tzinfo=timezone.utc)
+
+    @classmethod
+    def _make(cls, db_session, **over):
+        """A notification whose stamp is old enough to be unmistakable."""
+        from app.models.notification import Notification
+        n = Notification(
+            user_id=1, category="system", notification_type="info",
+            title="T", message="M", **over,
+        )
+        db_session.add(n)
+        db_session.commit()
+        # Backdate in a separate statement so the starting point is explicit.
+        db_session.query(Notification).filter_by(id=n.id).update(
+            {Notification.updated_at: cls.OLD}, synchronize_session=False
+        )
+        db_session.commit()
+        db_session.expire_all()
+        return db_session.get(Notification, n.id)
+
+    @staticmethod
+    def _stamp(db_session, row_id):
+        from app.models.notification import Notification
+        db_session.expire_all()
+        return db_session.get(Notification, row_id).updated_at
+
+    @staticmethod
+    def _is_backdated(stamp) -> bool:
+        """Comparison that survives naive (SQLite) and aware (psycopg2) values."""
+        return stamp.year == 2020
+
+    def test_bulk_dismiss_all_stamps_every_row(self, db_session):
+        """dismiss_all writes via Query.update(); onupdate must still fire, or
+        a mass action would be invisible to an incremental fetch."""
+        from app.services.notifications.service import NotificationService
+
+        a = self._make(db_session)
+        b = self._make(db_session)
+
+        NotificationService().dismiss_all(db_session, user_id=1)
+
+        assert not self._is_backdated(self._stamp(db_session, a.id))
+        assert not self._is_backdated(self._stamp(db_session, b.id))
+
+    def test_bulk_mark_all_as_read_stamps_every_row(self, db_session):
+        from app.services.notifications.service import NotificationService
+
+        a = self._make(db_session)
+
+        NotificationService().mark_all_as_read(db_session, user_id=1)
+
+        assert not self._is_backdated(self._stamp(db_session, a.id))
+
+    def test_a_no_op_dismiss_does_not_move_the_stamp(self, db_session):
+        """Dismissing an already-trashed row changes nothing - stamping it
+        would drag the row into every later incremental fetch."""
+        from app.services.notifications.service import NotificationService
+
+        n = self._make(db_session, deleted_at=datetime.now(timezone.utc))
+
+        NotificationService().dismiss(db_session, n.id, user_id=1)
+
+        assert self._is_backdated(self._stamp(db_session, n.id))
+
+    def test_a_no_op_restore_does_not_move_the_stamp(self, db_session):
+        from app.services.notifications.service import NotificationService
+
+        n = self._make(db_session)  # already active
+
+        NotificationService().restore(db_session, n.id, user_id=1)
+
+        assert self._is_backdated(self._stamp(db_session, n.id))
+
+    def test_restore_moves_the_stamp_when_it_actually_restores(self, db_session):
+        """The case the whole issue is about: without a stamp the client cannot
+        tell a restore-after-dismiss from a stale server view."""
+        from app.models.notification import Notification
+        from app.services.notifications.service import NotificationService
+
+        n = self._make(db_session, deleted_at=datetime.now(timezone.utc))
+
+        NotificationService().restore(db_session, n.id, user_id=1)
+
+        db_session.expire_all()
+        restored = db_session.get(Notification, n.id)
+        assert restored.deleted_at is None
+        assert not self._is_backdated(restored.updated_at)
