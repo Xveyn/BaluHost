@@ -85,14 +85,13 @@ describe('PluginsPage scope-picker (external) vs permissions modal (bundled)', (
     // The label a user actually sees for the backend scope. Real i18n makes
     // this assertion meaningful: with the old mocked `t` it read "storage".
     expect(screen.getByRole('checkbox', { name: /Plugin-Speicher/ })).toBeChecked();
-    // And the frontend scope shows its RAW KEY, because i18next splits the
-    // colon in "read:power" as a namespace separator when resolving nested
-    // objects — ScopeGrantModal.tsx:21 lacks the `nsSeparator: false` that
-    // PluginDocumentation.tsx:58 already carries. Documented here rather than
-    // fixed on the side; a fix turns this into /Energie/ or similar.
-    expect(screen.getByRole('checkbox', { name: 'read:power' })).toBeChecked();
+    // The frontend scope, whose key contains a colon. This assertion is the
+    // regression guard for the nsSeparator bug the migration uncovered:
+    // without `nsSeparator: false` in ScopeGrantModal the label falls back to
+    // the raw key "read:power" and the description disappears entirely.
+    expect(screen.getByRole('checkbox', { name: /Energieinfo/ })).toBeChecked();
 
-    await user.click(screen.getByRole('checkbox', { name: 'read:power' }));
+    await user.click(screen.getByRole('checkbox', { name: /Energieinfo/ }));
     await user.click(screen.getByText('Gewähren & Aktivieren'));
 
     // Asserted on the request that leaves the app, not on a mocked function.
