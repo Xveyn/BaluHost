@@ -41,6 +41,7 @@ async def get_notifications(
     notification_type: Optional[str] = Query(None, description="Filter by type (info, warning, critical)"),
     created_after: Optional[datetime] = Query(None, description="Only return notifications after this time"),
     created_before: Optional[datetime] = Query(None, description="Only return notifications before this time"),
+    updated_after: Optional[datetime] = Query(None, description="Only return notifications changed at or after this time (incremental sync)"),
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(50, ge=1, le=100, description="Items per page"),
     current_user: UserPublic = Depends(deps.get_current_user),
@@ -62,6 +63,7 @@ async def get_notifications(
         notification_type=notification_type,
         created_after=created_after,
         created_before=created_before,
+        updated_after=updated_after,
         limit=page_size,
         offset=offset,
         is_admin=admin,
@@ -78,6 +80,7 @@ async def get_notifications(
         notification_type=notification_type,
         created_after=created_after,
         created_before=created_before,
+        updated_after=updated_after,
         is_admin=admin,
     )
 
@@ -428,6 +431,7 @@ async def get_trash(
     notification_type: Optional[str] = Query(None),
     created_after: Optional[datetime] = Query(None),
     created_before: Optional[datetime] = Query(None),
+    updated_after: Optional[datetime] = Query(None, description="Only return notifications changed at or after this time (incremental sync)"),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
     current_user: UserPublic = Depends(deps.get_current_user),
@@ -446,6 +450,7 @@ async def get_trash(
         notification_type=notification_type,
         created_after=created_after,
         created_before=created_before,
+        updated_after=updated_after,
         limit=page_size,
         offset=offset,
         is_admin=admin,
@@ -459,6 +464,7 @@ async def get_trash(
         notification_type=notification_type,
         created_after=created_after,
         created_before=created_before,
+        updated_after=updated_after,
         is_admin=admin,
     )
 

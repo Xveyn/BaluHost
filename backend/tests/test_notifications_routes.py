@@ -156,3 +156,44 @@ class TestTrashRoutes:
         )
         assert get_resp.status_code == 200
         assert get_resp.json()["trash_retention_days"] == 3
+
+
+class TestUpdatedAfterQuery:
+    """#504 problem 2, end to end."""
+
+    def test_inbox_accepts_updated_after(self, client, auth_headers):
+        response = client.get(
+            "/api/notifications",
+            params={"updated_after": "2020-01-01T00:00:00Z"},
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+
+    def test_trash_accepts_updated_after(self, client, auth_headers):
+        response = client.get(
+            "/api/notifications/trash",
+            params={"updated_after": "2020-01-01T00:00:00Z"},
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+
+    def test_every_item_carries_the_stamp(self, client, auth_headers):
+        response = client.get("/api/notifications", headers=auth_headers)
+
+        assert response.status_code == 200
+        for item in response.json()["notifications"]:
+            assert item["updated_at"] is not None
+
+    def test_a_far_future_cutoff_returns_nothing(self, client, auth_headers):
+        """Guards against the parameter being silently ignored — a filter that
+        does nothing would let the client think it is fully synced."""
+        response = client.get(
+            "/api/notifications",
+            params={"updated_after": "2999-01-01T00:00:00Z"},
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        assert response.json()["notifications"] == []
