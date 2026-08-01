@@ -66,3 +66,39 @@ def test_unreadable_and_vanished_entries_are_skipped(tmp_path):
 def test_missing_proc_returns_none(tmp_path):
     """Windows dev boxes have no /proc at all."""
     assert detector.detect_running_app_id(tmp_path / "nope") is None
+
+
+class TestSteamIsRunning:
+    """Guard for the exit action: `steam steam://close/bigpicture` STARTS Steam
+    when it is not already running, so the caller has to know first."""
+
+    def test_finds_the_client_started_from_its_install_dir(self, tmp_path):
+        root = _fake_proc(tmp_path, {
+            1: "/sbin/init",
+            4367: "/home/sven/.local/share/Steam/ubuntu12_32/steam",
+        })
+
+        assert detector.steam_is_running(root) is True
+
+    def test_finds_the_client_started_with_arguments(self, tmp_path):
+        root = _fake_proc(tmp_path, {4367: "/usr/bin/steam -silent"})
+
+        assert detector.steam_is_running(root) is True
+
+    def test_no_steam_process_means_false(self, tmp_path):
+        root = _fake_proc(tmp_path, {1: "/sbin/init", 900: "/usr/bin/firefox"})
+
+        assert detector.steam_is_running(root) is False
+
+    def test_helpers_alone_do_not_count_as_the_client(self, tmp_path):
+        """A false positive is the expensive direction - it would let the exit
+        action boot Steam. Helper processes never outlive the client anyway."""
+        root = _fake_proc(tmp_path, {
+            5001: "/home/sven/.local/share/Steam/ubuntu12_32/steamwebhelper --type=zygote",
+            5002: "/usr/bin/steamerrorreporter",
+        })
+
+        assert detector.steam_is_running(root) is False
+
+    def test_missing_proc_means_false(self, tmp_path):
+        assert detector.steam_is_running(tmp_path / "nope") is False

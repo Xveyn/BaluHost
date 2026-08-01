@@ -11,7 +11,10 @@ import logging
 from typing import Optional
 
 from app.core.config import settings
-from app.plugins.installed.steam_gaming.detector import detect_running_app_id
+from app.plugins.installed.steam_gaming.detector import (
+    detect_running_app_id,
+    steam_is_running as _detect_steam_is_running,
+)
 from app.plugins.installed.steam_gaming.names import resolve_name
 
 logger = logging.getLogger(__name__)
@@ -49,6 +52,18 @@ def current_app_id() -> Optional[str]:
     if app_id is None and settings.is_dev_mode:
         return DEV_APP_ID
     return app_id
+
+
+def steam_is_running() -> bool:
+    """True while the Steam client is up. Blocking - call via asyncio.to_thread.
+
+    Mirrors current_app_id()'s shape: the real scan answers first so a Linux
+    dev box with a real Steam still tells the truth, and only a box without
+    /proc falls back to the dev stand-in.
+    """
+    if _detect_steam_is_running():
+        return True
+    return bool(settings.is_dev_mode)
 
 
 def resolve_game_name(app_id: str) -> Optional[str]:
