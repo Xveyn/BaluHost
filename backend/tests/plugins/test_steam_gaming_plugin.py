@@ -7,7 +7,7 @@ import pytest
 
 from app.api.routes.plugins import run_plugin_menu_action
 from app.plugins.installed import steam_gaming as plugin_module
-from app.plugins.installed.steam_gaming import SteamGamingPlugin, ledger
+from app.plugins.installed.steam_gaming import SteamGamingPlugin, gaming_state, ledger
 from app.plugins.installed.steam_gaming import detection as detection_module
 
 
@@ -16,6 +16,16 @@ def _clear_cache():
     plugin_module._CACHE.clear()
     yield
     plugin_module._CACHE.clear()
+
+
+@pytest.fixture(autouse=True)
+def _marker_in_tmp(tmp_path, monkeypatch):
+    """Keep the gaming-mode marker out of the real storage root.
+
+    The menu actions write it for real, so without this every run of this file
+    would touch dev-storage - and the assertions would depend on leftovers.
+    """
+    monkeypatch.setattr(gaming_state.settings, "nas_storage_path", str(tmp_path))
 
 
 @pytest.fixture
@@ -150,10 +160,6 @@ def _patch_desktop(ok: bool, message: str = ""):
 
 
 class TestGamingModeMenuItem:
-    def test_manifest_declares_both_directions(self):
-        manifest = SteamGamingPlugin().get_ui_manifest()
-        assert [item.id for item in manifest.menu_items] == [_ACTION, _END_ACTION]
-
     def test_item_carries_key_and_literal_fallback(self):
         item = SteamGamingPlugin().get_ui_manifest().menu_items[0]
         assert item.label_key == "menu_gaming_mode"
@@ -163,7 +169,7 @@ class TestGamingModeMenuItem:
     def test_translations_cover_every_key_the_items_use(self):
         plugin = SteamGamingPlugin()
         translations = plugin.get_translations()
-        for item in plugin.get_ui_manifest().menu_items:
+        for item in plugin.get_menu_items():
             for lang in ("en", "de"):
                 assert item.label_key in translations[lang]
                 assert item.description_key in translations[lang]
@@ -175,8 +181,152 @@ class TestGamingModeMenuItem:
             "Zap", "Shield", "Upload", "RefreshCw", "HardDrive", "Moon", "Lock",
             "Thermometer", "Coffee", "Clock", "Save", "Monitor", "Gamepad2",
         }
-        for item in SteamGamingPlugin().get_ui_manifest().menu_items:
+        for item in SteamGamingPlugin().get_menu_items():
             assert item.icon in known, f"{item.id} uses an icon the frontend cannot resolve"
+
+
+def _patch_visibility(*, active: bool, displays_on: bool = True):
+    return (
+        patch(
+            "app.plugins.installed.steam_gaming.gaming_state.is_active",
+            return_value=active,
+        ),
+        patch("app.plugins.installed.steam_gaming._displays_on", return_value=displays_on),
+    )
+
+
+class TestMenuOffersOneDirectionAtATime:
+    """Whether Big Picture runs is not detectable (design doc 2026-07-24), so
+    the menu goes by what BaluHost itself did - plus the displays, which are.
+    """
+
+    def _ids(self):
+        return [item.id for item in SteamGamingPlugin().get_ui_manifest().menu_items]
+
+    def test_offers_start_while_gaming_mode_is_off(self):
+        marker, displays = _patch_visibility(active=False)
+        with marker, displays:
+            assert self._ids() == [_ACTION]
+
+    def test_offers_end_while_gaming_mode_is_on(self):
+        marker, displays = _patch_visibility(active=True)
+        with marker, displays:
+            assert self._ids() == [_END_ACTION]
+
+    def test_dark_displays_outrank_the_marker(self):
+        """Displays off means nothing is on screen to end - and a stale marker
+        (Big Picture ended at the box, backend never told) must not leave the
+        menu stuck on "end"."""
+        marker, displays = _patch_visibility(active=True, displays_on=False)
+        with marker, displays:
+            assert self._ids() == [_ACTION]
+
+    def test_never_shows_both(self):
+        for active in (True, False):
+            for displays_on in (True, False):
+                marker, displays = _patch_visibility(active=active, displays_on=displays_on)
+                with marker, displays:
+                    assert len(self._ids()) == 1
+
+
+class TestBothActionsStayDispatchable:
+    """The manifest hides one entry; get_menu_items() must still declare both.
+
+    The core validates a clicked action_id against get_menu_items(), so
+    declaring only the visible one would 404 every click that races a state
+    change - the menu was rendered when the other direction was current.
+    Manifest ⊆ declared is the safe direction; the reverse (advertising
+    something undeclared) is the one the base class warns about.
+    """
+
+    def test_declares_both_regardless_of_state(self):
+        for active in (True, False):
+            marker, displays = _patch_visibility(active=active)
+            with marker, displays:
+                declared = {item.id for item in SteamGamingPlugin().get_menu_items()}
+                assert declared == {_ACTION, _END_ACTION}
+
+
+class TestMarkerBookkeeping:
+    async def test_a_successful_start_records_gaming_mode(self):
+        desktop_patch, _service = _patch_desktop(True, "ok")
+        with desktop_patch, patch(
+            "app.plugins.installed.steam_gaming.open_big_picture",
+            return_value=(True, "requested"),
+        ):
+            await SteamGamingPlugin().run_menu_action(_ACTION, db=None)
+
+        assert gaming_state.is_active() is True
+
+    async def test_a_start_that_never_reached_steam_records_nothing(self):
+        desktop_patch, _service = _patch_desktop(True, "ok")
+        with desktop_patch, patch(
+            "app.plugins.installed.steam_gaming.open_big_picture",
+            return_value=(False, "steam binary not found"),
+        ):
+            await SteamGamingPlugin().run_menu_action(_ACTION, db=None)
+
+        assert gaming_state.is_active() is False
+
+    async def test_a_successful_end_clears_it(self):
+        gaming_state.mark_started()
+        game_p, steam_p, close_p, show_p, sleep_p = _patch_end_action()
+        with game_p, steam_p, close_p, show_p, sleep_p:
+            await SteamGamingPlugin().run_menu_action(_END_ACTION, db=None)
+
+        assert gaming_state.is_active() is False
+
+    async def test_it_is_cleared_even_when_the_windows_stay_up(self):
+        """Big Picture is closed either way - that IS the end of gaming mode.
+        Leaving the marker would strand the menu on "end" forever."""
+        gaming_state.mark_started()
+        game_p, steam_p, close_p, show_p, sleep_p = _patch_end_action(
+            minimized=(False, "qdbus6 not found")
+        )
+        with game_p, steam_p, close_p, show_p, sleep_p:
+            await SteamGamingPlugin().run_menu_action(_END_ACTION, db=None)
+
+        assert gaming_state.is_active() is False
+
+    async def test_steam_being_down_clears_a_stale_marker(self):
+        gaming_state.mark_started()
+        game_p, steam_p, close_p, show_p, sleep_p = _patch_end_action(steam_running=False)
+        with game_p, steam_p, close_p, show_p, sleep_p:
+            await SteamGamingPlugin().run_menu_action(_END_ACTION, db=None)
+
+        assert gaming_state.is_active() is False
+
+    async def test_a_refusal_leaves_the_marker_alone(self):
+        """A game is running, so gaming mode very much still is."""
+        gaming_state.mark_started()
+        game_p, steam_p, close_p, show_p, sleep_p = _patch_end_action(
+            game=("1449560", "Metro Exodus")
+        )
+        with game_p, steam_p, close_p, show_p, sleep_p:
+            await SteamGamingPlugin().run_menu_action(_END_ACTION, db=None)
+
+        assert gaming_state.is_active() is True
+
+    async def test_a_failed_close_leaves_the_marker_alone(self):
+        gaming_state.mark_started()
+        game_p, steam_p, close_p, show_p, sleep_p = _patch_end_action(
+            closed=(False, "steam binary not found")
+        )
+        with game_p, steam_p, close_p, show_p, sleep_p:
+            await SteamGamingPlugin().run_menu_action(_END_ACTION, db=None)
+
+        assert gaming_state.is_active() is True
+
+    async def test_startup_clears_a_marker_that_survived_a_restart(self):
+        """A deploy restarts the backend while Big Picture may well keep
+        running. Clearing means the menu offers "start" again - wrong at worst
+        by one harmless click, whereas a stale "end" minimizes the windows of
+        someone who never asked."""
+        gaming_state.mark_started()
+
+        await SteamGamingPlugin().on_startup()
+
+        assert gaming_state.is_active() is False
 
 
 class TestGamingModeAction:
@@ -323,12 +473,18 @@ class TestManifestAndRouteAgreeOnDeclaredActions:
     """
 
     def test_every_manifest_menu_item_id_is_declared(self):
+        """Subset, not equality, since the menu shows one direction at a time.
+
+        The invariant that matters is unchanged: nothing may be advertised
+        that the route would 404. The other direction (declared but hidden) is
+        deliberate here and safe - see TestBothActionsStayDispatchable.
+        """
         plugin = SteamGamingPlugin()
         manifest_ids = {item.id for item in plugin.get_ui_manifest().menu_items}
         declared_ids = {item.id for item in plugin.get_menu_items()}
 
         assert manifest_ids, "the manifest must actually declare something for this test to mean anything"
-        assert manifest_ids == declared_ids
+        assert manifest_ids <= declared_ids
 
     async def test_route_does_not_404_the_action_the_manifest_advertises(self):
         plugin = SteamGamingPlugin()

@@ -17,8 +17,9 @@ vi.mock('../../api/plugins', () => ({ runPluginMenuAction: vi.fn() }));
 // top-level array would hit the temporal dead zone. vi.hoisted lifts the state
 // alongside the mock.
 const menuItems = vi.hoisted(() => [] as unknown[]);
+const refreshMenuItems = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 vi.mock('../../contexts/PluginContext', () => ({
-  usePlugins: () => ({ pluginMenuItems: menuItems }),
+  usePlugins: () => ({ pluginMenuItems: menuItems, refreshMenuItems }),
 }));
 
 import PowerMenu from '../../components/PowerMenu';
@@ -131,6 +132,25 @@ describe('PowerMenu — plugin menu actions', () => {
     render(<PowerMenu {...baseProps} />);
     openMenu();
     expect(await screen.findByText('Gaming Mode')).toBeInTheDocument();
+  });
+
+  it('re-fetches the menu items on every open', async () => {
+    // The Steam plugin advertises "start" or "end" gaming mode depending on
+    // server-side state. Without this the menu would keep showing whichever
+    // direction was current when the page loaded.
+    render(<PowerMenu {...baseProps} />);
+    openMenu();
+    await waitFor(() => expect(refreshMenuItems).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getByTitle('Power'));  // close
+    openMenu();
+    await waitFor(() => expect(refreshMenuItems).toHaveBeenCalledTimes(2));
+  });
+
+  it('does not re-fetch the menu items for a non-admin', async () => {
+    render(<PowerMenu {...baseProps} isAdmin={false} />);
+    openMenu();
+    expect(refreshMenuItems).not.toHaveBeenCalled();
   });
 
   it('renders no plugin actions for a non-admin', async () => {

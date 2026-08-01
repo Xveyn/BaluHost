@@ -2,7 +2,10 @@
 from pathlib import Path
 import pytest
 
-from app.services.power.gpu.display_detector import get_active_display_count
+from app.services.power.gpu.display_detector import (
+    get_active_display_count,
+    get_active_display_count_sync,
+)
 
 
 @pytest.fixture
@@ -71,3 +74,20 @@ async def test_multiple_connectors(fake_sysfs: Path):
     _make_connector(fake_sysfs, "card0-DP-2", "connected", "enabled")
     count = await get_active_display_count(sysfs_root=fake_sysfs)
     assert count == 2
+
+
+@pytest.mark.asyncio
+async def test_sync_variant_agrees_with_the_async_one(fake_sysfs: Path):
+    """The plugin UI manifest is built synchronously and needs the same answer;
+    the async variant is only a to_thread wrapper around the same helper."""
+    _make_connector(fake_sysfs, "card0-HDMI-A-1", "connected", "enabled")
+    _make_connector(fake_sysfs, "card0-DP-1", "connected", "disabled")
+
+    assert get_active_display_count_sync(sysfs_root=fake_sysfs) == 1
+    assert get_active_display_count_sync(sysfs_root=fake_sysfs) == (
+        await get_active_display_count(sysfs_root=fake_sysfs)
+    )
+
+
+def test_sync_variant_without_drm_returns_zero(tmp_path: Path):
+    assert get_active_display_count_sync(sysfs_root=tmp_path) == 0

@@ -23,7 +23,7 @@ vi.mock('../../api/desktop', () => ({
 }));
 
 vi.mock('../../contexts/PluginContext', () => ({
-  usePlugins: () => ({ pluginMenuItems: [] }),
+  usePlugins: () => ({ pluginMenuItems: [], refreshMenuItems: vi.fn().mockResolvedValue(undefined) }),
 }));
 
 import PowerMenu from '../../components/PowerMenu';
