@@ -280,3 +280,104 @@ class TestUpdatedAfterQuery:
         assert response.status_code == 200
         titles = [n["title"] for n in response.json()["notifications"]]
         assert titles == ["recent"]
+
+    def test_inbox_total_matches_filtered_list(
+        self, client, auth_headers, db_session, test_user
+    ):
+        """`total` must come from the same filtered query as the list, or
+        pagination breaks. `updated_after=updated_after` is easy to drop from
+        the count call by accident — FastAPI ignores unknown query params, so
+        a plain status_code==200 test would not catch that regression."""
+        from app.models.notification import Notification
+
+        recent = Notification(
+            user_id=test_user.id,
+            category="system",
+            notification_type="info",
+            title="recent",
+            message="m",
+        )
+        old = Notification(
+            user_id=test_user.id,
+            category="system",
+            notification_type="info",
+            title="old",
+            message="m",
+        )
+        db_session.add_all([recent, old])
+        db_session.commit()
+
+        db_session.query(Notification).filter_by(id=old.id).update(
+            {Notification.updated_at: datetime(2020, 1, 1, tzinfo=timezone.utc)},
+            synchronize_session=False,
+        )
+        db_session.commit()
+
+        # Baseline: without the filter both rows are there, so `total` below
+        # is provably narrowed by the filter rather than being 1 by default.
+        baseline = client.get("/api/notifications", headers=auth_headers)
+        assert baseline.status_code == 200
+        assert baseline.json()["total"] == 2
+
+        response = client.get(
+            "/api/notifications",
+            params={"updated_after": "2025-01-01T00:00:00Z"},
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total"] == 1
+        assert len(data["notifications"]) == data["total"]
+        assert [n["title"] for n in data["notifications"]] == ["recent"]
+
+    def test_trash_filters_by_updated_after(
+        self, client, auth_headers, db_session, test_user
+    ):
+        """Content-level check for the trash endpoint's updated_after filter,
+        covering both the list call and the count call — a dropped
+        `updated_after=updated_after` on either one would slip past a
+        status_code-only test."""
+        from app.models.notification import Notification
+
+        recent = Notification(
+            user_id=test_user.id,
+            category="system",
+            notification_type="info",
+            title="recent-trash",
+            message="m",
+            deleted_at=datetime.now(timezone.utc),
+        )
+        old = Notification(
+            user_id=test_user.id,
+            category="system",
+            notification_type="info",
+            title="old-trash",
+            message="m",
+            deleted_at=datetime.now(timezone.utc),
+        )
+        db_session.add_all([recent, old])
+        db_session.commit()
+
+        db_session.query(Notification).filter_by(id=old.id).update(
+            {Notification.updated_at: datetime(2020, 1, 1, tzinfo=timezone.utc)},
+            synchronize_session=False,
+        )
+        db_session.commit()
+
+        # Baseline: both trashed rows are visible without the filter.
+        baseline = client.get("/api/notifications/trash", headers=auth_headers)
+        assert baseline.status_code == 200
+        assert baseline.json()["total"] == 2
+
+        response = client.get(
+            "/api/notifications/trash",
+            params={"updated_after": "2025-01-01T00:00:00Z"},
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total"] == 1
+        assert len(data["notifications"]) == data["total"]
+        assert [n["title"] for n in data["notifications"]] == ["recent-trash"]
