@@ -25,6 +25,7 @@
 /deploy/             @Xveyn
 /scripts/bootstrap-runner-ubuntu.sh  @Xveyn
 /scripts/bootstrap-ci-runner.sh      @Xveyn
+/scripts/ci-podman-health.sh         @Xveyn
 /ci-config.example.conf              @Xveyn
 /scripts/configure-ci.sh             @Xveyn
 

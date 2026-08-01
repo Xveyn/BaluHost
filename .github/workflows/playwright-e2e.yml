@@ -80,7 +80,7 @@ jobs:
         if: github.repository == 'Xveyn/BaluHost'
         run: |
           set -euo pipefail
-          flock "$HOME/.podman-health.lock" -c 'podman info >/dev/null 2>&1 || podman system migrate'
+          flock "$HOME/.podman-health.lock" -c "bash '$GITHUB_WORKSPACE/scripts/ci-podman-health.sh'"
 
       - name: Mocked Playwright tests in rootless Podman container
         env:
