@@ -68,6 +68,9 @@ class NotificationResponse(NotificationBase):
         description="Core category, or the name of the contributing plugin"
     )
     created_at: datetime
+    updated_at: datetime = Field(
+        description="Monotonic write stamp; moves on every state change (#504)"
+    )
     user_id: Optional[int] = None
     is_read: bool = False
     deleted_at: Optional[datetime] = Field(
@@ -108,6 +111,7 @@ class NotificationResponse(NotificationBase):
         return cls(
             id=notification.id,
             created_at=notification.created_at,
+            updated_at=notification.updated_at,
             user_id=notification.user_id,
             notification_type=notification.notification_type,
             category=notification.category,

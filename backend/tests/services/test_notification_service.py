@@ -955,3 +955,24 @@ class TestTrashSemantics:
 
         count = notification_service.get_unread_count(db_session, test_user.id)
         assert count == 1
+
+
+class TestUpdatedAtInResponse:
+    """The stamp has to reach the client, or the sync cannot use it (#504)."""
+
+    def test_response_carries_the_stamp(self, db_session):
+        from app.models.notification import Notification
+        from app.schemas.notification import NotificationResponse
+
+        n = Notification(
+            user_id=None, category="system", notification_type="info",
+            title="T", message="M",
+        )
+        db_session.add(n)
+        db_session.commit()
+        db_session.refresh(n)
+
+        response = NotificationResponse.from_db(n)
+
+        assert response.updated_at is not None
+        assert response.updated_at == n.updated_at
