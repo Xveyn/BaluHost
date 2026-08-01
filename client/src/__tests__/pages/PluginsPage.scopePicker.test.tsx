@@ -1,33 +1,34 @@
+/**
+ * Scope-picker (external plugins) vs permissions modal (bundled ones).
+ *
+ * This file was T2/#316's exhibit: ten vi.mock blocks and assertions against
+ * i18n KEYS, which pass just as happily when a translation is missing. It now
+ * runs on renderWithProviders — real i18next, real PluginProvider, real
+ * api/plugins module — so the assertions are the German text a user sees and
+ * the toggle assertion is the request body that actually goes out.
+ *
+ * Four mocks remain, and they are a different kind: heavy children that this
+ * test is not about (documentation pane, settings section, marketplace tab,
+ * the local-network gate). No render helper removes those; keeping them is a
+ * scoping decision, not missing infrastructure.
+ */
 import React from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import PluginsPage from '../../pages/PluginsPage';
-import { usePlugins } from '../../contexts/PluginContext';
-import {
-  getScopeCatalog, getPluginDetails, togglePlugin,
-} from '../../api/plugins';
+import { describe, it, expect, vi } from 'vitest';
+import { screen, waitFor } from '@testing-library/react';
 
-vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (k: string) => k }) }));
-vi.mock('../../contexts/PluginContext', () => ({ usePlugins: vi.fn() }));
-vi.mock('../../api/plugins', () => ({
-  getScopeCatalog: vi.fn(),
-  getPluginDetails: vi.fn(),
-  togglePlugin: vi.fn().mockResolvedValue({ name: 'x', is_enabled: true, message: 'ok' }),
-  listPermissions: vi.fn().mockResolvedValue({ permissions: [] }),
-  toggleDashboardPanel: vi.fn(),
-  uninstallPlugin: vi.fn(),
-}));
+import PluginsPage from '../../pages/PluginsPage';
+import { renderWithProviders } from '../helpers/renderWithProviders';
+
 vi.mock('../../hooks/useConfirmDialog', () => ({
   useConfirmDialog: () => ({ confirm: vi.fn(), dialog: null }),
 }));
-vi.mock('../../lib/pluginI18n', () => ({ resolvePluginString: (_t: unknown, _k: unknown, f: string) => f }));
-vi.mock('../../lib/safeUrl', () => ({ safeExternalUrl: () => null }));
 vi.mock('../../components/plugins/PluginDocumentation', () => ({ default: () => null }));
 vi.mock('../../components/plugins/PluginSettingsSection', () => ({ PluginSettingsSection: () => null }));
 vi.mock('../../components/plugins/MarketplaceTab', () => ({ default: () => null }));
-vi.mock('../../components/LocalOnlyAction', () => ({ LocalOnlyAction: ({ children }: { children: React.ReactNode }) => children }));
+vi.mock('../../components/LocalOnlyAction', () => ({
+  LocalOnlyAction: ({ children }: { children: React.ReactNode }) => children,
+}));
 
-const mockUsePlugins = usePlugins as unknown as ReturnType<typeof vi.fn>;
 const CATALOG = {
   scopes: [
     { key: 'read:system-info', tier: 'frontend', dangerous: false },
@@ -47,55 +48,75 @@ function makePlugin(over: Record<string, unknown> = {}) {
   };
 }
 
-beforeEach(() => {
-  vi.clearAllMocks();
-  (getScopeCatalog as ReturnType<typeof vi.fn>).mockResolvedValue(CATALOG);
-});
+/** Everything PluginsPage and the providers around it ask for. */
+function routesFor(listed: Record<string, unknown>, details: Record<string, unknown>) {
+  return {
+    '/api/plugins': { plugins: [listed] },
+    '/api/plugins/ui/manifest': { plugins: [] },
+    '/api/plugins/scope-catalog': CATALOG,
+    '/api/plugins/permissions': { permissions: [] },
+    '/api/plugins/weather': details,
+    'POST /api/plugins/weather/toggle': { name: 'weather', is_enabled: true, message: 'ok' },
+  };
+}
 
 describe('PluginsPage scope-picker (external) vs permissions modal (bundled)', () => {
   it('external: pre-checks requested scopes, sends the checked subset', async () => {
-    mockUsePlugins.mockReturnValue({
-      plugins: [makePlugin()], isLoading: false, error: null, refreshPlugins: vi.fn(),
+    const { user, api } = renderWithProviders(<PluginsPage />, {
+      auth: { username: 'admin', role: 'admin' },
+      withPlugins: true,
+      api: routesFor(
+        makePlugin(),
+        makePlugin({
+          is_installed: false,
+          requested_api_scopes: ['storage', 'read:power'],
+          dashboard_panel_enabled: false,
+        }),
+      ),
     });
-    (getPluginDetails as ReturnType<typeof vi.fn>).mockResolvedValue(
-      makePlugin({ is_installed: false, requested_api_scopes: ['storage', 'read:power'], dashboard_panel_enabled: false }),
-    );
 
-    render(<PluginsPage />);
-    // Wait until the catalog has loaded before opening the picker (avoids the
-    // mount-effect race: selectedScopes is computed from scopeCatalog at click time).
-    await waitFor(() => expect(getScopeCatalog).toHaveBeenCalled());
+    // The picker computes its pre-selection from the catalog at click time.
+    await waitFor(() => expect(api.callsTo('/api/plugins/scope-catalog')).toHaveLength(1));
 
-    fireEvent.click(await screen.findByText('buttons.enable'));
+    await user.click(await screen.findByText('Aktivieren'));
 
-    expect(await screen.findByText('picker.title')).toBeInTheDocument();
-    expect(screen.getByRole('checkbox', { name: /storage/i })).toBeChecked();
-    expect(screen.getByRole('checkbox', { name: /read:power/i })).toBeChecked();
+    expect(await screen.findByText(/Capability-Scopes gewähren/)).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('checkbox', { name: /read:power/i }));
-    fireEvent.click(screen.getByText('picker.grant'));
+    // The label a user actually sees for the backend scope. Real i18n makes
+    // this assertion meaningful: with the old mocked `t` it read "storage".
+    expect(screen.getByRole('checkbox', { name: /Plugin-Speicher/ })).toBeChecked();
+    // And the frontend scope shows its RAW KEY, because i18next splits the
+    // colon in "read:power" as a namespace separator when resolving nested
+    // objects — ScopeGrantModal.tsx:21 lacks the `nsSeparator: false` that
+    // PluginDocumentation.tsx:58 already carries. Documented here rather than
+    // fixed on the side; a fix turns this into /Energie/ or similar.
+    expect(screen.getByRole('checkbox', { name: 'read:power' })).toBeChecked();
 
-    await waitFor(() =>
-      expect(togglePlugin).toHaveBeenCalledWith('weather', {
-        enabled: true,
-        grant_api_scopes: ['storage'],
-      }),
-    );
+    await user.click(screen.getByRole('checkbox', { name: 'read:power' }));
+    await user.click(screen.getByText('Gewähren & Aktivieren'));
+
+    // Asserted on the request that leaves the app, not on a mocked function.
+    await waitFor(() => expect(api.callsTo('/api/plugins/weather/toggle', 'POST')).toHaveLength(1));
+    expect(api.callsTo('/api/plugins/weather/toggle', 'POST')[0].body).toEqual({
+      enabled: true,
+      grant_api_scopes: ['storage'],
+    });
   });
 
   it('bundled: shows the permissions modal, not the scope-picker', async () => {
-    mockUsePlugins.mockReturnValue({
-      plugins: [makePlugin({ is_external: false, required_permissions: ['file:read'] })],
-      isLoading: false, error: null, refreshPlugins: vi.fn(),
+    const bundled = { is_external: false, required_permissions: ['file:read'] };
+    const { user } = renderWithProviders(<PluginsPage />, {
+      auth: { username: 'admin', role: 'admin' },
+      withPlugins: true,
+      api: routesFor(
+        makePlugin(bundled),
+        makePlugin({ ...bundled, dangerous_permissions: [], granted_permissions: [] }),
+      ),
     });
-    (getPluginDetails as ReturnType<typeof vi.fn>).mockResolvedValue(
-      makePlugin({ is_external: false, required_permissions: ['file:read'], dangerous_permissions: [], granted_permissions: [] }),
-    );
 
-    render(<PluginsPage />);
-    fireEvent.click(await screen.findByText('buttons.enable'));
+    await user.click(await screen.findByText('Aktivieren'));
 
-    expect(await screen.findByText('modal.enableDesc')).toBeInTheDocument();
-    expect(screen.queryByText('picker.title')).not.toBeInTheDocument();
+    expect(await screen.findByText('Dieses Plugin benötigt folgende Berechtigungen:')).toBeInTheDocument();
+    expect(screen.queryByText(/Capability-Scopes gewähren/)).not.toBeInTheDocument();
   });
 });
