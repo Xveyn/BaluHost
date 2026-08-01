@@ -340,7 +340,14 @@ export function UploadProvider({ children }: { children: ReactNode }) {
       // Fire completion callbacks so FileManager can reload
       fireCompletionCallbacks();
     })();
-  }, [t, fireCompletionCallbacks]);
+    // `token` belongs in here: getToken() closes over the value from the
+    // render that created this callback, and AuthProvider only sets the token
+    // in its mount effect - so the FIRST render always has null. Without the
+    // dependency the callback keeps that null, and every upload started after
+    // sign-in silently does nothing but show "Session expired". That it works
+    // in the browser today rests on react-i18next handing out a fresh `t`
+    // often enough to rebuild the callback by accident (T3/#317).
+  }, [t, fireCompletionCallbacks, token]);
 
   /**
    * Start an upload: checks for duplicates first, then either shows the

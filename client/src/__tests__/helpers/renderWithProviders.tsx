@@ -15,13 +15,14 @@
  *             token is stored, which is what the `auth` option does. Mounting
  *             it unconditionally means a component using useAuth() just works
  *             instead of throwing "must be used within an AuthProvider".
- *   opt-in  PluginProvider (`withPlugins`)
- *           - fetches the plugin list AND the UI manifest as soon as a user is
- *             signed in, so a test that does not need it should not have to
- *             stub two more routes
- *   never   NotificationProvider, UploadProvider
- *           - they open a WebSocket and hold upload state. Add them here when
- *             a test needs one, together with the fake that makes it safe.
+ *   opt-in  PluginProvider (`withPlugins`), UploadProvider (`withUpload`)
+ *           - PluginProvider fetches the plugin list AND the UI manifest as
+ *             soon as a user is signed in; UploadProvider holds queue state
+ *             and lazy-loads the duplicate dialog. Neither should be paid for
+ *             by a test that does not use it.
+ *   never   NotificationProvider
+ *           - opens a WebSocket. Add it here when a test needs one, together
+ *             with the fake that makes it safe.
  *
  * The network comes from ONE route table for both transports - see apiStub.ts;
  * AuthProvider talks raw `fetch`, everything else goes through axios.
@@ -36,6 +37,7 @@ import type { ReactElement, ReactNode } from 'react';
 
 import { AuthProvider } from '../../contexts/AuthContext';
 import { PluginProvider } from '../../contexts/PluginContext';
+import { UploadProvider } from '../../contexts/UploadContext';
 import { ThemeProvider } from '../../contexts/ThemeContext';
 import { createTestQueryClient } from './queryClient';
 import { createTestI18n } from './i18nTest';
@@ -63,6 +65,8 @@ export interface RenderWithProvidersOptions extends Omit<RenderOptions, 'wrapper
   auth?: TestUser | false;
   /** Mount PluginProvider (needs `auth`, it only loads with a token). */
   withPlugins?: boolean;
+  /** Mount UploadProvider (needs `auth`; uploads are skipped without a token). */
+  withUpload?: boolean;
 }
 
 export interface RenderWithProvidersResult extends RenderResult {
@@ -95,6 +99,7 @@ export function renderWithProviders(
     api = {},
     auth = false,
     withPlugins = false,
+    withUpload = false,
     ...renderOptions
   } = options;
 
@@ -116,6 +121,7 @@ export function renderWithProviders(
 
   function Wrapper({ children }: { children: ReactNode }) {
     let tree = <>{children}</>;
+    if (withUpload) tree = <UploadProvider>{tree}</UploadProvider>;
     if (withPlugins) tree = <PluginProvider>{tree}</PluginProvider>;
     tree = <AuthProvider>{tree}</AuthProvider>;
     return (
