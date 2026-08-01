@@ -75,6 +75,19 @@ class Notification(Base):
         DateTime(timezone=True), nullable=True, default=None
     )
 
+    # Monotonic write stamp for incremental sync (#504). SQLAlchemy fills it on
+    # INSERT via server_default and on every UPDATE via onupdate - measured to
+    # fire for bulk Query.update() as well, which is what mark_all_as_read and
+    # dismiss_all use. A no-op call writes nothing and therefore does NOT bump
+    # the stamp, which is what keeps an incremental fetch small.
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+        index=True,
+    )
+
     # Relationship
     user: Mapped[Optional["User"]] = relationship("User", back_populates="notifications")
 
@@ -86,6 +99,7 @@ class Notification(Base):
         return {
             "id": self.id,
             "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
             "user_id": self.user_id,
             "notification_type": self.notification_type,
             "category": self.category,
