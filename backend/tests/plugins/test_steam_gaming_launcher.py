@@ -4,7 +4,12 @@ from __future__ import annotations
 import subprocess
 from unittest.mock import MagicMock, patch
 
-from app.plugins.installed.steam_gaming.launcher import BIG_PICTURE_URL, open_big_picture
+from app.plugins.installed.steam_gaming.launcher import (
+    BIG_PICTURE_URL,
+    CLOSE_BIG_PICTURE_URL,
+    close_big_picture,
+    open_big_picture,
+)
 
 
 class TestOpenBigPicture:
@@ -85,3 +90,66 @@ class TestOpenBigPicture:
 
         handle.wait.assert_not_called()
         handle.communicate.assert_not_called()
+
+
+class TestCloseBigPicture:
+    """The counterpart, measured on BaluNode 2026-08-01: the running client
+    leaves Big Picture and stays up."""
+
+    def test_launches_steam_with_the_close_url(self):
+        with patch("app.plugins.installed.steam_gaming.launcher.settings") as cfg, \
+             patch("subprocess.Popen") as popen, \
+             patch("app.plugins.installed.steam_gaming.launcher.wayland_session_env", return_value={}):
+            cfg.is_dev_mode = False
+            ok, _detail = close_big_picture()
+
+        assert ok is True
+        assert popen.call_args.args[0] == ["steam", CLOSE_BIG_PICTURE_URL]
+
+    def test_close_url_is_not_the_open_url(self):
+        """A copy-paste slip here would make the exit action re-open Big
+        Picture, and nothing downstream could tell the difference."""
+        assert CLOSE_BIG_PICTURE_URL != BIG_PICTURE_URL
+
+    def test_detaches_like_the_open_direction(self):
+        with patch("app.plugins.installed.steam_gaming.launcher.settings") as cfg, \
+             patch("subprocess.Popen") as popen, \
+             patch("app.plugins.installed.steam_gaming.launcher.wayland_session_env", return_value={}):
+            cfg.is_dev_mode = False
+            close_big_picture()
+
+        kwargs = popen.call_args.kwargs
+        assert kwargs["start_new_session"] is True
+        assert kwargs["stdin"] == subprocess.DEVNULL
+        assert "shell" not in kwargs
+
+    def test_passes_the_wayland_session_env(self):
+        with patch("app.plugins.installed.steam_gaming.launcher.settings") as cfg, \
+             patch("subprocess.Popen") as popen, \
+             patch(
+                 "app.plugins.installed.steam_gaming.launcher.wayland_session_env",
+                 return_value={"XDG_RUNTIME_DIR": "/run/user/1000"},
+             ):
+            cfg.is_dev_mode = False
+            close_big_picture()
+
+        assert popen.call_args.kwargs["env"] == {"XDG_RUNTIME_DIR": "/run/user/1000"}
+
+    def test_missing_steam_binary_is_reported_not_raised(self):
+        with patch("app.plugins.installed.steam_gaming.launcher.settings") as cfg, \
+             patch("subprocess.Popen", side_effect=FileNotFoundError()), \
+             patch("app.plugins.installed.steam_gaming.launcher.wayland_session_env", return_value={}):
+            cfg.is_dev_mode = False
+            ok, detail = close_big_picture()
+
+        assert ok is False
+        assert "steam" in detail.lower()
+
+    def test_dev_mode_does_not_spawn_anything(self):
+        with patch("app.plugins.installed.steam_gaming.launcher.settings") as cfg, \
+             patch("subprocess.Popen") as popen:
+            cfg.is_dev_mode = True
+            ok, _detail = close_big_picture()
+
+        assert ok is True
+        popen.assert_not_called()

@@ -18,6 +18,14 @@ DEFAULT_PROC_ROOT = Path("/proc")
 
 _APPID_RE = re.compile(r"SteamLaunch\s+AppId=(\d+)")
 
+# The Steam CLIENT itself, not its helpers: `steam` as a whole path segment,
+# followed by whitespace or the end of the command line. `steamwebhelper` and
+# `steamerrorreporter` deliberately do NOT match - a false positive is the
+# expensive direction, because it would let the exit action fire
+# `steam steam://close/bigpicture` at a box where Steam is down, which STARTS
+# Steam instead of closing anything.
+_STEAM_CLIENT_RE = re.compile(r"(?:^|/)steam(?:\s|$)")
+
 
 def _iter_cmdlines(proc_root: Path) -> Iterator[tuple[int, str]]:
     """Yield ``(pid, cmdline)`` for every readable process directory."""
@@ -52,3 +60,15 @@ def detect_running_app_id(proc_root: Path = DEFAULT_PROC_ROOT) -> Optional[str]:
         if best_pid is None or pid < best_pid:
             best_pid, best_app_id = pid, match.group(1)
     return best_app_id
+
+
+def steam_is_running(proc_root: Path = DEFAULT_PROC_ROOT) -> bool:
+    """True while a Steam client process exists.
+
+    Same /proc scan as the game detection, different question: this one asks
+    whether Steam is up at all, which is the precondition for handing it a
+    steam:// URL that must not launch it.
+    """
+    return any(
+        _STEAM_CLIENT_RE.search(cmdline) for _pid, cmdline in _iter_cmdlines(proc_root)
+    )

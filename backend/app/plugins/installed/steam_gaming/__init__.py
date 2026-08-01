@@ -30,16 +30,27 @@ from app.plugins.base import (
 from app.models.steam_session import SteamSession
 from app.plugins.dashboard_panel import StatusItem, StatusPanelData
 from app.plugins.installed.steam_gaming import ledger
-from app.plugins.installed.steam_gaming.detection import current_app_id, resolve_game_name
-from app.plugins.installed.steam_gaming.launcher import open_big_picture
+from app.plugins.installed.steam_gaming.detection import (
+    current_app_id,
+    resolve_game_name,
+    steam_is_running,
+)
+from app.plugins.installed.steam_gaming.launcher import close_big_picture, open_big_picture
 from app.plugins.installed.steam_gaming.poller import SteamSessionPoller
 from app.services.power.desktop import get_desktop_service
+from app.services.power.desktop_windows import show_desktop
 from app.services.power.session_lock import unlock_if_permitted
 
 logger = logging.getLogger(__name__)
 
 _PILL_ID = "session"
 _MENU_ACTION_ID = "gaming_mode"
+_MENU_END_ACTION_ID = "gaming_mode_end"
+# Steam needs a moment to put its windowed UI back on screen after leaving Big
+# Picture. Minimizing before that would clear a desktop the window then pops
+# back onto. Measured on BaluNode with 2s; kept well inside the 20s budget of a
+# plugin menu action.
+_WINDOW_SETTLE_SECONDS = 2.0
 _EVENT_STARTED = ledger.EVENT_STARTED
 _EVENT_ENDED = ledger.EVENT_ENDED
 _POLL_INTERVAL_SECONDS = 30.0
@@ -142,16 +153,31 @@ class SteamGamingPlugin(PluginBase):
     def get_ui_manifest(self) -> PluginUIManifest:
         return PluginUIManifest(
             enabled=True,
-            menu_items=[PluginMenuItem(
-                id=_MENU_ACTION_ID,
-                icon="Gamepad2",
-                tone="info",
-                order=10,
-                label_key="menu_gaming_mode",
-                label_text="Gaming Mode",
-                description_key="menu_gaming_mode_desc",
-                description_text="Turn displays on and open Big Picture",
-            )],
+            menu_items=[
+                PluginMenuItem(
+                    id=_MENU_ACTION_ID,
+                    icon="Gamepad2",
+                    tone="info",
+                    order=10,
+                    label_key="menu_gaming_mode",
+                    label_text="Gaming Mode",
+                    description_key="menu_gaming_mode_desc",
+                    description_text="Turn displays on and open Big Picture",
+                ),
+                # "Monitor", not something more expressive: the frontend icon
+                # map is a closed set (#451), and anything outside it silently
+                # degrades to the generic plug icon.
+                PluginMenuItem(
+                    id=_MENU_END_ACTION_ID,
+                    icon="Monitor",
+                    tone="neutral",
+                    order=20,
+                    label_key="menu_gaming_mode_end",
+                    label_text="End Gaming Mode",
+                    description_key="menu_gaming_mode_end_desc",
+                    description_text="Close Big Picture and clear the desktop",
+                ),
+            ],
         )
 
     async def run_menu_action(
@@ -162,6 +188,8 @@ class SteamGamingPlugin(PluginBase):
         user=None,
         client_host: Optional[str] = None,
     ) -> Optional[MenuActionResult]:
+        if action_id == _MENU_END_ACTION_ID:
+            return await self._end_gaming_mode()
         if action_id != _MENU_ACTION_ID:
             return None
 
@@ -204,6 +232,61 @@ class SteamGamingPlugin(PluginBase):
             ok=True,
             message_key="menu_gaming_mode_started",
             message_text="Gaming mode started",
+        )
+
+    async def _end_gaming_mode(self) -> MenuActionResult:
+        """Leave Big Picture and clear the desktop again.
+
+        Deliberately does NOT turn the displays off - that already exists as
+        its own entry in the power menu, and combining both would make one
+        click do two things the user may not want together.
+        """
+        # A running game is the one state that IS detectable, so it is the one
+        # precondition worth enforcing: nobody wants a remote click pulling the
+        # UI out from under someone playing at the box.
+        game = await asyncio.to_thread(_current_game)
+        if game is not None:
+            app_id, name = game
+            return MenuActionResult(
+                ok=False,
+                message_key="menu_end_game_running",
+                message_text=f"A game is still running: {name or app_id}",
+            )
+
+        # Without this guard the close URL would START Steam - see launcher.py.
+        if not await asyncio.to_thread(steam_is_running):
+            return MenuActionResult(
+                ok=True,
+                message_key="menu_end_steam_not_running",
+                message_text="Steam is not running - nothing to end",
+            )
+
+        closed, detail = await asyncio.to_thread(close_big_picture)
+        if not closed:
+            logger.warning("end gaming mode: Big Picture was not closed: %s", detail)
+            return MenuActionResult(
+                ok=False,
+                message_key="menu_end_close_failed",
+                message_text=f"Big Picture could not be closed: {detail}",
+            )
+
+        await asyncio.sleep(_WINDOW_SETTLE_SECONDS)
+
+        minimized, detail = await asyncio.to_thread(show_desktop)
+        if not minimized:
+            logger.warning("end gaming mode: windows stayed up: %s", detail)
+            return MenuActionResult(
+                ok=False,
+                message_key="menu_end_windows_failed",
+                message_text=f"Big Picture was closed, but the windows stayed up: {detail}",
+            )
+
+        # "ended", not "Big Picture is gone": the close is dispatched to a
+        # detached process and the mode is not observable from here either.
+        return MenuActionResult(
+            ok=True,
+            message_key="menu_gaming_mode_ended",
+            message_text="Gaming mode ended",
         )
 
     def get_dashboard_panel(self) -> Optional[DashboardPanelSpec]:
@@ -285,6 +368,13 @@ class SteamGamingPlugin(PluginBase):
                 "menu_gaming_mode_started": "Gaming mode started",
                 "menu_displays_failed": "Displays could not be turned on",
                 "menu_steam_failed": "Displays are on, but Steam did not start",
+                "menu_gaming_mode_end": "End Gaming Mode",
+                "menu_gaming_mode_end_desc": "Close Big Picture + clear the desktop",
+                "menu_gaming_mode_ended": "Gaming mode ended",
+                "menu_end_game_running": "A game is still running",
+                "menu_end_steam_not_running": "Steam is not running - nothing to end",
+                "menu_end_close_failed": "Big Picture could not be closed",
+                "menu_end_windows_failed": "Big Picture was closed, but the windows stayed up",
             },
             "de": {
                 "pill_name": "Gaming-Session",
@@ -294,5 +384,12 @@ class SteamGamingPlugin(PluginBase):
                 "menu_gaming_mode_started": "Gaming-Modus gestartet",
                 "menu_displays_failed": "Displays konnten nicht eingeschaltet werden",
                 "menu_steam_failed": "Displays sind an, aber Steam startete nicht",
+                "menu_gaming_mode_end": "Gaming-Modus beenden",
+                "menu_gaming_mode_end_desc": "Big Picture schließen + Fenster minimieren",
+                "menu_gaming_mode_ended": "Gaming-Modus beendet",
+                "menu_end_game_running": "Es läuft noch ein Spiel",
+                "menu_end_steam_not_running": "Steam läuft nicht - nichts zu beenden",
+                "menu_end_close_failed": "Big Picture konnte nicht geschlossen werden",
+                "menu_end_windows_failed": "Big Picture ist zu, aber die Fenster blieben offen",
             },
         }

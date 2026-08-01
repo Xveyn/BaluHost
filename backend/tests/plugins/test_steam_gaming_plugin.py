@@ -110,6 +110,34 @@ async def test_an_unknown_pill_id_is_silent(plugin, dev_mode):
 
 
 _ACTION = "gaming_mode"
+_END_ACTION = "gaming_mode_end"
+
+
+def _patch_end_action(
+    *,
+    game=None,
+    steam_running: bool = True,
+    closed: tuple = (True, "requested"),
+    minimized: tuple = (True, "windows minimized"),
+):
+    """Patch everything the exit action touches.
+
+    The last element stubs the settle delay - without it every test that walks
+    the happy path would really wait _WINDOW_SETTLE_SECONDS.
+    """
+    return (
+        patch("app.plugins.installed.steam_gaming._current_game", return_value=game),
+        patch(
+            "app.plugins.installed.steam_gaming.steam_is_running",
+            return_value=steam_running,
+        ),
+        patch(
+            "app.plugins.installed.steam_gaming.close_big_picture",
+            return_value=closed,
+        ),
+        patch("app.plugins.installed.steam_gaming.show_desktop", return_value=minimized),
+        patch("asyncio.sleep", new_callable=AsyncMock),
+    )
 
 
 def _patch_desktop(ok: bool, message: str = ""):
@@ -122,9 +150,9 @@ def _patch_desktop(ok: bool, message: str = ""):
 
 
 class TestGamingModeMenuItem:
-    def test_manifest_declares_the_action(self):
+    def test_manifest_declares_both_directions(self):
         manifest = SteamGamingPlugin().get_ui_manifest()
-        assert [item.id for item in manifest.menu_items] == [_ACTION]
+        assert [item.id for item in manifest.menu_items] == [_ACTION, _END_ACTION]
 
     def test_item_carries_key_and_literal_fallback(self):
         item = SteamGamingPlugin().get_ui_manifest().menu_items[0]
@@ -132,13 +160,23 @@ class TestGamingModeMenuItem:
         assert item.label_text
         assert item.icon == "Gamepad2"
 
-    def test_translations_cover_every_key_the_item_uses(self):
+    def test_translations_cover_every_key_the_items_use(self):
         plugin = SteamGamingPlugin()
-        item = plugin.get_ui_manifest().menu_items[0]
         translations = plugin.get_translations()
-        for lang in ("en", "de"):
-            assert item.label_key in translations[lang]
-            assert item.description_key in translations[lang]
+        for item in plugin.get_ui_manifest().menu_items:
+            for lang in ("en", "de"):
+                assert item.label_key in translations[lang]
+                assert item.description_key in translations[lang]
+
+    def test_every_icon_resolves_in_the_frontend_icon_map(self):
+        """client/src/components/topbar/iconMap.ts is a CLOSED map (#451) - an
+        icon outside it silently degrades to the generic Plug fallback."""
+        known = {
+            "Zap", "Shield", "Upload", "RefreshCw", "HardDrive", "Moon", "Lock",
+            "Thermometer", "Coffee", "Clock", "Save", "Monitor", "Gamepad2",
+        }
+        for item in SteamGamingPlugin().get_ui_manifest().menu_items:
+            assert item.icon in known, f"{item.id} uses an icon the frontend cannot resolve"
 
 
 class TestGamingModeAction:
@@ -179,6 +217,98 @@ class TestGamingModeAction:
 
         assert result.ok is False
         assert result.message_key == "menu_steam_failed"
+
+
+class TestEndGamingModeAction:
+    """Closing Big Picture and clearing the desktop again.
+
+    Big Picture's state is not observable (design doc 2026-07-24), so this
+    direction is as fire-and-forget as the start direction - what CAN be
+    checked are the two preconditions: no game running, Steam running.
+    """
+
+    async def test_closes_big_picture_then_minimizes_the_windows(self):
+        calls: list[str] = []
+        game_p, steam_p, close_p, show_p, sleep_p = _patch_end_action()
+        with game_p, steam_p, close_p as close, show_p as show, sleep_p:
+            close.side_effect = lambda: (calls.append("close"), (True, "requested"))[1]
+            show.side_effect = lambda: (calls.append("show"), (True, "minimized"))[1]
+            result = await SteamGamingPlugin().run_menu_action(_END_ACTION, db=None)
+
+        assert calls == ["close", "show"]
+        assert result.ok is True
+        assert result.message_key == "menu_gaming_mode_ended"
+
+    async def test_lets_the_windowed_ui_settle_before_minimizing(self):
+        """Steam repaints its normal window a moment after leaving Big
+        Picture - minimizing first would clear a desktop it then pops onto."""
+        assert plugin_module._WINDOW_SETTLE_SECONDS > 0
+
+        game_p, steam_p, close_p, show_p, sleep_p = _patch_end_action()
+        with game_p, steam_p, close_p, show_p, sleep_p as sleep:
+            await SteamGamingPlugin().run_menu_action(_END_ACTION, db=None)
+
+        sleep.assert_awaited_once_with(plugin_module._WINDOW_SETTLE_SECONDS)
+
+    async def test_refuses_while_a_game_is_running(self):
+        game_p, steam_p, close_p, show_p, sleep_p = _patch_end_action(
+            game=("1449560", "Metro Exodus")
+        )
+        with game_p, steam_p, close_p as close, show_p as show, sleep_p:
+            result = await SteamGamingPlugin().run_menu_action(_END_ACTION, db=None)
+
+        close.assert_not_called()
+        show.assert_not_called()
+        assert result.ok is False
+        assert result.message_key == "menu_end_game_running"
+        assert "Metro Exodus" in result.message_text
+
+    async def test_does_not_start_steam_just_to_close_big_picture(self):
+        """`steam steam://close/bigpicture` STARTS Steam when it is not
+        running - the whole point of the guard."""
+        game_p, steam_p, close_p, show_p, sleep_p = _patch_end_action(steam_running=False)
+        with game_p, steam_p, close_p as close, show_p as show, sleep_p:
+            result = await SteamGamingPlugin().run_menu_action(_END_ACTION, db=None)
+
+        close.assert_not_called()
+        show.assert_not_called()
+        assert result.ok is True  # nothing to end is not a failure
+        assert result.message_key == "menu_end_steam_not_running"
+
+    async def test_does_not_minimize_when_big_picture_could_not_be_closed(self):
+        """Clearing the desktop while Big Picture is still up would hide the
+        failure behind an empty screen."""
+        game_p, steam_p, close_p, show_p, sleep_p = _patch_end_action(
+            closed=(False, "steam binary not found")
+        )
+        with game_p, steam_p, close_p, show_p as show, sleep_p:
+            result = await SteamGamingPlugin().run_menu_action(_END_ACTION, db=None)
+
+        show.assert_not_called()
+        assert result.ok is False
+        assert result.message_key == "menu_end_close_failed"
+
+    async def test_reports_partial_success_when_the_windows_stay_up(self):
+        game_p, steam_p, close_p, show_p, sleep_p = _patch_end_action(
+            minimized=(False, "qdbus6 not found")
+        )
+        with game_p, steam_p, close_p, show_p, sleep_p:
+            result = await SteamGamingPlugin().run_menu_action(_END_ACTION, db=None)
+
+        assert result.ok is False
+        assert result.message_key == "menu_end_windows_failed"
+
+    async def test_blocking_calls_run_off_the_event_loop(self):
+        """Same reason as the start direction: asyncio.wait_for() in the route
+        cannot interrupt a blocking call made on the loop thread."""
+        idents: list[int] = []
+        game_p, steam_p, close_p, show_p, sleep_p = _patch_end_action()
+        with game_p, steam_p, close_p as close, show_p as show, sleep_p:
+            close.side_effect = lambda: (idents.append(threading.get_ident()), (True, "x"))[1]
+            show.side_effect = lambda: (idents.append(threading.get_ident()), (True, "x"))[1]
+            await SteamGamingPlugin().run_menu_action(_END_ACTION, db=None)
+
+        assert idents and all(ident != threading.get_ident() for ident in idents)
 
 
 class TestManifestAndRouteAgreeOnDeclaredActions:
