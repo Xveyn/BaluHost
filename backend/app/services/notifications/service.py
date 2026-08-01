@@ -428,6 +428,7 @@ class NotificationService:
         notification_type: Optional[str] = None,
         created_after: Optional[datetime] = None,
         created_before: Optional[datetime] = None,
+        updated_after: Optional[datetime] = None,
         limit: int = 50,
         offset: int = 0,
         is_admin: bool = False,
@@ -444,6 +445,8 @@ class NotificationService:
             notification_type: Filter by type (info, warning, critical)
             created_after: Only return notifications created after this time
             created_before: Only return notifications created before this time
+            updated_after: Only return notifications whose state changed at or
+                after this time (incremental sync, #504)
             limit: Maximum number of results
             offset: Number of results to skip
             is_admin: Whether the user is an admin (includes system notifications)
@@ -482,6 +485,9 @@ class NotificationService:
         if created_before:
             query = query.filter(Notification.created_at <= created_before)
 
+        if updated_after:
+            query = query.filter(Notification.updated_at >= updated_after)
+
         query = query.order_by(desc(Notification.created_at))
         query = query.offset(offset).limit(limit)
 
@@ -497,6 +503,7 @@ class NotificationService:
         notification_type: Optional[str] = None,
         created_after: Optional[datetime] = None,
         created_before: Optional[datetime] = None,
+        updated_after: Optional[datetime] = None,
         is_admin: bool = False,
     ) -> int:
         """Count notifications for a user using SQL COUNT(*).
@@ -514,6 +521,8 @@ class NotificationService:
             notification_type: Filter by type (info, warning, critical)
             created_after: Only count notifications created after this time
             created_before: Only count notifications created before this time
+            updated_after: Only count notifications whose state changed at or
+                after this time (incremental sync, #504)
             is_admin: Whether the user is an admin (includes system notifications)
 
         Returns:
@@ -551,6 +560,9 @@ class NotificationService:
 
         if created_before:
             query = query.filter(Notification.created_at <= created_before)
+
+        if updated_after:
+            query = query.filter(Notification.updated_at >= updated_after)
 
         return query.scalar() or 0
 
