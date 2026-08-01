@@ -79,10 +79,12 @@ jobs:
           # `podman info` initialises the runtime and would recreate the pause
           # process itself, so the probe has to be serialized too — hence flock
           # around the whole check rather than a bare `||`.
-          # `podman system migrate` runs ONLY when podman is already broken:
-          # resetting the pause process unconditionally would rip it out from
-          # under a container the other runner instance is running right now.
-          flock "$HOME/.podman-health.lock" -c 'podman info >/dev/null 2>&1 || podman system migrate'
+          # The repair itself lives in the script (identical in all three
+          # sandbox jobs) because it needs more than one line to be safe:
+          # `podman system migrate` STOPS running containers and has crashed
+          # doing so (#498), so it must not run while another job is mid-flight
+          # and its exit code must not become this job's result.
+          flock "$HOME/.podman-health.lock" -c "bash '$GITHUB_WORKSPACE/scripts/ci-podman-health.sh'"
 
       - name: Lint + backend tests (with coverage) in rootless Podman container
         env:
@@ -184,7 +186,7 @@ jobs:
         if: github.repository == 'Xveyn/BaluHost'
         run: |
           set -euo pipefail
-          flock "$HOME/.podman-health.lock" -c 'podman info >/dev/null 2>&1 || podman system migrate'
+          flock "$HOME/.podman-health.lock" -c "bash '$GITHUB_WORKSPACE/scripts/ci-podman-health.sh'"
 
       - name: Lint + build + unit tests (with coverage) in rootless Podman container
         env:
