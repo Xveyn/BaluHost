@@ -40,7 +40,7 @@ export default function PowerMenu({ isAdmin, onShutdown, onRestart, onLogout }: 
   const [confirmAction, setConfirmAction] = useState<'shutdown' | 'restart' | 'sleep' | 'suspend' | null>(null);
   const [sleepAvailable, setSleepAvailable] = useState(false);
   const [desktopState, setDesktopState] = useState<DesktopState | null>(null);
-  const { pluginMenuItems } = usePlugins();
+  const { pluginMenuItems, refreshMenuItems } = usePlugins();
   const [runningAction, setRunningAction] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -55,8 +55,12 @@ export default function PowerMenu({ isAdmin, onShutdown, onRestart, onLogout }: 
       getDesktopStatus()
         .then((s) => setDesktopState(s.state))
         .catch(() => setDesktopState(null));
+      // Plugin entries can depend on server-side state too — the Steam plugin
+      // offers "start" or "end" gaming mode, never both — and the manifest is
+      // otherwise only fetched at page load.
+      void refreshMenuItems();
     }
-  }, [isOpen, isAdmin]);
+  }, [isOpen, isAdmin, refreshMenuItems]);
 
   // Close dropdown when clicking outside
   useEffect(() => {

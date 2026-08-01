@@ -27,9 +27,10 @@ from app.plugins.base import (
     PluginUIManifest,
     StatusPillSpec,
 )
+from app.core.config import settings
 from app.models.steam_session import SteamSession
 from app.plugins.dashboard_panel import StatusItem, StatusPanelData
-from app.plugins.installed.steam_gaming import ledger
+from app.plugins.installed.steam_gaming import gaming_state, ledger
 from app.plugins.installed.steam_gaming.detection import (
     current_app_id,
     resolve_game_name,
@@ -39,6 +40,7 @@ from app.plugins.installed.steam_gaming.launcher import close_big_picture, open_
 from app.plugins.installed.steam_gaming.poller import SteamSessionPoller
 from app.services.power.desktop import get_desktop_service
 from app.services.power.desktop_windows import show_desktop
+from app.services.power.gpu.display_detector import get_active_display_count_sync
 from app.services.power.session_lock import unlock_if_permitted
 
 logger = logging.getLogger(__name__)
@@ -101,6 +103,70 @@ def _panel_value(row: SteamSession, now: datetime) -> str:
     return f"{ledger.as_utc(row.started_at):%d.%m.} · {duration}"
 
 
+def _start_menu_item() -> PluginMenuItem:
+    return PluginMenuItem(
+        id=_MENU_ACTION_ID,
+        icon="Gamepad2",
+        tone="info",
+        order=10,
+        label_key="menu_gaming_mode",
+        label_text="Gaming Mode",
+        description_key="menu_gaming_mode_desc",
+        description_text="Turn displays on and open Big Picture",
+    )
+
+
+def _end_menu_item() -> PluginMenuItem:
+    # "Monitor", not something more expressive: the frontend icon map is a
+    # closed set (#451), and anything outside it silently degrades to the
+    # generic plug icon.
+    return PluginMenuItem(
+        id=_MENU_END_ACTION_ID,
+        icon="Monitor",
+        tone="neutral",
+        order=10,
+        label_key="menu_gaming_mode_end",
+        label_text="End Gaming Mode",
+        description_key="menu_gaming_mode_end_desc",
+        description_text="Close Big Picture and clear the desktop",
+    )
+
+
+def _displays_on() -> bool:
+    """True while at least one display is lit.
+
+    Read synchronously because the UI manifest is built synchronously - a few
+    small sysfs reads, the async sibling only wraps the same helper in a
+    thread. Unreadable sysfs counts as "off": that steers the menu to the
+    start action, which is the harmless one to offer wrongly.
+    """
+    if settings.is_dev_mode:
+        # No DRM connectors on a Windows dev box, so the count would pin the
+        # menu to "start" forever and the toggle could not be tried locally.
+        return True
+    try:
+        return get_active_display_count_sync() > 0
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.debug("display count unreadable: %s", exc)
+        return False
+
+
+def _end_action_is_current() -> bool:
+    """Whether the menu should offer to END gaming mode rather than start it.
+
+    Two signals, because the obvious one does not exist: whether Big Picture
+    runs is not detectable (design doc 2026-07-24).
+
+    - the marker says BaluHost started gaming mode and has not ended it
+    - the displays are on, so there is something on screen to end
+
+    The display check is what rescues a stale marker: if Big Picture was left
+    at the box and the screens went dark, the menu offers "start" again
+    instead of stranding on "end".
+    """
+    return gaming_state.is_active() and _displays_on()
+
+
 class SteamGamingPlugin(PluginBase):
     """Surfaces a running Steam session in the topbar status strip."""
 
@@ -113,6 +179,17 @@ class SteamGamingPlugin(PluginBase):
             description="Shows a status-strip pill while a Steam game is running",
             author="BaluHost",
         )
+
+    async def on_startup(self) -> None:
+        """Forget a gaming mode that the previous process started.
+
+        A deploy or a crash restarts the backend while Big Picture may well
+        keep running, and the marker would then outlive everything we know
+        about it. Clearing means the menu offers "start" again - wrong at
+        worst by one harmless click, whereas a stale "end" minimizes the
+        windows of someone who never asked for it.
+        """
+        await asyncio.to_thread(gaming_state.mark_ended)
 
     def get_status_pills(self) -> List[StatusPillSpec]:
         return [StatusPillSpec(
@@ -151,34 +228,20 @@ class SteamGamingPlugin(PluginBase):
         }
 
     def get_ui_manifest(self) -> PluginUIManifest:
-        return PluginUIManifest(
-            enabled=True,
-            menu_items=[
-                PluginMenuItem(
-                    id=_MENU_ACTION_ID,
-                    icon="Gamepad2",
-                    tone="info",
-                    order=10,
-                    label_key="menu_gaming_mode",
-                    label_text="Gaming Mode",
-                    description_key="menu_gaming_mode_desc",
-                    description_text="Turn displays on and open Big Picture",
-                ),
-                # "Monitor", not something more expressive: the frontend icon
-                # map is a closed set (#451), and anything outside it silently
-                # degrades to the generic plug icon.
-                PluginMenuItem(
-                    id=_MENU_END_ACTION_ID,
-                    icon="Monitor",
-                    tone="neutral",
-                    order=20,
-                    label_key="menu_gaming_mode_end",
-                    label_text="End Gaming Mode",
-                    description_key="menu_gaming_mode_end_desc",
-                    description_text="Close Big Picture and clear the desktop",
-                ),
-            ],
-        )
+        """Advertise the direction that makes sense right now - only one."""
+        item = _end_menu_item() if _end_action_is_current() else _start_menu_item()
+        return PluginUIManifest(enabled=True, menu_items=[item])
+
+    def get_menu_items(self) -> List[PluginMenuItem]:
+        """Both directions stay dispatchable, whatever the manifest shows.
+
+        The core validates a clicked action_id against THIS list. Deriving it
+        from the manifest (the base class default) would 404 any click that
+        races a state change - the menu in the browser was rendered when the
+        other direction was current. Advertising a subset of what is declared
+        is the safe direction; the reverse is the drift base.py warns about.
+        """
+        return [_start_menu_item(), _end_menu_item()]
 
     async def run_menu_action(
         self,
@@ -226,6 +289,11 @@ class SteamGamingPlugin(PluginBase):
                 message_text=f"Displays are on, but Steam did not start: {detail}",
             )
 
+        # Only now, with Big Picture actually dispatched: the marker drives
+        # which direction the menu offers, so recording a start that never
+        # happened would hide the start action behind a useless end action.
+        await asyncio.to_thread(gaming_state.mark_started)
+
         # "started", not "Big Picture is running": the process is detached, so
         # anything past the spawn is not observable from here.
         return MenuActionResult(
@@ -255,6 +323,9 @@ class SteamGamingPlugin(PluginBase):
 
         # Without this guard the close URL would START Steam - see launcher.py.
         if not await asyncio.to_thread(steam_is_running):
+            # Steam is down, so gaming mode is over no matter what the marker
+            # claims - clearing it here is how a stale one heals.
+            await asyncio.to_thread(gaming_state.mark_ended)
             return MenuActionResult(
                 ok=True,
                 message_key="menu_end_steam_not_running",
@@ -269,6 +340,11 @@ class SteamGamingPlugin(PluginBase):
                 message_key="menu_end_close_failed",
                 message_text=f"Big Picture could not be closed: {detail}",
             )
+
+        # Big Picture is gone, so gaming mode has ended - independently of
+        # whether the windows go down below. Leaving the marker set on that
+        # failure would strand the menu on "end".
+        await asyncio.to_thread(gaming_state.mark_ended)
 
         await asyncio.sleep(_WINDOW_SETTLE_SECONDS)
 

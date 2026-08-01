@@ -29,6 +29,7 @@ interface PluginContextType {
   isLoading: boolean;
   error: string | null;
   refreshPlugins: () => Promise<void>;
+  refreshMenuItems: () => Promise<void>;
 }
 
 const PluginContext = createContext<PluginContextType | undefined>(undefined);
@@ -73,6 +74,29 @@ export function PluginProvider({ children }: PluginProviderProps) {
     }
   }, [token]);
 
+  /**
+   * Re-fetch only the UI manifest.
+   *
+   * Menu items can depend on server-side state (the Steam plugin offers
+   * "start" or "end" gaming mode, never both), so a menu opened minutes after
+   * page load would otherwise show the state from page load.
+   *
+   * Deliberately narrower than refreshPlugins(): no plugin list, and no
+   * isLoading flip. The power menu calls this on every open, and toggling the
+   * shared loading flag would flash a spinner on an open Plugins page for a
+   * fetch it never asked for. On error the last known items stay — a stale
+   * entry beats an empty power menu.
+   */
+  const refreshMenuItems = useCallback(async () => {
+    if (!token || isPi) return;
+    try {
+      const manifest = await getUIManifest();
+      setEnabledPlugins(manifest?.plugins ?? []);
+    } catch {
+      // keep what we have
+    }
+  }, [token]);
+
   useEffect(() => {
     loadPlugins();
   }, [loadPlugins]);
@@ -112,6 +136,7 @@ export function PluginProvider({ children }: PluginProviderProps) {
     isLoading,
     error,
     refreshPlugins: loadPlugins,
+    refreshMenuItems,
   };
 
   return (

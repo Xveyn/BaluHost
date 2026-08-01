@@ -40,3 +40,15 @@ async def get_active_display_count(sysfs_root: Path = Path("/")) -> int:
     `enabled` covers DPMS-off / unused: physically connected but no active mode.
     """
     return await asyncio.to_thread(_count_sync, sysfs_root)
+
+
+def get_active_display_count_sync(sysfs_root: Path = Path("/")) -> int:
+    """Same count, for callers that cannot await.
+
+    The work is a handful of small sysfs reads - the async variant above only
+    wraps it in a thread because it sits on request paths that already are
+    async. The plugin UI manifest is built synchronously and needs the same
+    answer, and reaching into the private helper from there would make this
+    module's public surface a lie.
+    """
+    return _count_sync(sysfs_root)
