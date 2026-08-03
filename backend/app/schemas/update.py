@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional, Literal, Any
+from typing import Optional, Literal
 
 from pydantic import BaseModel, Field
 
@@ -261,17 +261,6 @@ class UpdateConfigResponse(UpdateConfigBase):
     updated_by: Optional[int] = None
 
     model_config = {"from_attributes": True}
-
-
-# WebSocket message schemas for real-time updates
-class UpdateWebSocketMessage(BaseModel):
-    """WebSocket message for update events."""
-
-    type: Literal[
-        "update_available", "update_progress", "update_complete",
-        "update_failed", "rollback_complete"
-    ] = Field(description="Message type")
-    payload: Any = Field(description="Message payload")
 
 
 class ReleaseNoteCategory(BaseModel):

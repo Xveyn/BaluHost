@@ -269,18 +269,12 @@ class NotificationPreferencesResponse(NotificationPreferencesBase):
         )
 
 
-# WebSocket message schemas
-class WebSocketMessage(BaseModel):
-    """WebSocket message format."""
-
-    type: Literal["notification", "unread_count", "ping", "pong"] = Field(
-        description="Message type"
-    )
-    payload: Any = Field(description="Message payload")
-
-
-class NotificationWebSocketPayload(BaseModel):
-    """Payload for notification WebSocket messages."""
-
-    notification: NotificationResponse
-    unread_count: int
+# No schema describes the WebSocket frames. `services/websocket_manager.py`
+# builds them and is the only source of truth; two models here claimed to
+# document them, were never imported by anything, and had drifted into being
+# wrong. WebSocketMessage's Literal listed four types and was never extended
+# for dashboard_panel_update or smart_device_update, and
+# NotificationWebSocketPayload described a {notification, unread_count} pair
+# that is not sent — the unread count is its own "unread_count" frame. A
+# schema no route validates against cannot go stale loudly, so it went stale
+# quietly (#511 follow-up).
