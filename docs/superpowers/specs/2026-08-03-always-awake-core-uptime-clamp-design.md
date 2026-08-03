@@ -51,9 +51,11 @@ Fenster 19:00–23:30, aktueller Zeitpunkt 15:00, Kernbetriebszeit-Hauptschalter
 
 Weitere Festlegungen:
 
-- **Mehrere Fenster:** es zählt das Fenster, das den Zeitpunkt enthält —
-  erste Übereinstimmung in ID-Reihenfolge, konsistent zu `is_in_core_uptime`
-  („first-match wins on overlap").
+- **Mehrere Fenster:** es zählt das Fenster, das den Zeitpunkt enthält.
+  Enthalten ihn mehrere (überlappende Fenster), gewinnt der **früheste Start** —
+  bewusst nicht der erste Treffer wie bei `is_in_core_uptime`. Nur so hängt das
+  Ergebnis nicht von der Listenreihenfolge ab, und die Frontend-Vorschau, die
+  über aufgelöste Termine rechnet, kommt garantiert auf denselben Wert.
 - **Laufendes Fenster:** wird nie gekürzt, weil sein Beginn in der Vergangenheit
   liegt. Die Bedingung `start > now` deckt das ohne Sonderfall ab.
 - **Kurze Restdauer:** die Kürzung darf beliebig kurze Restlaufzeiten erzeugen
