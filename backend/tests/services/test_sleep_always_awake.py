@@ -654,32 +654,27 @@ def test_update_config_leaves_until_past_window_end_untouched():
     svc = _build_service()
     row = _clamp_row()
 
-    # Time-independent scenario: use fixed reference point (tomorrow at 10:00 UTC)
-    ref_time_utc = datetime.now(timezone.utc).replace(hour=10, minute=0, second=0, microsecond=0) + timedelta(days=1)
-    ref_time_local = ref_time_utc.astimezone().replace(tzinfo=None)
+    # Anchor on local time (tomorrow at 12:00) — window times are local wall clock
+    # Never derive scenarios from UTC anchor when windows use local HH:MM strings
+    now_local = (datetime.now() + timedelta(days=1)).replace(
+        hour=12, minute=0, second=0, microsecond=0
+    )
 
-    # Requested: 12 hours in future (22:00 UTC = ~00:00 next day local)
-    requested = ref_time_utc + timedelta(hours=12)
+    # Window 16:00-22:00 starts after now (12:00)
+    window = _window("16:00", "22:00")
 
-    # Window 08:00-18:00 does NOT contain 22:00 UTC, so remains unchanged
-    window_start = "08:00"
-    window_end = "18:00"
+    # Until is 23:00 local (past the window end at 22:00)
+    until_local = now_local.replace(hour=23)
+    requested = until_local.astimezone(timezone.utc)
 
-    session = _session_with(row, [_window(window_start, window_end)])
+    session = _session_with(row, [window])
+    update = SleepConfigUpdate(always_awake_enabled=True, always_awake_until=requested)
 
-    # Construct update with both datetime patches active
-    with patch("app.schemas.sleep.datetime") as mock_schema_dt, \
-         patch("app.services.power.sleep.datetime") as mock_sleep_dt:
-        mock_schema_dt.now.return_value = ref_time_utc
-        mock_schema_dt.side_effect = lambda *a, **k: datetime(*a, **k)
-        mock_sleep_dt.now.return_value = ref_time_local
-        mock_sleep_dt.side_effect = lambda *a, **k: datetime(*a, **k)
-
-        update = SleepConfigUpdate(always_awake_enabled=True, always_awake_until=requested)
-
-        with patch("app.services.power.sleep.SessionLocal", return_value=session), \
-             patch.object(svc, "get_config", return_value=MagicMock()):
-            svc.update_config(update)
+    with patch("app.services.power.sleep.SessionLocal", return_value=session), \
+         patch("app.services.power.sleep.datetime") as mock_dt, \
+         patch.object(svc, "get_config", return_value=MagicMock()):
+        mock_dt.now.return_value = now_local
+        svc.update_config(update)
 
     # Should remain unchanged since requested is past window end
     assert row.always_awake_until == requested
