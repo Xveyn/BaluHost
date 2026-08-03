@@ -378,6 +378,19 @@ class CoreUptimeWindowResponse(CoreUptimeWindowBase):
     updated_at: datetime
 
 
+class CoreUptimeOccurrence(BaseModel):
+    """One resolved instance of a core-uptime window, as absolute UTC timestamps.
+
+    Consumed by the Always-Awake UI to preview whether a chosen expiry would be
+    clamped to a window start — a plain interval comparison, so the frontend
+    needs no weekday/midnight logic of its own.
+    """
+    window_id: int
+    label: Optional[str] = None
+    start: datetime
+    end: datetime
+
+
 # ---------------------------------------------------------------------------
 # OS Auto-Suspend (bidirectional)
 # ---------------------------------------------------------------------------

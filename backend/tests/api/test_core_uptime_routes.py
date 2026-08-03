@@ -133,3 +133,63 @@ def test_master_toggle_via_config_endpoint(client, admin_headers, monkeypatch):
     )
     assert r.status_code == 200
     assert r.json()["core_uptime_enabled"] is True
+
+
+OCCURRENCES = f"{settings.api_prefix}/system/sleep/core-uptime/occurrences"
+
+
+def test_occurrences_empty_without_windows(client, admin_headers):
+    r = client.get(OCCURRENCES, headers=admin_headers)
+    assert r.status_code == 200
+    assert r.json() == []
+
+
+def test_occurrences_resolves_window_to_timestamps(client, admin_headers):
+    create = client.post(BASE, headers=admin_headers, json={
+        "label": "Abend",
+        "start_time": "19:00",
+        "end_time": "23:30",
+        "weekdays": [0, 1, 2, 3, 4, 5, 6],
+    })
+    assert create.status_code in (200, 201)
+    window_id = create.json()["id"]
+
+    r = client.get(OCCURRENCES, headers=admin_headers, params={"days": 2})
+    assert r.status_code == 200
+    body = r.json()
+    # Taegliches Fenster ueber 2 Tage Horizont: mindestens 2 Vorkommen.
+    assert len(body) >= 2
+    first = body[0]
+    assert first["window_id"] == window_id
+    assert first["label"] == "Abend"
+    # Zeitstempel sind absolut und tragen einen Zeitzonen-Offset.
+    assert first["start"] != first["end"]
+    from datetime import datetime as _dt
+    assert _dt.fromisoformat(first["start"]).tzinfo is not None
+    assert _dt.fromisoformat(first["end"]).tzinfo is not None
+    # Aufsteigend sortiert.
+    starts = [o["start"] for o in body]
+    assert starts == sorted(starts)
+
+
+def test_occurrences_skips_disabled_windows(client, admin_headers):
+    create = client.post(BASE, headers=admin_headers, json={
+        "start_time": "19:00", "end_time": "23:30", "weekdays": [0, 1, 2, 3, 4, 5, 6],
+    })
+    window_id = create.json()["id"]
+    disable = client.put(f"{BASE}/{window_id}", headers=admin_headers, json={"enabled": False})
+    assert disable.status_code == 200
+
+    r = client.get(OCCURRENCES, headers=admin_headers)
+    assert r.status_code == 200
+    assert r.json() == []
+
+
+def test_occurrences_rejects_days_out_of_range(client, admin_headers):
+    assert client.get(OCCURRENCES, headers=admin_headers, params={"days": 0}).status_code == 422
+    assert client.get(OCCURRENCES, headers=admin_headers, params={"days": 8}).status_code == 422
+
+
+def test_occurrences_forbidden_for_regular_user(client, user_headers):
+    r = client.get(OCCURRENCES, headers=user_headers)
+    assert r.status_code in (401, 403)

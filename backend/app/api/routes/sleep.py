@@ -2,6 +2,7 @@
 Sleep mode API endpoints.
 """
 import logging
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
@@ -32,6 +33,7 @@ from app.schemas.sleep import (
     CoreUptimeWindowCreate,
     CoreUptimeWindowUpdate,
     CoreUptimeWindowResponse,
+    CoreUptimeOccurrence,
     PresenceHeartbeatRequest,
     PresenceHeartbeatResponse,
 )
@@ -39,6 +41,7 @@ from app.models.sleep import CoreUptimeWindow as CoreUptimeWindowModel
 from app.services.power.sleep import get_sleep_manager
 from app.services.power import os_sleep_inspector
 from app.services.power import os_auto_suspend
+from app.services.power import core_uptime as core_uptime_helpers
 from app.services.power import presence as presence_service
 from app.schemas.sleep import OsSleepReportResponse, OsAutoSuspendResponse, OsAutoSuspendUpdate
 
@@ -409,6 +412,41 @@ async def list_core_uptime_windows(
     """List all core-uptime windows (admin only)."""
     rows = db.query(CoreUptimeWindowModel).order_by(CoreUptimeWindowModel.id.asc()).all()
     return [_to_response(r) for r in rows]
+
+
+@router.get(
+    "/core-uptime/occurrences",
+    response_model=list[CoreUptimeOccurrence],
+)
+@user_limiter.limit(get_limit("admin_operations"))
+async def list_core_uptime_occurrences(
+    request: Request, response: Response,
+    days: int = Query(7, ge=1, le=7, description="Horizon in days"),
+    current_user: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+) -> list[CoreUptimeOccurrence]:
+    """Resolve enabled core-uptime windows into concrete occurrences (admin only).
+
+    Windows are stored as recurring server-local patterns; this returns them as
+    absolute UTC timestamps so clients can compare them against
+    `always_awake_until` directly.
+    """
+    rows = (
+        db.query(CoreUptimeWindowModel)
+        .filter(CoreUptimeWindowModel.enabled.is_(True))
+        .order_by(CoreUptimeWindowModel.id.asc())
+        .all()
+    )
+    occurrences = core_uptime_helpers.expand_occurrences(datetime.now(), rows, days=days)
+    return [
+        CoreUptimeOccurrence(
+            window_id=o.window_id,
+            label=o.label,
+            start=o.start.astimezone(timezone.utc),
+            end=o.end.astimezone(timezone.utc),
+        )
+        for o in occurrences
+    ]
 
 
 @router.post(
