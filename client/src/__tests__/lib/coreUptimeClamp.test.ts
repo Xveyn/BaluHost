@@ -64,6 +64,22 @@ describe('clampToCoreUptime', () => {
     expect(clampToCoreUptime(until, [early, late], NOW).until).toBe(early.start);
   });
 
+  it('does not clamp when a running window overlaps a future window that also contains until', () => {
+    // Window A is already running (started before `now`); window B starts later
+    // but both contain `until`. The earliest start across ALL containing
+    // windows is A's — and A's start is already in the past, so the backend
+    // (`clamp_to_core_uptime_start`) leaves `until` unchanged. A frontend that
+    // filters to future-start windows BEFORE picking the earliest would wrongly
+    // clamp to B instead.
+    const now = new Date('2026-05-06T14:00:00');
+    const running = occ('2026-05-06T08:00:00', '2026-05-06T23:00:00', 4, 'Tag');
+    const future = occ('2026-05-06T19:00:00', '2026-05-06T21:00:00', 5, 'Abend');
+    const until = new Date('2026-05-06T20:00:00').toISOString();
+    const result = clampToCoreUptime(until, [running, future], now);
+    expect(result.until).toBe(until);
+    expect(result.clampedTo).toBeNull();
+  });
+
   it('is the identity with no occurrences', () => {
     const until = new Date('2026-05-06T21:00:00').toISOString();
     const result = clampToCoreUptime(until, [], NOW);
