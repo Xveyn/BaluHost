@@ -1353,6 +1353,16 @@ class SleepManagerService:
                 # Apply partial update
                 update_data = update.model_dump(exclude_unset=True)
 
+                # Captured BEFORE the always_awake_until pop below, and before any
+                # field is applied: whether THIS request actually touched the
+                # always-awake override. A write that only changes an unrelated
+                # field (e.g. idle_timeout_minutes) must never re-evaluate a
+                # pending override — see the spec's explicit non-goal.
+                touched_override = (
+                    "always_awake_until" in update_data
+                    or update_data.get("always_awake_enabled") is True
+                )
+
                 # Special-case: always_awake_until accepts explicit None to clear.
                 # The default loop drops None values to keep optional fields lenient.
                 if "always_awake_until" in update_data:
@@ -1370,7 +1380,10 @@ class SleepManagerService:
                 # window: from that window's start on, core uptime keeps the system
                 # awake anyway, so the manual override closes out there. An expiry
                 # beyond the window's end survives untouched — it is still needed.
-                if config.always_awake_until is not None and config.core_uptime_enabled:
+                # Gated on touched_override so an unrelated config write can't
+                # silently re-evaluate an already-set override (and, via the route's
+                # audit condition, would otherwise do so unaudited).
+                if touched_override and config.always_awake_until is not None and config.core_uptime_enabled:
                     windows = db.execute(
                         select(CoreUptimeWindowModel).where(
                             CoreUptimeWindowModel.enabled.is_(True)
@@ -1380,7 +1393,7 @@ class SleepManagerService:
                         config.always_awake_until = (
                             core_uptime_helpers.clamp_to_core_uptime_start(
                                 config.always_awake_until,
-                                list(windows),
+                                windows,
                                 datetime.now(),
                             )
                         )

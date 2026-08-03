@@ -193,3 +193,34 @@ def test_occurrences_rejects_days_out_of_range(client, admin_headers):
 def test_occurrences_forbidden_for_regular_user(client, user_headers):
     r = client.get(OCCURRENCES, headers=user_headers)
     assert r.status_code in (401, 403)
+
+
+def test_occurrences_ignores_core_uptime_master_toggle(client, admin_headers, db):
+    """Deliberate: the endpoint filters only on each window's own `enabled`
+    flag, never on the `core_uptime_enabled` master toggle (see core_uptime.py
+    / sleep.py:update_config). A future "consistency" refactor could otherwise
+    silently regress this — pin it down explicitly.
+
+    Writes the master toggle directly via the DB session (not PUT /config):
+    the sleep manager singleton is not started in the test environment
+    (SKIP_APP_INIT=1), so that route 503s unless the manager is mocked out —
+    see test_master_toggle_via_config_endpoint above. Going through the DB
+    keeps this test's focus on the occurrences query itself.
+    """
+    from app.models.sleep import SleepConfig as SleepConfigModel
+
+    config = db.get(SleepConfigModel, 1)
+    if config is None:
+        config = SleepConfigModel(id=1)
+        db.add(config)
+    config.core_uptime_enabled = False
+    db.commit()
+
+    create = client.post(BASE, headers=admin_headers, json={
+        "start_time": "19:00", "end_time": "23:30", "weekdays": [0, 1, 2, 3, 4, 5, 6],
+    })
+    assert create.status_code in (200, 201)
+
+    r = client.get(OCCURRENCES, headers=admin_headers)
+    assert r.status_code == 200
+    assert len(r.json()) >= 1

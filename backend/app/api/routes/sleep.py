@@ -421,7 +421,15 @@ async def list_core_uptime_windows(
 @user_limiter.limit(get_limit("admin_operations"))
 async def list_core_uptime_occurrences(
     request: Request, response: Response,
-    days: int = Query(7, ge=1, le=7, description="Horizon in days"),
+    days: int = Query(
+        7, ge=1, le=7,
+        description=(
+            "Horizon in days from today. Internally resolved with an extra "
+            "day_offset=-1 to also surface a window that started yesterday and "
+            "crosses midnight into today — so days=1 returns occurrences for "
+            "both today and tomorrow, not just today."
+        ),
+    ),
     current_user: User = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ) -> list[CoreUptimeOccurrence]:

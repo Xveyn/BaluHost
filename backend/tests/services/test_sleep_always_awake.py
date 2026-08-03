@@ -686,36 +686,65 @@ def test_update_config_does_not_clamp_when_core_uptime_disabled():
     svc = _build_service()
     row = _clamp_row(core_uptime_enabled=False)
 
-    # Time-independent scenario: use fixed reference point (tomorrow at 10:00 UTC)
-    ref_time_utc = datetime.now(timezone.utc).replace(hour=10, minute=0, second=0, microsecond=0) + timedelta(days=1)
-    ref_time_local = ref_time_utc.astimezone().replace(tzinfo=None)
+    # Anchor on local time (tomorrow at 12:00) — window times are local wall clock.
+    # Never derive scenarios from a UTC anchor when windows use local HH:MM strings.
+    now_local = (datetime.now() + timedelta(days=1)).replace(
+        hour=12, minute=0, second=0, microsecond=0
+    )
 
-    # Requested: 6 hours in future
-    requested = ref_time_utc + timedelta(hours=6)
+    # Window 16:00-22:00 starts 4 hours after now (12:00) — would clamp if enabled.
+    window = _window("16:00", "22:00")
 
-    # Even though window 08:00-20:00 contains requested, core_uptime is disabled
-    # so no clamping should occur
-    window_start = "08:00"
-    window_end = "20:00"
+    # Until is 18:00 local (inside the window 16:00-22:00)
+    until_local = now_local.replace(hour=18)
+    requested = until_local.astimezone(timezone.utc)
 
-    session = _session_with(row, [_window(window_start, window_end)])
+    session = _session_with(row, [window])
+    update = SleepConfigUpdate(always_awake_enabled=True, always_awake_until=requested)
 
-    # Construct update with both datetime patches active
-    with patch("app.schemas.sleep.datetime") as mock_schema_dt, \
-         patch("app.services.power.sleep.datetime") as mock_sleep_dt:
-        mock_schema_dt.now.return_value = ref_time_utc
-        mock_schema_dt.side_effect = lambda *a, **k: datetime(*a, **k)
-        mock_sleep_dt.now.return_value = ref_time_local
-        mock_sleep_dt.side_effect = lambda *a, **k: datetime(*a, **k)
+    with patch("app.services.power.sleep.SessionLocal", return_value=session), \
+         patch("app.services.power.sleep.datetime") as mock_dt, \
+         patch.object(svc, "get_config", return_value=MagicMock()):
+        mock_dt.now.return_value = now_local
+        svc.update_config(update)
 
-        update = SleepConfigUpdate(always_awake_enabled=True, always_awake_until=requested)
-
-        with patch("app.services.power.sleep.SessionLocal", return_value=session), \
-             patch.object(svc, "get_config", return_value=MagicMock()):
-            svc.update_config(update)
-
-    # Should remain unchanged since core_uptime is disabled
+    # core_uptime_enabled=False -> should remain unchanged despite the window
+    # containing the requested expiry.
     assert row.always_awake_until == requested
+
+
+def test_update_config_ignores_pending_override_when_request_is_unrelated():
+    """A write that only touches an unrelated field must not re-evaluate a
+    pending always_awake_until, even though a containing future window exists.
+
+    This is the case the SleepConfigPanel triggers in practice: it PUTs
+    idle_timeout_minutes alone. Regression for the spec's explicit non-goal
+    ("ein bereits gesetzter Override wird nicht neu bewertet").
+    """
+    from app.schemas.sleep import SleepConfigUpdate
+    svc = _build_service()
+
+    now_local = (datetime.now() + timedelta(days=1)).replace(
+        hour=12, minute=0, second=0, microsecond=0
+    )
+    window = _window("16:00", "22:00")
+
+    # Pending expiry already sits inside the future window — if the clamp were
+    # to (wrongly) re-run here, it would shorten this to 16:00.
+    pending_until = now_local.replace(hour=18).astimezone(timezone.utc)
+    row = _clamp_row(until=pending_until)
+
+    session = _session_with(row, [window])
+    update = SleepConfigUpdate(idle_timeout_minutes=20)
+
+    with patch("app.services.power.sleep.SessionLocal", return_value=session), \
+         patch("app.services.power.sleep.datetime") as mock_dt, \
+         patch.object(svc, "get_config", return_value=MagicMock()):
+        mock_dt.now.return_value = now_local
+        svc.update_config(update)
+
+    assert row.idle_timeout_minutes == 20
+    assert row.always_awake_until == pending_until
 
 
 def test_update_config_clamps_when_core_uptime_enabled_in_same_request():
