@@ -187,53 +187,23 @@ class WebSocketManager:
 
         return sent_count
 
-    async def broadcast_to_all(self, message: dict[str, Any]) -> int:
-        """Broadcast a message to all connected users.
-
-        Args:
-            message: Message to send
-
-        Returns:
-            Number of connections the message was sent to
-        """
-        sent_count = 0
-        async with self._lock:
-            for user_id, connections in list(self._user_connections.items()):
-                disconnected = []
-
-                for conn in connections:
-                    try:
-                        await conn.websocket.send_json({
-                            "type": "notification",
-                            "payload": message,
-                        })
-                        sent_count += 1
-                    except Exception as e:
-                        logger.warning(f"Failed to broadcast to user {user_id}: {e}")
-                        disconnected.append(conn)
-
-                # Clean up disconnected connections
-                for conn in disconnected:
-                    if conn in connections:
-                        connections.remove(conn)
-
-                if not connections and user_id in self._user_connections:
-                    del self._user_connections[user_id]
-                    self._admin_users.discard(user_id)
-
-        return sent_count
-
     async def broadcast_typed(
-        self, msg_type: str, payload: dict[str, Any], admins_only: bool = False
+        self, msg_type: str, payload: Any, admins_only: bool = False
     ) -> int:
         """Broadcast a typed message to connected users.
 
-        Unlike broadcast_to_all() which wraps in {"type": "notification"},
-        this method sends {"type": msg_type, "payload": payload} directly.
+        Sends {"type": msg_type, "payload": payload} — the caller names the
+        type and it reaches the wire unchanged. This is the only all-users
+        broadcast. There used to be a broadcast_to_all() next to it that
+        force-set "type": "notification" and nested the caller's dict under
+        it; a caller that had already typed its message got wrapped twice and
+        no client could match on it (#511). Pass "notification" as msg_type if
+        that is genuinely what you are sending.
 
         Args:
             msg_type: Message type string (e.g. "dashboard_panel_update").
-            payload: Message payload dict.
+            payload: Message payload — a dict for most message types, a list
+                for the batch-shaped ones like "smart_device_update".
             admins_only: Skip non-admin connections. Needed for payloads that a
                 REST route would gate behind is_privileged() - without it the
                 gate would be decorative. "Admin" here means conn.is_admin,

@@ -107,17 +107,33 @@ class TestBroadcastToAdmins:
 
 @pytest.mark.asyncio
 class TestBroadcastToAll:
+    """All-users reach, now via broadcast_typed() — broadcast_to_all() is gone (#511)."""
+
     async def test_sends_to_all_users(self, manager: WebSocketManager):
         ws1, ws2 = _make_ws(), _make_ws()
         await manager.connect(ws1, user_id=1)
         await manager.connect(ws2, user_id=2)
 
-        count = await manager.broadcast_to_all({"event": "update"})
+        count = await manager.broadcast_typed("some_event", {"event": "update"})
         assert count == 2
 
     async def test_empty_when_no_connections(self, manager: WebSocketManager):
-        count = await manager.broadcast_to_all({"event": "update"})
+        count = await manager.broadcast_typed("some_event", {"event": "update"})
         assert count == 0
+
+    async def test_caller_type_is_not_overwritten(self, manager: WebSocketManager):
+        """The regression that made #511 possible: an envelope forced onto the caller."""
+        ws = _make_ws()
+        await manager.connect(ws, user_id=1)
+
+        await manager.broadcast_typed("smart_device_update", [{"device_id": 9}])
+
+        frame = ws.send_json.await_args[0][0]
+        assert frame == {"type": "smart_device_update", "payload": [{"device_id": 9}]}
+
+    async def test_broadcast_to_all_is_removed(self, manager: WebSocketManager):
+        """Keep it gone: re-adding it re-opens the double-wrap trap."""
+        assert not hasattr(manager, "broadcast_to_all")
 
 
 @pytest.mark.asyncio
