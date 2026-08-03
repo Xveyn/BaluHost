@@ -744,7 +744,11 @@
       "hintPermanentClearToResume": "Permanently active — turn off to let schedule/core hours resume.",
       "bannerActiveWithUntil": "Always-awake active until {{time}} — auto-sleep blocked.",
       "bannerActivePermanent": "Always-awake active (permanent) — auto-sleep blocked.",
-      "scheduleHint": "ℹ Always-awake takes precedence. Sleep-schedule triggers are ignored."
+      "scheduleHint": "ℹ Always-awake takes precedence. Sleep-schedule triggers are ignored.",
+      "clampPreview": "Will be shortened to {{time}} — core operating hours take over from then (awake until {{end}}).",
+      "clampActive": "Ends at {{time}} when core operating hours begin (awake until {{end}}).",
+      "clampBadge": "Will be shortened to the start of core operating hours",
+      "coreUptimeRunning": "Core operating hours run until {{end}} — the system stays awake until then anyway."
     },
     "osSettings": {
       "title": "OS sleep settings",

@@ -14,7 +14,10 @@ import {
   getSleepConfig,
   getSleepStatus,
   updateSleepConfig,
+  getCoreUptimeOccurrences,
+  type CoreUptimeOccurrence,
 } from '../../api/sleep';
+import { clampToCoreUptime, findRunningOccurrence } from '../../lib/coreUptimeClamp';
 
 type Preset = '1h' | '4h' | '8h' | 'permanent' | 'custom';
 
@@ -71,6 +74,8 @@ export function AlwaysAwakePanel() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerValue, setPickerValue] = useState<string>('');
   const [pickerError, setPickerError] = useState<string | null>(null);
+  const [occurrences, setOccurrences] = useState<CoreUptimeOccurrence[]>([]);
+  const [hoveredPreset, setHoveredPreset] = useState<Exclude<Preset, 'permanent' | 'custom'> | null>(null);
   const tickRef = useRef<number | null>(null);
   const pickerRef = useRef<HTMLDivElement | null>(null);
 
@@ -82,6 +87,12 @@ export function AlwaysAwakePanel() {
       setExpiresIn(status.always_awake?.expires_in_seconds ?? null);
       setScheduleEnabled(cfg.schedule_enabled);
       setCoreUptimeEnabled(cfg.core_uptime_enabled ?? false);
+
+      if (cfg.core_uptime_enabled) {
+        setOccurrences(await getCoreUptimeOccurrences(7));
+      } else {
+        setOccurrences([]);
+      }
 
       if (!cfg.always_awake_enabled) {
         setActivePreset(null);
@@ -156,17 +167,24 @@ export function AlwaysAwakePanel() {
   }, [pickerOpen]);
 
   const setPreset = async (preset: Exclude<Preset, 'custom'>) => {
-    const newUntil =
+    const rawUntil =
       preset === 'permanent'
         ? null
         : new Date(Date.now() + PRESET_HOURS[preset] * 3600 * 1000).toISOString();
+    // Ein Ablauf innerhalb eines kuenftigen Kernbetriebszeit-Fensters wird auf
+    // dessen Beginn gekuerzt — dieselbe Regel wie im Backend. Der optimistische
+    // State muss den gekuerzten Wert tragen, sonst springt die Anzeige nach dem
+    // naechsten refresh() zurueck.
+    const newUntil = rawUntil ? clampToCoreUptime(rawUntil, occurrences).until : null;
     const previousEnabled = enabled;
     const previousUntil = until;
     const previousExpiresIn = expiresIn;
     const previousActivePreset = activePreset;
     setEnabled(true);
     setUntil(newUntil);
-    setExpiresIn(newUntil ? PRESET_HOURS[preset as keyof typeof PRESET_HOURS] * 3600 : null);
+    setExpiresIn(
+      newUntil ? Math.max(0, Math.floor((new Date(newUntil).getTime() - Date.now()) / 1000)) : null,
+    );
     setActivePreset(preset);
     try {
       await updateSleepConfig({
@@ -199,16 +217,15 @@ export function AlwaysAwakePanel() {
       return;
     }
     const target = new Date(localValue);
-    const delta = target.getTime() - Date.now();
 
-    const newUntil = target.toISOString();
+    const newUntil = clampToCoreUptime(target.toISOString(), occurrences).until;
     const previousEnabled = enabled;
     const previousUntil = until;
     const previousExpiresIn = expiresIn;
     const previousActivePreset = activePreset;
     setEnabled(true);
     setUntil(newUntil);
-    setExpiresIn(Math.floor(delta / 1000));
+    setExpiresIn(Math.max(0, Math.floor((new Date(newUntil).getTime() - Date.now()) / 1000)));
     setActivePreset('custom');
     setPickerOpen(false);
     setPickerError(null);
@@ -260,6 +277,25 @@ export function AlwaysAwakePanel() {
       await setPreset('permanent');
     }
   };
+
+  const runningOccurrence = findRunningOccurrence(occurrences);
+
+  const activeClamp =
+    until && !runningOccurrence
+      ? occurrences.find((o) => new Date(o.start).getTime() === new Date(until).getTime()) ?? null
+      : null;
+
+  const previewFor = (p: Exclude<Preset, 'permanent' | 'custom'>) =>
+    clampToCoreUptime(
+      new Date(Date.now() + PRESET_HOURS[p] * 3600 * 1000).toISOString(),
+      occurrences,
+    );
+
+  const hoveredClamp = hoveredPreset ? previewFor(hoveredPreset) : null;
+  const pickerClamp =
+    pickerOpen && pickerValue && !pickerError
+      ? clampToCoreUptime(new Date(pickerValue).toISOString(), occurrences)
+      : null;
 
   if (loading) {
     return (
@@ -323,7 +359,22 @@ export function AlwaysAwakePanel() {
             </button>
           </div>
 
-          {(scheduleEnabled || coreUptimeEnabled) && until && (
+          {runningOccurrence && (
+            <div className="rounded border border-emerald-500/20 bg-emerald-500/10 p-2 text-xs text-emerald-300">
+              {t('sleep.alwaysAwake.coreUptimeRunning', {
+                end: formatTime(runningOccurrence.end),
+              })}
+            </div>
+          )}
+          {activeClamp && (
+            <div className="rounded border border-amber-500/20 bg-amber-500/10 p-2 text-xs text-amber-300">
+              {t('sleep.alwaysAwake.clampActive', {
+                time: formatTime(activeClamp.start),
+                end: formatTime(activeClamp.end),
+              })}
+            </div>
+          )}
+          {(scheduleEnabled || coreUptimeEnabled) && until && !runningOccurrence && !activeClamp && (
             <div className="rounded border border-amber-500/20 bg-amber-500/10 p-2 text-xs text-amber-300">
               {t('sleep.alwaysAwake.hintScheduleResumes', { time: formatTime(until) })}
             </div>
@@ -343,15 +394,23 @@ export function AlwaysAwakePanel() {
             p === 'permanent'
               ? 'sleep.alwaysAwake.presetPermanent'
               : (`sleep.alwaysAwake.preset${p}` as const);
+          const clampPreview = p === 'permanent' ? null : previewFor(p).clampedTo;
           return (
             <button
               key={p}
               type="button"
               onClick={() => setPreset(p)}
+              title={clampPreview ? t('sleep.alwaysAwake.clampBadge') : undefined}
+              onMouseEnter={() => { if (p !== 'permanent') setHoveredPreset(p); }}
+              onMouseLeave={() => setHoveredPreset(null)}
+              onFocus={() => { if (p !== 'permanent') setHoveredPreset(p); }}
+              onBlur={() => setHoveredPreset(null)}
               className={`min-w-[3.5rem] rounded px-3 py-1.5 text-xs font-medium transition-colors ${
                 isActive
                   ? 'bg-amber-500/30 text-amber-200 border border-amber-500/50'
-                  : 'bg-slate-800/40 text-slate-400 border border-slate-700/40 hover:text-amber-300 hover:border-amber-500/30'
+                  : clampPreview
+                    ? 'bg-slate-800/40 text-slate-400 border border-dashed border-amber-500/40 hover:text-amber-300'
+                    : 'bg-slate-800/40 text-slate-400 border border-slate-700/40 hover:text-amber-300 hover:border-amber-500/30'
               }`}
             >
               {t(labelKey)}
@@ -398,6 +457,14 @@ export function AlwaysAwakePanel() {
               {pickerError && (
                 <p className="text-xs text-red-400">{pickerError}</p>
               )}
+              {pickerClamp?.clampedTo && (
+                <p className="text-[11px] text-amber-300">
+                  {t('sleep.alwaysAwake.clampPreview', {
+                    time: formatTime(pickerClamp.until),
+                    end: formatTime(pickerClamp.clampedTo.end),
+                  })}
+                </p>
+              )}
               <div className="flex justify-end gap-2 pt-1">
                 <button
                   type="button"
@@ -419,6 +486,14 @@ export function AlwaysAwakePanel() {
           )}
         </div>
       </div>
+      {hoveredClamp?.clampedTo && (
+        <p className="text-[11px] text-amber-300">
+          {t('sleep.alwaysAwake.clampPreview', {
+            time: formatTime(hoveredClamp.until),
+            end: formatTime(hoveredClamp.clampedTo.end),
+          })}
+        </p>
+      )}
     </div>
   );
 }
