@@ -105,9 +105,20 @@ def expand_occurrences(
 In `update_config()` (Zeile 1339 ff.), nachdem `always_awake_until` gesetzt und
 bevor `db.commit()` aufgerufen wird:
 
-1. Nur aktiv, wenn `config.always_awake_until is not None` **und** der nach dem
-   Update gültige `config.core_uptime_enabled` wahr ist (der Wert kann im selben
-   Request mitgeändert worden sein — deshalb erst nach dem Anwenden prüfen).
+1. Nur aktiv, wenn der Request den Override überhaupt angefasst hat
+   (`"always_awake_until" in update_data` — **vor** dem `pop` erfasst — oder
+   `always_awake_enabled is True`), **und** `config.always_awake_until is not None`,
+   **und** der nach dem Update gültige `config.core_uptime_enabled` wahr ist (der
+   Wert kann im selben Request mitgeändert worden sein — deshalb erst nach dem
+   Anwenden prüfen).
+
+   Ohne das erste Kriterium würde jeder `PUT /config` einen laufenden Override
+   neu bewerten — auch einer, der nur `idle_timeout_minutes` ändert. Das
+   widerspräche dem Non-Goal weiter unten und bliebe unauditiert, weil der
+   Audit-Eintrag nur bei Always-Awake-Feldern im Payload feuert. Bewusste
+   Konsequenz: ein Request, der **ausschließlich** `core_uptime_enabled: true`
+   setzt, kürzt einen bereits gesetzten Override nicht mehr — funktional
+   folgenlos, weil die Kernbetriebszeit in diesem Intervall ohnehin wach hält.
 2. Fenster in derselben Session laden:
    `db.query(CoreUptimeWindowModel).filter(CoreUptimeWindowModel.enabled.is_(True))`
    — `.is_(True)` statt `== True`, damit ein Ruff-E712-Autofix die Query nicht
@@ -128,8 +139,10 @@ if start_local is not None and start_local > now_local:
 Rückkonvertierung ist damit korrekt und braucht keine externe TZ-Bibliothek.
 
 4. Die Kürzung sitzt bewusst im Service, nicht im Route-Handler: sie greift
-   damit für jeden Schreibpfad, auch für direkte API-Aufrufe außerhalb der
-   Web-UI.
+   damit auf jedem Schreibpfad, der den Override setzt — auch bei direkten
+   API-Aufrufen außerhalb der Web-UI. Genau deshalb muss der Client den
+   **ungekürzten** Wunschwert senden (siehe Frontend-Abschnitt): das Backend
+   ist die einzige Instanz, die kürzt, und es kürzt genau einmal.
 
 Der bestehende Audit-Log-Eintrag `always_awake_toggled` in
 `backend/app/api/routes/sleep.py` protokolliert bereits das Ergebnis-`until` aus
@@ -195,8 +208,17 @@ export function clampToCoreUptime(
 ```
 
 Reiner Intervallvergleich — dieselbe Semantik wie im Backend, ohne dessen
-Wochentags- und Mitternachtslogik nachzubauen:
-Treffer ist die erste Occurrence mit `start > now && until >= start && until < end`.
+Wochentags- und Mitternachtslogik nachzubauen. Zwingend **zweistufig**, exakt wie
+`window_start_containing` + `clamp_to_core_uptime_start`:
+
+1. den **frühesten** `start` über **alle** Occurrences mit
+   `until >= start && until < end` bestimmen — ohne Vorfilter auf die Zukunft,
+2. erst danach das einzige Zukunfts-Gate anlegen: liegt dieser früheste Start
+   `<= now`, wird **nicht** gekürzt.
+
+Ein Vorfilter `start > now` **vor** dem Minimum wäre falsch: bei einem laufenden
+Fenster, das ein künftiges überlappt, würde das Frontend kürzen, wo das Backend
+nicht kürzt.
 
 Zweite, ebenso reine Funktion für den Sonderfall „läuft gerade":
 `findRunningOccurrence(occurrences, now)` → erste mit `start <= now < end`.
@@ -220,9 +242,23 @@ Zweite, ebenso reine Funktion für den Sonderfall „läuft gerade":
 - **Läuft gerade:** liefert `findRunningOccurrence` einen Treffer, ersetzt dessen
   Hinweis den Kürzungshinweis („Kernbetriebszeit läuft bis 23:30 — bis dahin
   bleibt das System ohnehin wach").
-- **Optimistisches Update:** `setPreset()` und `setCustomPreset()` müssen den
-  **gekürzten** Wert in `setUntil`/`setExpiresIn` schreiben und senden, sonst
-  springt die Anzeige nach dem nächsten `refresh()` sichtbar zurück.
+- **Optimistisches Update — gekürzt anzeigen, ungekürzt senden:**
+  `setPreset()` und `setCustomPreset()` schreiben den **gekürzten** Wert in
+  `setUntil`/`setExpiresIn` (sonst springt die Anzeige nach dem nächsten
+  `refresh()` sichtbar zurück), senden aber den **ungekürzten** Wunschwert an
+  `updateSleepConfig`.
+
+  Der Grund ist die Nicht-Idempotenz der Kürzung: bei gestaffelt überlappenden
+  Fenstern (A 19:00–21:00, B 20:00–23:00, jetzt 15:00, Wunsch 22:00) ergibt eine
+  Kürzung 20:00, eine zweite auf dieses Ergebnis aber 19:00 — weil 20:00 in A
+  liegt. Sendete der Client den bereits gekürzten Wert, kürzte das Backend
+  erneut, und die Anzeige verspräche 20:00, während die Datenbank 19:00 hielte.
+  Sendet der Client den Rohwert, kürzt genau eine Instanz genau einmal, und
+  Vorschau und gespeicherter Wert sind identisch.
+
+  Zweiter Effekt: eine veraltete Occurrence-Liste (Fenster in einem anderen Tab
+  gelöscht, seit dem letzten `refresh()`) kann den Override nicht mehr
+  eigenmächtig verkürzen — das Backend bleibt die einzige Autorität.
 - Die Preset-Erkennung in `refresh()` (Toleranz ±5 min gegen 1h/4h/8h) ordnet
   einen gekürzten Wert korrekterweise `custom` zu — gewolltes Verhalten, keine
   Anpassung nötig.
@@ -263,9 +299,15 @@ Verhaltenstabelle, plus:
 
 **Vitest:**
 - `clampToCoreUptime` / `findRunningOccurrence` als reine Funktionen entlang
-  derselben Tabelle
-- Panel: Kürzungshinweis erscheint, und `updateSleepConfig` wird mit dem
-  gekürzten Wert aufgerufen
+  derselben Tabelle, plus die gestaffelte Überlappung (A 19–21, B 20–23,
+  Wunsch 22:00), die die Nicht-Idempotenz dokumentiert
+- Panel: Kürzungshinweis erscheint; `updateSleepConfig` wird mit dem
+  **ungekürzten** Wert aufgerufen, während die Anzeige den **gekürzten** zeigt —
+  beides in einem Test, damit keine der beiden Hälften stillschweigend wegfallen
+  kann
+- Panel: laufendes Fenster unterdrückt den Kürzungshinweis, auch wenn
+  `until` exakt auf dem Fensterbeginn liegt (sonst prüft der Test die
+  Vorrangregel nicht)
 
 ## Nicht Teil dieser Änderung
 
