@@ -88,8 +88,17 @@ export function AlwaysAwakePanel() {
       setScheduleEnabled(cfg.schedule_enabled);
       setCoreUptimeEnabled(cfg.core_uptime_enabled ?? false);
 
+      // Isolated on purpose: the clamp hints are a supplementary feature.
+      // A failure here (e.g. the occurrences endpoint 500s) must not trip
+      // the generic loadFailed toast, and must not skip the activePreset
+      // computation below — the panel stays fully usable, just without
+      // clamp hints.
       if (cfg.core_uptime_enabled) {
-        setOccurrences(await getCoreUptimeOccurrences(7));
+        try {
+          setOccurrences(await getCoreUptimeOccurrences(7));
+        } catch {
+          setOccurrences([]);
+        }
       } else {
         setOccurrences([]);
       }

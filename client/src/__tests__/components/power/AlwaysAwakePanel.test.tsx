@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { AlwaysAwakePanel } from '../../../components/power/AlwaysAwakePanel';
 import {
@@ -85,17 +85,26 @@ describe('AlwaysAwakePanel — Kernbetriebszeit-Kuerzung', () => {
     mockedOccurrences.mockResolvedValue([occurrence] as never);
 
     const user = userEvent.setup();
+    const before = Date.now();
     render(<AlwaysAwakePanel />);
 
     const button = await screen.findByText('sleep.alwaysAwake.preset8h');
     await user.click(button);
 
     await waitFor(() => expect(mockedUpdate).toHaveBeenCalled());
+    const after = Date.now();
     const sent = mockedUpdate.mock.calls[0][0] as { always_awake_until: string };
-    expect(sent.always_awake_until).not.toBe(occurrence.start);
+    const sentMs = new Date(sent.always_awake_until).getTime();
+    // Unclamped: the preset is "now + 8h" computed at click time. Bound it by
+    // the actual wall-clock span of this test (before/after), with a small
+    // tolerance for clock-read precision — not a hardcoded date or offset.
+    // The 1h..3h window is far outside this range, so a wrongly-clamped
+    // value (occurrence.start, ~1h out) would fail this assertion.
+    expect(sentMs).toBeGreaterThanOrEqual(before + 8 * 3600 * 1000 - 2000);
+    expect(sentMs).toBeLessThanOrEqual(after + 8 * 3600 * 1000 + 2000);
   });
 
-  it('shows the clamp hint while the affected preset is focused', async () => {
+  it('shows the clamp hint on hover', async () => {
     mockedConfig.mockResolvedValue(baseConfig());
     mockedOccurrences.mockResolvedValue([windowInHours(4, 6)] as never);
 
@@ -106,6 +115,22 @@ describe('AlwaysAwakePanel — Kernbetriebszeit-Kuerzung', () => {
     expect(screen.queryByText('sleep.alwaysAwake.clampPreview')).not.toBeInTheDocument();
     await user.hover(button);
     expect(await screen.findByText('sleep.alwaysAwake.clampPreview')).toBeInTheDocument();
+  });
+
+  it('shows the clamp hint on keyboard focus', async () => {
+    mockedConfig.mockResolvedValue(baseConfig());
+    mockedOccurrences.mockResolvedValue([windowInHours(4, 6)] as never);
+
+    render(<AlwaysAwakePanel />);
+
+    const button = await screen.findByText('sleep.alwaysAwake.preset8h');
+    expect(screen.queryByText('sleep.alwaysAwake.clampPreview')).not.toBeInTheDocument();
+    fireEvent.focus(button);
+    expect(await screen.findByText('sleep.alwaysAwake.clampPreview')).toBeInTheDocument();
+    fireEvent.blur(button);
+    await waitFor(() =>
+      expect(screen.queryByText('sleep.alwaysAwake.clampPreview')).not.toBeInTheDocument(),
+    );
   });
 
   it('explains an already-clamped active override after reload', async () => {
@@ -123,11 +148,17 @@ describe('AlwaysAwakePanel — Kernbetriebszeit-Kuerzung', () => {
     expect(await screen.findByText('sleep.alwaysAwake.clampActive')).toBeInTheDocument();
   });
 
-  it('reports a currently running window instead of a clamp hint', async () => {
+  it('reports a currently running window instead of a clamp-active hint, even when until equals the window start', async () => {
     const start = new Date(Date.now() - 3600 * 1000);
     const end = new Date(Date.now() + 3 * 3600 * 1000);
+    // `always_awake_until` deliberately equals the running occurrence's
+    // `start` — this is exactly the shape `activeClamp` matches on
+    // (`until === occurrence.start`). Without the `!runningOccurrence`
+    // guard in AlwaysAwakePanel, this would also render clampActive; this
+    // test proves the guard actually suppresses it in favour of
+    // coreUptimeRunning.
     mockedConfig.mockResolvedValue(
-      baseConfig({ always_awake_enabled: true, always_awake_until: end.toISOString() }),
+      baseConfig({ always_awake_enabled: true, always_awake_until: start.toISOString() }),
     );
     mockedStatus.mockResolvedValue({
       always_awake: { expires_in_seconds: 3 * 3600 },
