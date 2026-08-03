@@ -198,6 +198,9 @@ async def _write_service_heartbeats() -> None:
         await asyncio.sleep(_HEARTBEAT_INTERVAL_SECONDS)
 
 
+_SMART_DEVICE_BRIDGE_INTERVAL_SECONDS = 1.0
+
+
 async def _smart_device_ws_bridge() -> None:
     """Poll smart_devices_changes.json SHM and broadcast via WebSocket (primary only).
 
@@ -210,7 +213,7 @@ async def _smart_device_ws_bridge() -> None:
     _last_broadcast_ts: float = 0.0
 
     while True:
-        await asyncio.sleep(1.0)
+        await asyncio.sleep(_SMART_DEVICE_BRIDGE_INTERVAL_SECONDS)
         try:
             data = read_shm(SMART_DEVICES_CHANGES_FILE, max_age_seconds=10.0)
             if data is None:
@@ -226,10 +229,12 @@ async def _smart_device_ws_bridge() -> None:
 
             ws = get_websocket_manager()
             if ws:
-                await ws.broadcast_to_all({
-                    "type": "smart_device_update",
-                    "payload": changes,
-                })
+                # broadcast_typed(), not broadcast_to_all(): the latter wraps
+                # whatever it gets in a {"type": "notification"} envelope, which
+                # buried this message one level deep and broke every consumer
+                # matching on the top-level type (#511). admins_only stays off —
+                # device state goes to every connection, as it always has.
+                await ws.broadcast_typed("smart_device_update", changes)
             _last_broadcast_ts = ts
         except Exception as exc:
             logger.debug("SmartDevice WS bridge error: %s", exc)
