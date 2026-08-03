@@ -739,7 +739,11 @@
       "hintPermanentClearToResume": "Dauerhaft aktiv — schalte aus, damit Schedule/Kernbetriebszeit wieder greifen.",
       "bannerActiveWithUntil": "Immer wach aktiv bis {{time}} — Auto-Sleep blockiert.",
       "bannerActivePermanent": "Immer wach aktiv (dauerhaft) — Auto-Sleep blockiert.",
-      "scheduleHint": "ℹ Always-Awake hat Vorrang. Sleep-Schedule-Trigger werden ignoriert."
+      "scheduleHint": "ℹ Always-Awake hat Vorrang. Sleep-Schedule-Trigger werden ignoriert.",
+      "clampPreview": "Wird auf {{time}} gekürzt — ab dann übernimmt die Kernbetriebszeit (wach bis {{end}}).",
+      "clampActive": "Endet um {{time}} mit dem Beginn der Kernbetriebszeit (wach bis {{end}}).",
+      "clampBadge": "Wird auf den Beginn der Kernbetriebszeit gekürzt",
+      "coreUptimeRunning": "Kernbetriebszeit läuft bis {{end}} — bis dahin bleibt das System ohnehin wach."
     },
     "osSettings": {
       "title": "OS-Sleep-Einstellungen",

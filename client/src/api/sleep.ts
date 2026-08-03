@@ -48,6 +48,13 @@ export interface CoreUptimeStatus {
   next_start: string | null;
 }
 
+export interface CoreUptimeOccurrence {
+  window_id: number;
+  label: string | null;
+  start: string;  // ISO 8601, UTC
+  end: string;    // ISO 8601, UTC
+}
+
 export interface AlwaysAwakeStatus {
   enabled: boolean;
   until: string | null;            // ISO 8601 UTC, null = permanent
@@ -292,6 +299,14 @@ export async function getSleepHistory(
 
 export async function getSleepCapabilities(): Promise<SleepCapabilities> {
   const response = await apiClient.get<SleepCapabilities>('/api/system/sleep/capabilities');
+  return response.data;
+}
+
+export async function getCoreUptimeOccurrences(days = 7): Promise<CoreUptimeOccurrence[]> {
+  const response = await apiClient.get<CoreUptimeOccurrence[]>(
+    '/api/system/sleep/core-uptime/occurrences',
+    { params: { days } },
+  );
   return response.data;
 }
 

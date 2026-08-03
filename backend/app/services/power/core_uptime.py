@@ -9,8 +9,8 @@ Conventions:
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta
-from typing import Optional, Sequence
+from datetime import datetime, timedelta, timezone
+from typing import NamedTuple, Optional, Sequence
 
 
 def _parse_hhmm(s: str) -> tuple[int, int]:
@@ -107,3 +107,98 @@ def current_window_end(now: datetime, w) -> datetime:
         # We're in the early part — end is today at end_time
         return now.replace(hour=eh, minute=em, second=0, microsecond=0)
     return now.replace(hour=eh, minute=em, second=0, microsecond=0)
+
+
+def current_window_start(now: datetime, w) -> datetime:
+    """Return the datetime when the currently-active window started.
+
+    Mirror of `current_window_end`. Caller must ensure `now` is inside `w`.
+    """
+    sh, sm = _parse_hhmm(w.start_time)
+    if _crosses_midnight(w.start_time, w.end_time):
+        start_today = now.replace(hour=sh, minute=sm, second=0, microsecond=0)
+        if now >= start_today:
+            # Late part — the window started today
+            return start_today
+        # Early part — the window started yesterday
+        return (now - timedelta(days=1)).replace(
+            hour=sh, minute=sm, second=0, microsecond=0
+        )
+    return now.replace(hour=sh, minute=sm, second=0, microsecond=0)
+
+
+def window_start_containing(dt: datetime, windows: Sequence) -> Optional[datetime]:
+    """Start of the window containing `dt`, or None.
+
+    On overlapping windows the EARLIEST start wins — deliberately not
+    first-match, so the result does not depend on list order (the frontend
+    preview computes the same value from resolved occurrences).
+    """
+    starts = [
+        current_window_start(dt, w) for w in windows if _window_active_at(dt, w)
+    ]
+    return min(starts) if starts else None
+
+
+def clamp_to_core_uptime_start(
+    until_utc: datetime,
+    windows: Sequence,
+    now_local: datetime,
+) -> datetime:
+    """Shorten an always-awake expiry to the start of the core-uptime window
+    containing it — but only if that start is still in the future.
+
+    `until_utc` is UTC-aware (naive values are read as UTC, matching
+    `SleepManagerService._is_always_awake`); `windows` and `now_local` are
+    server-local, per this module's convention. The return value is UTC-aware.
+    """
+    if until_utc.tzinfo is None:
+        until_utc = until_utc.replace(tzinfo=timezone.utc)
+    until_local = until_utc.astimezone().replace(tzinfo=None)
+    start_local = window_start_containing(until_local, windows)
+    if start_local is None or start_local <= now_local:
+        return until_utc
+    # astimezone() on a naive value reads it as local time — exactly what we want.
+    return start_local.astimezone(timezone.utc)
+
+
+class Occurrence(NamedTuple):
+    """One resolved instance of a recurring window, in server-local time."""
+    window_id: int
+    label: Optional[str]
+    start: datetime
+    end: datetime
+
+
+def expand_occurrences(
+    now: datetime,
+    windows: Sequence,
+    days: int = 7,
+) -> list[Occurrence]:
+    """Resolve recurring windows into concrete occurrences.
+
+    Iterates day_offset -1..days: the -1 catches a window that started
+    yesterday and crosses midnight. Occurrences that already ended are
+    dropped. Result is sorted by start.
+    """
+    out: list[Occurrence] = []
+    for w in windows:
+        if not w.enabled:
+            continue
+        sh, sm = _parse_hhmm(w.start_time)
+        eh, em = _parse_hhmm(w.end_time)
+        weekdays = _parse_weekdays(w.weekdays)
+        crosses = _crosses_midnight(w.start_time, w.end_time)
+        for day_offset in range(-1, days + 1):
+            day = now + timedelta(days=day_offset)
+            if day.weekday() not in weekdays:
+                continue
+            start = day.replace(hour=sh, minute=sm, second=0, microsecond=0)
+            end_day = day + timedelta(days=1) if crosses else day
+            end = end_day.replace(hour=eh, minute=em, second=0, microsecond=0)
+            if end <= now:
+                continue
+            out.append(
+                Occurrence(window_id=w.id, label=w.label, start=start, end=end)
+            )
+    return sorted(out, key=lambda o: o.start)

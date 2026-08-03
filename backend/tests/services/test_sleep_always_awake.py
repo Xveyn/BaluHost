@@ -568,3 +568,258 @@ async def test_enter_true_suspend_releases_inhibitor_before_backend_call():
     assert call_order == ["release", "suspend"], (
         f"Expected release before suspend, got {call_order}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Kuerzung von always_awake_until an Kernbetriebszeit-Fenstern
+# ---------------------------------------------------------------------------
+
+def _clamp_row(*, core_uptime_enabled: bool = True, until=None):
+    """SleepConfig-Zeile fuer die Kuerzungstests."""
+    return SleepConfig(
+        id=1, auto_idle_enabled=False, idle_timeout_minutes=15,
+        idle_cpu_threshold=5.0, idle_disk_io_threshold=0.5, idle_http_threshold=5.0,
+        auto_escalation_enabled=False, escalation_after_minutes=60,
+        schedule_enabled=False, schedule_sleep_time="23:00", schedule_wake_time="06:00",
+        schedule_mode="soft",
+        wol_mac_address=None, wol_broadcast_address=None,
+        pause_monitoring=False, pause_disk_io=False, reduced_telemetry_interval=30.0,
+        disk_spindown_enabled=False,
+        core_uptime_enabled=core_uptime_enabled,
+        always_awake_enabled=True,
+        always_awake_until=until,
+    )
+
+
+def _window(start: str, end: str, weekdays: str = "0,1,2,3,4,5,6"):
+    """Fake CoreUptimeWindow — duck-typed, wie in test_core_uptime_helpers."""
+    from types import SimpleNamespace
+    return SimpleNamespace(
+        id=1, enabled=True, label=None,
+        start_time=start, end_time=end, weekdays=weekdays,
+    )
+
+
+def _session_with(row, windows):
+    """MagicMock-Session: scalar_one_or_none -> row, scalars().all() -> windows."""
+    session = MagicMock()
+    session.execute.return_value.scalar_one_or_none.return_value = row
+    session.execute.return_value.scalars.return_value.all.return_value = windows
+    return session
+
+
+def _local_utc(local_naive):
+    """Lokal-naiven Zeitpunkt in den entsprechenden UTC-aware Wert umrechnen."""
+    return local_naive.astimezone(timezone.utc)
+
+
+def test_update_config_clamps_until_into_future_window():
+    """Ablauf im kuenftigen Fenster wird auf den Fensterbeginn gekuerzt."""
+    from app.schemas.sleep import SleepConfigUpdate
+    svc = _build_service()
+    row = _clamp_row()
+
+    # Anchor on local time (tomorrow at 12:00) — window times are local wall clock
+    # Window must START AFTER now_local for clamping to apply
+    now_local = (datetime.now() + timedelta(days=1)).replace(
+        hour=12, minute=0, second=0, microsecond=0
+    )
+
+    # Window 16:00-22:00 starts 4 hours after now (12:00)
+    window = _window("16:00", "22:00")
+
+    # Until is 18:00 local (inside the future window 16:00-22:00)
+    until_local = now_local.replace(hour=18)
+    requested = until_local.astimezone(timezone.utc)
+
+    # Expected: clamped to 16:00 local (window start)
+    expected_local = now_local.replace(hour=16)
+    expected_utc = expected_local.astimezone(timezone.utc)
+
+    session = _session_with(row, [window])
+    update = SleepConfigUpdate(always_awake_enabled=True, always_awake_until=requested)
+
+    with patch("app.services.power.sleep.SessionLocal", return_value=session), \
+         patch("app.services.power.sleep.datetime") as mock_dt, \
+         patch.object(svc, "get_config", return_value=MagicMock()):
+        mock_dt.now.return_value = now_local
+        svc.update_config(update)
+
+    assert row.always_awake_until == expected_utc
+
+
+def test_update_config_leaves_until_past_window_end_untouched():
+    """Ablauf hinter dem Fensterende bleibt unveraendert."""
+    from app.schemas.sleep import SleepConfigUpdate
+    svc = _build_service()
+    row = _clamp_row()
+
+    # Anchor on local time (tomorrow at 12:00) — window times are local wall clock
+    # Never derive scenarios from UTC anchor when windows use local HH:MM strings
+    now_local = (datetime.now() + timedelta(days=1)).replace(
+        hour=12, minute=0, second=0, microsecond=0
+    )
+
+    # Window 16:00-22:00 starts after now (12:00)
+    window = _window("16:00", "22:00")
+
+    # Until is 23:00 local (past the window end at 22:00)
+    until_local = now_local.replace(hour=23)
+    requested = until_local.astimezone(timezone.utc)
+
+    session = _session_with(row, [window])
+    update = SleepConfigUpdate(always_awake_enabled=True, always_awake_until=requested)
+
+    with patch("app.services.power.sleep.SessionLocal", return_value=session), \
+         patch("app.services.power.sleep.datetime") as mock_dt, \
+         patch.object(svc, "get_config", return_value=MagicMock()):
+        mock_dt.now.return_value = now_local
+        svc.update_config(update)
+
+    # Should remain unchanged since requested is past window end
+    assert row.always_awake_until == requested
+
+
+def test_update_config_does_not_clamp_when_core_uptime_disabled():
+    """Hauptschalter aus -> keine Kuerzung (bis wird nicht geaendert)."""
+    from app.schemas.sleep import SleepConfigUpdate
+    svc = _build_service()
+    row = _clamp_row(core_uptime_enabled=False)
+
+    # Anchor on local time (tomorrow at 12:00) — window times are local wall clock.
+    # Never derive scenarios from a UTC anchor when windows use local HH:MM strings.
+    now_local = (datetime.now() + timedelta(days=1)).replace(
+        hour=12, minute=0, second=0, microsecond=0
+    )
+
+    # Window 16:00-22:00 starts 4 hours after now (12:00) — would clamp if enabled.
+    window = _window("16:00", "22:00")
+
+    # Until is 18:00 local (inside the window 16:00-22:00)
+    until_local = now_local.replace(hour=18)
+    requested = until_local.astimezone(timezone.utc)
+
+    session = _session_with(row, [window])
+    update = SleepConfigUpdate(always_awake_enabled=True, always_awake_until=requested)
+
+    with patch("app.services.power.sleep.SessionLocal", return_value=session), \
+         patch("app.services.power.sleep.datetime") as mock_dt, \
+         patch.object(svc, "get_config", return_value=MagicMock()):
+        mock_dt.now.return_value = now_local
+        svc.update_config(update)
+
+    # core_uptime_enabled=False -> should remain unchanged despite the window
+    # containing the requested expiry.
+    assert row.always_awake_until == requested
+
+
+def test_update_config_ignores_pending_override_when_request_is_unrelated():
+    """A write that only touches an unrelated field must not re-evaluate a
+    pending always_awake_until, even though a containing future window exists.
+
+    This is the case the SleepConfigPanel triggers in practice: it PUTs
+    idle_timeout_minutes alone. Regression for the spec's explicit non-goal
+    ("ein bereits gesetzter Override wird nicht neu bewertet").
+    """
+    from app.schemas.sleep import SleepConfigUpdate
+    svc = _build_service()
+
+    now_local = (datetime.now() + timedelta(days=1)).replace(
+        hour=12, minute=0, second=0, microsecond=0
+    )
+    window = _window("16:00", "22:00")
+
+    # Pending expiry already sits inside the future window — if the clamp were
+    # to (wrongly) re-run here, it would shorten this to 16:00.
+    pending_until = now_local.replace(hour=18).astimezone(timezone.utc)
+    row = _clamp_row(until=pending_until)
+
+    session = _session_with(row, [window])
+    update = SleepConfigUpdate(idle_timeout_minutes=20)
+
+    with patch("app.services.power.sleep.SessionLocal", return_value=session), \
+         patch("app.services.power.sleep.datetime") as mock_dt, \
+         patch.object(svc, "get_config", return_value=MagicMock()):
+        mock_dt.now.return_value = now_local
+        svc.update_config(update)
+
+    assert row.idle_timeout_minutes == 20
+    assert row.always_awake_until == pending_until
+
+
+def test_update_config_clamps_when_core_uptime_enabled_in_same_request():
+    """core_uptime_enabled wird im selben Request eingeschaltet -> Kuerzung greift."""
+    from app.schemas.sleep import SleepConfigUpdate
+    svc = _build_service()
+    row = _clamp_row(core_uptime_enabled=False)
+
+    # Anchor on local time (tomorrow at 12:00)
+    # Window must START AFTER now_local for clamping to apply
+    now_local = (datetime.now() + timedelta(days=1)).replace(
+        hour=12, minute=0, second=0, microsecond=0
+    )
+
+    # Window 16:00-22:00 starts 4 hours after now (12:00)
+    window = _window("16:00", "22:00")
+
+    # Until is 18:00 local (inside the future window 16:00-22:00)
+    until_local = now_local.replace(hour=18)
+    requested = until_local.astimezone(timezone.utc)
+
+    # Expected: clamped to 16:00 local (window start)
+    expected_local = now_local.replace(hour=16)
+    expected_utc = expected_local.astimezone(timezone.utc)
+
+    session = _session_with(row, [window])
+
+    # Enable core_uptime in the same request
+    update = SleepConfigUpdate(
+        always_awake_enabled=True,
+        always_awake_until=requested,
+        core_uptime_enabled=True,
+    )
+
+    with patch("app.services.power.sleep.SessionLocal", return_value=session), \
+         patch("app.services.power.sleep.datetime") as mock_dt, \
+         patch.object(svc, "get_config", return_value=MagicMock()):
+        mock_dt.now.return_value = now_local
+        svc.update_config(update)
+
+    assert row.always_awake_until == expected_utc
+
+
+def test_update_config_no_clamp_for_permanent_override():
+    """until=None (dauerhaft) bleibt None — nichts zu kuerzen."""
+    from app.schemas.sleep import SleepConfigUpdate
+    svc = _build_service()
+    row = _clamp_row(until=_local_utc(datetime(2026, 8, 5, 21, 0)))
+    session = _session_with(row, [_window("19:00", "23:30")])
+
+    update = SleepConfigUpdate(always_awake_enabled=True, always_awake_until=None)
+
+    with patch("app.services.power.sleep.SessionLocal", return_value=session), \
+         patch("app.services.power.sleep.datetime") as mock_dt, \
+         patch.object(svc, "get_config", return_value=MagicMock()):
+        mock_dt.now.return_value = datetime(2026, 8, 5, 15, 0)
+        svc.update_config(update)
+
+    assert row.always_awake_until is None
+
+
+def test_update_config_disabling_still_clears_until_with_windows_present():
+    """enabled=False raeumt until ab — die Kuerzung darf da nichts wiederbeleben."""
+    from app.schemas.sleep import SleepConfigUpdate
+    svc = _build_service()
+    row = _clamp_row(until=_local_utc(datetime(2026, 8, 5, 21, 0)))
+    session = _session_with(row, [_window("19:00", "23:30")])
+
+    update = SleepConfigUpdate(always_awake_enabled=False)
+
+    with patch("app.services.power.sleep.SessionLocal", return_value=session), \
+         patch("app.services.power.sleep.datetime") as mock_dt, \
+         patch.object(svc, "get_config", return_value=MagicMock()):
+        mock_dt.now.return_value = datetime(2026, 8, 5, 15, 0)
+        svc.update_config(update)
+
+    assert row.always_awake_enabled is False
+    assert row.always_awake_until is None

@@ -1,5 +1,5 @@
 """Unit tests for pure core-uptime helpers (no DB)."""
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -8,6 +8,10 @@ from app.services.power.core_uptime import (
     is_in_core_uptime,
     next_core_uptime_start,
     current_window_end,
+    current_window_start,
+    window_start_containing,
+    clamp_to_core_uptime_start,
+    expand_occurrences,
 )
 
 
@@ -189,3 +193,203 @@ def test_current_window_end_cross_midnight_early_part():
     now = datetime(2026, 5, 9, 2, 0)  # Sat 02:00 inside Fri-started window
     w = _w("22:00", "06:00", "4")
     assert current_window_end(now, w) == datetime(2026, 5, 9, 6, 0)
+
+
+# ---- current_window_start ----
+
+def test_current_window_start_simple():
+    # Mi 12:00 innerhalb Mo-Fr 08:00-22:00
+    now = datetime(2026, 5, 6, 12, 0)
+    w = _w("08:00", "22:00", "0,1,2,3,4")
+    assert current_window_start(now, w) == datetime(2026, 5, 6, 8, 0)
+
+
+def test_current_window_start_overnight_late_half():
+    # Fenster 22:00-06:00, jetzt Mi 23:30 -> Beginn ist heute 22:00
+    now = datetime(2026, 5, 6, 23, 30)
+    w = _w("22:00", "06:00")
+    assert current_window_start(now, w) == datetime(2026, 5, 6, 22, 0)
+
+
+def test_current_window_start_overnight_early_half():
+    # Fenster 22:00-06:00, jetzt Do 02:00 -> Beginn war gestern 22:00
+    now = datetime(2026, 5, 7, 2, 0)
+    w = _w("22:00", "06:00")
+    assert current_window_start(now, w) == datetime(2026, 5, 6, 22, 0)
+
+
+# ---- window_start_containing ----
+
+def test_window_start_containing_hit():
+    dt = datetime(2026, 5, 6, 20, 0)
+    windows = [_w("19:00", "23:30", "0,1,2,3,4")]
+    assert window_start_containing(dt, windows) == datetime(2026, 5, 6, 19, 0)
+
+
+def test_window_start_containing_miss_returns_none():
+    dt = datetime(2026, 5, 6, 18, 0)
+    windows = [_w("19:00", "23:30", "0,1,2,3,4")]
+    assert window_start_containing(dt, windows) is None
+
+
+def test_window_start_containing_ignores_disabled_window():
+    dt = datetime(2026, 5, 6, 20, 0)
+    windows = [_w("19:00", "23:30", "0,1,2,3,4", enabled=False)]
+    assert window_start_containing(dt, windows) is None
+
+
+def test_window_start_containing_empty_list():
+    assert window_start_containing(datetime(2026, 5, 6, 20, 0), []) is None
+
+
+def test_window_start_containing_overlap_picks_earliest_start():
+    # Zwei Fenster enthalten 21:00 — das frueher beginnende gewinnt,
+    # unabhaengig von der Listenreihenfolge.
+    dt = datetime(2026, 5, 6, 21, 0)
+    late = _w("20:00", "23:00")
+    early = _w("19:00", "22:00")
+    assert window_start_containing(dt, [late, early]) == datetime(2026, 5, 6, 19, 0)
+    assert window_start_containing(dt, [early, late]) == datetime(2026, 5, 6, 19, 0)
+
+
+# ---- clamp_to_core_uptime_start ----
+#
+# Die Funktion rechnet UTC -> lokale Serverzeit und zurueck. Damit die Tests
+# unabhaengig von der TZ der CI-Maschine sind, wird der UTC-Eingabewert aus
+# einem lokalen Wunschzeitpunkt abgeleitet statt hart gesetzt.
+
+def _utc(local_naive: datetime) -> datetime:
+    """Lokal-naiven Zeitpunkt in den entsprechenden UTC-aware Wert umrechnen."""
+    return local_naive.astimezone(timezone.utc)
+
+
+def test_clamp_shortens_expiry_inside_future_window():
+    now_local = datetime(2026, 5, 6, 15, 0)
+    windows = [_w("19:00", "23:30", "0,1,2,3,4")]
+    until = _utc(datetime(2026, 5, 6, 21, 0))
+    result = clamp_to_core_uptime_start(until, windows, now_local)
+    assert result == _utc(datetime(2026, 5, 6, 19, 0))
+    assert result.tzinfo is not None
+
+
+def test_clamp_leaves_expiry_before_window_untouched():
+    now_local = datetime(2026, 5, 6, 15, 0)
+    windows = [_w("19:00", "23:30", "0,1,2,3,4")]
+    until = _utc(datetime(2026, 5, 6, 17, 0))
+    assert clamp_to_core_uptime_start(until, windows, now_local) == until
+
+
+def test_clamp_leaves_expiry_past_window_end_untouched():
+    now_local = datetime(2026, 5, 6, 15, 0)
+    windows = [_w("19:00", "23:30", "0,1,2,3,4")]
+    until = _utc(datetime(2026, 5, 7, 1, 0))
+    assert clamp_to_core_uptime_start(until, windows, now_local) == until
+
+
+def test_clamp_expiry_exactly_on_window_start_is_unchanged():
+    now_local = datetime(2026, 5, 6, 15, 0)
+    windows = [_w("19:00", "23:30", "0,1,2,3,4")]
+    until = _utc(datetime(2026, 5, 6, 19, 0))
+    assert clamp_to_core_uptime_start(until, windows, now_local) == until
+
+
+def test_clamp_does_not_shorten_when_window_already_running():
+    # Fensterbeginn liegt in der Vergangenheit -> kein Kuerzen moeglich.
+    now_local = datetime(2026, 5, 6, 20, 0)
+    windows = [_w("19:00", "23:30", "0,1,2,3,4")]
+    until = _utc(datetime(2026, 5, 6, 21, 0))
+    assert clamp_to_core_uptime_start(until, windows, now_local) == until
+
+
+def test_clamp_with_no_windows_is_identity():
+    now_local = datetime(2026, 5, 6, 15, 0)
+    until = _utc(datetime(2026, 5, 6, 21, 0))
+    assert clamp_to_core_uptime_start(until, [], now_local) == until
+
+
+def test_clamp_accepts_naive_until_as_utc():
+    # Defensive: ein naiver DB-Wert wird als UTC interpretiert, nicht als lokal.
+    now_local = datetime(2026, 5, 6, 15, 0)
+    windows = [_w("19:00", "23:30", "0,1,2,3,4")]
+    aware = _utc(datetime(2026, 5, 6, 21, 0))
+    naive = aware.replace(tzinfo=None)
+    assert clamp_to_core_uptime_start(naive, windows, now_local) == _utc(
+        datetime(2026, 5, 6, 19, 0)
+    )
+
+
+# ---- expand_occurrences ----
+
+def test_expand_occurrences_respects_weekdays():
+    now = datetime(2026, 5, 6, 12, 0)  # Mi
+    windows = [_w("19:00", "23:30", "0,1,2,3,4")]  # Mo-Fr
+    occ = expand_occurrences(now, windows, days=7)
+    starts = [o.start for o in occ]
+    # Mi/Do/Fr diese Woche + Mo/Di/Mi naechste Woche = 6 Vorkommen
+    assert starts == [
+        datetime(2026, 5, 6, 19, 0),
+        datetime(2026, 5, 7, 19, 0),
+        datetime(2026, 5, 8, 19, 0),
+        datetime(2026, 5, 11, 19, 0),
+        datetime(2026, 5, 12, 19, 0),
+        datetime(2026, 5, 13, 19, 0),
+    ]
+
+
+def test_expand_occurrences_sets_end_and_metadata():
+    now = datetime(2026, 5, 6, 12, 0)
+    windows = [_w("19:00", "23:30", "2", label="Abend")]  # nur Mittwoch
+    occ = expand_occurrences(now, windows, days=1)
+    assert len(occ) == 1
+    assert occ[0].start == datetime(2026, 5, 6, 19, 0)
+    assert occ[0].end == datetime(2026, 5, 6, 23, 30)
+    assert occ[0].label == "Abend"
+    assert occ[0].window_id == 1
+
+
+def test_expand_occurrences_overnight_end_is_next_day():
+    now = datetime(2026, 5, 6, 12, 0)
+    windows = [_w("22:00", "06:00", "2")]  # Mittwoch 22:00 -> Donnerstag 06:00
+    occ = expand_occurrences(now, windows, days=1)
+    assert occ[0].start == datetime(2026, 5, 6, 22, 0)
+    assert occ[0].end == datetime(2026, 5, 7, 6, 0)
+
+
+def test_expand_occurrences_includes_window_started_yesterday():
+    # Donnerstag 02:00: das Mittwoch-Fenster 22:00-06:00 laeuft noch.
+    now = datetime(2026, 5, 7, 2, 0)
+    windows = [_w("22:00", "06:00", "2")]
+    occ = expand_occurrences(now, windows, days=7)
+    assert occ[0].start == datetime(2026, 5, 6, 22, 0)
+    assert occ[0].end == datetime(2026, 5, 7, 6, 0)
+
+
+def test_expand_occurrences_drops_finished_occurrences():
+    # Mittwoch 20:00: das heutige Fenster 08:00-12:00 ist vorbei.
+    now = datetime(2026, 5, 6, 20, 0)
+    windows = [_w("08:00", "12:00", "2")]  # nur Mittwoch
+    occ = expand_occurrences(now, windows, days=7)
+    assert [o.start for o in occ] == [datetime(2026, 5, 13, 8, 0)]
+
+
+def test_expand_occurrences_skips_disabled_windows():
+    now = datetime(2026, 5, 6, 12, 0)
+    windows = [_w("19:00", "23:30", "0,1,2,3,4", enabled=False)]
+    assert expand_occurrences(now, windows, days=7) == []
+
+
+def test_expand_occurrences_sorted_across_windows():
+    now = datetime(2026, 5, 6, 6, 0)
+    late = _w("19:00", "23:30", "2")
+    early = _w("08:00", "12:00", "2")
+    occ = expand_occurrences(now, [late, early], days=1)
+    assert [o.start for o in occ] == [
+        datetime(2026, 5, 6, 8, 0),
+        datetime(2026, 5, 6, 19, 0),
+    ]
+
+
+def test_expand_occurrences_honours_days_horizon():
+    now = datetime(2026, 5, 6, 12, 0)
+    windows = [_w("19:00", "23:30")]  # taeglich
+    assert len(expand_occurrences(now, windows, days=1)) == 2  # heute + morgen
