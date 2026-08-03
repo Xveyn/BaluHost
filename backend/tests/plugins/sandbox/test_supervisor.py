@@ -53,6 +53,26 @@ def _write_echo_plugin(plugin_dir: Path) -> None:
     (plugin_dir / "__init__.py").write_text(code, encoding="utf-8")
 
 
+def _write_suicidal_plugin(plugin_dir: Path) -> None:
+    """Write a plugin whose route kills its own worker mid-request.
+
+    os._exit() skips cleanup deliberately: it reproduces a worker that dies
+    while the host is waiting on its answer, which is the case the channel
+    reports as ConnectionError.
+    """
+    (plugin_dir / "__init__.py").write_text(
+        textwrap.dedent("""\
+            import os
+
+            def register(host):
+                @host.route("GET", "die")
+                async def die(request):
+                    os._exit(1)
+        """),
+        encoding="utf-8",
+    )
+
+
 def _write_trivial_plugin(plugin_dir: Path) -> None:
     """Write a no-route plugin that satisfies the worker's plugin-load requirement."""
     (plugin_dir / "__init__.py").write_text(
@@ -167,6 +187,29 @@ async def test_auto_restart_after_unexpected_exit(tmp_path):
         # And it serves requests again via the SDK-dispatched route.
         resp = await sup.dispatch("GET", "again", b"", {"user_id": 1, "username": "testuser", "role": "user"})
         assert resp["body"]["path"] == "again"
+    finally:
+        await sup.stop()
+
+
+async def test_dispatch_maps_a_dying_worker_to_supervisor_error(tmp_path):
+    """A worker dying mid-request is an expected failure, not an unexpected one.
+
+    dispatch() mapped only asyncio.TimeoutError, so this escaped as a raw
+    ConnectionError. The proxy's catch-all still turned it into a 502, so the
+    client saw the right status — but it was logged via logger.exception as
+    "Unexpected error" with a traceback, next to the same 502 that a plain
+    SupervisorError logs as a one-line warning. The exception type is the
+    supervisor's contract with its only caller; leaking the channel's is a
+    leak of the transport.
+    """
+    _write_suicidal_plugin(tmp_path)
+    sup = SandboxSupervisor("suicide_plugin", tmp_path)
+    await sup.start()
+    try:
+        with pytest.raises(SupervisorError):
+            await sup.dispatch(
+                "GET", "die", b"", {"user_id": 1, "username": "u", "role": "user"}
+            )
     finally:
         await sup.stop()
 

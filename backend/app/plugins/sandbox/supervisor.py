@@ -141,6 +141,16 @@ class SandboxSupervisor:
                 raise SupervisorTimeout(
                     f"plugin {self.plugin_name} request timed out"
                 ) from exc
+            except ConnectionError as exc:
+                # The worker died while we were waiting on its answer. That is
+                # an expected failure mode of a supervised subprocess — the
+                # supervise loop is already restarting it — so it belongs in
+                # this class's own error type. Letting the channel's exception
+                # escape leaked the transport into the caller's contract and
+                # got the request logged as an unexpected crash.
+                raise SupervisorError(
+                    f"plugin {self.plugin_name} worker connection lost"
+                ) from exc
             finally:
                 self._inflight.pop(request_id, None)
         return resp.body
