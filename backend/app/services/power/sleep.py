@@ -1366,6 +1366,25 @@ class SleepManagerService:
                 if update_data.get("always_awake_enabled") is False:
                     config.always_awake_until = None
 
+                # Shorten a pending expiry that lands inside a FUTURE core-uptime
+                # window: from that window's start on, core uptime keeps the system
+                # awake anyway, so the manual override closes out there. An expiry
+                # beyond the window's end survives untouched — it is still needed.
+                if config.always_awake_until is not None and config.core_uptime_enabled:
+                    windows = db.execute(
+                        select(CoreUptimeWindowModel).where(
+                            CoreUptimeWindowModel.enabled.is_(True)
+                        )
+                    ).scalars().all()
+                    if windows:
+                        config.always_awake_until = (
+                            core_uptime_helpers.clamp_to_core_uptime_start(
+                                config.always_awake_until,
+                                list(windows),
+                                datetime.now(),
+                            )
+                        )
+
                 db.commit()
                 db.refresh(config)
                 logger.info("Sleep config updated: %s", list(update_data.keys()))
