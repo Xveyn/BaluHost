@@ -86,6 +86,35 @@ describe('clampToCoreUptime', () => {
     expect(result.until).toBe(until);
     expect(result.clampedTo).toBeNull();
   });
+
+  it('previewed (single-clamp) value agrees with what the backend stores from the raw pick — staggered overlap', () => {
+    // Regression for the non-idempotency bug (AlwaysAwakePanel used to send
+    // the ALREADY-clamped value to the backend, which clamped it a second
+    // time). Window A 19:00-21:00 and window B 20:00-23:00, both enabled,
+    // `now` 15:00, raw pick 22:00:
+    //
+    //   once  = clampToCoreUptime(raw)       -> 20:00 (only B contains 22:00)
+    //   twice = clampToCoreUptime(once)      -> 19:00 (A now contains 20:00 too)
+    //
+    // `once` is exactly what the frontend now previews AND what it sends as
+    // the raw payload; the backend applies the identical rule exactly once to
+    // that raw value and therefore also lands on 20:00 — the round trip
+    // agrees. `twice` is kept here only to document the hazard the fix
+    // removes: it must differ from `once`, proving a caller that (wrongly)
+    // re-clamps an already-clamped value would silently drift to a different,
+    // over-shortened result.
+    const now = new Date('2026-05-06T15:00:00');
+    const windowA = occ('2026-05-06T19:00:00', '2026-05-06T21:00:00', 1, 'A');
+    const windowB = occ('2026-05-06T20:00:00', '2026-05-06T23:00:00', 2, 'B');
+    const raw = new Date('2026-05-06T22:00:00').toISOString();
+
+    const once = clampToCoreUptime(raw, [windowA, windowB], now);
+    expect(once.until).toBe(windowB.start);
+
+    const twice = clampToCoreUptime(once.until, [windowA, windowB], now);
+    expect(twice.until).toBe(windowA.start);
+    expect(twice.until).not.toBe(once.until);
+  });
 });
 
 describe('findRunningOccurrence', () => {

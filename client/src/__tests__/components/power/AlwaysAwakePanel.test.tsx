@@ -60,12 +60,19 @@ afterEach(() => {
 describe('AlwaysAwakePanel — Kernbetriebszeit-Kuerzung', () => {
   // i18n ist in Component-Tests nicht initialisiert: t() liefert den rohen Key.
 
-  it('sends the clamped value when the chosen expiry falls into a window', async () => {
+  it('sends the raw value to the backend but displays the clamped value optimistically', async () => {
+    // The backend re-applies clamp_to_core_uptime_start on whatever it receives.
+    // Sending the already-clamped value would double-clamp on staggered,
+    // overlapping windows (regression: see coreUptimeClamp.test.ts) — the UI
+    // must send the RAW pick and keep the clamp purely for its own optimistic
+    // display, matching what the backend's single clamp of the raw value
+    // produces.
     const occurrence = windowInHours(4, 6); // beginnt in 4h, laeuft 6h
     mockedConfig.mockResolvedValue(baseConfig());
     mockedOccurrences.mockResolvedValue([occurrence] as never);
 
     const user = userEvent.setup();
+    const before = Date.now();
     render(<AlwaysAwakePanel />);
 
     // "8h" landet 8h in der Zukunft — also innerhalb des Fensters (4h..10h).
@@ -73,10 +80,19 @@ describe('AlwaysAwakePanel — Kernbetriebszeit-Kuerzung', () => {
     await user.click(button);
 
     await waitFor(() => expect(mockedUpdate).toHaveBeenCalled());
-    expect(mockedUpdate).toHaveBeenCalledWith({
-      always_awake_enabled: true,
-      always_awake_until: occurrence.start,
-    });
+    const after = Date.now();
+
+    // Sent value: the RAW "now + 8h" pick, unclamped. Bounded by the actual
+    // wall-clock span of this test, not a hardcoded offset — a wrongly-sent
+    // clamped value (occurrence.start, ~4h out) would fail this assertion.
+    const sent = mockedUpdate.mock.calls[0][0] as { always_awake_until: string };
+    const sentMs = new Date(sent.always_awake_until).getTime();
+    expect(sentMs).toBeGreaterThanOrEqual(before + 8 * 3600 * 1000 - 2000);
+    expect(sentMs).toBeLessThanOrEqual(after + 8 * 3600 * 1000 + 2000);
+
+    // Displayed value: the clamped occurrence start — what the backend's own
+    // clamp of that raw value will also settle on.
+    expect(await screen.findByText('sleep.alwaysAwake.clampActive')).toBeInTheDocument();
   });
 
   it('sends the raw value when the chosen expiry clears the window end', async () => {

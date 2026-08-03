@@ -30,6 +30,9 @@ const PRESET_HOURS: Record<Exclude<Preset, 'permanent' | 'custom'>, number> = {
 const MIN_HORIZON_MS = 5 * 60 * 1000;        // 5 minutes
 const MAX_HORIZON_MS = 7 * 24 * 3600 * 1000; // 7 days
 
+/** Stable id for the hovered/focused preset's clamp-detail <p>, referenced via aria-describedby. */
+const CLAMP_DETAIL_ID = 'always-awake-clamp-detail';
+
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
@@ -183,8 +186,13 @@ export function AlwaysAwakePanel() {
     // Ein Ablauf innerhalb eines kuenftigen Kernbetriebszeit-Fensters wird auf
     // dessen Beginn gekuerzt — dieselbe Regel wie im Backend. Der optimistische
     // State muss den gekuerzten Wert tragen, sonst springt die Anzeige nach dem
-    // naechsten refresh() zurueck.
+    // naechsten refresh() zurueck. Das Backend bekommt aber den ROHEN Wert: es
+    // wendet dieselbe Kuerzung selbst genau einmal an. Wuerden wir stattdessen
+    // den bereits gekuerzten Wert schicken, wuerde das Backend ihn ein zweites
+    // Mal kuerzen (nicht idempotent bei ueberlappenden, gestaffelten Fenstern)
+    // und DB/UI liefen auseinander.
     const newUntil = rawUntil ? clampToCoreUptime(rawUntil, occurrences).until : null;
+    const wasClamped = newUntil !== rawUntil;
     const previousEnabled = enabled;
     const previousUntil = until;
     const previousExpiresIn = expiresIn;
@@ -194,12 +202,16 @@ export function AlwaysAwakePanel() {
     setExpiresIn(
       newUntil ? Math.max(0, Math.floor((new Date(newUntil).getTime() - Date.now()) / 1000)) : null,
     );
-    setActivePreset(preset);
+    // A clamped preset no longer matches its own duration — a reload would
+    // reclassify it as 'custom' (see refresh()'s remaining-seconds matching),
+    // so reflect that immediately instead of showing a stale preset as active.
+    setActivePreset(wasClamped ? 'custom' : preset);
     try {
       await updateSleepConfig({
         always_awake_enabled: true,
-        always_awake_until: newUntil,
+        always_awake_until: rawUntil,
       });
+      setHoveredPreset(null);
     } catch (err) {
       setEnabled(previousEnabled);
       setUntil(previousUntil);
@@ -226,8 +238,12 @@ export function AlwaysAwakePanel() {
       return;
     }
     const target = new Date(localValue);
+    const rawUntil = target.toISOString();
 
-    const newUntil = clampToCoreUptime(target.toISOString(), occurrences).until;
+    // See setPreset() above: the backend applies the same clamp itself, so it
+    // must receive the RAW value — the clamped value stays local-only, for the
+    // optimistic display.
+    const newUntil = clampToCoreUptime(rawUntil, occurrences).until;
     const previousEnabled = enabled;
     const previousUntil = until;
     const previousExpiresIn = expiresIn;
@@ -241,8 +257,9 @@ export function AlwaysAwakePanel() {
     try {
       await updateSleepConfig({
         always_awake_enabled: true,
-        always_awake_until: newUntil,
+        always_awake_until: rawUntil,
       });
+      setHoveredPreset(null);
     } catch (err) {
       setEnabled(previousEnabled);
       setUntil(previousUntil);
@@ -404,12 +421,19 @@ export function AlwaysAwakePanel() {
               ? 'sleep.alwaysAwake.presetPermanent'
               : (`sleep.alwaysAwake.preset${p}` as const);
           const clampPreview = p === 'permanent' ? null : previewFor(p).clampedTo;
+          // Only link to the detail <p> when it will actually be rendered for
+          // THIS button (hoveredPreset === p and a clamp applies) — an
+          // aria-describedby pointing at an absent id is silently ignored by
+          // screen readers, but keeping the condition explicit avoids relying
+          // on that.
+          const describesClampDetail = hoveredPreset === p && !!clampPreview;
           return (
             <button
               key={p}
               type="button"
               onClick={() => setPreset(p)}
               title={clampPreview ? t('sleep.alwaysAwake.clampBadge') : undefined}
+              aria-describedby={describesClampDetail ? CLAMP_DETAIL_ID : undefined}
               onMouseEnter={() => { if (p !== 'permanent') setHoveredPreset(p); }}
               onMouseLeave={() => setHoveredPreset(null)}
               onFocus={() => { if (p !== 'permanent') setHoveredPreset(p); }}
@@ -496,7 +520,7 @@ export function AlwaysAwakePanel() {
         </div>
       </div>
       {hoveredClamp?.clampedTo && (
-        <p className="text-[11px] text-amber-300">
+        <p id={CLAMP_DETAIL_ID} className="text-[11px] text-amber-300">
           {t('sleep.alwaysAwake.clampPreview', {
             time: formatTime(hoveredClamp.until),
             end: formatTime(hoveredClamp.clampedTo.end),
