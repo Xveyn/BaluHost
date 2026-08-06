@@ -15,6 +15,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
+from app.schemas.fans import PwmControl
+
 logger = logging.getLogger(__name__)
 
 AMD_VENDOR_ID = "0x1002"
@@ -68,9 +70,44 @@ async def disable_amd_manual(hwmon_dir: Path, drm_root: Optional[Path], state: A
                 state.previous_level, state.previous_pwm_enable)
 
 
-def _device_from_hwmon(hwmon_dir: Path, drm_root: Optional[Path]) -> Optional[Path]:
-    """Walk up from hwmon dir to find the amdgpu PCI device directory."""
-    # hwmon_dir typically looks like: <drm>/card0/device/hwmon/hwmonN
+def probe_amd_pwm_control(hwmon_dir: Path) -> PwmControl:
+    """Stellt fest, ob Live-PWM fuer diesen AMD-GPU-Luefter moeglich ist.
+
+    Ab RDNA3 (SMU13) liegt die Luefterkurve in der Firmware und wird ueber
+    <device>/gpu_od/fan_ctrl/ exponiert; pwm{n}-Writes lehnt der Treiber mit
+    EINVAL ab. Die Existenz von fan_curve ist der Marker.
+
+    WICHTIG: Aus einem fehlenden gpu_od/ darf NICHT auf ein fehlendes
+    Overdrive-Bit geschlossen werden. Auf der Referenzkarte (RX 7900 XT) war
+    amdgpu.ppfeaturemask=0xffffffff gesetzt und PWM trotzdem tot — die
+    gegenteilige Annahme war der urspruengliche Fehler in #480.
+    """
+    device = _device_from_hwmon(hwmon_dir)
+    if device is None:
+        return PwmControl.SUPPORTED
+    if (device / "gpu_od" / "fan_ctrl" / "fan_curve").exists():
+        return PwmControl.FIRMWARE_MANAGED
+    return PwmControl.SUPPORTED
+
+
+def _device_from_hwmon(hwmon_dir: Path, drm_root: Optional[Path] = None) -> Optional[Path]:
+    """Finde das amdgpu-PCI-Device zu einer hwmon-Directory.
+
+    Primaerweg: jede hwmon-Directory traegt einen 'device'-Symlink auf ihr
+    PCI-Geraet. An der Hardware verifiziert:
+        ls -d /sys/class/hwmon/hwmon2/device/gpu_od/fan_ctrl  -> existiert
+
+    Fallback: Aufwaertslauf ueber den aufgeloesten Pfad. Der funktioniert NUR
+    in synthetischen Baeumen — real enthaelt readlink -f keine Komponente
+    namens 'device'. Bleibt erhalten, damit bestehende Tests gueltig bleiben.
+    """
+    direct = hwmon_dir / "device"
+    try:
+        if (direct / "vendor").read_text().strip() == AMD_VENDOR_ID:
+            return direct
+    except OSError:
+        pass
+
     p = hwmon_dir.resolve()
     for parent in p.parents:
         if parent.name == "device" and (parent / "vendor").exists():
