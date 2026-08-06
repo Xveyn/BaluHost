@@ -116,6 +116,7 @@ async def test_scan_marks_normal_fan_supported(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_dev_backend_exposes_a_firmware_managed_gpu_fan():
+    import asyncio
     from app.services.power.fan_backend_dev import DevFanControlBackend
 
     backend = DevFanControlBackend(get_settings())
@@ -123,4 +124,17 @@ async def test_dev_backend_exposes_a_firmware_managed_gpu_fan():
 
     assert fans["dev_gpu_pwm1"].pwm_control is PwmControl.SUPPORTED
     assert fans["dev_gpu_rdna3_pwm1"].pwm_control is PwmControl.FIRMWARE_MANAGED
+
+    # Verify set_pwm is rejected for firmware-managed fan
     assert await backend.set_pwm("dev_gpu_rdna3_pwm1", 80) is False
+
+    # Verify that pwm_percent and target_rpm remain unchanged after rejected set_pwm
+    assert backend._fans["dev_gpu_rdna3_pwm1"]["pwm_percent"] == 0
+    assert backend._fans["dev_gpu_rdna3_pwm1"]["target_rpm"] == 0
+
+    # Verify current_rpm stays at 0 across multiple get_fans() calls (no drift via fluctuation)
+    for _ in range(5):
+        fans = await backend.get_fans()
+        fan = next(f for f in fans if f.fan_id == "dev_gpu_rdna3_pwm1")
+        assert fan.rpm == 0, f"current_rpm drifted to {fan.rpm}"
+        await asyncio.sleep(0.05)  # Small delay between calls to test stability

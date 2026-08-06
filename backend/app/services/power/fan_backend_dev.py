@@ -208,6 +208,10 @@ class DevFanControlBackend(FanControlBackend):
 
         # Update fan RPM with latency and fluctuation
         for fan_id, fan_data in self._fans.items():
+            # Skip firmware-managed fans (they don't respond to PWM changes)
+            if fan_data.get("pwm_control") is PwmControl.FIRMWARE_MANAGED:
+                continue
+
             elapsed = current_time - fan_data["last_update"]
 
             # Gradual RPM transition (2-3 second lag)
