@@ -102,6 +102,7 @@ class FanInfo(BaseModel):
     is_gpu_fan: bool = False
     gpu_vendor: Optional[str] = None
     last_write_error: Optional[str] = None
+    pwm_control: PwmControl = PwmControl.SUPPORTED
     curve_type: str = "graph"
     flat_pwm_percent: Optional[int] = None
     target_temp_celsius: Optional[float] = None

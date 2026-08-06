@@ -7,7 +7,7 @@ import logging
 from typing import Dict, List, Optional
 
 from app.core.config import Settings
-from app.schemas.fans import FanMode, FanCurvePoint
+from app.schemas.fans import FanMode, FanCurvePoint, PwmControl
 from app.services.power.fan_control import FanControlBackend, FanData, TempSensorData
 
 logger = logging.getLogger(__name__)
@@ -116,6 +116,7 @@ class DevFanControlBackend(FanControlBackend):
                 is_gpu_fan=fan_data.get("is_gpu_fan", False),
                 gpu_vendor=fan_data.get("gpu_vendor"),
                 device_driver=fan_data.get("device_driver"),
+                pwm_control=fan_data.get("pwm_control", PwmControl.SUPPORTED),
             ))
 
         return fans

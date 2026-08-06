@@ -8,8 +8,9 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from app.core.config import Settings
-from app.schemas.fans import FanMode, FanCurvePoint
+from app.schemas.fans import FanMode, FanCurvePoint, PwmControl
 from app.services.power.fan_control import FanControlBackend, FanData, TempSensorData
+from app.services.power.fan_gpu_manual import probe_amd_pwm_control
 
 logger = logging.getLogger(__name__)
 
@@ -107,6 +108,7 @@ class LinuxFanControlBackend(FanControlBackend):
                 gpu_vendor=fan_info.get("gpu_vendor"),
                 device_driver=fan_info.get("device_driver"),
                 last_write_error=fan_info.get("last_write_error"),
+                pwm_control=fan_info.get("pwm_control", PwmControl.SUPPORTED),
             ))
 
         return fans
@@ -335,6 +337,13 @@ class LinuxFanControlBackend(FanControlBackend):
                         temp_path = temp_file
                         break
 
+                pwm_control = PwmControl.SUPPORTED
+                if gpu_vendor == "amd":
+                    try:
+                        pwm_control = probe_amd_pwm_control(hwmon_dir)
+                    except OSError as exc:
+                        logger.debug(f"pwm_control probe failed for {hwmon_dir}: {exc}")
+
                 new_cache[fan_id] = {
                     "name": f"{hwmon_name_value} PWM{pwm_num}",
                     "pwm_path": pwm_file,
@@ -345,6 +354,7 @@ class LinuxFanControlBackend(FanControlBackend):
                     "is_gpu_fan": is_gpu_fan,
                     "gpu_vendor": gpu_vendor,
                     "device_driver": hwmon_name_value,
+                    "pwm_control": pwm_control,
                 }
 
         if new_cache or not self._fan_cache:

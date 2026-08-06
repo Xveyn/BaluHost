@@ -19,7 +19,7 @@ from sqlalchemy import select, desc, func
 
 from app.core.config import Settings
 from app.models.fans import FanConfig, FanSample
-from app.schemas.fans import FanMode, FanCurvePoint
+from app.schemas.fans import FanMode, FanCurvePoint, PwmControl
 from app.services.power.fan_schedule import FanScheduleService
 from app.services.power.fan_profiles import FanProfileService
 from app.services.power.fan_sources import (
@@ -55,6 +55,7 @@ class FanData:
     gpu_vendor: Optional[str] = None
     device_driver: Optional[str] = None
     last_write_error: Optional[str] = None
+    pwm_control: PwmControl = PwmControl.SUPPORTED
 
 
 @dataclass
@@ -707,6 +708,7 @@ class FanControlService:
                         "is_gpu_fan": fan.is_gpu_fan,
                         "gpu_vendor": fan.gpu_vendor,
                         "last_write_error": fan.last_write_error,
+                        "pwm_control": fan.pwm_control,
                         "curve_type": getattr(config, "curve_type", "graph"),
                         "flat_pwm_percent": getattr(config, "flat_pwm_percent", None),
                         "target_temp_celsius": getattr(config, "target_temp_celsius", None),
@@ -755,6 +757,7 @@ class FanControlService:
                         "is_gpu_fan": fan.is_gpu_fan,
                         "gpu_vendor": fan.gpu_vendor,
                         "last_write_error": fan.last_write_error,
+                        "pwm_control": fan.pwm_control,
                         "curve_type": "graph",
                         "flat_pwm_percent": None,
                         "target_temp_celsius": None,

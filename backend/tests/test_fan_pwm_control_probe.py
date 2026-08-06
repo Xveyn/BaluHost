@@ -73,3 +73,42 @@ def test_board_sensor_without_device_is_supported(tmp_path):
     hwmon.mkdir(parents=True)
     (hwmon / "name").write_text("nct6798\n")
     assert probe_amd_pwm_control(hwmon) is PwmControl.SUPPORTED
+
+
+import pytest
+
+from app.core.config import get_settings
+from app.services.power.fan_backend_linux import LinuxFanControlBackend
+
+
+@pytest.mark.asyncio
+async def test_scan_marks_rdna3_fan_firmware_managed(tmp_path, monkeypatch):
+    hwmon = _hardware_shaped_tree(tmp_path, with_fan_curve=True)
+    (hwmon / "pwm1").write_text("0\n")
+    (hwmon / "fan1_input").write_text("0\n")
+    (hwmon / "pwm1_enable").write_text("2\n")
+
+    backend = LinuxFanControlBackend(get_settings())
+    monkeypatch.setattr(backend, "_hwmon_base", hwmon.parent)
+    await backend._scan_pwm_fans()
+
+    fan_id = next(iter(backend._fan_cache))
+    assert backend._fan_cache[fan_id]["pwm_control"] is PwmControl.FIRMWARE_MANAGED
+
+    fans = await backend.get_fans()
+    assert fans[0].pwm_control is PwmControl.FIRMWARE_MANAGED
+
+
+@pytest.mark.asyncio
+async def test_scan_marks_normal_fan_supported(tmp_path, monkeypatch):
+    hwmon = _hardware_shaped_tree(tmp_path, with_fan_curve=False)
+    (hwmon / "pwm1").write_text("128\n")
+    (hwmon / "fan1_input").write_text("1200\n")
+    (hwmon / "pwm1_enable").write_text("2\n")
+
+    backend = LinuxFanControlBackend(get_settings())
+    monkeypatch.setattr(backend, "_hwmon_base", hwmon.parent)
+    await backend._scan_pwm_fans()
+
+    fan_id = next(iter(backend._fan_cache))
+    assert backend._fan_cache[fan_id]["pwm_control"] is PwmControl.SUPPORTED
