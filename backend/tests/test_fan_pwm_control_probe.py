@@ -112,3 +112,15 @@ async def test_scan_marks_normal_fan_supported(tmp_path, monkeypatch):
 
     fan_id = next(iter(backend._fan_cache))
     assert backend._fan_cache[fan_id]["pwm_control"] is PwmControl.SUPPORTED
+
+
+@pytest.mark.asyncio
+async def test_dev_backend_exposes_a_firmware_managed_gpu_fan():
+    from app.services.power.fan_backend_dev import DevFanControlBackend
+
+    backend = DevFanControlBackend(get_settings())
+    fans = {f.fan_id: f for f in await backend.get_fans()}
+
+    assert fans["dev_gpu_pwm1"].pwm_control is PwmControl.SUPPORTED
+    assert fans["dev_gpu_rdna3_pwm1"].pwm_control is PwmControl.FIRMWARE_MANAGED
+    assert await backend.set_pwm("dev_gpu_rdna3_pwm1", 80) is False
