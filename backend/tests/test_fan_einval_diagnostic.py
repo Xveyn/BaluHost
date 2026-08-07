@@ -98,6 +98,56 @@ async def test_eacces_reports_permission_not_kernel_rejection(tmp_path, monkeypa
 
 
 @pytest.mark.asyncio
+async def test_eperm_reports_eperm_not_eacces(tmp_path, monkeypatch):
+    """Fund 5: die Meldung darf nur den Code nennen, der tatsaechlich beobachtet
+    wurde. EPERM ist ein anderer Fehler als EACCES (z.B. immutable-Flag statt
+    fehlender Owner-Rechte) und darf nicht als EACCES ausgegeben werden."""
+    d = _amd_hwmon(tmp_path)
+    backend = LinuxFanControlBackend(get_settings())
+    monkeypatch.setattr(backend, "_hwmon_base", tmp_path / "sys" / "class" / "hwmon")
+    await backend._scan_pwm_fans()
+    fan_id = next(iter(backend._fan_cache))
+
+    def fail_eperm(self_, value):
+        raise PermissionError(1, "Operation not permitted")  # errno.EPERM == 1
+
+    monkeypatch.setattr(Path, "write_text", fail_eperm)
+    with patch("subprocess.run") as srun:
+        srun.return_value.returncode = 1
+        srun.return_value.stderr = b"a password is required"
+        ok = await backend.set_pwm(fan_id, 80)
+
+    assert ok is False
+    err = backend._fan_cache[fan_id]["last_write_error"]
+    assert "EPERM" in err
+    assert "EACCES" not in err
+    assert backend._fan_cache[fan_id]["pwm_control"] is PwmControl.NO_PERMISSION
+
+
+@pytest.mark.asyncio
+async def test_missing_sysfs_node_is_not_reported_as_kernel_rejection(tmp_path, monkeypatch):
+    """Fund 4: existiert die sysfs-Node beim Eintritt nicht, liefert
+    _write_hwmon_file (False, None). Das ist keine Kernel-Ablehnung, sondern
+    eine verschwundene Node (Device entfernt / Treiber neu geladen)."""
+    d = _amd_hwmon(tmp_path)
+    backend = LinuxFanControlBackend(get_settings())
+    monkeypatch.setattr(backend, "_hwmon_base", tmp_path / "sys" / "class" / "hwmon")
+    await backend._scan_pwm_fans()
+    fan_id = next(iter(backend._fan_cache))
+
+    # Node verschwindet, bevor set_pwm sie anfasst.
+    (d / "pwm1").unlink()
+
+    ok = await backend.set_pwm(fan_id, 80)
+
+    assert ok is False
+    err = backend._fan_cache[fan_id]["last_write_error"]
+    assert "no longer exists" in err
+    assert "errno=None" not in err
+    assert "rejected by kernel" not in err
+
+
+@pytest.mark.asyncio
 async def test_successful_write_clears_no_permission(tmp_path, monkeypatch):
     """Werden Rechte zur Laufzeit korrigiert, muss der Zustand zurueckgehen."""
     d = _amd_hwmon(tmp_path)

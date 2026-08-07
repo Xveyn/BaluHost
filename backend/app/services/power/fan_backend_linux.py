@@ -163,8 +163,18 @@ class LinuxFanControlBackend(FanControlBackend):
             except Exception:
                 user = "the service user"
             fan_info["last_write_error"] = (
-                f"No write permission for {pwm_path} (EACCES). The backend runs as "
+                f"No write permission for {pwm_path} "
+                f"({errno.errorcode.get(err_code, err_code)}). The backend runs as "
                 f"'{user}' and the udev rule does not cover hwmon PWM nodes."
+            )
+        elif err_code is None:
+            # _write_hwmon_file() found the path missing before even attempting
+            # the write — the kernel rejected nothing, the sysfs node is gone
+            # (device removed or driver reloaded). Do not claim a kernel
+            # rejection that never happened.
+            fan_info["last_write_error"] = (
+                f"PWM sysfs node {pwm_path} no longer exists (device removed "
+                f"or driver reloaded)."
             )
         else:
             driver = fan_info.get("device_driver", "unknown")
@@ -174,7 +184,8 @@ class LinuxFanControlBackend(FanControlBackend):
                 enable_val = v if v is not None else "?"
             fan_info["last_write_error"] = (
                 f"PWM write rejected by kernel (driver={driver}, "
-                f"pwm_enable={enable_val}, errno={err_code})."
+                f"pwm_enable={enable_val}, "
+                f"errno={errno.errorcode.get(err_code, err_code)})."
             )
 
         logger.error(f"Failed to write PWM for {fan_id}: {fan_info['last_write_error']}")
@@ -443,7 +454,7 @@ class LinuxFanControlBackend(FanControlBackend):
                 logger.warning(f"sudo tee failed for {path}: {result.stderr.decode()}")
             except Exception as exc2:
                 logger.error(f"Failed to write {path} with sudo: {exc2}")
-            return False, errno.EACCES
+            return False, code
         except Exception as exc:
             # Catch-all wie bisher: nichts Unerwartetes in den Loop propagieren.
             logger.error(f"Failed to write {path}: {exc}")
