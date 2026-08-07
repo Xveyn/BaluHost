@@ -530,6 +530,12 @@ class FanControlService:
                         target_pwm = evaluate_curve(
                             eval_cfg, temperature, prev, other_fan_pwms, _profile_loader, dt,
                         )
+                        if eval_cfg.curve_type == "graph" and temperature is None:
+                            # #517-Folgeschaden: _interpolate() liefert 0 fuer
+                            # temp=None (kein temp_sensor_id, oder der Sensor
+                            # liefert nicht). Ein ausgefallener Sensor darf die
+                            # Kuehlung nicht abstellen -> aktuellen PWM halten.
+                            target_pwm = fan.pwm_percent
                         # Hysteresis dampens the already-computed target (only for graph-like outputs)
                         target_pwm = self._apply_hysteresis(
                             fan.fan_id, temperature or 0.0,

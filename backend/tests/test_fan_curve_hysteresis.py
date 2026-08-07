@@ -136,3 +136,34 @@ async def test_monitor_loop_applies_the_curve_target_not_fifty(db_session):
         assert backend.set_pwm_calls[0][1] != 10  # min_pwm_percent
     finally:
         FanControlService._instance = None
+
+
+@pytest.mark.asyncio
+async def test_monitor_loop_holds_current_pwm_when_temperature_is_unavailable(db_session):
+    """Folgeschaden von #517: evaluate_curve()/_interpolate() liefert 0 fuer
+
+    temp=None (kein temp_sensor_id gesetzt, oder der Sensor liefert nicht). Vor
+    diesem Fix lief dieser Wert unveraendert durch die Klemmung auf
+    min_pwm_percent — bei min_pwm_percent=0 blieb ein Luefter mit ausgefallenem
+    Sensor komplett stehen. Das ist ein Sicherheitsrueckschritt gegenueber dem
+    alten (fehlerhaften) Verhalten, das wenigstens hartcodiert 50% lieferte.
+
+    Erwartung: der Loop haelt den aktuellen PWM-Wert, statt auf 0 zu regeln.
+    """
+    db_session.add(_config_row(min_pwm_percent=0, temp_sensor_id=None))
+    db_session.commit()
+
+    service = _monitor_service(db_session)
+    service._registry.get_temp = AsyncMock(return_value=None)
+    backend = _StubBackend(temperature=None, pwm_percent=45)
+    service._backend = backend
+    try:
+        await service._monitor_and_control_fans()
+
+        # Der Luefter darf nicht auf 0 geregelt werden, nur weil die Temperatur
+        # fehlt — und der Loop darf keinen abweichenden Wert an die Hardware
+        # schreiben (der aktuelle Wert bleibt bestehen).
+        assert backend.set_pwm_calls == []
+        assert service._last_pwm_by_fan["f1"] == 45
+    finally:
+        FanControlService._instance = None
