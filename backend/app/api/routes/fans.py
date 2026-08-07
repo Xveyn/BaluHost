@@ -33,6 +33,7 @@ from app.schemas.fans import (
     ApplyPresetResponse,
     UpdateFanConfigRequest,
     UpdateFanConfigResponse,
+    PwmControl,
     FanCurvePoint,
     FanScheduleEntrySchema,
     CreateFanScheduleEntryRequest,
@@ -156,7 +157,6 @@ async def set_fan_pwm(
     backend = service._backend
     cache = getattr(backend, "_fan_cache", None)
     if cache and body.fan_id in cache:
-        from app.schemas.fans import PwmControl
         if cache[body.fan_id].get("pwm_control") is PwmControl.FIRMWARE_MANAGED:
             raise HTTPException(
                 status_code=400,
@@ -1018,8 +1018,6 @@ async def set_gpu_manual_mode(
     hwmon_dir = info["pwm_path"].parent
 
     if body.enable:
-        from app.schemas.fans import PwmControl
-
         if info.get("pwm_control") is PwmControl.FIRMWARE_MANAGED:
             raise HTTPException(
                 status_code=400,
