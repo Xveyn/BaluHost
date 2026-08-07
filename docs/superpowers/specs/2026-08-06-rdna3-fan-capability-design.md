@@ -306,8 +306,23 @@ nicht durch und bleibt CI überlassen.
   vorhanden ⇒ PWM unmöglich" stammt von einer RX 7900 XT. Sie entspricht dem
   SMU13-Verhalten, ist aber nicht über die gesamte RDNA3-Reihe verifiziert.
   Fällt eine Karte auf, die beides kann, verliert sie die PWM-Steuerung —
-  sichtbar am Badge und über den Meldungstext zurückverfolgbar. Weil die
-  Modus-Buttons bedienbar bleiben, sperrt sich niemand dadurch aus.
+  sichtbar am Badge und über den Meldungstext zurückverfolgbar.
+
+  **Eine Fehlerkennung hat keinen Selbsthilfe-Weg.** Die Modus-Buttons retten
+  nur das DB-Feld `mode`. Bei einer fälschlich als `FIRMWARE_MANAGED`
+  erkannten Karte sind gleichzeitig zu: der Slider, Kurve/Zeitplan/Advanced,
+  `POST /api/fans/pwm` (400), `gpu-manual-mode enable` (400), und der Loop
+  schreibt nie. Es gibt keinen Config-Schalter und kein UI-Override. Erholung
+  hieße Dienst stoppen und sysfs von Hand schreiben. Ein Konfigurationsschalter
+  zum Abschalten der Erkennung ist als Folgearbeit vorgesehen (eigenes Issue).
+
+  **Zweiter Ordnungseffekt.** Stand ein solcher Lüfter zuvor auf
+  `pwm_enable=1`, hört der Loop einfach auf zu schreiben, und **nichts stellt
+  `pwm_enable=2` wieder her** — der Lüfter bleibt beim letzten PWM-Wert stehen,
+  während die Auto-Regelung des Treibers weiterhin deaktiviert ist. Auf echter
+  RDNA3-Hardware ist das gegenstandslos (der Treiber ignoriert `pwm_enable=1`
+  ohnehin, siehe Messtabelle oben); bei einer Fehlerkennung auf einer Karte,
+  die PWM tatsächlich unterstützt, ist das ein thermisches Risiko.
 - **Nicht gemessen:** ob `gpu_od/` ohne `amdgpu.ppfeaturemask=0xffffffff`
   verschwindet. Die Implementierung darf deshalb **nicht** aus einem fehlenden
   `gpu_od/` auf „Overdrive fehlt" schließen und daraus eine Handlungsempfehlung
