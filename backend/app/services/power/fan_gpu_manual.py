@@ -48,7 +48,15 @@ async def enable_amd_manual(hwmon_dir: Path, drm_root: Optional[Path] = None) ->
 
     await asyncio.to_thread(level_path.write_text, "manual")
     if pwm_enable_path is not None:
-        await asyncio.to_thread(pwm_enable_path.write_text, "1")
+        try:
+            await asyncio.to_thread(pwm_enable_path.write_text, "1")
+        except OSError:
+            # Nichts halb angewendet zuruecklassen.
+            try:
+                await asyncio.to_thread(level_path.write_text, prev_level or "auto")
+            except OSError:
+                logger.error("Rollback of performance_level failed for %s", device)
+            raise
 
     logger.info("AMD GPU manual mode enabled (prev_level=%s, prev_enable=%s)", prev_level, prev_enable)
     return AmdManualState(previous_level=prev_level, previous_pwm_enable=prev_enable)

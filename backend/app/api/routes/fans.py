@@ -153,6 +153,17 @@ async def set_fan_pwm(
     Only works when fan is in manual mode.
     Requires admin role.
     """
+    backend = service._backend
+    cache = getattr(backend, "_fan_cache", None)
+    if cache and body.fan_id in cache:
+        from app.schemas.fans import PwmControl
+        if cache[body.fan_id].get("pwm_control") is PwmControl.FIRMWARE_MANAGED:
+            raise HTTPException(
+                status_code=400,
+                detail=cache[body.fan_id].get("last_write_error")
+                or "This GPU manages its fan curve in firmware; PWM has no effect.",
+            )
+
     success, rpm = await service.set_fan_pwm(body.fan_id, body.pwm_percent)
 
     if not success:
@@ -1007,6 +1018,16 @@ async def set_gpu_manual_mode(
     hwmon_dir = info["pwm_path"].parent
 
     if body.enable:
+        from app.schemas.fans import PwmControl
+
+        if info.get("pwm_control") is PwmControl.FIRMWARE_MANAGED:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "This GPU manages its fan curve in firmware (RDNA3+); manual "
+                    "PWM mode has no effect. See issue #516."
+                ),
+            )
         state = await enable_amd_manual(hwmon_dir=hwmon_dir, drm_root=None)
         _gpu_manual_state[fan_id] = state
     else:
