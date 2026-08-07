@@ -34,7 +34,7 @@ export default function FanDetails({ fan, onCurveUpdate, isReadOnly, onEditingCh
   const isFirmwareManaged = fan.pwm_control === 'firmware_managed';
   const editingLocked = isReadOnly || isFirmwareManaged;
   const editor = useFanCurveEditor(fan, {
-    isReadOnly, onCurveUpdate, onConfigUpdate, onEditingChange, onApplyProfile, profiles,
+    isReadOnly: editingLocked, onCurveUpdate, onConfigUpdate, onEditingChange, onApplyProfile, profiles,
   });
 
   return (
@@ -46,7 +46,7 @@ export default function FanDetails({ fan, onCurveUpdate, isReadOnly, onEditingCh
         </h2>
 
         <FanPresetProfileButtons
-          isReadOnly={isReadOnly}
+          isReadOnly={editingLocked}
           systemProfiles={editor.systemProfiles}
           userProfiles={editor.userProfiles}
           showMoreProfiles={editor.showMoreProfiles}
@@ -69,7 +69,7 @@ export default function FanDetails({ fan, onCurveUpdate, isReadOnly, onEditingCh
               viewMode={editor.viewMode}
               onViewModeChange={editor.setViewMode}
               hasUnsavedChanges={editor.hasUnsavedChanges}
-              isReadOnly={isReadOnly}
+              isReadOnly={editingLocked}
               onSave={editor.handleSaveCurve}
               onDiscard={editor.handleDiscardChanges}
             />
