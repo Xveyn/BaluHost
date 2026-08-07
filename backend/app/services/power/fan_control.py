@@ -538,11 +538,23 @@ class FanControlService:
 
                 target_pwm = max(config.min_pwm_percent, min(config.max_pwm_percent, target_pwm))
 
+                if fan.pwm_control is PwmControl.FIRMWARE_MANAGED:
+                    # Die Firmware besitzt die Kurve (RDNA3+). Kein Write-Versuch,
+                    # und der Sample protokolliert den tatsaechlichen Wert.
+                    target_pwm = fan.pwm_percent
+
                 if target_pwm != fan.pwm_percent:
                     await self._backend.set_pwm(fan.fan_id, target_pwm)
                 self._last_pwm_by_fan[fan.fan_id] = target_pwm
 
-                if mode == FanMode.EMERGENCY and config.mode != FanMode.EMERGENCY.value:
+                if (
+                    mode == FanMode.EMERGENCY
+                    and config.mode != FanMode.EMERGENCY.value
+                    and fan.pwm_control is not PwmControl.FIRMWARE_MANAGED
+                ):
+                    # Bei firmware-verwalteten Lueftern brachte EMERGENCY nichts
+                    # ausser einem Zustand, aus dem nur der AUTO-Button wieder
+                    # herausfuehrt. Die Benachrichtigung oben bleibt erhalten.
                     config.mode = FanMode.EMERGENCY.value
                     db.commit()
 
