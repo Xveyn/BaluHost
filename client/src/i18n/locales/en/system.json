@@ -1029,7 +1029,9 @@
         "badge": "Firmware",
         "badgeHint": "This GPU's fan curve is managed by firmware and cannot be set by BaluHost.",
         "title": "Firmware-managed fan curve",
-        "explanation": "From RDNA3 onward the fan curve lives in the GPU firmware. The amdgpu driver rejects direct PWM control — even with the amdgpu.ppfeaturemask kernel parameter set. Speed and temperature are still shown."
+        "explanation": "From RDNA3 onward the fan curve lives in the GPU firmware. The amdgpu driver rejects direct PWM control — even with the amdgpu.ppfeaturemask kernel parameter set. Speed and temperature are still shown.",
+        "resetButton": "Reset manual mode",
+        "resetSuccess": "Manual mode reset — the GPU is back under firmware control."
       }
     }
   },

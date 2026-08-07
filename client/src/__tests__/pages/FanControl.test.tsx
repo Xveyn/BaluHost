@@ -115,3 +115,25 @@ describe('FanControl Seite: Zeitplan-Sperre folgt dem ausgewaehlten Luefter, nic
     });
   });
 });
+
+describe('FanControl Seite: Profile-Panel fuer firmware-verwaltete Luefter gesperrt', () => {
+  it('zeigt den Profile Manager fuer einen normalen Luefter', async () => {
+    mockStatus([fan({ fan_id: 'case_pwm1', name: 'Case Fan', pwm_control: 'supported' })]);
+    renderWithQueryClient(<FanControl />);
+    await waitFor(() => {
+      expect(screen.getByText('system:fanControl.profiles.title')).toBeTruthy();
+    });
+  });
+
+  it('versteckt den Profile Manager fuer einen firmware-verwalteten Luefter, obwohl isReadOnly=false', async () => {
+    mockStatus([fan({ fan_id: 'gpu_pwm1', name: 'GPU Fan', pwm_control: 'firmware_managed' })]);
+    renderWithQueryClient(<FanControl />);
+    // Warten, bis die Seite fertig gerendert hat (Fan-Karte sichtbar), dann
+    // pruefen, dass der Profile Manager (der nachweislich nie an diesen
+    // Luefter schreiben kann) nicht erscheint.
+    await waitFor(() => {
+      expect(screen.getByText('GPU Fan')).toBeTruthy();
+    });
+    expect(screen.queryByText('system:fanControl.profiles.title')).toBeNull();
+  });
+});

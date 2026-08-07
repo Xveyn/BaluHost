@@ -152,7 +152,7 @@ export default function FanDetails({ fan, onCurveUpdate, isReadOnly, onEditingCh
       {fan.is_gpu_fan && fan.gpu_vendor === 'amd' && (
         <div className="mt-4">
           {isFirmwareManaged ? (
-            <FirmwareFanNotice />
+            <FirmwareFanNotice fanId={fan.fan_id} />
           ) : (
             <GpuManualModeToggle
               fanId={fan.fan_id}

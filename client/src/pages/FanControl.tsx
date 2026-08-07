@@ -271,7 +271,7 @@ export default function FanControl() {
       </div>
 
       {/* Profile Manager */}
-      {selectedFanData && !isReadOnly && (
+      {selectedFanData && !isReadOnly && !isSelectedFanFirmwareManaged && (
         <div className="mt-6">
           <ProfileManager
             profiles={profiles}
