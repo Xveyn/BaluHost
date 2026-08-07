@@ -59,6 +59,11 @@ export default function FanControl() {
     return status?.fans.find(f => f.fan_id === selectedFan);
   }, [status?.fans, selectedFan]);
 
+  // Firmware-managed fans (RDNA3 GPU) never accept a PWM write from BaluHost —
+  // a schedule for one would silently do nothing. Derived per-fan, not globally,
+  // so a normal fan's schedule stays editable while the GPU fan's is locked.
+  const isSelectedFanFirmwareManaged = selectedFanData?.pwm_control === 'firmware_managed';
+
   // Auto-select first fan if none selected
   useEffect(() => {
     if (!selectedFan && status?.fans && status.fans.length > 0) {
@@ -283,7 +288,7 @@ export default function FanControl() {
         <div className="mt-6">
           <FanSchedulePanel
             fan={selectedFanData}
-            isReadOnly={isReadOnly}
+            isReadOnly={isReadOnly || isSelectedFanFirmwareManaged}
             profiles={profiles}
           />
         </div>
