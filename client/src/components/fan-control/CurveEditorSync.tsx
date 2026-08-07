@@ -21,9 +21,12 @@ export default function CurveEditorSync({ allFans, currentFanId, syncFanId, onCh
         className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white"
       >
         <option value="">{t('system:fanControl.curveTypes.selectFan')}</option>
-        {allFans.filter((f) => f.fan_id !== currentFanId).map((f) => (
-          <option key={f.fan_id} value={f.fan_id}>{f.name}</option>
-        ))}
+        {allFans
+          .filter((f) => f.fan_id !== currentFanId)
+          .filter((f) => f.pwm_control !== 'firmware_managed')
+          .map((f) => (
+            <option key={f.fan_id} value={f.fan_id}>{f.name}</option>
+          ))}
       </select>
     </div>
   );

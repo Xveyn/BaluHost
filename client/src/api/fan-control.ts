@@ -73,6 +73,7 @@ export interface FanInfo {
   is_gpu_fan?: boolean;
   gpu_vendor?: string | null;
   last_write_error?: string | null;
+  pwm_control?: 'supported' | 'firmware_managed' | 'no_permission';
   // Curve type and tuning fields (Task 15)
   curve_type?: 'graph' | 'flat' | 'target' | 'mix' | 'sync';
   flat_pwm_percent?: number | null;

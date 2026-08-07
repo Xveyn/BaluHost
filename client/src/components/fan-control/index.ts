@@ -16,3 +16,4 @@ export { default as CurveEditorMix } from './CurveEditorMix';
 export { default as CurveEditorSync } from './CurveEditorSync';
 export { default as AdvancedFanSettings } from './AdvancedFanSettings';
 export { default as GpuManualModeToggle } from './GpuManualModeToggle';
+export { default as FirmwareFanNotice } from './FirmwareFanNotice';
