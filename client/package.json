@@ -7,7 +7,7 @@
     "dev": "vite",
     "test": "vitest",
     "test:coverage": "vitest run --coverage",
-    "build:runtime": "vite build --config vite.runtime.config.ts",
+    "build:runtime": "vite build --config vite.runtime.config.ts && node scripts/assert-runtime-bundle.mjs",
     "prebuild": "npm run build:runtime",
     "build": "tsc -b && vite build",
     "build:pi": "tsc -b && vite build --mode pi",
