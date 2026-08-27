@@ -73,6 +73,7 @@ client/
 **API schemas**: `backend/app/schemas/`
 **Tests**: `backend/tests/`
 **Fan control**: `backend/app/services/power/fan_control.py`
+**Audio control**: `backend/app/plugins/installed/audio_control/` (bundled Plugin; `pactl.py` kapselt den gesamten pactl-Kontakt)
 **Power management**: `backend/app/services/power/manager.py`
 **Monitoring orchestrator**: `backend/app/services/monitoring/orchestrator.py`
 **Service status**: `backend/app/services/service_status.py`

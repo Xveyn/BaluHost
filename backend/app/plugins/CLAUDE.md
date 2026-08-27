@@ -26,6 +26,7 @@ plugins/
 ├── sdk/                 # Plugin authoring toolkit (cli, validator, dry_install)
 ├── smart_device/        # SmartDevice plugin framework (base class, manager, poller, capabilities)
 └── installed/           # Plugin implementations
+    ├── audio_control/   # Lautstärke, Ausgabegerät und Per-App-Mixer der Desktop-Session (pactl)
     ├── optical_drive/   # CD/DVD burning, reading, ISO browsing
     ├── storage_analytics/  # Storage usage analytics
     └── tapo_smart_plug/ # TP-Link Tapo smart plug integration with mock backend
