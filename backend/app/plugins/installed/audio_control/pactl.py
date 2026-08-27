@@ -9,10 +9,13 @@ Werkzeuge erzeugt Verwechslungen, die erst im Betrieb auffallen.
 """
 from __future__ import annotations
 
+import json
 import logging
+import subprocess
 from typing import List, Optional
 
 from app.plugins.installed.audio_control.models import AudioSink, AudioStream
+from app.services.power.session_env import wayland_session_env
 
 logger = logging.getLogger(__name__)
 
@@ -170,3 +173,62 @@ def _optional_str(raw: object) -> Optional[str]:
         return None
     text = str(raw).strip()
     return text or None
+
+
+# pactl darf niemals haengen bleiben und dabei einen Worker blockieren.
+PACTL_TIMEOUT_SECONDS = 5
+PACTL_BINARY = "pactl"
+
+
+def run_pactl(args: List[str]) -> tuple[bool, str]:
+    """Fuehrt pactl mit Listen-Argumenten aus.
+
+    Args:
+        args: Argumente ohne den Programmnamen, etwa ``["set-sink-mute", "61", "1"]``.
+
+    Returns:
+        (Erfolg, Ausgabe bzw. Fehlertext). Die Ausgabe ist fuer Log und
+        Auswertung gedacht und wird nicht an Clients weitergereicht — sie
+        enthaelt Geraetenamen und Pfade.
+    """
+    try:
+        completed = subprocess.run(
+            [PACTL_BINARY, *args],
+            capture_output=True,
+            text=True,
+            timeout=PACTL_TIMEOUT_SECONDS,
+            env=wayland_session_env(),
+        )
+    except FileNotFoundError:
+        logger.warning("pactl ist nicht installiert")
+        return False, "pactl nicht gefunden"
+    except subprocess.TimeoutExpired:
+        logger.warning("pactl-Zeitueberschreitung: %s", args)
+        return False, "Zeitueberschreitung"
+    except OSError as exc:
+        logger.warning("pactl-Aufruf fehlgeschlagen: %s", exc)
+        return False, "Aufruf fehlgeschlagen"
+
+    if completed.returncode != 0:
+        logger.warning("pactl %s endete mit %s: %s", args, completed.returncode, completed.stderr.strip())
+        return False, completed.stderr.strip() or "pactl-Fehler"
+    return True, completed.stdout.strip()
+
+
+def run_pactl_json(args: List[str]) -> Optional[object]:
+    """Fuehrt pactl mit ``-f json`` aus und gibt die geparste Struktur zurueck.
+
+    Args:
+        args: Argumente ohne Programmnamen und ohne ``-f json``.
+
+    Returns:
+        Die geparste JSON-Struktur, oder None bei Fehler oder ungueltigem JSON.
+    """
+    ok, output = run_pactl(["-f", "json", *args])
+    if not ok:
+        return None
+    try:
+        return json.loads(output)
+    except json.JSONDecodeError:
+        logger.warning("pactl lieferte ungueltiges JSON fuer %s", args)
+        return None
