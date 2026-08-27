@@ -1,0 +1,14 @@
+{
+  "title": "Audio",
+  "output": "Output device",
+  "sinkVolume": "Volume",
+  "streamVolume": "Application volume",
+  "mute": "Mute",
+  "unmute": "Unmute",
+  "apps": "Applications",
+  "noStreams": "Nothing is playing right now.",
+  "unavailable": "Audio is unavailable. Is the desktop session running?",
+  "paused": "paused",
+  "loadError": "Could not load the audio state",
+  "saveError": "Could not apply the change"
+}

@@ -13,6 +13,9 @@ vi.mock('../../../components/NotificationCenter', () => ({ default: () => <div d
 vi.mock('../../../components/PowerMenu', () => ({ default: () => <div data-testid="power-menu" /> }));
 vi.mock('../../../components/UserMenu', () => ({ default: () => <div data-testid="user-menu" /> }));
 vi.mock('../../../components/topbar/TopbarStatusStrip', () => ({ TopbarStatusStrip: () => <div data-testid="topbar-status-strip" /> }));
+vi.mock('../../../contexts/PluginContext', () => ({
+  usePluginEnabled: () => false,
+}));
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (k: string) => k }) }));
 
 const props = {

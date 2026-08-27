@@ -20,6 +20,7 @@ vi.mock('../contexts/AuthContext', () => ({
 }));
 vi.mock('../contexts/PluginContext', () => ({
   usePlugins: () => ({ pluginNavItems: [] }),
+  usePluginEnabled: () => false,
   PluginProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 vi.mock('../contexts/VersionContext', () => ({

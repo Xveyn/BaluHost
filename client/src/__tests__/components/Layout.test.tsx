@@ -18,7 +18,10 @@ const getStatusBarStateMock = vi.hoisted(() =>
 
 // ---- Kontext-Mocks ----
 vi.mock('../../contexts/AuthContext', () => ({ useAuth: () => authState }));
-vi.mock('../../contexts/PluginContext', () => ({ usePlugins: () => pluginState }));
+vi.mock('../../contexts/PluginContext', () => ({
+  usePlugins: () => pluginState,
+  usePluginEnabled: () => false,
+}));
 vi.mock('../../contexts/VersionContext', () => ({ useFormattedVersion: () => 'v1.38.0' }));
 vi.mock('../../lib/features', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../lib/features')>()),

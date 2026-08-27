@@ -1,0 +1,14 @@
+{
+  "title": "Audio",
+  "output": "Ausgabegerät",
+  "sinkVolume": "Lautstärke",
+  "streamVolume": "Lautstärke der Anwendung",
+  "mute": "Stummschalten",
+  "unmute": "Ton einschalten",
+  "apps": "Anwendungen",
+  "noStreams": "Gerade spielt nichts.",
+  "unavailable": "Audio ist nicht erreichbar. Läuft die Desktop-Sitzung?",
+  "paused": "pausiert",
+  "loadError": "Audiozustand konnte nicht geladen werden",
+  "saveError": "Änderung konnte nicht übernommen werden"
+}
