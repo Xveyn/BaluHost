@@ -187,9 +187,11 @@ def run_pactl(args: List[str]) -> tuple[bool, str]:
         args: Argumente ohne den Programmnamen, etwa ``["set-sink-mute", "61", "1"]``.
 
     Returns:
-        (Erfolg, Ausgabe bzw. Fehlertext). Die Ausgabe ist fuer Log und
-        Auswertung gedacht und wird nicht an Clients weitergereicht — sie
-        enthaelt Geraetenamen und Pfade.
+        (Erfolg, Ausgabe bzw. Fehlertext). Die Ausgabe ist die rohe
+        pactl-Ausgabe (stdout bei Erfolg, stderr-Auszug bei Fehler) und
+        enthaelt Geraetenamen und Pfade. Sie ist fuer Log und
+        Weiterverarbeitung gedacht — Aufrufer duerfen sie nicht ungeprueft in
+        eine Client-Antwort uebernehmen.
     """
     try:
         completed = subprocess.run(

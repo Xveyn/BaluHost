@@ -7,7 +7,6 @@ der realen Session spricht.
 from __future__ import annotations
 
 import asyncio
-import logging
 from typing import List, Protocol, Tuple
 
 from app.plugins.installed.audio_control.models import AudioSink, AudioState, AudioStream
@@ -17,8 +16,6 @@ from app.plugins.installed.audio_control.pactl import (
     run_pactl,
     run_pactl_json,
 )
-
-logger = logging.getLogger(__name__)
 
 
 class AudioBackend(Protocol):

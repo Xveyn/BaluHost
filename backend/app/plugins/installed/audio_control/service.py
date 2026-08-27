@@ -41,22 +41,27 @@ class AudioService:
 
     async def set_sink_volume(self, sink_id: int, percent: int) -> Tuple[bool, str]:
         """Setzt den Pegel eines Ausgabegeraets."""
+        logger.info("Sink-Pegel angefordert: sink=%s percent=%s", sink_id, percent)
         return await self._backend.set_sink_volume(sink_id, percent)
 
     async def set_sink_mute(self, sink_id: int, muted: bool) -> Tuple[bool, str]:
         """Schaltet ein Ausgabegeraet stumm oder wieder laut."""
+        logger.info("Sink-Stummschaltung angefordert: sink=%s muted=%s", sink_id, muted)
         return await self._backend.set_sink_mute(sink_id, muted)
 
     async def set_default_sink(self, name: str) -> Tuple[bool, str]:
         """Macht ein Geraet zum Standardausgang."""
+        logger.info("Standardgeraet-Wechsel angefordert: name=%s", name)
         return await self._backend.set_default_sink(name)
 
     async def set_stream_volume(self, stream_id: int, percent: int) -> Tuple[bool, str]:
         """Setzt den Pegel eines einzelnen Streams."""
+        logger.info("Stream-Pegel angefordert: stream=%s percent=%s", stream_id, percent)
         return await self._backend.set_stream_volume(stream_id, percent)
 
     async def set_stream_mute(self, stream_id: int, muted: bool) -> Tuple[bool, str]:
         """Schaltet einen einzelnen Stream stumm oder wieder laut."""
+        logger.info("Stream-Stummschaltung angefordert: stream=%s muted=%s", stream_id, muted)
         return await self._backend.set_stream_mute(stream_id, muted)
 
 
