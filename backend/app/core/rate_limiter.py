@@ -181,6 +181,11 @@ RATE_LIMITS = {
     # Presence heartbeat — 1 request / 45s per client, with headroom for
     # visibility-change immediate beats and multiple tabs per user
     "presence_heartbeat": "10/minute",
+
+    # Audiosteuerung — Popover-Abfrage alle 2s plus entprellte Schieberegler.
+    # admin_operations (30/Minute) waere hier falsch: die Abfrage allein
+    # verbraucht schon 30 Anfragen pro Minute.
+    "audio_control": "240/minute",
 }
 
 
