@@ -25,6 +25,7 @@ from app.plugins.installed.audio_control.models import (
     VolumeRequest,
 )
 from app.plugins.installed.audio_control import service as service_module
+from app.schemas.user import UserPublic
 from app.services.audit.logger_db import get_audit_logger_db
 
 logger = logging.getLogger(__name__)
@@ -34,7 +35,7 @@ router = APIRouter()
 _LIMIT = get_limit("audio_control")
 
 
-def _audit(action: str, user, success: bool, detail: str) -> None:
+def _audit(action: str, user: UserPublic, success: bool, detail: str) -> None:
     """Schreibt einen Audit-Eintrag fuer Zustandsspruenge.
 
     Bewusst nur fuer Geraetewechsel und Stummschaltung. Pegelaenderungen

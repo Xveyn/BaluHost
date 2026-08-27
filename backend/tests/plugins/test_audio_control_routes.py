@@ -8,6 +8,7 @@ from app.plugins.installed.audio_control import AudioControlPlugin
 from app.plugins.installed.audio_control.backend import DevAudioBackend
 from app.plugins.installed.audio_control.service import AudioService
 from app.plugins.installed.audio_control import service as service_module
+import app.plugins.installed.audio_control as plugin_module
 
 
 class _User:
@@ -191,6 +192,80 @@ class TestPermissionIsRequired:
     def test_every_route_depends_on_the_audio_permission(self):
         """Auch die lesende Route — media.name verraet den laufenden Titel."""
         router = AudioControlPlugin().get_router()
+        # Ohne diese Zahl liefe die Schleife unten grün, wenn die Routenliste
+        # (versehentlich) leer waere — die falsche Ausfallrichtung fuer einen
+        # Test, der eine Sicherheitsgrenze absichert.
+        assert len(router.routes) == 6
         for route in router.routes:
             dependencies = [d.call for d in route.dependant.dependencies]
             assert require_power_control_audio in dependencies, route.path
+
+
+class TestAuditLogging:
+    """Nur Geraetewechsel und Stummschaltung landen im Audit-Log.
+
+    Pegeländerungen duerfen keinen Audit-Eintrag erzeugen — ein Schieberegler
+    wuerde das Log sonst mit Dutzenden Eintraegen zumuellen und die
+    interessanten Vorgaenge darin begraben. Ersetzt ``get_audit_logger_db`` im
+    Namensraum des Plugin-Moduls durch einen mitschreibenden Stub, statt nur
+    auf den HTTP-Statuscode zu schauen — sonst waere eine spaeter versehentlich
+    in eine Pegel-Route eingefuegte ``_audit(...)``-Zeile lautlos.
+    """
+
+    @pytest.fixture
+    def audit_client(self, monkeypatch):
+        events: list[dict] = []
+
+        class _RecordingAuditLogger:
+            def log_event(self, **kwargs):
+                events.append(kwargs)
+
+            def log_security_event(self, **kwargs):
+                # In diesen Tests immer admin — wird nicht erwartet, aber die
+                # Stub-Methode muss existieren, falls sie doch aufgerufen wird.
+                pass
+
+        monkeypatch.setattr(plugin_module, "get_audit_logger_db", lambda: _RecordingAuditLogger())
+        monkeypatch.setattr(
+            service_module, "get_audio_service", lambda: AudioService(backend=DevAudioBackend())
+        )
+        app = FastAPI()
+        app.include_router(AudioControlPlugin().get_router(), prefix="/api/plugins/audio_control")
+        app.dependency_overrides[require_power_control_audio] = lambda: _User()
+        return TestClient(app), events
+
+    def test_sink_volume_writes_no_audit_entry(self, audit_client):
+        client, events = audit_client
+        resp = client.put("/api/plugins/audio_control/sinks/61/volume", json={"percent": 40})
+        assert resp.status_code == 200
+        assert events == []
+
+    def test_stream_volume_writes_no_audit_entry(self, audit_client):
+        client, events = audit_client
+        resp = client.put("/api/plugins/audio_control/streams/789/volume", json={"percent": 20})
+        assert resp.status_code == 200
+        assert events == []
+
+    def test_sink_mute_writes_exactly_one_audit_entry(self, audit_client):
+        client, events = audit_client
+        resp = client.put("/api/plugins/audio_control/sinks/61/mute", json={"muted": True})
+        assert resp.status_code == 200
+        assert len(events) == 1
+        assert events[0]["action"] == "audio_sink_mute"
+
+    def test_default_sink_writes_exactly_one_audit_entry(self, audit_client):
+        client, events = audit_client
+        resp = client.put(
+            "/api/plugins/audio_control/default-sink",
+            json={"name": "alsa_output.dev-gpu.hdmi-stereo"},
+        )
+        assert resp.status_code == 200
+        assert len(events) == 1
+        assert events[0]["action"] == "audio_default_sink"
+
+    def test_stream_mute_writes_exactly_one_audit_entry(self, audit_client):
+        client, events = audit_client
+        resp = client.put("/api/plugins/audio_control/streams/789/mute", json={"muted": True})
+        assert resp.status_code == 200
+        assert len(events) == 1
+        assert events[0]["action"] == "audio_stream_mute"
