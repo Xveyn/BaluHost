@@ -556,15 +556,23 @@ def parse_percent(raw: object) -> int:
         lassen.
     """
     if isinstance(raw, bool):
+        logger.debug("Prozentwert war ein Wahrheitswert: %r", raw)
         return 0
     if isinstance(raw, (int, float)):
-        return max(0, int(raw))
+        try:
+            return max(0, int(raw))
+        except (ValueError, OverflowError):
+            # int(float("inf")) wirft OverflowError, keinen ValueError.
+            logger.debug("Prozentwert nicht in eine Ganzzahl wandelbar: %r", raw)
+            return 0
     if isinstance(raw, str):
         try:
             return max(0, int(float(raw.strip().rstrip("%"))))
-        except ValueError:
+        except (ValueError, OverflowError):
+            # "inf%" laesst float() passieren und bringt erst int() zu Fall.
             logger.debug("Prozentwert nicht auswertbar: %r", raw)
             return 0
+    logger.debug("Prozentwert von unerwartetem Typ %s: %r", type(raw).__name__, raw)
     return 0
 
 
@@ -581,6 +589,7 @@ def volume_percent(volume: object) -> int:
         Der hoechste Kanalpegel in Prozent, 0 wenn nichts auswertbar ist.
     """
     if not isinstance(volume, dict) or not volume:
+        logger.debug("Lautstaerke fehlt oder hat unerwartete Form: %r", volume)
         return 0
     values = [
         parse_percent(channel.get("value_percent"))
@@ -609,6 +618,7 @@ def parse_sinks(payload: object, default_name: Optional[str]) -> List[AudioSink]
     sinks: List[AudioSink] = []
     for entry in payload:
         if not isinstance(entry, dict):
+            logger.debug("Sink-Eintrag ist kein Objekt, uebersprungen: %r", entry)
             continue
         try:
             name = str(entry["name"])
@@ -643,9 +653,11 @@ def parse_streams(payload: object) -> List[AudioStream]:
     streams: List[AudioStream] = []
     for entry in payload:
         if not isinstance(entry, dict):
+            logger.debug("Stream-Eintrag ist kein Objekt, uebersprungen: %r", entry)
             continue
         props = entry.get("properties")
         if not isinstance(props, dict):
+            logger.debug("Stream ohne auswertbare properties, uebersprungen")
             continue
         if props.get("media.class") != _OUTPUT_MEDIA_CLASS:
             continue
@@ -1264,6 +1276,45 @@ class TestWriteRoutes:
         assert resp.status_code == 200
 
 
+class TestBackendOutputNeverReachesTheClient:
+    """pactl-Ausgaben enthalten Geraetenamen und Pfade — sie bleiben im Log."""
+
+    def test_a_successful_write_returns_no_backend_message(self, client):
+        resp = client.put("/api/plugins/audio_control/sinks/61/volume", json={"percent": 40})
+        body = resp.json()
+        assert body == {"success": True}
+        assert "message" not in body
+
+    def test_a_successful_default_sink_switch_returns_no_backend_message(self, client):
+        resp = client.put(
+            "/api/plugins/audio_control/default-sink",
+            json={"name": "alsa_output.dev-gpu.hdmi-stereo"},
+        )
+        assert resp.json() == {"success": True}
+
+
+class TestDefaultSinkNameIsValidatedBeforeTheCall:
+    """Die einzige Stelle, an der eine Client-Zeichenkette ein pactl-Argument wird."""
+
+    def test_an_unknown_name_never_reaches_the_backend(self, monkeypatch, client):
+        from app.plugins.installed.audio_control.backend import DevAudioBackend
+
+        called: list[str] = []
+
+        async def _spy(self, name: str):
+            called.append(name)
+            return True, "sollte nie passieren"
+
+        monkeypatch.setattr(DevAudioBackend, "set_default_sink", _spy)
+
+        resp = client.put(
+            "/api/plugins/audio_control/default-sink", json={"name": "gibt.es.nicht"}
+        )
+
+        assert resp.status_code == 404
+        assert called == [], "unbekannter Name darf das Backend nie erreichen"
+
+
 class TestValidation:
     def test_volume_above_the_cap_is_rejected(self, client):
         resp = client.put("/api/plugins/audio_control/sinks/61/volume", json={"percent": 1000})
@@ -1440,7 +1491,9 @@ async def _apply(ok: bool, message: str, kind: str, target_id: int) -> dict:
     auf dem Fehlerpfad an und ist dort billig.
     """
     if ok:
-        return {"success": True, "message": message}
+        # `message` stammt roh aus pactl (stdout/stderr) und kann Geraetenamen
+        # und Pfade enthalten. Es wird geloggt, aber nie ausgeliefert.
+        return {"success": True}
 
     state = await service_module.get_audio_service().get_state()
     if not state.available:
@@ -1459,7 +1512,7 @@ async def _apply(ok: bool, message: str, kind: str, target_id: int) -> dict:
 async def _apply_default_sink(ok: bool, message: str, name: str) -> dict:
     """Wie ``_apply``, aber fuer das Standardgeraet (Name statt Index)."""
     if ok:
-        return {"success": True, "message": message}
+        return {"success": True}
 
     state = await service_module.get_audio_service().get_state()
     if not state.available:
@@ -1525,8 +1578,24 @@ async def set_default_sink(
     response: Response,
     current_user=Depends(require_power_control_audio),
 ) -> dict:
-    """Macht ein Geraet zum Standardausgang."""
-    ok, message = await service_module.get_audio_service().set_default_sink(body.name)
+    """Macht ein Geraet zum Standardausgang.
+
+    Der Name wird **vor** dem Aufruf gegen die gelesene Geraeteliste geprueft.
+    Listen-Argumente verhindern zwar eine Shell-Injektion, aber dies ist die
+    einzige Stelle, an der eine Client-Zeichenkette ueberhaupt in ein
+    pactl-Argument gelangt — und eine Zusicherung, die nur in der Prosa steht
+    und nirgends im Code, ist keine.
+    """
+    service = service_module.get_audio_service()
+    state = await service.get_state()
+    if not state.available:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail="Audio nicht erreichbar"
+        )
+    if not any(sink.name == body.name for sink in state.sinks):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Nicht gefunden")
+
+    ok, message = await service.set_default_sink(body.name)
     _audit("audio_default_sink", current_user, ok, message)
     return await _apply_default_sink(ok, message, body.name)
 
