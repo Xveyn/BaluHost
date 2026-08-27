@@ -17,7 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
 from app.api.deps import require_power_control_audio
 from app.core.rate_limiter import get_limit, user_limiter
-from app.plugins.base import PluginBase, PluginMetadata
+from app.plugins.base import PluginBase, PluginMetadata, PluginUIManifest
 from app.plugins.installed.audio_control.models import (
     AudioState,
     DefaultSinkRequest,
@@ -238,3 +238,21 @@ class AudioControlPlugin(PluginBase):
 
     def get_router(self) -> APIRouter:
         return router
+
+    def get_ui_manifest(self) -> PluginUIManifest:
+        """Meldet das Plugin ans Frontend, ohne einen Nav-Eintrag beizusteuern.
+
+        **Ohne diese Ueberschreibung ist das Feature unsichtbar.** Die
+        Standardimplementierung von ``PluginBase`` liefert ``None``, und
+        ``PluginManager.get_ui_manifest()`` nimmt nur Plugins mit einem aktiven
+        Manifest in ``/api/plugins/ui/manifest`` auf. Genau daraus speist der
+        ``PluginContext`` seine Liste, die ``usePluginEnabled`` abfragt — ein
+        Plugin ohne Manifest gilt dort dauerhaft als abgeschaltet, und die
+        Topbar rendert das Lautsprecher-Symbol nie.
+
+        ``nav_items`` bleibt leer: die Bedienung sitzt in der Topbar, nicht auf
+        einer Unterseite. Ein leeres ``nav_items`` erzeugt keine Route, also
+        wird auch kein ``bundle.js`` nachgeladen (das passiert nur in
+        ``PluginPage``).
+        """
+        return PluginUIManifest(enabled=True)
