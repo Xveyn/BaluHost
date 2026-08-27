@@ -66,7 +66,14 @@ export function AudioMenu() {
   useEffect(() => {
     if (!isOpen) return;
     void refresh();
-    const id = setInterval(() => void refresh(), POLL_MS);
+    const id = setInterval(() => {
+      // Solange eine Reglerbewegung noch aussteht, NICHT abfragen: der Abruf
+      // brächte den alten Serverwert zurück und liesse den Regler mitten im
+      // Ziehen zurückspringen. Sobald der entprellte Schreibvorgang durch ist,
+      // ruft er selbst refresh() auf.
+      if (timers.current.size > 0) return;
+      void refresh();
+    }, POLL_MS);
     return () => clearInterval(id);
   }, [isOpen, refresh]);
 
@@ -204,7 +211,11 @@ export function AudioMenu() {
                   >
                     <button
                       type="button"
-                      aria-label={stream.muted ? t('unmute') : t('mute')}
+                      aria-label={
+                        stream.muted
+                          ? t('unmuteApp', { app: stream.application })
+                          : t('muteApp', { app: stream.application })
+                      }
                       onClick={() => void setStreamMute(stream.id, !stream.muted).then(refresh)}
                       className="text-slate-400 hover:text-sky-400"
                     >
@@ -215,10 +226,15 @@ export function AudioMenu() {
                       )}
                     </button>
                     <div className="flex-1">
-                      <p className="truncate text-xs text-slate-300">{stream.application}</p>
+                      <p className="truncate text-xs text-slate-300">
+                        {stream.application}
+                        {stream.corked && (
+                          <span className="ml-1 text-slate-500">({t('paused')})</span>
+                        )}
+                      </p>
                       <input
                         type="range"
-                        aria-label={t('streamVolume')}
+                        aria-label={t('streamVolume', { app: stream.application })}
                         min={0}
                         max={150}
                         value={stream.volume_percent}
