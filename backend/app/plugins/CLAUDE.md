@@ -25,12 +25,17 @@ plugins/
 ├── sandbox/             # Subprocess-isolation layer (protocol, channel, transport, worker, supervisor, capabilities, host_capabilities, proxy, spawn, loader)
 ├── sdk/                 # Plugin authoring toolkit (cli, validator, dry_install)
 ├── smart_device/        # SmartDevice plugin framework (base class, manager, poller, capabilities)
-└── installed/           # Plugin implementations
-    ├── audio_control/   # Lautstärke, Ausgabegerät und Per-App-Mixer der Desktop-Session (pactl)
-    ├── optical_drive/   # CD/DVD burning, reading, ISO browsing
-    ├── storage_analytics/  # Storage usage analytics
-    └── tapo_smart_plug/ # TP-Link Tapo smart plug integration with mock backend
+└── installed/           # Bundled plugin implementations (one CLAUDE.md each)
+    ├── audio_control/      # Volume, output device and per-app mixer of the desktop session (pactl)
+    ├── optical_drive/      # CD/DVD burning, reading, ISO browsing (own router)
+    ├── steam_gaming/       # Status pill, session ledger, Gaming-Mode menu action
+    ├── storage_analytics/  # DEMO ONLY — every number is hard-coded, see its CLAUDE.md
+    └── tapo_smart_plug/    # TP-Link Tapo smart plugs via the SmartDevice framework
 ```
+
+Each bundled plugin has its own `CLAUDE.md` with its layout, invariants and
+pitfalls. Read that one before changing a plugin; this file covers the framework
+they plug into.
 
 ## Trust Tiers
 
