@@ -37,15 +37,23 @@ def parse_percent(raw: object) -> int:
         lassen.
     """
     if isinstance(raw, bool):
+        logger.debug("Prozentwert war ein Wahrheitswert: %r", raw)
         return 0
     if isinstance(raw, (int, float)):
-        return max(0, int(raw))
+        try:
+            return max(0, int(raw))
+        except (ValueError, OverflowError):
+            # int(float("inf")) wirft OverflowError, keinen ValueError.
+            logger.debug("Prozentwert nicht in eine Ganzzahl wandelbar: %r", raw)
+            return 0
     if isinstance(raw, str):
         try:
             return max(0, int(float(raw.strip().rstrip("%"))))
-        except ValueError:
+        except (ValueError, OverflowError):
+            # "inf%" laesst float() passieren und bringt erst int() zu Fall.
             logger.debug("Prozentwert nicht auswertbar: %r", raw)
             return 0
+    logger.debug("Prozentwert von unerwartetem Typ %s: %r", type(raw).__name__, raw)
     return 0
 
 
@@ -62,6 +70,7 @@ def volume_percent(volume: object) -> int:
         Der hoechste Kanalpegel in Prozent, 0 wenn nichts auswertbar ist.
     """
     if not isinstance(volume, dict) or not volume:
+        logger.debug("Lautstaerke fehlt oder hat unerwartete Form: %r", volume)
         return 0
     values = [
         parse_percent(channel.get("value_percent"))
@@ -90,6 +99,7 @@ def parse_sinks(payload: object, default_name: Optional[str]) -> List[AudioSink]
     sinks: List[AudioSink] = []
     for entry in payload:
         if not isinstance(entry, dict):
+            logger.debug("Sink-Eintrag ist kein Objekt, uebersprungen: %r", entry)
             continue
         try:
             name = str(entry["name"])
@@ -124,9 +134,11 @@ def parse_streams(payload: object) -> List[AudioStream]:
     streams: List[AudioStream] = []
     for entry in payload:
         if not isinstance(entry, dict):
+            logger.debug("Stream-Eintrag ist kein Objekt, uebersprungen: %r", entry)
             continue
         props = entry.get("properties")
         if not isinstance(props, dict):
+            logger.debug("Stream ohne auswertbare properties, uebersprungen")
             continue
         if props.get("media.class") != _OUTPUT_MEDIA_CLASS:
             continue

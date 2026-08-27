@@ -1,8 +1,6 @@
 """Parser-Tests gegen die an der Produktionsmaschine gemessene pactl-Ausgabe."""
 import json
 
-import pytest
-
 from app.plugins.installed.audio_control.pactl import (
     parse_percent,
     parse_sinks,
@@ -82,6 +80,19 @@ class TestParsePercent:
     def test_negative_is_clamped_to_zero(self):
         assert parse_percent("-5%") == 0
 
+    def test_infinite_string_becomes_zero(self):
+        """float() akzeptiert 'inf%', erst int() faellt mit OverflowError um."""
+        assert parse_percent("inf%") == 0
+        assert parse_percent("-inf%") == 0
+
+    def test_infinite_float_becomes_zero(self):
+        """int(float('inf')) wirft OverflowError, keinen ValueError."""
+        assert parse_percent(float("inf")) == 0
+
+    def test_nan_float_becomes_zero(self):
+        """int(float('nan')) wirft ValueError, aber ueber den Zahlen-Zweig."""
+        assert parse_percent(float("nan")) == 0
+
 
 class TestVolumePercent:
     def test_takes_the_maximum_across_channels(self):
@@ -133,6 +144,14 @@ class TestParseStreams:
             [REAL_SINK_INPUT]
         )
 
+    def test_an_infinite_channel_value_does_not_crash_the_whole_list(self):
+        """Ein kaputter Kanalwert darf nicht die ganze Streamliste mitreissen."""
+        broken = json.loads(json.dumps(REAL_SINK_INPUT))
+        broken["volume"]["front-left"]["value_percent"] = "inf%"
+        streams = parse_streams([broken])
+        assert len(streams) == 1
+        assert streams[0].volume_percent == 55
+
 
 class TestParseSinks:
     def test_parses_a_sink_and_marks_the_default(self):
@@ -164,3 +183,14 @@ class TestParseSinks:
     def test_a_sink_without_description_falls_back_to_its_name(self):
         bare = {k: v for k, v in REAL_SINK.items() if k != "description"}
         assert parse_sinks([bare], None)[0].description == bare["name"]
+
+    def test_empty_payload_is_an_empty_list(self):
+        assert parse_sinks([], None) == []
+
+    def test_an_infinite_channel_value_does_not_crash_the_whole_list(self):
+        """Ein kaputter Kanalwert darf nicht die ganze Geraeteliste mitreissen."""
+        broken = json.loads(json.dumps(REAL_SINK))
+        broken["volume"]["front-left"]["value_percent"] = "inf%"
+        sinks = parse_sinks([broken], None)
+        assert len(sinks) == 1
+        assert sinks[0].volume_percent == 95
