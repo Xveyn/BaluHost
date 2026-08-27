@@ -2,7 +2,9 @@ import NotificationCenter from '../NotificationCenter';
 import PowerMenu from '../PowerMenu';
 import UserMenu from '../UserMenu';
 import { TopbarStatusStrip } from '../topbar/TopbarStatusStrip';
+import { AudioMenu } from '../topbar/AudioMenu';
 import { isPi } from '../../lib/features';
+import { usePluginEnabled } from '../../contexts/PluginContext';
 import { SidebarBrand } from './SidebarBrand';
 
 interface LayoutHeaderProps {
@@ -15,6 +17,7 @@ interface LayoutHeaderProps {
 }
 
 export function LayoutHeader({ isImpersonating, isAdmin, onOpenMobileMenu, onShutdown, onRestart, onLogout }: LayoutHeaderProps) {
+  const audioEnabled = usePluginEnabled('audio_control');
   return (
     <header className={`fixed right-0 left-0 lg:left-72 z-30 border-b border-slate-800/50 bg-slate-900/20 px-4 py-4 shadow-[0_8px_32px_rgba(0,0,0,0.3)] backdrop-blur-2xl sm:px-6 lg:px-10 ${isImpersonating ? 'top-10' : 'top-0'}`}>
       <div className="flex items-center justify-between">
@@ -38,6 +41,7 @@ export function LayoutHeader({ isImpersonating, isAdmin, onOpenMobileMenu, onShu
 
         {/* Header Right */}
         <div className="flex items-center gap-3">
+          {!isPi && audioEnabled && <AudioMenu />}
           {!isPi && <NotificationCenter />}
           <UserMenu />
           {isPi ? (

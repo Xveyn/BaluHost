@@ -107,6 +107,7 @@ plugins/
 │   ├── poller.py            # SmartDevicePoller (runs in monitoring-worker process)
 │   └── schemas.py           # Pydantic request/response schemas
 └── installed/               # Bundled plugin implementations (one CLAUDE.md each)
+    ├── audio_control/       # Volume, output device and per-app mixer via pactl (own router)
     ├── optical_drive/       # CD/DVD burning, reading, ISO browsing (own router)
     ├── steam_gaming/        # Status pill, session ledger, Gaming-Mode menu action
     ├── storage_analytics/   # DEMO ONLY — every number is hard-coded (#524)
@@ -492,6 +493,7 @@ below is the map, not the documentation.
 
 | Plugin | Category | Description |
 |---|---|---|
+| `audio_control` | system | Master volume, output device and per-application mixer of the desktop session (`pactl`) |
 | `optical_drive` | storage | CD/DVD/Blu-ray: read, rip (ISO/WAV), burn, blank |
 | `steam_gaming` | general | Status pill for a running Steam game, session ledger in the DB, Gaming-Mode power-menu action |
 | `storage_analytics` | storage | **Demo only** — serves hard-coded numbers, scans nothing (#524) |
@@ -499,6 +501,7 @@ below is the map, not the documentation.
 
 Patterns covered:
 
+- **`audio_control`** — own API routes behind a delegatable power permission, own rate-limit category, a subprocess boundary kept in a single module, and a **core** topbar component instead of a UI bundle. Its `get_ui_manifest()` returns `enabled=True` with empty `nav_items` — that is what makes a page-less plugin visible to the frontend at all
 - **`optical_drive`** — own API routes, UI manifest, config schema, async job management
 - **`steam_gaming`** — status pill, power-menu action, notification events, background poller with its own DB table; the reference for the contribution hooks listed below. Ships **no** router and no `plugin.json`, so enable/disable takes effect without a restart
 - **`storage_analytics`** — background tasks, Pluggy hook implementations (`@hookimpl`), periodic scans. Useful as an API example only; do not treat its output as data

@@ -260,3 +260,66 @@ class TestDelegatedDesktopAccess:
             headers={"Authorization": f"Bearer {admin_token}"},
         )
         assert resp.status_code == 200
+
+
+class TestAudioControlPermission:
+    """Das Recht can_control_audio verhält sich wie can_toggle_desktop."""
+
+    def test_get_permissions_includes_audio_field(
+        self, client: TestClient, admin_token: str, regular_user: User,
+    ):
+        resp = client.get(
+            f"/api/users/{regular_user.id}/power-permissions",
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["can_control_audio"] is False
+
+    def test_put_grants_audio_permission(
+        self, client: TestClient, admin_token: str, regular_user: User,
+    ):
+        resp = client.put(
+            f"/api/users/{regular_user.id}/power-permissions",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            json={"can_control_audio": True},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["can_control_audio"] is True
+        # Reset the shared regular_user row so this grant doesn't leak into
+        # order-independent runs of other tests in this file.
+        client.put(
+            f"/api/users/{regular_user.id}/power-permissions",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            json={"can_control_audio": False},
+        )
+
+    def test_audio_permission_does_not_imply_anything(
+        self, client: TestClient, admin_token: str, regular_user: User,
+    ):
+        """Es steht unabhängig neben den Sleep-/Suspend-Ketten."""
+        resp = client.put(
+            f"/api/users/{regular_user.id}/power-permissions",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            json={"can_control_audio": True},
+        )
+        body = resp.json()
+        assert body["can_control_audio"] is True
+        assert body["can_soft_sleep"] is False
+        assert body["can_wake"] is False
+        assert body["can_suspend"] is False
+        assert body["can_wol"] is False
+        # Reset the shared regular_user row so this grant doesn't leak into
+        # order-independent runs of other tests in this file.
+        client.put(
+            f"/api/users/{regular_user.id}/power-permissions",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            json={"can_control_audio": False},
+        )
+
+    def test_my_permissions_reports_audio_for_admin(self, client: TestClient, admin_token: str):
+        resp = client.get(
+            "/api/system/sleep/my-permissions",
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["can_control_audio"] is True

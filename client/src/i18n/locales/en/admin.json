@@ -94,7 +94,8 @@
         "unlockSession": {
           "label": "Unlock session",
           "desc": "Also unlock the desktop session when turning the displays on (home network or VPN only)"
-        }
+        },
+        "controlAudio": { "label": "Audio", "desc": "Control volume, output device and the per-app mixer" }
       }
     }
   },

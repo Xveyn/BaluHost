@@ -20,6 +20,7 @@ _ACTION_FIELD_MAP = {
     "wol": "can_wol",
     "toggle_desktop": "can_toggle_desktop",
     "unlock_session": "can_unlock_session",
+    "control_audio": "can_control_audio",
 }
 
 
@@ -47,6 +48,7 @@ def get_permissions(db: Session, user_id: int) -> UserPowerPermissionsResponse:
         can_wol=perm.can_wol,
         can_toggle_desktop=perm.can_toggle_desktop,
         can_unlock_session=perm.can_unlock_session,
+        can_control_audio=perm.can_control_audio,
         granted_by=perm.granted_by,
         granted_by_username=granted_by_username,
         granted_at=perm.granted_at,
@@ -119,6 +121,7 @@ def update_permissions(
         "can_wol": perm.can_wol,
         "can_toggle_desktop": perm.can_toggle_desktop,
         "can_unlock_session": perm.can_unlock_session,
+        "can_control_audio": perm.can_control_audio,
     }
 
     # Track which fields were explicitly set so implications can be applied
@@ -151,6 +154,8 @@ def update_permissions(
         perm.can_toggle_desktop = update.can_toggle_desktop
     if update.can_unlock_session is not None:
         perm.can_unlock_session = update.can_unlock_session
+    if update.can_control_audio is not None:
+        perm.can_control_audio = update.can_control_audio
 
     # Apply implication rules
     perm.can_soft_sleep, perm.can_wake, perm.can_suspend, perm.can_wol = (
@@ -173,6 +178,7 @@ def update_permissions(
         "can_wol": perm.can_wol,
         "can_toggle_desktop": perm.can_toggle_desktop,
         "can_unlock_session": perm.can_unlock_session,
+        "can_control_audio": perm.can_control_audio,
     }
 
     # Audit log
@@ -199,7 +205,7 @@ def check_permission(db: Session, user_id: int, action: str) -> bool:
         db: Database session
         user_id: User ID to check
         action: One of 'soft_sleep', 'wake', 'suspend', 'wol', 'toggle_desktop',
-            'unlock_session'
+            'unlock_session', 'control_audio'
 
     Returns:
         True if the user has the permission, False otherwise.

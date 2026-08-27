@@ -34,6 +34,7 @@ Translations are split by feature domain. Each namespace is a separate JSON file
 | `pihole` | Pi-hole DNS dashboard |
 | `setup` | Setup wizard steps |
 | `statusBar` | Status bar strip labels and tooltips |
+| `audio` | Topbar audio control (`AudioMenu`) |
 
 ## Usage in Components
 

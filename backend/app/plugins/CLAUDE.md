@@ -26,6 +26,7 @@ plugins/
 ├── sdk/                 # Plugin authoring toolkit (cli, validator, dry_install)
 ├── smart_device/        # SmartDevice plugin framework (base class, manager, poller, capabilities)
 └── installed/           # Bundled plugin implementations (one CLAUDE.md each)
+    ├── audio_control/      # Volume, output device and per-app mixer of the desktop session (pactl)
     ├── optical_drive/      # CD/DVD burning, reading, ISO browsing (own router)
     ├── steam_gaming/       # Status pill, session ledger, Gaming-Mode menu action
     ├── storage_analytics/  # DEMO ONLY — every number is hard-coded, see its CLAUDE.md
