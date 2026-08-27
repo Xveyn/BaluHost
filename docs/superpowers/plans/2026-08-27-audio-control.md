@@ -1422,8 +1422,12 @@ ueber pactl. Laeuft als bundled Plugin im Host-Prozess und damit unter
 derselben UID wie die Desktop-Session; ein Sandbox-Plugin kaeme nicht an den
 PipeWire-Socket.
 """
-from __future__ import annotations
-
+# NB: hier NICHT ``from __future__ import annotations`` ergaenzen. Zusammen mit
+# Pydantic v2 und FastAPIs Body-Erkennung durch den ``@limiter.limit``-Wrapper
+# von slowapi werden aufgeschobene Annotationen zu ForwardRefs, die FastAPI
+# nicht mehr als Pydantic-Modelle aufloest — der Rumpf gilt dann als
+# Query-Parameter und jedes PUT antwortet mit 422. Dieselbe Warnung steht in
+# ``api/routes/gpu_power.py``.
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
