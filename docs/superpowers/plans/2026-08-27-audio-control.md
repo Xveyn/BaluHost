@@ -24,15 +24,13 @@
 
 ---
 
-## Voraussetzung vor Task 2
+## Datenlage
 
-Die JSON-Form von `pactl -f json list sink-inputs` ist an der Produktionsmaschine gemessen und liegt in der Spec. Die Form von **`pactl -f json list sinks`** ist noch nicht gemessen. Vor Task 2 einmal auf BaluNode ausführen:
+Beide JSON-Formen sind an der Produktionsmaschine gemessen (PipeWire 1.4.2), die Fixtures in Task 2 sind wörtliche Auszüge daraus — keine Annahmen.
 
-```
-pactl -f json list sinks | head -30
-```
+`pactl -f json list sinks` liefert je Gerät unter anderem `index`, `state`, `name`, `description`, `mute`, `volume` (kanalweise, mit `value_percent` als **String**), `base_volume`, `ports`, `active_port` und einen umfangreichen `properties`-Block. Der Parser liest daraus nur `index`, `name`, `description`, `mute` und `volume`; alle übrigen Felder werden bewusst ignoriert und sind in den Fixtures gekürzt.
 
-Weicht die Struktur von der in Task 2 angenommenen ab (`index`, `name`, `description`, `mute`, `volume`), ist die Fixture in Task 2 entsprechend zu korrigieren. Der Parser ist bewusst defensiv geschrieben, sodass zusätzliche oder fehlende Felder ihn nicht brechen.
+**Indizes sind flüchtig.** Derselbe GPU-Ausgang trug innerhalb einer Stunde nacheinander die Indizes 655, 90 und 731. Kein Index darf über einen Abfragezyklus hinaus als gültig angenommen werden — deshalb ist ein 404 auf einen unbekannten Index ein Normalfall.
 
 ---
 
@@ -309,15 +307,32 @@ REAL_SINK_INPUT = {
 
 REAL_SINK = {
     "index": 61,
+    "state": "SUSPENDED",
     "name": "alsa_output.pci-0000_0e_00.6.iec958-stereo",
     "description": "Ryzen HD Audio Controller Digitales Stereo (IEC958)",
+    "driver": "PipeWire",
     "mute": False,
     "volume": {
-        "front-left": {"value": 62258, "value_percent": "95%", "db": "-0.45 dB"},
-        "front-right": {"value": 62258, "value_percent": "95%", "db": "-0.45 dB"},
+        "front-left": {"value": 62259, "value_percent": "95%", "db": "-1.34 dB"},
+        "front-right": {"value": 62259, "value_percent": "95%", "db": "-1.34 dB"},
     },
-    "state": "SUSPENDED",
+    "balance": 0.00,
+    "base_volume": {"value": 65536, "value_percent": "100%", "db": "0.00 dB"},
+    "active_port": "iec958-stereo-output",
     "properties": {"device.description": "Ryzen HD Audio Controller"},
+}
+
+REAL_SINK_GPU = {
+    "index": 731,
+    "state": "SUSPENDED",
+    "name": "alsa_output.pci-0000_03_00.1.hdmi-stereo-extra3",
+    "description": "Navi 31 HDMI/DP Audio Digital Stereo (HDMI 4)",
+    "mute": False,
+    "volume": {
+        "front-left": {"value": 65536, "value_percent": "100%", "db": "0.00 dB"},
+        "front-right": {"value": 65536, "value_percent": "100%", "db": "0.00 dB"},
+    },
+    "properties": {"device.description": "Navi 31 HDMI/DP Audio"},
 }
 
 
@@ -408,6 +423,17 @@ class TestParseSinks:
 
     def test_no_default_name_marks_nothing(self):
         assert parse_sinks([REAL_SINK], None)[0].is_default is False
+
+    def test_exactly_one_of_two_sinks_is_default(self):
+        sinks = parse_sinks(
+            [REAL_SINK, REAL_SINK_GPU], "alsa_output.pci-0000_0e_00.6.iec958-stereo"
+        )
+        assert [s.id for s in sinks] == [61, 731]
+        assert [s.is_default for s in sinks] == [True, False]
+
+    def test_a_sink_without_description_falls_back_to_its_name(self):
+        bare = {k: v for k, v in REAL_SINK.items() if k != "description"}
+        assert parse_sinks([bare], None)[0].description == bare["name"]
 ```
 
 - [ ] **Step 3: Test laufen lassen und Fehlschlag bestätigen**
