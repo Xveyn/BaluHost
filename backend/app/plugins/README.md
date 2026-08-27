@@ -106,11 +106,16 @@ plugins/
 │   ├── manager.py           # SmartDeviceManager (CRUD, command dispatch, SHM state)
 │   ├── poller.py            # SmartDevicePoller (runs in monitoring-worker process)
 │   └── schemas.py           # Pydantic request/response schemas
-└── installed/               # Bundled plugin implementations
-    ├── optical_drive/       # CD/DVD burning, reading, ISO browsing
-    ├── storage_analytics/   # Storage usage analytics
-    └── tapo_smart_plug/     # TP-Link Tapo smart plug integration with mock backend
+└── installed/               # Bundled plugin implementations (one CLAUDE.md each)
+    ├── optical_drive/       # CD/DVD burning, reading, ISO browsing (own router)
+    ├── steam_gaming/        # Status pill, session ledger, Gaming-Mode menu action
+    ├── storage_analytics/   # DEMO ONLY — every number is hard-coded (#524)
+    └── tapo_smart_plug/     # TP-Link Tapo smart plugs via the SmartDevice framework
 ```
+
+Every bundled plugin carries its own `CLAUDE.md` next to the code, covering its
+layout, its invariants and the traps specific to it. Read that file before
+changing a plugin; this README covers the framework they plug into.
 
 ## Plugin Lifecycle (Bundled)
 
@@ -482,14 +487,47 @@ Authoring toolkit for external plugin developers. Not used by bundled plugins.
 
 ## Bundled Plugins (Reference Implementations)
 
+Each of these has a `CLAUDE.md` in its own directory with the details; the table
+below is the map, not the documentation.
+
 | Plugin | Category | Description |
 |---|---|---|
 | `optical_drive` | storage | CD/DVD/Blu-ray: read, rip (ISO/WAV), burn, blank |
-| `storage_analytics` | storage | Storage usage analytics per user, file-type breakdown, top files |
+| `steam_gaming` | general | Status pill for a running Steam game, session ledger in the DB, Gaming-Mode power-menu action |
+| `storage_analytics` | storage | **Demo only** — serves hard-coded numbers, scans nothing (#524) |
 | `tapo_smart_plug` | smart_device | TP-Link Tapo P110/P115 with Switch + Power Monitoring |
 
 Patterns covered:
 
 - **`optical_drive`** — own API routes, UI manifest, config schema, async job management
-- **`storage_analytics`** — background tasks, Pluggy hook implementations (`@hookimpl`), periodic scans
+- **`steam_gaming`** — status pill, power-menu action, notification events, background poller with its own DB table; the reference for the contribution hooks listed below. Ships **no** router and no `plugin.json`, so enable/disable takes effect without a restart
+- **`storage_analytics`** — background tasks, Pluggy hook implementations (`@hookimpl`), periodic scans. Useful as an API example only; do not treat its output as data
 - **`tapo_smart_plug`** — `SmartDevicePlugin` subclass, capability protocols, dashboard panel, i18n, dev/prod-mode split
+
+### Newer contribution hooks
+
+Three `PluginBase` override points came after the sections above and are **not**
+documented here — the core owns their namespacing, gating, timeouts and audit
+entries, and the rules are exhaustive in `CLAUDE.md` (same directory):
+
+| Hook | Contributes | Reference implementation |
+|---|---|---|
+| `get_status_pills()` + `collect_status_pill()` | A pill in the topbar status strip | `steam_gaming` |
+| `get_ui_manifest().menu_items` + `run_menu_action()` | An action in the system/power menu | `steam_gaming` |
+| `get_notification_events()` | Notification event types, fired via `emit_plugin_event()` | `steam_gaming` |
+
+Common rule for all three: the plugin picks only a local `id` (`^[a-z0-9_]+$`);
+the core composes the public id as `plugin:<plugin_name>:<suffix>`. Read
+`CLAUDE.md` before implementing one — several of the constraints (the menu-item
+declaration site, the notification category being derived rather than chosen,
+the collector timeout) are not guessable from the signatures.
+
+### Restart semantics
+
+A plugin that contributes a **router** has its routes mounted once at startup
+(`core/lifespan.py`), so enabling it at runtime leaves `/api/plugins/{name}/*` at
+404 until `baluhost-backend` restarts — surfaced as
+`PluginDetailResponse.restart_required`. Method-based contributions (pills, menu
+items, panels, background tasks) reconcile across all workers within seconds
+(#448) and never need a restart. Of the bundled plugins, `optical_drive` and
+`storage_analytics` ship a router; `steam_gaming` and `tapo_smart_plug` do not.
