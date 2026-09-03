@@ -19,3 +19,12 @@ class DesktopStatus(BaseModel):
     state: DesktopState
     display_manager: str = Field(description="Name of the display-manager unit, e.g. 'sddm'")
     detail: Optional[str] = Field(default=None, description="Optional human-readable detail")
+    session_locked: Optional[bool] = Field(
+        default=None,
+        description=(
+            "Whether the graphical session is locked; None when that cannot be "
+            "determined. Filled in by the status route, not by the desktop "
+            "backend - the status-bar collector polls the service every 10s and "
+            "must not spawn a loginctl for a bit only the power menu reads."
+        ),
+    )
