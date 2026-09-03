@@ -1,9 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Power, PowerOff, RotateCcw, LogOut, Moon, Pause, MonitorOff, Monitor, Plug } from 'lucide-react';
+import { Power, PowerOff, RotateCcw, LogOut, Moon, Pause, MonitorOff, Monitor, Plug, Unlock } from 'lucide-react';
 import { ConfirmDialog } from './ui/ConfirmDialog';
 import { getSleepStatus, enterSoftSleep, enterSuspend } from '../api/sleep';
-import { getDesktopStatus, disableDesktop, enableDesktop, type DesktopState } from '../api/desktop';
+import { getDesktopStatus, disableDesktop, enableDesktop, unlockSession, type DesktopState } from '../api/desktop';
 import { usePlugins } from '../contexts/PluginContext';
 import { runPluginMenuAction } from '../api/plugins';
 import { resolvePluginString } from '../lib/pluginI18n';
@@ -40,6 +40,8 @@ export default function PowerMenu({ isAdmin, onShutdown, onRestart, onLogout }: 
   const [confirmAction, setConfirmAction] = useState<'shutdown' | 'restart' | 'sleep' | 'suspend' | null>(null);
   const [sleepAvailable, setSleepAvailable] = useState(false);
   const [desktopState, setDesktopState] = useState<DesktopState | null>(null);
+  // null = the server could not tell; the unlock entry stays hidden then.
+  const [sessionLocked, setSessionLocked] = useState<boolean | null>(null);
   const { pluginMenuItems, refreshMenuItems } = usePlugins();
   const [runningAction, setRunningAction] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -53,8 +55,14 @@ export default function PowerMenu({ isAdmin, onShutdown, onRestart, onLogout }: 
         .then(() => setSleepAvailable(true))
         .catch(() => setSleepAvailable(false));
       getDesktopStatus()
-        .then((s) => setDesktopState(s.state))
-        .catch(() => setDesktopState(null));
+        .then((s) => {
+          setDesktopState(s.state);
+          setSessionLocked(s.session_locked ?? null);
+        })
+        .catch(() => {
+          setDesktopState(null);
+          setSessionLocked(null);
+        });
       // Plugin entries can depend on server-side state too — the Steam plugin
       // offers "start" or "end" gaming mode, never both — and the manifest is
       // otherwise only fetched at page load.
@@ -133,6 +141,21 @@ export default function PowerMenu({ isAdmin, onShutdown, onRestart, onLogout }: 
       }
     } catch {
       toast.error(t('powerMenu.desktopEnableFailed', 'Failed to enable desktop'));
+    }
+  };
+
+  const handleUnlockSession = async () => {
+    setIsOpen(false);
+    try {
+      const result = await unlockSession();
+      if (result.success) {
+        toast.success(t('powerMenu.sessionUnlocked', 'Session unlocked'));
+      } else {
+        // result.message is an English debug string and stays out of the UI (#406).
+        toast.error(t('powerMenu.sessionUnlockFailed', 'Failed to unlock the session'));
+      }
+    } catch {
+      toast.error(t('powerMenu.sessionUnlockFailed', 'Failed to unlock the session'));
     }
   };
 
@@ -232,6 +255,23 @@ export default function PowerMenu({ isAdmin, onShutdown, onRestart, onLogout }: 
                         </div>
                       </button>
                     </>
+                  )}
+
+                  {/* Only while the displays are ON: with them off, "Enable
+                      desktop" below already unlocks as part of turning them on. */}
+                  {desktopState === 'running' && sessionLocked === true && (
+                    <button
+                      onClick={handleUnlockSession}
+                      className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition hover:bg-sky-500/10"
+                    >
+                      <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-sky-500/30 bg-sky-500/10">
+                        <Unlock className="h-4 w-4 text-sky-400" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-slate-100">{t('powerMenu.unlockSession', 'Unlock session')}</p>
+                        <p className="text-xs text-slate-400">{t('powerMenu.unlockSessionDesc', 'Dismiss the KDE lock screen')}</p>
+                      </div>
+                    </button>
                   )}
 
                   {desktopState === 'running' && (

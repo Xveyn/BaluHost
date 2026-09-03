@@ -265,6 +265,10 @@
     "desktopEnabled": "Desktop aktiviert",
     "desktopStillLocked": "Displays an - die Sitzung ist weiterhin gesperrt",
     "desktopEnableFailed": "Desktop konnte nicht aktiviert werden",
+    "unlockSession": "Sitzung entsperren",
+    "unlockSessionDesc": "KDE-Sperrbildschirm schließen",
+    "sessionUnlocked": "Sitzung entsperrt",
+    "sessionUnlockFailed": "Sitzung konnte nicht entsperrt werden",
     "pluginActionFailed": "Aktion fehlgeschlagen"
   },
   "adminOnly": "Nur für Admins",
