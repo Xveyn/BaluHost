@@ -16,8 +16,10 @@ from app.schemas.auth import (
     RecoveryCodesGenerateRequest, RecoveryCodesResponse, RecoveryCodesStatusResponse,
     RecoveryResetRequest,
 )
+from app.schemas.auth_policy import SessionPolicyResponse
 from app.schemas.user import UserPublic, UserCreate
 from app.services import auth as auth_service
+from app.services.auth_policy import get_auth_policy, session_token_minutes
 from app.services import users as user_service
 from app.services import totp_service
 from app.models.user import User as UserModel
@@ -40,6 +42,31 @@ router = APIRouter()
 _failed_login_attempts: TTLCache = TTLCache(maxsize=10000, ttl=1800)
 _BRUTE_FORCE_WINDOW = 300  # 5 minutes
 _BRUTE_FORCE_THRESHOLD = 5  # failures before alert
+
+
+def _session_token_minutes(db: Session) -> int:
+    """Configured access-token lifetime; falls back to the config default."""
+    try:
+        return session_token_minutes(db)
+    except Exception:
+        # A policy read must never turn a working login into a 500. Losing the
+        # configured value for one login is recoverable; refusing the login is
+        # not.
+        logger.exception("auth policy unreadable, falling back to the config TTL")
+        return settings.ACCESS_TOKEN_EXPIRE_MINUTES
+
+
+def _issue_session_token(user_record, db: Session) -> str:
+    """Mint an access token with the admin-configured lifetime.
+
+    Every session-issuing route in this module goes through here. Calling
+    auth_service.create_access_token() directly would silently fall back to the
+    config default and quietly exempt that one login path from the setting -
+    tests/api/test_session_token_ttl.py fails if a route does.
+    """
+    return auth_service.create_access_token(
+        user_record, expires_minutes=_session_token_minutes(db)
+    )
 
 
 @router.post("/login")
@@ -103,7 +130,7 @@ async def login(payload: LoginRequest, request: Request, response: Response, db:
         db=db
     )
 
-    token = auth_service.create_access_token(user_record)
+    token = _issue_session_token(user_record, db)
     user_public = user_service.serialize_user(user_record)
 
     # Emit plugin hook for successful login
@@ -189,7 +216,7 @@ async def verify_2fa(payload: TwoFactorVerifyRequest, request: Request, response
         user_record.pin_grace_until = _dt.now(_tz.utc) + _td(seconds=window)
         db.commit()
 
-    token = auth_service.create_access_token(user_record)
+    token = _issue_session_token(user_record, db)
     user_public = user_service.serialize_user(user_record)
 
     emit_hook(
@@ -262,7 +289,7 @@ async def login_pin(payload: PinLoginRequest, request: Request, response: Respon
             action="pin_login_grace", user=user_record.username,
             details={"ip_address": ip_address}, success=True, db=db,
         )
-        token = auth_service.create_access_token(user_record)
+        token = _issue_session_token(user_record, db)
         return TokenResponse(access_token=token, user=user_service.serialize_user(user_record))
 
     # Window expired → require TOTP via the existing pending flow.
@@ -684,7 +711,7 @@ async def register(payload: RegisterRequest, request: Request, response: Respons
         db=db
     )
 
-    token = auth_service.create_access_token(user_record)
+    token = _issue_session_token(user_record, db)
     user_public = user_service.serialize_user(user_record)
 
     # Emit plugin hook for user registration
@@ -748,6 +775,27 @@ async def change_password(
     )
 
     return {"message": "Password changed successfully"}
+
+
+@router.get("/session-policy", response_model=SessionPolicyResponse)
+@limiter.limit(get_limit("user_operations"))
+async def session_policy(
+    request: Request,
+    response: Response,
+    current_user: UserPublic = Depends(deps.get_current_user),
+    db: Session = Depends(get_db),
+) -> SessionPolicyResponse:
+    """The idle-logout numbers, for any logged-in user.
+
+    The admin policy lives behind get_current_admin, but the idle hook runs in
+    every session - so the two values it needs get their own read path instead
+    of widening the admin route.
+    """
+    policy = get_auth_policy(db)
+    return SessionPolicyResponse(
+        idle_timeout_minutes=policy.idle_timeout_minutes,
+        idle_warning_seconds=policy.idle_warning_seconds,
+    )
 
 
 @router.post("/logout")
@@ -854,7 +902,7 @@ async def refresh_token(
             token_service.update_token_usage(db, jti, ip_address=ip_address)
 
         # Generate new access token
-        new_access_token = auth_service.create_access_token(user_record)
+        new_access_token = _issue_session_token(user_record, db)
 
         # Log successful token refresh
         audit_logger.log_security_event(
