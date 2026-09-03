@@ -56,7 +56,8 @@ Custom React hooks encapsulating data fetching, polling, and UI logic. Each hook
 | `useConfirmDialog.ts` | Confirmation dialog state management |
 | `useSortableTable.ts` | Table sorting state (column, direction) |
 | `useByteUnitMode.ts` | Binary (GiB) vs decimal (GB) byte unit preference |
-| `useIdleTimeout.ts` | Auto-logout after inactivity period |
+| `useIdleTimeout.ts` | Auto-logout after inactivity; durations come from `useSessionPolicy` and default to 4 min + 60 s |
+| `useSessionPolicy.ts` | Reads `auth_policy`'s idle timings once per login via `GET /api/auth/session-policy`; falls back to the hardcoded defaults on error, never disables the idle logout |
 | `useNotificationSocket.ts` | WebSocket connection for real-time notifications |
 | `useNextMaintenance.ts` | Next scheduled maintenance window |
 | `usePresenceHeartbeat.ts` | Presence heartbeat to `/api/system/sleep/presence` while tab visible (blocks auto true-suspend, #214); fire-and-forget, mounted once in `AppRoutes` (auth-gated via `enabled`); paused while the idle-logout warning is visible (#222) |

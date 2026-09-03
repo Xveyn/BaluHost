@@ -19,6 +19,7 @@ import VCLSettings from '../components/vcl/VCLSettings';
 import { Link } from 'react-router-dom';
 import { RateLimitsTab } from '../components/rate-limits';
 import { AuthPolicySettings } from '../components/admin/AuthPolicySettings';
+import { SessionPolicySettings } from '../components/admin/SessionPolicySettings';
 import WebdavConnectionCard from '../components/webdav/WebdavConnectionCard';
 import SambaManagementCard from '../components/samba/SambaManagementCard';
 import NfsManagementCard from '../components/nfs/NfsManagementCard';
@@ -213,6 +214,7 @@ export default function SystemControlPage() {
           <div className="space-y-6">
             <RateLimitsTab />
             <AuthPolicySettings />
+            <SessionPolicySettings />
           </div>
         )}
         {activeTab === 'webdav' && <WebdavConnectionCard />}
