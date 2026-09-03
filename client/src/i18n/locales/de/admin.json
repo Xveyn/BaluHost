@@ -502,6 +502,21 @@
     },
     "processing": "Wird verarbeitet..."
   },
+  "sessionPolicy": {
+    "title": "Sitzungsdauer",
+    "description": "Wie lange eine angemeldete Sitzung lebt — Abmeldung bei Inaktivität und Laufzeit des Zugriffstokens.",
+    "idleTimeout": "Abmelden nach Inaktivität (Minuten)",
+    "idleHint": "Danach erscheint die Warnung mit Countdown.",
+    "idleDisabled": "0 = keine automatische Abmeldung bei Inaktivität.",
+    "warningSeconds": "Countdown im Warndialog (Sekunden)",
+    "tokenMinutes": "Laufzeit des Zugriffstokens (Minuten)",
+    "tokenHint": "Gilt ab der Anmeldung, unabhängig von Aktivität. Ein gestohlener Token bleibt so lange gültig — für Zugriffstokens gibt es keinen Widerruf.",
+    "idleExceedsToken": "Das Inaktivitätsfenster inklusive Countdown ist länger als die Tokenlaufzeit. Nutzer würden ohne Warndialog abgemeldet.",
+    "save": "Speichern",
+    "saving": "Speichert…",
+    "saved": "Sitzungsdauer gespeichert",
+    "saveError": "Sitzungsdauer konnte nicht gespeichert werden"
+  },
   "authPolicy": {
     "title": "PIN-Login-Richtlinie",
     "description": "Steuert das Gnadenfenster, in dem die Desktop-App-PIN ohne 2FA-Code genügt.",

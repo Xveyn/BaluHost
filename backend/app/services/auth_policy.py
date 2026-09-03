@@ -15,3 +15,8 @@ def get_auth_policy(db: Session) -> AuthPolicy:
         db.commit()
         db.refresh(policy)
     return policy
+
+
+def session_token_minutes(db: Session) -> int:
+    """TTL for a newly issued access token, as configured by the admin."""
+    return get_auth_policy(db).access_token_minutes

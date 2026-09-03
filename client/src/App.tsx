@@ -9,6 +9,7 @@ import { NotificationProvider } from './contexts/NotificationContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { buildApiUrl } from './lib/api';
 import { useIdleTimeout } from './hooks/useIdleTimeout';
+import { useSessionPolicy } from './hooks/useSessionPolicy';
 import { IdleWarningDialog } from './components/ui/IdleWarningDialog';
 import { usePresenceHeartbeat } from './hooks/usePresenceHeartbeat';
 import { FEATURES, isDesktop } from './lib/features';
@@ -136,9 +137,14 @@ function LoadingScreen({ backendReady, backendCheckAttempts }: { backendReady: b
 export function AppRoutes() {
   const { user, logout, loading, isAdmin } = useAuth();
 
+  // Timings are admin-configurable (auth_policy); until they load, the hook
+  // runs on its own 4 min / 60 s fallbacks.
+  const { idleMs, warningSec, idleEnabled } = useSessionPolicy(user !== null);
   const { warningVisible, secondsRemaining, resetTimer } = useIdleTimeout({
     onLogout: logout,
-    enabled: user !== null,
+    enabled: user !== null && idleEnabled,
+    idleMs,
+    warningSec,
   });
 
   usePresenceHeartbeat({ paused: warningVisible, enabled: user !== null });

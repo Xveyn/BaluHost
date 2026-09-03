@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { DEFAULT_IDLE_MS, DEFAULT_WARNING_SEC } from '../lib/sessionDefaults';
 
-const IDLE_MS = 4 * 60 * 1000;       // 4 min until warning
-const WARNING_SEC = 60;                // 60s countdown
 const STORAGE_KEY = 'baluhost-idle-ping';
 const ACTIVITY_EVENTS: (keyof DocumentEventMap)[] = [
   'mousemove', 'keydown', 'click', 'scroll', 'touchstart',
@@ -10,6 +9,10 @@ const ACTIVITY_EVENTS: (keyof DocumentEventMap)[] = [
 interface UseIdleTimeoutOptions {
   onLogout: () => void;
   enabled: boolean;
+  /** Inactivity before the warning appears. Defaults to 4 min. */
+  idleMs?: number;
+  /** Countdown length inside the warning dialog. Defaults to 60 s. */
+  warningSec?: number;
 }
 
 interface UseIdleTimeoutReturn {
@@ -18,9 +21,14 @@ interface UseIdleTimeoutReturn {
   resetTimer: () => void;
 }
 
-export function useIdleTimeout({ onLogout, enabled }: UseIdleTimeoutOptions): UseIdleTimeoutReturn {
+export function useIdleTimeout({
+  onLogout,
+  enabled,
+  idleMs = DEFAULT_IDLE_MS,
+  warningSec = DEFAULT_WARNING_SEC,
+}: UseIdleTimeoutOptions): UseIdleTimeoutReturn {
   const [warningVisible, setWarningVisible] = useState(false);
-  const [secondsRemaining, setSecondsRemaining] = useState(WARNING_SEC);
+  const [secondsRemaining, setSecondsRemaining] = useState(warningSec);
 
   // Stable refs to avoid re-creating callbacks when props change
   const onLogoutRef = useRef(onLogout);
@@ -28,6 +36,14 @@ export function useIdleTimeout({ onLogout, enabled }: UseIdleTimeoutOptions): Us
 
   const enabledRef = useRef(enabled);
   enabledRef.current = enabled;
+
+  // The durations arrive from the server one render after login, so callbacks
+  // read them through refs and stay stable; the effect below restarts the
+  // timers when they actually change.
+  const idleMsRef = useRef(idleMs);
+  idleMsRef.current = idleMs;
+  const warningSecRef = useRef(warningSec);
+  warningSecRef.current = warningSec;
 
   const idleTimer = useRef<ReturnType<typeof setTimeout>>();
   const countdownInterval = useRef<ReturnType<typeof setInterval>>();
@@ -60,14 +76,14 @@ export function useIdleTimeout({ onLogout, enabled }: UseIdleTimeoutOptions): Us
     clearTimers();
     warningActiveRef.current = false;
     setWarningVisible(false);
-    setSecondsRemaining(WARNING_SEC);
+    setSecondsRemaining(warningSecRef.current);
     lastActivityRef.current = Date.now();
 
     if (!enabledRef.current) return;
 
     idleTimer.current = setTimeout(() => {
-      startCountdown(WARNING_SEC);
-    }, IDLE_MS);
+      startCountdown(warningSecRef.current);
+    }, idleMsRef.current);
   }, [clearTimers, startCountdown]);
 
   // Activity handler — resets timer and pings other tabs
@@ -103,7 +119,10 @@ export function useIdleTimeout({ onLogout, enabled }: UseIdleTimeoutOptions): Us
         document.removeEventListener(event, handleActivity);
       }
     };
-  }, [enabled]); // eslint-disable-line react-hooks/exhaustive-deps
+    // idleMs/warningSec are in the deps on purpose: when the server-side policy
+    // arrives after login, the running timer must be replaced, not left at the
+    // fallback duration.
+  }, [enabled, idleMs, warningSec]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Cross-tab sync: listen for storage events from other tabs
   useEffect(() => {
@@ -128,14 +147,14 @@ export function useIdleTimeout({ onLogout, enabled }: UseIdleTimeoutOptions): Us
       if (document.visibilityState !== 'visible') return;
 
       const elapsed = Date.now() - lastActivityRef.current;
-      const totalMs = IDLE_MS + WARNING_SEC * 1000;
+      const totalMs = idleMsRef.current + warningSecRef.current * 1000;
 
       if (elapsed >= totalMs) {
         // Total timeout elapsed → immediate logout
         clearTimers();
         warningActiveRef.current = false;
         onLogoutRef.current();
-      } else if (elapsed >= IDLE_MS) {
+      } else if (elapsed >= idleMsRef.current) {
         // Idle time passed, still in countdown window → show warning with adjusted countdown
         clearTimers();
         const remaining = Math.ceil((totalMs - elapsed) / 1000);
@@ -144,9 +163,9 @@ export function useIdleTimeout({ onLogout, enabled }: UseIdleTimeoutOptions): Us
         // Not yet expired → restart timer with remaining idle time
         if (!warningActiveRef.current) {
           clearTimers();
-          const remainingIdle = IDLE_MS - elapsed;
+          const remainingIdle = idleMsRef.current - elapsed;
           idleTimer.current = setTimeout(() => {
-            startCountdown(WARNING_SEC);
+            startCountdown(warningSecRef.current);
           }, remainingIdle);
         }
       }

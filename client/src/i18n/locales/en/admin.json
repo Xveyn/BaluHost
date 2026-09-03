@@ -502,6 +502,21 @@
     },
     "processing": "Processing..."
   },
+  "sessionPolicy": {
+    "title": "Session duration",
+    "description": "How long a signed-in session lives — idle logout and access-token lifetime.",
+    "idleTimeout": "Log out after inactivity (minutes)",
+    "idleHint": "The warning with its countdown appears after this.",
+    "idleDisabled": "0 = no automatic logout on inactivity.",
+    "warningSeconds": "Countdown in the warning dialog (seconds)",
+    "tokenMinutes": "Access-token lifetime (minutes)",
+    "tokenHint": "Counts from sign-in, regardless of activity. A stolen token stays valid that long — access tokens cannot be revoked.",
+    "idleExceedsToken": "The idle window including the countdown outlives the token. Users would be logged out with no warning dialog.",
+    "save": "Save",
+    "saving": "Saving…",
+    "saved": "Session duration saved",
+    "saveError": "Could not save the session duration"
+  },
   "authPolicy": {
     "title": "PIN login policy",
     "description": "Controls the grace window in which the desktop-app PIN suffices without a 2FA code.",

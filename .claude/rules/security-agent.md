@@ -37,7 +37,7 @@ Active security enforcement rule for BaluHost. Applies to all changes in `backen
 ### Token Types
 | Type | TTL | Claim `type` | Features |
 |------|-----|---------------|----------|
-| Access | 15 min (`ACCESS_TOKEN_EXPIRE_MINUTES`) | `"access"` | Contains `sub`, `username`, `role` |
+| Access | admin-configurable via `auth_policy.access_token_minutes`, default 15 min (`ACCESS_TOKEN_EXPIRE_MINUTES` is now only the fallback when the policy is unreadable) | `"access"` | Contains `sub`, `username`, `role`. Issued exclusively through `routes/auth.py:_issue_session_token()` — a route calling `auth_service.create_access_token()` directly would silently ignore the setting, and `tests/api/test_session_token_ttl.py` fails if one does |
 | Refresh | 7 days (`REFRESH_TOKEN_EXPIRE_DAYS`) | `"refresh"` | Contains `jti` for revocation |
 | SSE | 60 sec | `"sse"` | Scoped to single `upload_id`, safe for query params |
 | WS | 60 sec | `"ws"` | WebSocket handshake, contains `sub` + `username` |

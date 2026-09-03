@@ -90,3 +90,63 @@ describe('useIdleTimeout', () => {
     expect(onLogout).not.toHaveBeenCalled();
   });
 });
+
+describe('useIdleTimeout — configurable durations', () => {
+  beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => { vi.useRealTimers(); });
+
+  it('uses the 4 min / 60 s defaults when nothing is passed', () => {
+    const onLogout = vi.fn();
+    const { result } = renderHook(() => useIdleTimeout({ onLogout, enabled: true }));
+
+    act(() => { vi.advanceTimersByTime(4 * 60 * 1000 - 1000); });
+    expect(result.current.warningVisible).toBe(false);
+    act(() => { vi.advanceTimersByTime(1000); });
+    expect(result.current.warningVisible).toBe(true);
+  });
+
+  it('waits the configured idle time before warning', () => {
+    const onLogout = vi.fn();
+    const { result } = renderHook(() =>
+      useIdleTimeout({ onLogout, enabled: true, idleMs: 30 * 60 * 1000 }),
+    );
+
+    // The old hardcoded 4 minutes must NOT fire any more.
+    act(() => { vi.advanceTimersByTime(4 * 60 * 1000); });
+    expect(result.current.warningVisible).toBe(false);
+
+    act(() => { vi.advanceTimersByTime(26 * 60 * 1000); });
+    expect(result.current.warningVisible).toBe(true);
+  });
+
+  it('counts down from the configured warning seconds', () => {
+    const onLogout = vi.fn();
+    const { result } = renderHook(() =>
+      useIdleTimeout({ onLogout, enabled: true, idleMs: 60_000, warningSec: 120 }),
+    );
+
+    expect(result.current.secondsRemaining).toBe(120);
+    act(() => { vi.advanceTimersByTime(60_000); });
+    expect(result.current.secondsRemaining).toBe(120);
+
+    act(() => { vi.advanceTimersByTime(119_000); });
+    expect(onLogout).not.toHaveBeenCalled();
+    act(() => { vi.advanceTimersByTime(1000); });
+    expect(onLogout).toHaveBeenCalledTimes(1);
+  });
+
+  it('picks up changed durations without a remount', () => {
+    // The values arrive from the server one render after login, so the hook is
+    // always mounted with the defaults first.
+    const onLogout = vi.fn();
+    const { result, rerender } = renderHook(
+      ({ idleMs }) => useIdleTimeout({ onLogout, enabled: true, idleMs }),
+      { initialProps: { idleMs: 4 * 60 * 1000 } },
+    );
+
+    rerender({ idleMs: 30 * 60 * 1000 });
+    act(() => { vi.advanceTimersByTime(4 * 60 * 1000); });
+
+    expect(result.current.warningVisible).toBe(false);
+  });
+});

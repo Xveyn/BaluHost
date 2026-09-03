@@ -9,6 +9,18 @@ export interface PinStatus {
 export interface AuthPolicy {
   pin_login_enabled: boolean;
   pin_grace_window_seconds: number;
+  /** Inactivity before the logout warning, in minutes. 0 disables it. */
+  idle_timeout_minutes: number;
+  /** Countdown shown in the warning dialog, in seconds. */
+  idle_warning_seconds: number;
+  /** Lifetime of a newly issued access token, in minutes. */
+  access_token_minutes: number;
+}
+
+/** The subset every logged-in user may read — what the idle hook needs. */
+export interface SessionPolicy {
+  idle_timeout_minutes: number;
+  idle_warning_seconds: number;
 }
 
 /** Either a finished login (access_token) or a 2FA challenge (pending_token). */
@@ -54,5 +66,17 @@ export async function getAuthPolicy(): Promise<AuthPolicy> {
 
 export async function updateAuthPolicy(body: Partial<AuthPolicy>): Promise<AuthPolicy> {
   const res = await apiClient.put<AuthPolicy>('/api/admin/auth-policy', body);
+  return res.data;
+}
+
+/**
+ * Session limits for the current user's idle timer.
+ *
+ * Separate from `getAuthPolicy()`, which is admin-only: the idle logout runs in
+ * every session, so its two numbers have their own read path that leaks neither
+ * the token lifetime nor the PIN policy.
+ */
+export async function getSessionPolicy(): Promise<SessionPolicy> {
+  const res = await apiClient.get<SessionPolicy>('/api/auth/session-policy');
   return res.data;
 }
