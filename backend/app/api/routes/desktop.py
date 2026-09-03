@@ -11,7 +11,7 @@ from app.api.deps import get_current_user, get_db, require_power_toggle_desktop
 from app.core.rate_limiter import user_limiter, get_limit
 from app.schemas.desktop import DesktopStatus
 from app.services.power.desktop import get_desktop_service
-from app.services.power.session_lock import unlock_if_permitted
+from app.services.power.session_lock import current_lock_state, unlock_if_permitted
 from app.services.notifications.events import emit_desktop_disabled, emit_desktop_enabled
 from app.services.audit.logger_db import get_audit_logger_db
 
@@ -27,8 +27,44 @@ async def desktop_status(
     response: Response,
     current_user=Depends(get_current_user),
 ) -> DesktopStatus:
-    """Return whether the desktop displays are on (running) or off (stopped)."""
-    return await get_desktop_service().get_status()
+    """Return whether the desktop displays are on (running) or off (stopped).
+
+    Also carries the session's lock state, so the power menu can decide in a
+    single request whether to offer "unlock".
+    """
+    status = await get_desktop_service().get_status()
+    return status.model_copy(update={"session_locked": await current_lock_state()})
+
+
+@router.post("/unlock")
+@user_limiter.limit(get_limit("admin_operations"))
+async def desktop_unlock(
+    request: Request,
+    response: Response,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Unlock the graphical desktop session, leaving the displays alone.
+
+    The "enable" route unlocks as a side effect of turning the displays on;
+    this is the same action for the case where they are already on.
+
+    Authorization is deliberately NOT a route dependency: ``unlock_if_permitted``
+    is the single place where both gates (LAN/VPN + the ``can_unlock_session``
+    right, admins by role) are evaluated and audited. A role gate in front of it
+    would be a second, silently diverging rule. A refusal is therefore a 200
+    with ``success: false``, not a 403.
+    """
+    try:
+        ok, message = await unlock_if_permitted(
+            user=current_user,
+            client_host=request.client.host if request.client else None,
+            db=db,
+        )
+    except Exception:  # a failed unlock is an outcome, never a 5xx
+        logger.exception("Session unlock failed unexpectedly")
+        ok, message = False, "unlock failed unexpectedly"
+    return {"success": ok, "message": message}
 
 
 @router.post("/disable")

@@ -198,3 +198,105 @@ class TestDevBackend:
 
         assert ok is True
         assert "dev" in detail
+
+
+class TestLockStateRead:
+    """Reading the lock state - the half of logind the unlock path never used.
+
+    ``unlock()`` only ever asked "did it work?" after acting. Driving a button's
+    visibility needs the question asked on its own, without touching the
+    session.
+    """
+
+    def test_reports_locked(self):
+        runner = FakeRunner({
+            tuple(SHOW_USER): _proc(stdout="2\n"),
+            "locked_hint": _proc(stdout="yes\n"),
+        })
+
+        assert _backend(runner).is_locked() is True
+
+    def test_reports_unlocked(self):
+        runner = FakeRunner({
+            tuple(SHOW_USER): _proc(stdout="2\n"),
+            "locked_hint": _proc(stdout="no\n"),
+        })
+
+        assert _backend(runner).is_locked() is False
+
+    def test_never_unlocks_while_reading(self):
+        """A read must stay a read. If this ever calls unlock-session, opening
+        the power menu would silently unlock the desktop."""
+        runner = FakeRunner({
+            tuple(SHOW_USER): _proc(stdout="2\n"),
+            "locked_hint": _proc(stdout="yes\n"),
+        })
+
+        _backend(runner).is_locked()
+
+        assert all(cmd[1] != "unlock-session" for cmd in runner.calls)
+
+    def test_unknown_without_a_graphical_session(self):
+        """None, not False - "no session" is not "not locked"."""
+        runner = FakeRunner({
+            tuple(SHOW_USER): _proc(stdout="\n"),
+            tuple(LIST_SESSIONS): _proc(stdout=""),
+        })
+
+        assert _backend(runner).is_locked() is None
+
+    def test_unknown_when_the_hint_cannot_be_read(self):
+        runner = FakeRunner({
+            tuple(SHOW_USER): _proc(stdout="2\n"),
+            "locked_hint": _proc(returncode=1, stderr="no such session"),
+        })
+
+        assert _backend(runner).is_locked() is None
+
+    def test_unknown_without_loginctl(self):
+        def _raise(_cmd):
+            raise FileNotFoundError("loginctl")
+
+        assert _backend(_raise).is_locked() is None
+
+    def test_unknown_on_timeout(self):
+        def _raise(_cmd):
+            raise subprocess.TimeoutExpired(cmd="loginctl", timeout=3)
+
+        assert _backend(_raise).is_locked() is None
+
+
+class TestDevBackendLockState:
+    def test_starts_locked_so_the_button_is_testable_in_dev(self):
+        assert DevSessionLockBackend().is_locked() is True
+
+    def test_unlocking_flips_it(self):
+        backend = DevSessionLockBackend()
+        backend.unlock()
+
+        assert backend.is_locked() is False
+
+
+class TestCurrentLockState:
+    """The module-level read the route calls: off the event loop, never raises."""
+
+    async def test_returns_the_backend_answer(self):
+        from unittest.mock import MagicMock, patch
+
+        from app.services.power import session_lock
+
+        backend = MagicMock()
+        backend.is_locked.return_value = True
+        with patch.object(session_lock, "get_session_lock_backend", return_value=backend):
+            assert await session_lock.current_lock_state() is True
+
+    async def test_a_raising_backend_becomes_unknown(self):
+        """The status route must not 500 because logind hiccupped."""
+        from unittest.mock import MagicMock, patch
+
+        from app.services.power import session_lock
+
+        backend = MagicMock()
+        backend.is_locked.side_effect = OSError("boom")
+        with patch.object(session_lock, "get_session_lock_backend", return_value=backend):
+            assert await session_lock.current_lock_state() is None

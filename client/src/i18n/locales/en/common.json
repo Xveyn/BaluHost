@@ -265,6 +265,10 @@
     "desktopEnabled": "Desktop enabled",
     "desktopStillLocked": "Displays on - the session is still locked",
     "desktopEnableFailed": "Failed to enable desktop",
+    "unlockSession": "Unlock session",
+    "unlockSessionDesc": "Dismiss the KDE lock screen",
+    "sessionUnlocked": "Session unlocked",
+    "sessionUnlockFailed": "Failed to unlock the session",
     "pluginActionFailed": "Action failed"
   },
   "adminOnly": "Admin only",

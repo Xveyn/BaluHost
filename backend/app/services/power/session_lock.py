@@ -44,6 +44,10 @@ class SessionLockBackend(Protocol):
         """Unlock the session; returns (ok, detail)."""
         ...
 
+    def is_locked(self) -> Optional[bool]:
+        """Whether the session is locked right now, or None if unknowable."""
+        ...
+
 
 class DevSessionLockBackend:
     """In-memory backend for dev mode / non-Linux hosts."""
@@ -55,6 +59,10 @@ class DevSessionLockBackend:
         """Pretend to unlock - there is no logind on a dev box."""
         self._locked = False
         return True, "session unlocked (dev)"
+
+    def is_locked(self) -> Optional[bool]:
+        """Start out locked, so the unlock button is reachable in dev mode."""
+        return self._locked
 
 
 class LinuxSessionLockBackend:
@@ -124,6 +132,24 @@ class LinuxSessionLockBackend:
             return False
         return None
 
+    def is_locked(self) -> Optional[bool]:
+        """Read the lock state without touching the session.
+
+        A pure read: it asks logind and changes nothing. Returns None whenever
+        the answer is unknown (no graphical session, unreadable hint, no
+        loginctl) - callers must not read that as "not locked", or a UI would
+        hide its unlock button on exactly the box where logind is mute.
+        """
+        try:
+            session_id = self._graphical_session_id()
+            if not session_id:
+                return None
+            return self._locked_hint(session_id)
+        except FileNotFoundError:
+            return None
+        except subprocess.TimeoutExpired:
+            return None
+
     def unlock(self) -> Tuple[bool, str]:
         """Unlock the graphical session and VERIFY it actually unlocked.
 
@@ -171,6 +197,22 @@ def get_session_lock_backend() -> SessionLockBackend:
             DevSessionLockBackend() if settings.is_dev_mode else LinuxSessionLockBackend()
         )
     return _backend
+
+
+async def current_lock_state() -> Optional[bool]:
+    """Whether the desktop session is locked, or None if that cannot be told.
+
+    Deliberately ungated: the answer is a single bit about the machine's own
+    screen, no more revealing than the desktop on/off state next to it, and
+    every caller is already authenticated. Acting on it still runs the full
+    gates in :func:`unlock_if_permitted`.
+    """
+    try:
+        return await asyncio.to_thread(get_session_lock_backend().is_locked)
+    except Exception:
+        # A status endpoint must not 5xx because logind hiccupped.
+        logger.exception("session lock state could not be read")
+        return None
 
 
 def _may_unlock(user: UserPublic, db: Session) -> bool:
