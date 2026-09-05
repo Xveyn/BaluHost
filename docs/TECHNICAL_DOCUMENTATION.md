@@ -1236,6 +1236,37 @@ CREATE TABLE fan_sample (
 );
 ```
 
+#### Stable Fan & Sensor Identities (v1.38+)
+
+As of version 1.38, fan and sensor identities are no longer tied to `hwmon` device indices, which can shift during hardware re-enumeration or driver reload. Instead, they are anchored to a **stable chip-level identifier** derived from the hardware bus and address.
+
+**Identity Format:**
+- **Fans:** `<chip>-<bus>-<adresse>:pwm<N>` (e.g., `nct6798-isa-0290:pwm1`)
+- **Sensors:** `hwmon:<chip>-<bus>-<adresse>:temp<M>` (e.g., `hwmon:k10temp-pci-00c3:temp1`)
+
+These identities survive kernel driver reloads and hwmon renumbering.
+
+**Important Limitation:**  
+Chips without a discoverable `pci` or `platform` parent (i.e., on `i2c`, `spi`, `scsi`, `hid` or other buses) continue to use the hwmon-indexed form (`hwmon0_pwm1`, etc.) and behave as before. This notably affects **`drivetemp`** (SATA disk temperature sensors), which retain their legacy identities.
+
+**Migration Behavior:**  
+When the backend starts after a code upgrade that includes this refactoring:
+1. All existing `fan_configs` rows are analyzed to derive their new stable identities.
+2. Rows are **matched and renamed** to the new identity if a stable identity can be determined; orphaned configs (i.e., matching no currently-visible hardware) are preserved but marked inactive.
+3. Newly-visible fans (e.g., after a hardware addition or back after a driver reload) get a new row if on the primary worker.
+
+**Prerequisite after Restore from Pre-Refactoring Backup:**  
+If you restore a database snapshot taken before this refactoring, a backend restart is required. The reconciliation logic runs only at startup and will not run again mid-session.
+
+**Fan History:**  
+After the refactoring, the fan history graph is empty for **all** fans. Existing `fan_sample` rows retain their old identity and gradually expire according to the configured retention policy. This is a one-time effect; ongoing samples use the new stable identities and accumulate normally.
+
+**Fan Regulation During Identity Mismatch:**  
+If the identity-matching logic fails at startup (e.g., due to an unexpected hardware topology), the backend will **not** create default fan configurations as a fail-safe. During this cycle, fans remain unregulated (PWM is unmodified, no automatic curve adjustment). This prevents erasing legitimate user configurations with synthetic defaults. The error is logged with a traceback; a subsequent backend restart after the mismatch is resolved will complete the reconciliation.
+
+**Secondary Worker Behavior:**  
+The configuration-creation logic runs only on the primary Uvicorn worker. A backend-switching request (e.g., switching from `dev` to `prod` mode via HTTP) landing on a secondary worker will not create configs for newly-visible fans; these configs are created on the next primary-worker startup cycle (either an immediate restart or the next service restart). This is transparent to the user but introduces a brief window where newly-visible fans lack a configuration row.
+
 ---
 
 ### 17. Monitoring Orchestrator

@@ -87,6 +87,8 @@ Business logic layer. Routes delegate to services — services contain the actua
 **`power/`** — CPU frequency scaling, fan control, energy, sleep
 - `manager.py` — PowerManager: demand-based CPU profile selection
 - `fan_control.py` — Temperature-based fan speed control with curves
+- `fan_identity.py` — Derives stable chip-level fan/sensor identities (`<chip>-<bus>-<adresse>:pwm<N>`) that survive hwmon renumbering; ships with `get_stable_identity()`, `is_stable_backend()`, and hwmon-index fallback for unsupported buses (i2c, spi, scsi, hid, drivetemp)
+- `fan_reconcile.py` — One-time identity reconciliation at backend startup; matches legacy `fan_id` to stable equivalents, creates new configs for newly-visible fans (primary worker only), enforces fail-safe on mismatch (no default config creation)
 - `sleep.py` — Soft/hard sleep modes with idle detection
 - `presence.py` — user-presence tracker (heartbeats → presence_sessions table; blocks auto true-suspend, issue #214)
 - `energy.py` — Power consumption tracking and cost estimation
