@@ -163,6 +163,33 @@ class TestRender:
         assert "renderHistory" in page, "the chart must be built, not just declared"
         assert "dirDelta" in page, "the tree needs its per-directory delta column"
 
+    def test_flagged_and_score_get_separate_charts(self):
+        """flagged-file counts (tens to low hundreds) and the score sum
+        (thousands to tens of thousands) differ enough in scale that a
+        shared axis flattens the smaller series into an unreadable
+        near-flat line - a visual-pass finding, not something a structural
+        test alone would have caught. They now render as two independent
+        charts, each with its own host/legend and own-series label."""
+        hist = {
+            "areas": ["backend/app"],
+            "points": [
+                {"label": "2026-01", "commit": "a", "date": "2026-01-31",
+                 "files": 1, "loc": 10, "flagged": 0, "score": 0,
+                 "areas": {"backend/app": 10}},
+                {"label": "2026-02", "commit": "b", "date": "2026-02-28",
+                 "files": 1, "loc": 20, "flagged": 1, "score": 5,
+                 "areas": {"backend/app": 20}},
+            ],
+            "churn": {},
+        }
+        page = repo_map_html.render(make_report(), history=hist)
+        assert 'id="flagged-chart"' in page
+        assert 'id="flagged-legend"' in page
+        assert 'id="score-chart"' in page
+        assert 'id="score-legend"' in page
+        assert "geflaggte Dateien" in page
+        assert "Score-Summe" in page
+
     def test_chart_does_not_use_non_uniform_svg_scaling(self):
         """preserveAspectRatio="none" on a percentage-width svg stretches a
         fixed viewBox horizontally, distorting every glyph and gap (a visual

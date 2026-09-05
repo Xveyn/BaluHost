@@ -8,11 +8,13 @@ self-contained document.
 """
 from __future__ import annotations
 
-# Two inline-SVG line charts (LOC per area, flagged files / score sum) plus
-# a hotspot table (score x commits). No chart library: builds SVG nodes
-# directly from DATA.history via the DOM API. Colors come from the page's
-# existing dark-theme tokens (--accent/--ok/--warn/--hot/--muted) so a chart
-# never introduces a color the rest of the report doesn't already use.
+# Three inline-SVG line charts (LOC per area; flagged-file count; score sum,
+# each of the last two on its own axis since they differ by ~27x in scale
+# and would flatten one another on a shared one) plus a hotspot table (score
+# x commits). No chart library: builds SVG nodes directly from DATA.history
+# via the DOM API. Colors come from the page's existing dark-theme tokens
+# (--accent/--ok/--warn/--hot/--muted) so a chart never introduces a color
+# the rest of the report doesn't already use.
 HISTORY_SCRIPT = """
 const SERIES_COLORS = ["#6fa8ff", "#4fbf7f", "#f0b429", "#f2686b", "#8d95a5"];
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -46,17 +48,21 @@ function lineChart(host, labels, series, fmt) {
     role: "img" });
   const rawMax = Math.max(0, ...series.flatMap((s) => s.values));
   const step = niceStep(rawMax > 0 ? rawMax : 1, 4);
-  const max = step * 4;
+  // The axis top follows the data (rounded up to the next step), not a
+  // fixed 4-tick span - a max that is much bigger than the data would
+  // otherwise waste the top half of the plot on empty space.
+  const max = Math.max(step, Math.ceil(rawMax / step) * step);
+  const ticks = Math.round(max / step);
   const x = (i) => L + (labels.length < 2 ? 0
     : (i * (W - L - R)) / (labels.length - 1));
   const y = (v) => H - B - (v / max) * (H - T - B);
 
-  for (let g = 0; g <= 4; g++) {
-    const gy = T + (g * (H - T - B)) / 4;
+  for (let g = 0; g <= ticks; g++) {
+    const gy = T + (g * (H - T - B)) / ticks;
     root.append(svg("line", { class: "grid", x1: L, x2: W - R, y1: gy, y2: gy }));
     const t = svg("text", { class: "tick", x: L - 8, y: gy + 4,
       "text-anchor": "end" });
-    t.textContent = fmt(Math.round(step * (4 - g)));
+    t.textContent = fmt(Math.round(step * (ticks - g)));
     root.append(t);
   }
   root.append(svg("line", { class: "axis", x1: L, x2: W - R,
@@ -118,12 +124,22 @@ function renderHistory() {
   lineChart(document.getElementById("history-chart"), labels, areaSeries,
     (v) => nf.format(v));
 
+  // Two separate charts, not one shared axis: flagged-file counts (tens to
+  // low hundreds) and the score sum (thousands to tens of thousands) live
+  // on wildly different scales, so a single shared axis flattens the
+  // smaller series into an unreadable near-flat line at the bottom.
   const flagged = [
-    { name: "flagged files", values: h.points.map((p) => p.flagged) },
-    { name: "score sum", values: h.points.map((p) => p.score) },
+    { name: "geflaggte Dateien", values: h.points.map((p) => p.flagged) },
   ];
   legend(document.getElementById("flagged-legend"), flagged.map((s) => s.name));
   lineChart(document.getElementById("flagged-chart"), labels, flagged,
+    (v) => nf.format(v));
+
+  const scoreSum = [
+    { name: "Score-Summe", values: h.points.map((p) => p.score) },
+  ];
+  legend(document.getElementById("score-legend"), scoreSum.map((s) => s.name));
+  lineChart(document.getElementById("score-chart"), labels, scoreSum,
     (v) => nf.format(v));
 
   const rows = DATA.files

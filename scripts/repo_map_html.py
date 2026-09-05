@@ -388,6 +388,10 @@ _TEMPLATE = f"""<!doctype html>
         <div class="legend" id="flagged-legend"></div>
         <div id="flagged-chart"></div>
       </div>
+      <div>
+        <div class="legend" id="score-legend"></div>
+        <div id="score-chart"></div>
+      </div>
     </div>
     <h2>Hotspots &mdash; Score &times; Commits</h2>
     <div class="wrap"><table>
