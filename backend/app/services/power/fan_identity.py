@@ -37,17 +37,19 @@ def encode_platform_address(dev_name: str) -> Optional[int]:
     auch wenn der Punkt danach nie matcht. Daraus werden asus-nb-wmi -> 0x0a
     und eeepc-wmi -> 0xeee: stabil, aber bedeutungslos. _PLATFORM_HEX
     verlangt den Punkt tatsaechlich und bildet damit den gemeinten
-    Device-Tree-Fall ab statt des Parser-Unfalls.
+    Device-Tree-Fall ab statt des Parser-Unfalls. Betroffen sind nur Chips,
+    die `sensors` ohnehin nicht listet.
 
-    Zweite bewusste Abweichung: sscanf ("%d") traegt dem Fehlen des
-    Stringende-Ankers Rechnung -- "nct6775.656.1" liefert 656. Libsensors'
-    "%*[a-zA-Z0-9_]%*1[.:]%d" haette das gleiche Ergebnis.
+    Technische Anmerkung zu _PLATFORM_DECIMAL: sscanf ("%d") liest den
+    fuehrenden Ziffernlauf und ignoriert den Rest. Das Muster verzichtet
+    bewusst auf einen Stringende-Anker ($), um dieses Verhalten nachzubilden.
+    Ein Anker waere eine Abweichung -- "nct6775.656.1" wuerde dann None
+    liefern statt 656. Keinen Anker zu setzen ist die Paritaet.
 
-    Dritte bewusste Abweichung: Zeichenklasse enthaelt Bindestrich,
+    Zweite bewusste Abweichung: Zeichenklasse enthaelt Bindestrich,
     normatives Scanset %*[a-zA-Z0-9_] nicht. Ohne Bindestrich fiele
     "abc-def.5" in den Hex-Parser-Unfall (sscanf "%x" liest "abc" -> 0xabc).
-    Stattdessen lesen wir den Suffix. Betroffen sind nur Chips, die `sensors`
-    ohnehin nicht listet.
+    Stattdessen lesen wir den Suffix.
     """
     match = _PLATFORM_DECIMAL.match(dev_name)
     if match:
