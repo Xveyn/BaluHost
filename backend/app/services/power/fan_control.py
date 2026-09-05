@@ -673,7 +673,7 @@ class FanControlService:
                     display_temp = fan.temperature_celsius
                     if config.temp_sensor_id:
                         try:
-                            sensor_temp = await self._backend.get_temperature(config.temp_sensor_id)
+                            sensor_temp = await self._registry.get_temp(config.temp_sensor_id)
                             if sensor_temp is not None:
                                 display_temp = sensor_temp
                         except Exception:

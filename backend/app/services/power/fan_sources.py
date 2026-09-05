@@ -13,6 +13,9 @@ logger = logging.getLogger(__name__)
 
 SourceKind = Literal["hwmon", "gpu", "disk", "mix"]
 
+# Namespace-Praefix-Whitelist fuer _normalize_id()
+_NAMESPACES = ("hwmon:", "gpu:", "disk:", "mix:")
+
 
 @runtime_checkable
 class TempSource(Protocol):
@@ -100,8 +103,12 @@ class TempSourceRegistry:
 
     @staticmethod
     def _normalize_id(sensor_id: str) -> str:
-        """Accept both namespaced (hwmon:foo) and legacy (foo) IDs."""
-        if ":" in sensor_id:
+        """Accept both namespaced (hwmon:foo) and legacy (foo) IDs.
+
+        Geprueft wird der Namespace-Praefix, nicht das blosse Vorkommen eines
+        Doppelpunkts: stabile Kennungen (#532) tragen selbst einen.
+        """
+        if sensor_id.startswith(_NAMESPACES):
             return sensor_id
         return f"hwmon:{sensor_id}"
 
