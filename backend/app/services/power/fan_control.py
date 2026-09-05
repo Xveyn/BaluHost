@@ -334,8 +334,40 @@ class FanControlService:
                         db,
                         chips=chip_facts,
                         sensor_map=self._collect_sensor_map(),
-                        cpu_sensor_id=cpu_sensor_id,
+                        cpu_sensor_id=TempSourceRegistry._normalize_id(cpu_sensor_id)
+                        if cpu_sensor_id else None,
                     )
+                    # Eigenstaendiger Commit VOR dem Audit-Eintrag: der
+                    # Abgleich muss die Datenbank erreicht haben, BEVOR die
+                    # Anlage-Schleife unten startet (R4) -- und bevor der
+                    # Audit-Aufruf unten laeuft, damit dessen eigene Session
+                    # (db=None, siehe unten) nicht ueber unsere entscheidet,
+                    # ob unser Commit stattfand. db.commit() steht bewusst
+                    # noch IM try: die eigentlichen ORM-Schreibzugriffe des
+                    # Abgleichs (Umbenennung, Deaktivierung) erreichen die
+                    # Datenbank erst beim Flush, das der Commit ausloest --
+                    # ein UNIQUE-Verstoss aus einem Rename wuerde sonst erst
+                    # hier auftreten und aus dem try entkommen.
+                    db.commit()
+                    if report.renamed or report.deactivated:
+                        try:
+                            # Eigene Session (db=None): AuditLoggerDB.log_event
+                            # committet die uebergebene Session selbst. Mit
+                            # unserer db haette ein fehlschlagender Audit-Commit
+                            # unsere bereits erfolgreiche Transaktion getroffen
+                            # und den echten Fehler als Audit-Problem maskiert.
+                            from app.services.audit import get_audit_logger_db
+                            get_audit_logger_db().log_system_event(
+                                action="fan_identity_reconcile",
+                                details={
+                                    "renamed": report.renamed,
+                                    "deactivated": report.deactivated,
+                                    "skipped_absent": report.skipped_absent,
+                                },
+                                db=None,
+                            )
+                        except Exception:
+                            logger.debug("Audit-Eintrag zum Identitaets-Abgleich fehlgeschlagen")
                 except Exception:
                     # Nicht weitermachen: die Scan-IDs liegen bereits in der
                     # neuen Form vor, die DB-Zeilen aber noch in der alten.
@@ -344,37 +376,35 @@ class FanControlService:
                     # updated_at ist "jetzt" und gewaenne beim naechsten
                     # Abgleich gegen die echte Nutzerkurve. Das waere genau
                     # der Datenverlust, den dieser Abgleich verhindern soll,
-                    # nur auf einem Umweg. Stattdessen: kein Commit, kein
-                    # neuer Fan-Datensatz -- die Luefter bleiben fuer diesen
-                    # einen Startzyklus ungeregelt (sichtbar: PWM bewegt sich
-                    # nicht, keine Kurve in der UI), aber keine Zeile geht
-                    # verloren. Der naechste Start versucht es erneut.
+                    # nur auf einem Umweg. Stattdessen: kein neuer
+                    # Fan-Datensatz -- die Luefter bleiben fuer diesen einen
+                    # Startzyklus ungeregelt (sichtbar: PWM bewegt sich nicht,
+                    # keine Kurve in der UI), aber keine Zeile geht verloren.
+                    # Der naechste Start versucht es erneut.
                     logger.exception(
                         "Identitaets-Abgleich fehlgeschlagen -- keine Configs "
                         "angelegt, um die Altzeilen nicht zu ueberdecken. Die "
                         "Luefter bleiben bis zum naechsten Start ungeregelt."
                     )
                     return
-                if report.renamed or report.deactivated:
-                    try:
-                        from app.services.audit import get_audit_logger_db
-                        get_audit_logger_db().log_system_event(
-                            action="fan_identity_reconcile",
-                            details={
-                                "renamed": report.renamed,
-                                "deactivated": report.deactivated,
-                                "skipped_absent": report.skipped_absent,
-                            },
-                            db=db,
-                        )
-                    except Exception:
-                        logger.debug("Audit-Eintrag zum Identitaets-Abgleich fehlgeschlagen")
 
-                # Eigenstaendiger Commit: der Abgleich muss die Datenbank
-                # erreicht haben, BEVOR die Anlage-Schleife unten startet.
-                # Liefe er danach, waeren die Ziel-IDs bereits durch frische
-                # Default-Zeilen belegt und jede Altzeile verloere (R4).
-                db.commit()
+            if not getattr(lifespan, "IS_PRIMARY_WORKER", False):
+                # Die Anlage-Schleife ist ebenso primary-only wie der Abgleich
+                # oben (C1): der Sekundaer-Worker durchlaeuft beim Start KEINE
+                # start_power_manager(primary=True)/check_and_notify_permissions()
+                # zwischen Primary-Flag und Fan-Start (siehe lifespan.py) und
+                # erreicht diese Stelle deshalb plausibel VOR dem Primary.
+                # Legte er hier eine Default-Config unter einer (noch) neuen
+                # Scan-ID an, traegt sie updated_at="jetzt" und gewinnt beim
+                # spaeteren Abgleich des Primary gegen die echte Nutzerkurve
+                # -- genau die Zeile, die der Abgleich schuetzen soll, ginge
+                # ueber den Sekundaer-Worker doch noch verloren. Sekundaer-
+                # Worker lesen daher nur; die Configs liegen in der
+                # gemeinsamen Datenbank, der Primary legt sie an. Ein
+                # Sekundaer, der kurz davor eine Anfrage bedient, zeigt einen
+                # Luefter ohne Config -- transient und harmlos.
+                logger.debug("Sekundaer-Worker: Anlage-Schleife uebersprungen")
+                return
 
             for fan in fans:
                 existing = db.execute(
@@ -396,13 +426,16 @@ class FanControlService:
                         ) if (cpu_sensor_id or fan.temp_sensor_id) else None,
                         is_active=True,
                     )
-                    db.add(config)
                     try:
-                        db.flush()
+                        # Savepoint statt db.rollback() auf der ganzen
+                        # Transaktion: sonst risse eine kollidierende fuenfte
+                        # Zeile die vier zuvor erfolgreich geflushten wieder
+                        # mit sich (I3). Ein anderer Worker war schneller --
+                        # die Zeile existiert, das ist der gewuenschte
+                        # Endzustand.
+                        with db.begin_nested():
+                            db.add(config)
                     except IntegrityError:
-                        # Ein anderer Worker war schneller. Die Zeile existiert,
-                        # das ist der gewuenschte Endzustand.
-                        db.rollback()
                         logger.debug("Fan-Config %s wurde parallel angelegt", fan.fan_id)
 
             db.commit()

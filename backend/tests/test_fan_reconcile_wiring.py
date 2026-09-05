@@ -1,12 +1,45 @@
 """Vorbedingungen und Gate des Identitaets-Abgleichs (#532)."""
 import logging
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from sqlalchemy import create_engine, select
+from sqlalchemy.orm import sessionmaker
 
+from app.models.base import Base
+from app.models.fans import FanConfig
 from app.schemas.fans import FanCurvePoint, FanMode
 from app.services.power import fan_control as fan_control_module
 from app.services.power.fan_control import FanControlService, FanData
+
+
+class _FakeLinuxBackend:
+    """Schlankes Double fuer LinuxFanControlBackend, mit echten dict-Attributen
+    statt Mock-Kindern -- fuer die beiden Tests unten, die eine echte
+    SQLite-Session gegen die tatsaechliche Transaktionsreihenfolge pruefen.
+    """
+
+    def __init__(self, fan_cache, temp_paths, fans, cpu_sensor_id=None):
+        self._fan_cache = fan_cache
+        self._temp_paths = temp_paths
+        self._fans = fans
+        self._cpu_sensor_id = cpu_sensor_id
+
+    async def get_fans(self):
+        return self._fans
+
+    async def get_available_temp_sensors(self):
+        if self._cpu_sensor_id is None:
+            return []
+        from app.services.power.fan_control import TempSensorData
+        return [TempSensorData(
+            sensor_id=self._cpu_sensor_id,
+            device_name="k10temp",
+            label="Tctl",
+            is_cpu_sensor=True,
+            current_temp=50.0,
+        )]
 
 
 def _service(monkeypatch, *, primary: bool, linux: bool):
@@ -114,3 +147,129 @@ async def test_reconcile_failure_does_not_create_configs(monkeypatch, caplog):
     assert any(r.levelno == logging.ERROR for r in caplog.records), (
         "Fehlschlag muss als ERROR mit Traceback geloggt werden"
     )
+
+
+@pytest.mark.asyncio
+async def test_secondary_worker_creates_no_configs(monkeypatch):
+    """C1: der Sekundaer-Worker darf die Anlage-Schleife nicht ausfuehren.
+
+    Legte er hier eine Default-Config unter der (bereits neuen) Scan-ID an,
+    truege sie updated_at="jetzt" und gewaenne beim spaeteren Abgleich des
+    Primary gegen die echte Nutzerkurve -- der Datenverlust, den der
+    Abgleich verhindern soll, nur ueber den Sekundaer-Worker eingeschleust.
+    Echte In-Memory-SQLite-Session, kein MagicMock: die Zeilenzahl wird
+    tatsaechlich gezaehlt, nicht an einem Call-Count abgelesen.
+    """
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    session_factory = sessionmaker(bind=engine)
+
+    FanControlService._instance = None
+    config = MagicMock()
+    config.fan_control_enabled = True
+    config.is_dev_mode = False
+
+    service = FanControlService(config, session_factory)
+    service._use_linux_backend = True
+    monkeypatch.setattr(fan_control_module.lifespan, "IS_PRIMARY_WORKER",
+                        False, raising=False)
+
+    fan = FanData(
+        fan_id="nct6798-isa-0290:pwm1",
+        name="nct6798 PWM1",
+        rpm=900,
+        pwm_percent=40,
+        temperature_celsius=None,
+        mode=FanMode.AUTO,
+        min_pwm_percent=0,
+        max_pwm_percent=100,
+        emergency_temp_celsius=85.0,
+        temp_sensor_id=None,
+        curve_points=[FanCurvePoint(temp=35, pwm=30)],
+        is_active=True,
+    )
+    service._backend = _FakeLinuxBackend(fan_cache={}, temp_paths={}, fans=[fan])
+
+    await service._load_fan_configs()
+
+    with session_factory() as check:
+        assert check.execute(select(FanConfig)).scalars().all() == [], (
+            "Sekundaer-Worker hat eine Config angelegt -- C1-Regression"
+        )
+
+
+@pytest.mark.asyncio
+async def test_reconcile_runs_before_anlage_and_no_duplicate_row(monkeypatch):
+    """Reihenfolge: Abgleich vor Anlage-Schleife, keine zusaetzliche Zeile.
+
+    Eine Altzeile liegt unter der frueheren hwmon-indizierten ID in der DB.
+    Der Scan liefert dieselbe physische PWM-Leitung bereits unter der neuen,
+    stabilen ID. Lief der Abgleich VOR der Anlage-Schleife (wie vorgesehen),
+    traegt die migrierte Zeile danach die neue ID plus legacy_fan_id, und
+    die Anlage-Schleife findet unter der neuen ID bereits eine "existing"
+    Zeile vor -- es entsteht KEINE zweite, zusaetzliche Default-Zeile. Liefe
+    der Abgleich stattdessen nach der Anlage-Schleife (die Regression, die
+    R4 verhindern soll), gaebe es zwei Zeilen: die frische Default-Zeile
+    unter der neuen ID und die unveraenderte Altzeile.
+    """
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    session_factory = sessionmaker(bind=engine)
+
+    with session_factory() as seed:
+        seed.add(FanConfig(
+            fan_id="hwmon5_pwm1",
+            name="nct6798 PWM1",
+            mode="auto",
+            temp_sensor_id="hwmon5_temp6",
+            is_active=True,
+            updated_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        ))
+        seed.commit()
+
+    FanControlService._instance = None
+    config = MagicMock()
+    config.fan_control_enabled = True
+    config.is_dev_mode = False
+
+    service = FanControlService(config, session_factory)
+    service._use_linux_backend = True
+    monkeypatch.setattr(fan_control_module.lifespan, "IS_PRIMARY_WORKER",
+                        True, raising=False)
+
+    fan = FanData(
+        fan_id="nct6798-isa-0290:pwm1",
+        name="nct6798 PWM1",
+        rpm=900,
+        pwm_percent=40,
+        temperature_celsius=None,
+        mode=FanMode.AUTO,
+        min_pwm_percent=0,
+        max_pwm_percent=100,
+        emergency_temp_celsius=85.0,
+        temp_sensor_id=None,
+        curve_points=[FanCurvePoint(temp=35, pwm=30)],
+        is_active=True,
+    )
+    service._backend = _FakeLinuxBackend(
+        fan_cache={
+            "nct6798-isa-0290:pwm1": {
+                "identity_stable": True,
+                "device_driver": "nct6798",
+            },
+        },
+        temp_paths={},
+        fans=[fan],
+    )
+
+    await service._load_fan_configs()
+
+    with session_factory() as check:
+        rows = list(check.execute(select(FanConfig)).scalars())
+        assert len(rows) == 1, (
+            f"erwartet genau eine Zeile (migriert, keine zusaetzliche "
+            f"Default-Zeile), gefunden: {[r.fan_id for r in rows]}"
+        )
+        row = rows[0]
+        assert row.fan_id == "nct6798-isa-0290:pwm1"
+        assert row.legacy_fan_id == "hwmon5_pwm1"
