@@ -483,6 +483,14 @@ class LinuxFanControlBackend(FanControlBackend):
                 # Find PWM enable
                 pwm_enable_path = hwmon_dir / f"pwm{pwm_num}_enable"
 
+                # pwm_enable EINMAL pro Start lesen, bevor set_pwm es auf 1
+                # setzt. Nach dem ersten Regelzyklus steht dort unser eigener
+                # Wert -- dies ist der einzige Moment, in dem der Board-Wert
+                # sichtbar sein kann (#534).
+                pwm_enable_at_scan = None
+                if pwm_enable_path.exists():
+                    pwm_enable_at_scan = await self._read_hwmon_file(pwm_enable_path)
+
                 # Prefer CPU sensor over local board sensor
                 if cpu_sensor_id:
                     temp_sensor_id = cpu_sensor_id
@@ -508,6 +516,7 @@ class LinuxFanControlBackend(FanControlBackend):
                     "name": f"{hwmon_name_value} PWM{pwm_num}",
                     "pwm_path": pwm_file,
                     "pwm_enable_path": pwm_enable_path if pwm_enable_path.exists() else None,
+                    "pwm_enable_at_scan": pwm_enable_at_scan,
                     "fan_input_path": fan_input_path,
                     "temp_path": temp_path,
                     "temp_sensor_id": temp_sensor_id,
