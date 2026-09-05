@@ -94,13 +94,15 @@ class FanControlBackend(ABC):
         pass
 
     @abstractmethod
-    async def set_pwm(self, fan_id: str, pwm_percent: int) -> bool:
+    async def set_pwm(self, fan_id: str, pwm_percent: int, force: bool = False) -> bool:
         """
         Set PWM value for a fan.
 
         Args:
             fan_id: Fan identifier
             pwm_percent: PWM percentage (0-100)
+            force: Ein etwaiges Backoff-Fenster uebergehen (#533). Fuer
+                Nutzeraktionen und den Notfallpfad.
 
         Returns:
             True if successful, False otherwise
@@ -550,7 +552,12 @@ class FanControlService:
                     target_pwm = fan.pwm_percent
 
                 if target_pwm != fan.pwm_percent:
-                    await self._backend.set_pwm(fan.fan_id, target_pwm)
+                    # Im Notfall das Backoff-Fenster umgehen (#533): ein
+                    # Ueberhitzungsfall ist per Definition kein Dauerzustand,
+                    # und thermische Sicherheit schlaegt Log-Hygiene.
+                    await self._backend.set_pwm(
+                        fan.fan_id, target_pwm, force=(mode == FanMode.EMERGENCY)
+                    )
                 self._last_pwm_by_fan[fan.fan_id] = target_pwm
 
                 if (
@@ -805,8 +812,9 @@ class FanControlService:
             # Apply min/max limits
             pwm_percent = max(config.min_pwm_percent, min(config.max_pwm_percent, pwm_percent))
 
-        # Set PWM
-        success = await self._backend.set_pwm(fan_id, pwm_percent)
+        # Set PWM. Nutzeraktion: das Backoff-Fenster umgehen (#533), damit der
+        # Klick einen echten Versuch und eine echte Fehlermeldung bekommt.
+        success = await self._backend.set_pwm(fan_id, pwm_percent, force=True)
 
         # Read back RPM
         rpm = None

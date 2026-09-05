@@ -87,7 +87,7 @@ class _StubBackend:
             pwm_control=PwmControl.SUPPORTED,
         )]
 
-    async def set_pwm(self, fan_id, pwm_percent):
+    async def set_pwm(self, fan_id, pwm_percent, force=False):
         self.set_pwm_calls.append((fan_id, pwm_percent))
         return True
 

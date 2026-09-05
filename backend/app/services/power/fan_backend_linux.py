@@ -6,6 +6,7 @@ import getpass
 import logging
 import os
 import subprocess
+import time
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -23,6 +24,15 @@ FIRMWARE_MANAGED_WRITE_ERROR = (
     "possible through the firmware curve (gpu_od/fan_ctrl), see issue #516."
 )
 
+# Backoff gegen Knoten, die den Write dauerhaft ablehnen (#533). Der Regelkreis
+# laeuft alle 5 s; ohne Deckelung ergab das 17k Logzeilen und 34k sudo-Aufrufe
+# pro Tag fuer einen einzigen Luefter.
+#
+# Die Basis ist BEWUSST groesser als ein Regelzyklus: mit 5 s waere das erste
+# Fenster genau einen Zyklus lang und wuerde nichts unterdruecken.
+PWM_BACKOFF_BASE_SECONDS = 10.0
+PWM_BACKOFF_MAX_SECONDS = 900.0  # 15 Minuten
+
 
 class LinuxFanControlBackend(FanControlBackend):
     """Linux hardware backend using hwmon sysfs."""
@@ -32,6 +42,11 @@ class LinuxFanControlBackend(FanControlBackend):
         self._hwmon_base = Path("/sys/class/hwmon")
         self._fan_cache: Dict[str, Dict] = {}
         self._has_write_permission = False
+        # fan_id -> (fail_count, naechster erlaubter Versuch als monotone Zeit).
+        # Bewusst NICHT in _fan_cache: der wird bei jedem Rescan neu gebaut,
+        # der Backoff muss das ueberleben.
+        self._write_backoff: Dict[str, Tuple[int, float]] = {}
+        self._monotonic = time.monotonic
 
     async def is_available(self) -> bool:
         """Check if hwmon is available."""
@@ -122,8 +137,13 @@ class LinuxFanControlBackend(FanControlBackend):
 
         return fans
 
-    async def set_pwm(self, fan_id: str, pwm_percent: int) -> bool:
-        """Set hardware PWM value."""
+    async def set_pwm(self, fan_id: str, pwm_percent: int, force: bool = False) -> bool:
+        """Set hardware PWM value.
+
+        force=True umgeht das Backoff-Fenster (#533) — fuer Nutzeraktionen und
+        den Notfallpfad, die einen echten Versuch und eine echte Fehlermeldung
+        verdienen statt eines stillen False.
+        """
         if fan_id not in self._fan_cache:
             logger.warning(f"Fan {fan_id} not found in cache")
             return False
@@ -136,6 +156,14 @@ class LinuxFanControlBackend(FanControlBackend):
             logger.debug(f"{fan_id}: firmware-managed fan curve, PWM write skipped")
             return False
 
+        backoff = self._write_backoff.get(fan_id)
+        if backoff is not None and not force and self._monotonic() < backoff[1]:
+            logger.debug(
+                f"{fan_id}: PWM write suppressed, {backoff[0]} consecutive failures, "
+                f"retry in {backoff[1] - self._monotonic():.0f}s"
+            )
+            return False
+
         pwm_path = fan_info["pwm_path"]
         pwm_enable_path = fan_info.get("pwm_enable_path")
 
@@ -145,11 +173,20 @@ class LinuxFanControlBackend(FanControlBackend):
         if pwm_enable_path:
             ok_enable, _ = await self._write_hwmon_file(pwm_enable_path, "1")
             if not ok_enable:
-                logger.warning(f"Failed to set PWM enable for {fan_id}")
+                # DEBUG statt WARNING (#533): schlaegt pwm_enable fehl, schlaegt
+                # gleich darauf auch der pwm-Write fehl und traegt die volle
+                # Diagnose. Eine Zeile pro Episode, nicht zwei pro Zyklus.
+                logger.debug(f"Failed to set PWM enable for {fan_id}")
 
         success, err_code = await self._write_hwmon_file(pwm_path, str(pwm_value))
         if success:
             fan_info["last_write_error"] = None
+            recovered = self._write_backoff.pop(fan_id, None)
+            if recovered is not None:
+                logger.info(
+                    f"{fan_id}: PWM write succeeded again after {recovered[0]} "
+                    f"consecutive failure(s)"
+                )
             if fan_info.get("pwm_control") is PwmControl.NO_PERMISSION:
                 # Rechte wurden zur Laufzeit korrigiert.
                 fan_info["pwm_control"] = PwmControl.SUPPORTED
@@ -188,7 +225,26 @@ class LinuxFanControlBackend(FanControlBackend):
                 f"errno={errno.errorcode.get(err_code, err_code)})."
             )
 
-        logger.error(f"Failed to write PWM for {fan_id}: {fan_info['last_write_error']}")
+        fail_count = self._write_backoff.get(fan_id, (0, 0.0))[0] + 1
+        delay = min(
+            PWM_BACKOFF_BASE_SECONDS * (2 ** (fail_count - 1)),
+            PWM_BACKOFF_MAX_SECONDS,
+        )
+        self._write_backoff[fan_id] = (fail_count, self._monotonic() + delay)
+
+        if fail_count == 1:
+            # Erster Fehlschlag einer Episode: eine ERROR-Zeile mit der vollen
+            # Diagnose. Wiederholungen laufen auf DEBUG, damit Fehler-Metrik und
+            # Log-Alerting brauchbar bleiben.
+            logger.error(
+                f"Failed to write PWM for {fan_id}: {fan_info['last_write_error']} "
+                f"Further attempts suppressed, next retry in {delay:.0f}s."
+            )
+        else:
+            logger.debug(
+                f"Failed to write PWM for {fan_id} ({fail_count} consecutive), "
+                f"next retry in {delay:.0f}s"
+            )
         return False
 
     # CPU temperature driver names (same keywords as hardware/sensors.py)
@@ -397,6 +453,10 @@ class LinuxFanControlBackend(FanControlBackend):
 
         if new_cache or not self._fan_cache:
             self._fan_cache = new_cache
+            # Backoff-Eintraege verschwundener Luefter mitnehmen, sonst waechst
+            # das Dict ueber Treiber-Reloads und hwmon-Renumbering hinweg (#533).
+            for stale in set(self._write_backoff) - set(self._fan_cache):
+                del self._write_backoff[stale]
             logger.info(f"Scanned hwmon: found {len(self._fan_cache)} PWM fan(s)")
         else:
             logger.warning(
@@ -451,7 +511,10 @@ class LinuxFanControlBackend(FanControlBackend):
                     self._has_write_permission = True
                     logger.debug(f"Wrote to {path} via sudo tee")
                     return True, None
-                logger.warning(f"sudo tee failed for {path}: {result.stderr.decode()}")
+                # DEBUG statt WARNING (#533): der Aufrufer meldet die Episode
+                # bereits mit einer ERROR-Zeile; hier wuerde sie pro Zyklus
+                # ein zweites Mal auflaufen.
+                logger.debug(f"sudo tee failed for {path}: {result.stderr.decode()}")
             except Exception as exc2:
                 logger.error(f"Failed to write {path} with sudo: {exc2}")
             return False, code
