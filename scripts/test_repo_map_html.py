@@ -94,8 +94,10 @@ class TestBuildPayload:
 
 class TestRender:
     def test_report_makes_no_external_requests(self):
+        """The SVG namespace URI (http://www.w3.org/2000/svg) is a name, not
+        a fetch, so this checks resource-load patterns rather than a blanket
+        "http://" substring - see test_page_loads_nothing_from_the_network."""
         html = repo_map_html.render(make_report([make_entry("a.py", "x = 1\n")]))
-        assert "http://" not in html
         assert "https://" not in html
         assert "<script src=" not in html
         assert "<link rel=\"stylesheet\"" not in html
@@ -139,3 +141,54 @@ class TestRender:
         page = repo_map_html.render(make_report(), history=hist)
         assert "id=\"history\"" in page
         assert "2026-02" in page
+
+    def test_history_chart_and_hotspots_are_wired_up(self):
+        hist = {
+            "areas": ["backend/app", "sonstiges"],
+            "points": [
+                {"label": "2026-01", "commit": "a", "date": "2026-01-31",
+                 "files": 1, "loc": 10, "flagged": 0, "score": 0,
+                 "areas": {"backend/app": 10, "sonstiges": 0}},
+                {"label": "2026-02", "commit": "b", "date": "2026-02-28",
+                 "files": 1, "loc": 20, "flagged": 1, "score": 5,
+                 "areas": {"backend/app": 20, "sonstiges": 0}},
+            ],
+            "churn": {"a.py": {"commits": 3, "added": 1, "deleted": 0,
+                               "last": "2026-02-01"}},
+        }
+        page = repo_map_html.render(make_report([make_entry("a.py", "x = 1\n")]),
+                                    history=hist)
+        assert "history-chart" in page
+        assert "history-hotspots" in page
+        assert "renderHistory" in page, "the chart must be built, not just declared"
+        assert "dirDelta" in page, "the tree needs its per-directory delta column"
+
+    def test_chart_does_not_use_non_uniform_svg_scaling(self):
+        """preserveAspectRatio="none" on a percentage-width svg stretches a
+        fixed viewBox horizontally, distorting every glyph and gap (a visual
+        bug found only by actually rendering the page). The chart now sizes
+        its viewBox from the host element instead, so this attribute must
+        never reappear."""
+        hist = {
+            "areas": ["backend/app"],
+            "points": [
+                {"label": "2026-01", "commit": "a", "date": "2026-01-31",
+                 "files": 1, "loc": 10, "flagged": 0, "score": 0,
+                 "areas": {"backend/app": 10}},
+                {"label": "2026-02", "commit": "b", "date": "2026-02-28",
+                 "files": 1, "loc": 20, "flagged": 1, "score": 5,
+                 "areas": {"backend/app": 20}},
+            ],
+            "churn": {},
+        }
+        page = repo_map_html.render(make_report(), history=hist)
+        assert "preserveAspectRatio" not in page
+
+    def test_page_loads_nothing_from_the_network(self):
+        """The SVG namespace URI is a name, not a fetch, so the check targets
+        resource loads rather than the substring http://."""
+        hist = {"areas": [], "points": [], "churn": {}}
+        page = repo_map_html.render(make_report(), history=hist)
+        for forbidden in ("<script src", "<link ", "@import", "url(http",
+                          "src=\"http", "href=\"http"):
+            assert forbidden not in page, f"page must stay self-contained: {forbidden}"
