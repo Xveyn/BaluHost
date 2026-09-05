@@ -143,6 +143,35 @@ def test_resumes_after_abort_between_rename_and_deactivate(db):
     assert "nct6798-isa-0290:pwm1" in _active(db)
 
 
+def test_losing_incumbent_frees_its_id_for_the_winner(db):
+    """I-2: Traegt der Inkumbent (bereits in Neuform) das AELTERE updated_at
+    und eine Altzeile das juengere, verliert der Inkumbent den Rangvergleich.
+    Ohne Freimachen wuerde die anschliessende Umbenennung des Gewinners auf
+    denselben fan_id-Wert den Unique-Index verletzen -- reproduzierbar ueber
+    Rollback+Roll-forward (siehe Review)."""
+    incumbent = db.execute(select(FanConfig).where(
+        FanConfig.fan_id == "hwmon3_pwm1")).scalar_one()
+    incumbent.fan_id = "nct6798-isa-0290:pwm1"
+    incumbent.legacy_fan_id = "hwmon3_pwm1"
+    incumbent.updated_at = _dt("2026-01-01T00:00:00")   # aelter als alle Rivalen
+    db.commit()
+
+    reconcile_fan_identities(db, chips=CHIPS, sensor_map=SENSOR_MAP,
+                             cpu_sensor_id=CPU_DEFAULT)
+    db.commit()   # darf keinen IntegrityError werfen
+
+    winner = db.execute(select(FanConfig).where(
+        FanConfig.fan_id == "nct6798-isa-0290:pwm1")).scalar_one()
+    assert winner.legacy_fan_id == "hwmon2_pwm1"        # juengste Altzeile gewinnt
+
+    incumbent_after = db.execute(select(FanConfig).where(
+        FanConfig.id == incumbent.id)).scalar_one()
+    assert incumbent_after.is_active is False
+    assert incumbent_after.fan_id != "nct6798-isa-0290:pwm1"
+
+    assert db.query(FanConfig).count() == 16            # nichts geloescht
+
+
 def test_unknown_name_is_neither_candidate_nor_deactivated(db):
     db.add(FanConfig(fan_id="hwmon9_pwm1", name="Unknown PWM1", mode="auto",
                      temp_sensor_id=None, is_active=True,
@@ -192,7 +221,11 @@ def test_unresolvable_sensor_falls_back_to_cpu_default(db):
 
 
 def test_sensor_label_is_rekeyed_and_keeps_provenance(db):
-    db.add(TempSensorLabel(sensor_id="hwmon4_temp1", custom_label="RAID-Platten"))
+    """I-1: real gespeicherte Label-sensor_id traegt IMMER das 'hwmon:'-Praefix
+    (die Route persistiert die Registry-Kennung, siehe HwmonTempSource.id).
+    Ohne Praefix-Abstreifen vor dem Regex-Test traf die Migration keine
+    einzige echte Zeile."""
+    db.add(TempSensorLabel(sensor_id="hwmon:hwmon4_temp1", custom_label="RAID-Platten"))
     db.commit()
 
     reconcile_fan_identities(db, chips=CHIPS, sensor_map=SENSOR_MAP,
@@ -200,9 +233,36 @@ def test_sensor_label_is_rekeyed_and_keeps_provenance(db):
     db.commit()
 
     labels = {row.sensor_id: row for row in db.query(TempSensorLabel).all()}
-    assert "k10temp-pci-00c3:temp1" in labels
-    assert labels["k10temp-pci-00c3:temp1"].custom_label == "RAID-Platten"
-    assert labels["k10temp-pci-00c3:temp1"].legacy_sensor_id == "hwmon4_temp1"
+    assert "hwmon:k10temp-pci-00c3:temp1" in labels
+    assert labels["hwmon:k10temp-pci-00c3:temp1"].custom_label == "RAID-Platten"
+    assert labels["hwmon:k10temp-pci-00c3:temp1"].legacy_sensor_id == "hwmon:hwmon4_temp1"
+
+
+def test_sensor_label_collision_keeps_older_row_under_its_own_key(db):
+    """Zwei Altzeilen zielen auf denselben neuen Schluessel -- die juengere
+    gewinnt und traegt ihn, die aeltere bleibt unter ihrem alten Schluessel
+    liegen (kein Loeschen, kein Primaerschluessel-Konflikt)."""
+    older = TempSensorLabel(sensor_id="hwmon:hwmon4_temp1", custom_label="Alt",
+                            updated_at=_dt("2026-01-01T00:00:00"))
+    newer = TempSensorLabel(sensor_id="hwmon:hwmon6_temp1", custom_label="Neu",
+                            updated_at=_dt("2026-08-01T00:00:00"))
+    db.add(older)
+    db.add(newer)
+    db.commit()
+
+    sensor_map = dict(SENSOR_MAP)
+    sensor_map["hwmon6_temp1"] = "hwmon:k10temp-pci-00c3:temp1"
+
+    reconcile_fan_identities(db, chips=CHIPS, sensor_map=sensor_map,
+                             cpu_sensor_id=CPU_DEFAULT)
+    db.commit()   # darf keinen Primaerschluessel-Konflikt werfen
+
+    labels = {row.sensor_id: row for row in db.query(TempSensorLabel).all()}
+    assert "hwmon:k10temp-pci-00c3:temp1" in labels
+    assert labels["hwmon:k10temp-pci-00c3:temp1"].custom_label == "Neu"
+    assert "hwmon:hwmon4_temp1" in labels           # aeltere bleibt liegen
+    assert labels["hwmon:hwmon4_temp1"].custom_label == "Alt"
+    assert len(labels) == 2
 
 
 def test_composite_sources_are_rewritten(db):

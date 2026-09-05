@@ -332,9 +332,15 @@ class LinuxFanControlBackend(FanControlBackend):
                 continue
 
             # Found a CPU sensor driver — use its first temp input
-            for temp_file in sorted(hwmon_dir.glob("temp*_input")):
+            for temp_file in sorted(hwmon_dir.glob("temp[0-9]*_input")):
                 temp_num = temp_file.name.replace("temp", "").replace("_input", "")
                 sensor_id = build_sensor_id(identity, int(temp_num))
+                # I-3: ohne diesen Eintrag bliebe get_temperature() fuer einen
+                # Chip, der erst NACH dem Startscan erscheint (Treiber
+                # nachgeladen), dauerhaft None -- _temp_paths wird sonst
+                # ausschliesslich in _scan_pwm_fans gefuellt, das nur beim
+                # Start und in switch_backend laeuft.
+                self._temp_paths.setdefault(sensor_id, temp_file)
                 logger.info(
                     f"Found CPU temp sensor: {sensor_id} (driver={driver_name})"
                 )
@@ -369,9 +375,14 @@ class LinuxFanControlBackend(FanControlBackend):
 
             is_cpu = device_name in self._CPU_SENSOR_DRIVERS
 
-            for temp_file in sorted(hwmon_dir.glob("temp*_input")):
+            for temp_file in sorted(hwmon_dir.glob("temp[0-9]*_input")):
                 temp_num = temp_file.name.replace("temp", "").replace("_input", "")
                 sensor_id = build_sensor_id(identity, int(temp_num))
+                # I-3: gleicher Grund wie in _find_cpu_temp_sensor -- ohne
+                # diesen Eintrag ist ein erst nachtraeglich gelisteter Sensor
+                # zwar in der Auswahlliste sichtbar, aber get_temperature()
+                # findet ihn nie (kein Scan-Lauf hat ihn eingetragen).
+                self._temp_paths.setdefault(sensor_id, temp_file)
 
                 # Try to read label
                 label = None
@@ -480,7 +491,7 @@ class LinuxFanControlBackend(FanControlBackend):
                     # Fallback: use first temp sensor in same hwmon dir
                     temp_sensor_id = None
                     temp_path = None
-                    for temp_file in hwmon_dir.glob("temp*_input"):
+                    for temp_file in hwmon_dir.glob("temp[0-9]*_input"):
                         temp_num = temp_file.name.replace("temp", "").replace("_input", "")
                         temp_sensor_id = build_sensor_id(identity, int(temp_num))
                         temp_path = temp_file

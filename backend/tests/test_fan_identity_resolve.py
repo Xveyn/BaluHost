@@ -121,8 +121,9 @@ def test_missing_device_link_falls_back(tmp_path):
 
 
 def test_missing_name_falls_back(tmp_path):
-    # Namensprüfung läuft vor dem Gerätelauf. Ein vollständiger Baum
-    # mit fehlender name ist trotzdem instabil.
+    # Die Namenspruefung laeuft vor dem Aufstieg durch den Geraetebaum: ein
+    # ansonsten vollstaendiger Baum ohne lesbare "name"-Datei ist trotzdem
+    # instabil.
     link = _tree(tmp_path, "hwmon4", "platform/k10temp-sim.1", "k10temp",
                  subsystem="platform")
     (link.resolve() / "name").unlink()

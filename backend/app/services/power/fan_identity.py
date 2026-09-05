@@ -109,7 +109,15 @@ def _subsystem_of(device: Path) -> Optional[str]:
 
 
 def _unstable(hwmon_name: str, prefix: Optional[str], reason: str) -> ChipIdentity:
-    logger.warning("hwmon %s: keine stabile Kennung (%s)", hwmon_name, reason)
+    # M-2: DEBUG statt WARNING. derive_all() laeuft nicht nur beim Start,
+    # sondern bei jedem Sensor-Listing-Request (get_available_temp_sensors(),
+    # _find_cpu_temp_sensor()) -- eine WARNING pro instabilem Chip UND
+    # Request waere die Log-Flut aus #533 im Kleinen. Ein Chip, der instabil
+    # ist, bleibt es fuer die Laufzeit des Prozesses; ein modulweiter Merker
+    # gegen wiederholtes Loggen waere komplexer als der Nutzen hier
+    # rechtfertigt -- DEBUG ist die einfachere Variante mit demselben Effekt
+    # (bei Bedarf im Log sichtbar, aber ohne Dauerrauschen auf WARNING).
+    logger.debug("hwmon %s: keine stabile Kennung (%s)", hwmon_name, reason)
     return ChipIdentity(key=hwmon_name, prefix=prefix or "Unknown",
                         stable=False, hwmon_name=hwmon_name, reason=reason)
 

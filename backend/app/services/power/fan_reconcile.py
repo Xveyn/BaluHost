@@ -155,8 +155,26 @@ def reconcile_fan_identities(
             if row.is_active:
                 row.is_active = False
                 report.deactivated.append(row.fan_id)
+            if row.fan_id == new_id:
+                # I-2: Ein Inkumbent (bereits in Neuform), der den Rangvergleich
+                # verliert, behielte sonst fan_id == new_id. Der Gewinner wird
+                # gleich darunter auf denselben Wert umbenannt -- zwei Zeilen mit
+                # identischem fan_id verletzen den Unique-Index beim Flush. Die
+                # ID freimachen, BEVOR der Gewinner sie uebernimmt. legacy_fan_id
+                # ist der natuerliche Rueckfall (die urspruengliche Altform, aus
+                # einem frueheren Lauf); ohne den erzeugt die id einen
+                # garantiert eindeutigen Ersatz.
+                row.fan_id = row.legacy_fan_id or f"{new_id}#legacy{row.id}"
 
         if winner.fan_id != new_id:
+            # session.dirty ist ein Set ohne Reihenfolgegarantie: ohne
+            # diesen Flush kann SQLAlchemy die Umbenennung des Gewinners
+            # (unten) VOR dem Freimachen des Inkumbenten (oben) herausschreiben
+            # und denselben Unique-Verstoss ausloesen, den die I-2-Aenderung
+            # gerade beheben soll -- nur verschoben vom Python- ins DB-Timing.
+            # Der Flush erzwingt: erst der befreite Inkumbent, dann der
+            # Gewinner.
+            db.flush()
             old_id = winner.fan_id
             winner.legacy_fan_id = old_id
             winner.fan_id = new_id
@@ -199,42 +217,50 @@ def _reconcile_sensor_labels(db: Session, sensor_map: Dict[str, str],
     ihrem alten Schluessel liegen und wird ignoriert. Kein Loeschen -- das
     ist ein ausdrueckliches Nicht-Ziel der Spec.
 
-    Praefix-Asymmetrie ist Absicht: sensor_id (Primaerschluessel dieser
-    Tabelle) wird OHNE "hwmon:"-Praefix abgelegt -- das ist die interne Form
-    der Registry. FanConfig.temp_sensor_id und die Quell-IDs in
-    composite_temp_sensors behalten das Praefix, weil sie dort die
-    oeffentliche, praefixierte Sensor-Kennung referenzieren. Keine
-    Vereinheitlichung vorgesehen.
+    I-1: Real gespeichert wird sensor_id IMMER praefixiert ("hwmon:hwmon4_temp1")
+    -- die Route persistiert dieselbe Kennung, die die Registry vergibt
+    (HwmonTempSource.id = "hwmon:"+sensor_id), und PUT/DELETE
+    /api/fans/sensors/{sensor_id}/label suchen spaeter exakt danach. Ein
+    Regex-Test ohne vorheriges Abstreifen des Praefix traf keine einzige
+    reale Zeile -- die Migration lief still ins Leere. Deshalb: Praefix vor
+    dem Regex-Test optional abstreifen (wie _map_sensor es bereits tut),
+    und die neue Kennung MIT Praefix zurueckschreiben -- sensor_map liefert
+    sie ohnehin schon praefixiert (siehe FanControlService._collect_sensor_map),
+    und nur so bleibt die Zeile fuer PUT/DELETE wiederauffindbar. Keine
+    Praefix-Asymmetrie mehr: sensor_id traegt jetzt durchgehend "hwmon:",
+    genau wie FanConfig.temp_sensor_id und die Quell-IDs in
+    composite_temp_sensors.
     """
     rows = list(db.execute(select(TempSensorLabel)).scalars())
     existing = {row.sensor_id for row in rows}
     claimed: Dict[str, TempSensorLabel] = {}
 
     for row in rows:
-        if not _LEGACY_SENSOR_ID.match(row.sensor_id or ""):
-            continue
-        new_id = sensor_map.get(row.sensor_id)
+        raw = row.sensor_id or ""
+        bare = raw[len("hwmon:"):] if raw.startswith("hwmon:") else raw
+        if not _LEGACY_SENSOR_ID.match(bare):
+            continue                                   # bereits stabil oder unbekannt
+        new_id = sensor_map.get(bare)
         if not new_id:
             report.unresolved_sensors.append(row.sensor_id)
             continue
-        bare_new = new_id[len("hwmon:"):] if new_id.startswith("hwmon:") else new_id
-        if bare_new in existing:
+        if new_id in existing:
             continue
-        rival = claimed.get(bare_new)
+        rival = claimed.get(new_id)
         if rival is not None:
             loser = min((rival, row), key=lambda r: r.updated_at or _EPOCH)
             logger.warning(
                 "Sensor-Label %s verworfen: %s ist bereits vergeben",
-                loser.sensor_id, bare_new,
+                loser.sensor_id, new_id,
             )
             if loser is row:
                 continue
-        claimed[bare_new] = row
+        claimed[new_id] = row
 
-    for bare_new, row in claimed.items():
+    for new_id, row in claimed.items():
         row.legacy_sensor_id = row.sensor_id
-        row.sensor_id = bare_new
-        logger.info("Sensor-Label: %s -> %s", row.legacy_sensor_id, bare_new)
+        row.sensor_id = new_id
+        logger.info("Sensor-Label: %s -> %s", row.legacy_sensor_id, new_id)
 
 
 def _reconcile_composites(db: Session, sensor_map: Dict[str, str]) -> None:

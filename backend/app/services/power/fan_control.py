@@ -349,7 +349,7 @@ class FanControlService:
                     # ein UNIQUE-Verstoss aus einem Rename wuerde sonst erst
                     # hier auftreten und aus dem try entkommen.
                     db.commit()
-                    if report.renamed or report.deactivated:
+                    if report.renamed or report.deactivated or report.unresolved_sensors:
                         try:
                             # Eigene Session (db=None): AuditLoggerDB.log_event
                             # committet die uebergebene Session selbst. Mit
@@ -363,11 +363,30 @@ class FanControlService:
                                     "renamed": report.renamed,
                                     "deactivated": report.deactivated,
                                     "skipped_absent": report.skipped_absent,
+                                    # M-3: eine nicht aufloesbare Sensor-Zuordnung
+                                    # tauscht die Nutzerwahl stillschweigend gegen
+                                    # den CPU-Default aus -- die einzige
+                                    # Nutzeraenderung dieses Laufs, die sonst
+                                    # nirgends revisionssicher gelandet waere.
+                                    "unresolved_sensors": report.unresolved_sensors,
                                 },
                                 db=None,
                             )
                         except Exception:
                             logger.debug("Audit-Eintrag zum Identitaets-Abgleich fehlgeschlagen")
+                    # M-6: _rebuild_registry() lief in start() VOR diesem Abgleich
+                    # und hat Labels/Composite-Quellen deshalb aus der noch
+                    # NICHT migrierten Datenbank gelesen. Ohne diesen zweiten
+                    # Aufruf gaelten im ersten Start nach dem Upgrade die alten
+                    # Schluessel bis zum naechsten Neustart. Eigenes try: der
+                    # Abgleich selbst ist zu diesem Zeitpunkt bereits committet
+                    # und erfolgreich -- ein Fehler beim Neuaufbau der Registry
+                    # darf nicht als Abgleichs-Fehlschlag geloggt werden und
+                    # nicht die Anlage-Schleife unten blockieren.
+                    try:
+                        await self._rebuild_registry()
+                    except Exception:
+                        logger.debug("Registry-Neuaufbau nach Abgleich fehlgeschlagen")
                 except Exception:
                     # Nicht weitermachen: die Scan-IDs liegen bereits in der
                     # neuen Form vor, die DB-Zeilen aber noch in der alten.
@@ -433,6 +452,16 @@ class FanControlService:
                         # mit sich (I3). Ein anderer Worker war schneller --
                         # die Zeile existiert, das ist der gewuenschte
                         # Endzustand.
+                        #
+                        # M-4: seit dem Primary-only-Gate direkt oberhalb (der
+                        # fruehe return bei nicht-Primary) ist dieser Zweig in
+                        # der Praxis kaum noch erreichbar -- ein weiterer
+                        # Uvicorn-Worker mit demselben Primary-Anspruch waere
+                        # der einzige verbleibende Weg zu einem Wettlauf um
+                        # dieselbe Zeile. Bewusst NICHT entfernen: der
+                        # Savepoint ist billig und die einzige Absicherung
+                        # gegen genau diesen (seltenen) Fall. Nicht als toten
+                        # Code streichen.
                         with db.begin_nested():
                             db.add(config)
                     except IntegrityError:

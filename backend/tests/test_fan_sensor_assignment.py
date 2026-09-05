@@ -4,11 +4,19 @@ Regression test: user-chosen sensor must not be overwritten on service restart.
 This test would FAIL if the auto-correction branch were re-added to
 _load_fan_configs (the branch that changes existing.temp_sensor_id to the CPU
 sensor when it points anywhere else).
+
+I-4: die Anlage-Schleife in _load_fan_configs ist seit dem Primary-Gate
+(fan_control.py) primary-only. Ohne IS_PRIMARY_WORKER=True kehrt die Methode
+vor der bewachten Schleife zurueck und diese Tests pruefen gar nichts mehr --
+sie waren gruen, auch wenn die entfernte Auto-Korrektur wieder eingebaut
+worden waere. monkeypatch.setattr auf app.core.lifespan.IS_PRIMARY_WORKER
+schaltet die Schleife fuer den Testlauf frei.
 """
 import json
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from app.core import lifespan
 from app.models.fans import FanConfig
 from app.schemas.fans import FanMode, FanCurvePoint
 from app.services.power.fan_control import FanControlService, FanData, TempSensorData
@@ -43,6 +51,10 @@ def _make_service(mock_backend, existing_sensor_id: str) -> FanControlService:
     service.config = MockSettings()
     service.db_session_factory = mock_session_factory
     service._backend = mock_backend
+    # _should_reconcile() prueft dies vor dem hwmon-Chipcount; False haelt
+    # den (hier nicht aufgebauten) Abgleichspfad zu, ohne die
+    # primary-only-Gate der Anlage-Schleife weiter unten zu beeinflussen.
+    service._use_linux_backend = False
     return service, mock_config
 
 
@@ -85,8 +97,9 @@ def _make_backend_with_cpu_sensor():
 
 
 @pytest.mark.asyncio
-async def test_non_cpu_sensor_survives_reload():
+async def test_non_cpu_sensor_survives_reload(monkeypatch):
     """Non-CPU sensor chosen by user must not be overwritten by CPU sensor on reload."""
+    monkeypatch.setattr(lifespan, "IS_PRIMARY_WORKER", True, raising=False)
     mock_backend = _make_backend_with_cpu_sensor()
 
     with patch.object(FanControlService, "_instance", None):
@@ -101,8 +114,9 @@ async def test_non_cpu_sensor_survives_reload():
 
 
 @pytest.mark.asyncio
-async def test_composite_sensor_survives_reload():
+async def test_composite_sensor_survives_reload(monkeypatch):
     """A composite (mix:) sensor ID must survive service reload even when CPU sensor is available."""
+    monkeypatch.setattr(lifespan, "IS_PRIMARY_WORKER", True, raising=False)
     mock_backend = _make_backend_with_cpu_sensor()
 
     with patch.object(FanControlService, "_instance", None):
@@ -116,8 +130,9 @@ async def test_composite_sensor_survives_reload():
 
 
 @pytest.mark.asyncio
-async def test_gpu_sensor_survives_reload():
+async def test_gpu_sensor_survives_reload(monkeypatch):
     """A GPU sensor (gpu:edge) must survive service reload unchanged."""
+    monkeypatch.setattr(lifespan, "IS_PRIMARY_WORKER", True, raising=False)
     mock_backend = _make_backend_with_cpu_sensor()
 
     with patch.object(FanControlService, "_instance", None):
@@ -131,8 +146,9 @@ async def test_gpu_sensor_survives_reload():
 
 
 @pytest.mark.asyncio
-async def test_disk_sensor_survives_reload():
+async def test_disk_sensor_survives_reload(monkeypatch):
     """A disk sensor (disk:sda) must survive service reload unchanged."""
+    monkeypatch.setattr(lifespan, "IS_PRIMARY_WORKER", True, raising=False)
     mock_backend = _make_backend_with_cpu_sensor()
 
     with patch.object(FanControlService, "_instance", None):
@@ -146,8 +162,9 @@ async def test_disk_sensor_survives_reload():
 
 
 @pytest.mark.asyncio
-async def test_cpu_sensor_assignment_unchanged_on_reload():
+async def test_cpu_sensor_assignment_unchanged_on_reload(monkeypatch):
     """A fan already using the CPU sensor must continue using it after reload."""
+    monkeypatch.setattr(lifespan, "IS_PRIMARY_WORKER", True, raising=False)
     mock_backend = _make_backend_with_cpu_sensor()
 
     with patch.object(FanControlService, "_instance", None):

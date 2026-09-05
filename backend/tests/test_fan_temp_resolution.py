@@ -94,3 +94,27 @@ async def test_cpu_sensor_id_agrees_between_lookup_and_scan(tmp_path):
     assert backend._temp_paths.get(sensor_id) == temp_path
 
     assert await backend.get_temperature(sensor_id) == 55.0
+
+
+@pytest.mark.asyncio
+async def test_sensor_discovered_after_scan_is_still_resolvable(tmp_path):
+    """I-3: ein hwmon-Chip, der erst NACH dem Startscan erscheint (Treiber
+    nachgeladen), muss trotzdem lesbar bleiben. _temp_paths wurde bisher
+    ausschliesslich in _scan_pwm_fans() gefuellt -- get_available_temp_sensors()
+    und _find_cpu_temp_sensor() bildeten zwar eine stabile ID, trugen sie
+    aber nie ein. Ohne Unterstrich in der Kennung greift auch der
+    Alt-Format-Rueckfall (_legacy_temp_path) nicht -- get_temperature()
+    lieferte fuer einen solchen Sensor dauerhaft None."""
+    klass = tmp_path / "sys" / "class" / "hwmon"
+    klass.mkdir(parents=True)
+    backend = LinuxFanControlBackend(get_settings())
+    backend._hwmon_base = klass
+
+    await backend._scan_pwm_fans()   # Startscan: der Chip existiert noch nicht
+
+    _k10temp_tree(tmp_path)          # Chip erscheint erst jetzt (Treiber nachgeladen)
+
+    sensors = await backend.get_available_temp_sensors()
+    assert any(s.sensor_id == "k10temp-isa-0001:temp1" for s in sensors)
+
+    assert await backend.get_temperature("k10temp-isa-0001:temp1") == 55.0

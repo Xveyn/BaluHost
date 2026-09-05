@@ -1252,7 +1252,7 @@ Chips without a discoverable `pci` or `platform` parent (i.e., on `i2c`, `spi`, 
 **Migration Behavior:**  
 When the backend starts after a code upgrade that includes this refactoring:
 1. All existing `fan_configs` rows are analyzed to derive their new stable identities.
-2. Rows are **matched and renamed** to the new identity if a stable identity can be determined; orphaned configs (i.e., matching no currently-visible hardware) are preserved but marked inactive.
+2. Rows are **matched and renamed** to the new identity if a stable identity can be determined. A row whose chip is **not currently visible** (e.g., a driver not yet loaded at this particular startup) is preserved **untouched and still active** — this is the core safeguard against curve loss: a chip that simply hasn't been re-enumerated yet must not have its curve invalidated. A row is only marked **inactive** when it loses a rank comparison against a newer row targeting the same stable identity, or when its chip is present but the specific PWM channel is gone.
 3. Newly-visible fans (e.g., after a hardware addition or back after a driver reload) get a new row if on the primary worker.
 
 **Prerequisite after Restore from Pre-Refactoring Backup:**  
