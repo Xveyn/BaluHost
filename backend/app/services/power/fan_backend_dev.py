@@ -162,6 +162,10 @@ class DevFanControlBackend(FanControlBackend):
         logger.debug(f"Set {fan_id} PWM to {pwm_percent}% (target RPM: {fan['target_rpm']})")
         return True
 
+    async def release_to_board(self, fan_id: str, enable_value: int) -> bool:
+        """Kein hwmon im Dev-Modus -- es gibt nichts zurueckzugeben."""
+        return True
+
     async def get_temperature(self, sensor_id: str) -> Optional[float]:
         """Get simulated temperature."""
         return self._temps.get(sensor_id)

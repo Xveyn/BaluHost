@@ -113,6 +113,19 @@ class FanControlBackend(ABC):
         pass
 
     @abstractmethod
+    async def release_to_board(self, fan_id: str, enable_value: int) -> bool:
+        """pwm_enable auf einen Automatikmodus zurueckschreiben (#534).
+
+        Args:
+            fan_id: Luefter-Kennung
+            enable_value: der beobachtete Automatikmodus (>= 2)
+
+        Returns:
+            True nur, wenn der Wert danach tatsaechlich anliegt.
+        """
+        pass
+
+    @abstractmethod
     async def get_temperature(self, sensor_id: str) -> Optional[float]:
         """Get temperature reading from a sensor."""
         pass
