@@ -1,4 +1,5 @@
 """When pwm write fails, capture driver name + pwm_enable in last_write_error."""
+import os
 from pathlib import Path
 from unittest.mock import patch
 
@@ -10,18 +11,17 @@ from app.core.config import get_settings
 
 @pytest.mark.asyncio
 async def test_write_failure_captures_diagnostic(tmp_path, monkeypatch):
-    d = tmp_path / "sys" / "class" / "hwmon" / "hwmon1"
-    d.mkdir(parents=True)
-    (d / "name").write_text("amdgpu\n")
-    (d / "pwm1").write_text("128\n")
-    (d / "fan1_input").write_text("1200\n")
-    (d / "pwm1_enable").write_text("2\n")
+    d = _amd_hwmon(tmp_path)
 
     backend = LinuxFanControlBackend(get_settings())
     monkeypatch.setattr(backend, "_hwmon_base", tmp_path / "sys" / "class" / "hwmon")
     await backend._scan_pwm_fans()
 
     fan_id = next(iter(backend._fan_cache))
+    # Beweis, dass der Scan den stabilen Zweig trifft (device/subsystem-Symlink
+    # in _amd_hwmon), nicht den Fallback "hwmon1_pwm1".
+    assert fan_id == "amdgpu-isa-0001:pwm1"
+    assert backend._fan_cache[fan_id]["identity_stable"] is True
 
     # Force direct write to fail with OSError(EINVAL) and sudo path to also fail
     def fail_write(self_, value):
@@ -43,12 +43,22 @@ from app.schemas.fans import PwmControl
 
 
 def _amd_hwmon(tmp_path, pwm="128", rpm="1200"):
-    d = tmp_path / "sys" / "class" / "hwmon" / "hwmon1"
+    """Platform-foermiger Baum (#532): device+subsystem-Symlink, damit die
+    Identitaetsableitung stabile IDs bildet statt in den Fallback zu fallen."""
+    sysfs = tmp_path / "sys"
+    device = sysfs / "devices" / "platform" / "amdgpu-sim.1"
+    device.mkdir(parents=True)
+    bus = sysfs / "bus" / "platform"
+    bus.mkdir(parents=True, exist_ok=True)
+    os.symlink(bus, device / "subsystem", target_is_directory=True)
+
+    d = sysfs / "class" / "hwmon" / "hwmon1"
     d.mkdir(parents=True)
     (d / "name").write_text("amdgpu\n")
     (d / "pwm1").write_text(f"{pwm}\n")
     (d / "fan1_input").write_text(f"{rpm}\n")
     (d / "pwm1_enable").write_text("2\n")
+    os.symlink(device, d / "device", target_is_directory=True)
     return d
 
 
@@ -80,6 +90,7 @@ async def test_eacces_reports_permission_not_kernel_rejection(tmp_path, monkeypa
     monkeypatch.setattr(backend, "_hwmon_base", tmp_path / "sys" / "class" / "hwmon")
     await backend._scan_pwm_fans()
     fan_id = next(iter(backend._fan_cache))
+    assert fan_id == "amdgpu-isa-0001:pwm1"
 
     def fail_eacces(self_, value):
         raise PermissionError(13, "Permission denied")

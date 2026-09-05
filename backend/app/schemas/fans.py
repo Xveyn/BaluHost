@@ -85,7 +85,7 @@ class FanActiveSchedule(BaseModel):
 
 class FanInfo(BaseModel):
     """Information about a single fan."""
-    fan_id: str = Field(..., description="Unique fan identifier (e.g., hwmon0_pwm1)")
+    fan_id: str = Field(..., description="Unique fan identifier (e.g., nct6798-isa-0290:pwm1)")
     name: str = Field(..., description="Human-readable fan name")
     rpm: Optional[int] = Field(default=None, description="Current RPM (revolutions per minute)")
     pwm_percent: int = Field(..., ge=0, le=100, description="Current PWM percentage")
@@ -119,7 +119,7 @@ class FanInfo(BaseModel):
     class Config:
         json_schema_extra = {
             "example": {
-                "fan_id": "hwmon0_pwm1",
+                "fan_id": "nct6798-isa-0290:pwm1",
                 "name": "CPU Fan",
                 "rpm": 2400,
                 "pwm_percent": 65,
@@ -129,7 +129,7 @@ class FanInfo(BaseModel):
                 "min_pwm_percent": 30,
                 "max_pwm_percent": 100,
                 "emergency_temp_celsius": 85.0,
-                "temp_sensor_id": "hwmon0_temp1",
+                "temp_sensor_id": "hwmon:k10temp-pci-00c3:temp1",
                 "curve_points": [
                     {"temp": 35, "pwm": 30},
                     {"temp": 50, "pwm": 50},
@@ -169,7 +169,7 @@ class SetFanModeRequest(BaseModel):
     class Config:
         json_schema_extra = {
             "example": {
-                "fan_id": "hwmon0_pwm1",
+                "fan_id": "nct6798-isa-0290:pwm1",
                 "mode": "auto"
             }
         }
@@ -191,7 +191,7 @@ class SetFanPWMRequest(BaseModel):
     class Config:
         json_schema_extra = {
             "example": {
-                "fan_id": "hwmon0_pwm1",
+                "fan_id": "nct6798-isa-0290:pwm1",
                 "pwm_percent": 75
             }
         }
@@ -230,7 +230,7 @@ class UpdateFanCurveRequest(BaseModel):
     class Config:
         json_schema_extra = {
             "example": {
-                "fan_id": "hwmon0_pwm1",
+                "fan_id": "nct6798-isa-0290:pwm1",
                 "curve_points": [
                     {"temp": 35, "pwm": 30},
                     {"temp": 50, "pwm": 50},
@@ -343,7 +343,7 @@ class ApplyPresetRequest(BaseModel):
     class Config:
         json_schema_extra = {
             "example": {
-                "fan_id": "hwmon0_pwm1",
+                "fan_id": "nct6798-isa-0290:pwm1",
                 "preset": "balanced"
             }
         }
@@ -389,9 +389,9 @@ class UpdateFanConfigRequest(BaseModel):
     class Config:
         json_schema_extra = {
             "example": {
-                "fan_id": "hwmon0_pwm1",
+                "fan_id": "nct6798-isa-0290:pwm1",
                 "hysteresis_celsius": 5.0,
-                "temp_sensor_id": "hwmon2_temp1"
+                "temp_sensor_id": "hwmon:k10temp-pci-00c3:temp1"
             }
         }
 
@@ -410,7 +410,7 @@ class UpdateFanConfigResponse(BaseModel):
 
 class TempSensorInfo(BaseModel):
     """Information about a temperature sensor."""
-    sensor_id: str = Field(..., description="Sensor identifier (e.g., hwmon2_temp1)")
+    sensor_id: str = Field(..., description="Sensor identifier (e.g., hwmon:k10temp-pci-00c3:temp1)")
     device_name: str = Field(..., description="Hardware device name (e.g., k10temp)")
     label: Optional[str] = Field(default=None, description="Sensor label (e.g., Tctl)")
     custom_label: Optional[str] = Field(default=None, description="User-supplied custom label")
