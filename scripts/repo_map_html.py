@@ -10,19 +10,30 @@ from __future__ import annotations
 import json
 
 from repo_map import DirNode, Report
+from repo_map_html_history import HISTORY_SCRIPT
 from repo_map_metrics import FileEntry
 
 # Score at which a file is called out as a split candidate.
 CANDIDATE_SCORE = 1
 
 
-def build_payload(report: Report) -> dict:
+def build_payload(report: Report, *, history: dict | None = None) -> dict:
     """Turn a report into the plain-data structure the page renders from.
 
     Files come out ordered by score, then by size - that ordering IS the work
     list, so it belongs in the data rather than in the browser.
     """
     files = sorted(report.entries, key=lambda e: (-e.score, -e.loc, e.path))
+    churn = (history or {}).get("churn", {})
+    # The page never reads DATA.history.churn - every current file already
+    # carries its own churn via files[].ch/.lt (from `churn` above). The full
+    # map (including entries for paths that no longer exist) is dead weight
+    # in the embedded payload; --json keeps it because that sidecar's whole
+    # purpose is the raw export. Copy rather than mutate: `history` is the
+    # caller's dict (also written verbatim to the --json sidecar).
+    history_view = None
+    if history is not None:
+        history_view = {k: v for k, v in history.items() if k != "churn"}
     return {
         "commit": report.commit,
         "generatedAt": report.generated_at,
@@ -33,7 +44,8 @@ def build_payload(report: Report) -> dict:
         },
         "totals": _totals(report.entries),
         "tree": _tree_payload(report.tree),
-        "files": [_file_payload(entry) for entry in files],
+        "files": [_file_payload(entry, churn.get(entry.path)) for entry in files],
+        "history": history_view,
     }
 
 
@@ -48,7 +60,7 @@ def _totals(entries: list[FileEntry]) -> dict:
     }
 
 
-def _file_payload(entry: FileEntry) -> dict:
+def _file_payload(entry: FileEntry, churn: dict | None = None) -> dict:
     return {
         "p": entry.path,
         "e": entry.ext,
@@ -68,6 +80,8 @@ def _file_payload(entry: FileEntry) -> dict:
         "gen": entry.generated,
         "s": entry.score,
         "r": list(entry.reasons),
+        "ch": (churn or {}).get("commits", 0),
+        "lt": (churn or {}).get("last"),
     }
 
 
@@ -96,9 +110,10 @@ def _embed(payload: dict) -> str:
     )
 
 
-def render(report: Report) -> str:
+def render(report: Report, *, history: dict | None = None) -> str:
     """Render the full HTML document for a report."""
-    return _TEMPLATE.replace("__PAYLOAD__", _embed(build_payload(report)))
+    payload = build_payload(report, history=history)
+    return _TEMPLATE.replace("__PAYLOAD__", _embed(payload))
 
 
 _STYLE = """
@@ -128,7 +143,7 @@ section { min-width: 0; }
 .tree details { margin-left: 14px; }
 .tree > details { margin-left: 0; }
 .tree summary { cursor: pointer; padding: 1px 0; list-style: none;
-  display: grid; grid-template-columns: 1fr 90px 70px 160px; gap: 8px;
+  display: grid; grid-template-columns: 1fr 90px 70px 80px 160px; gap: 8px;
   align-items: center; }
 .tree summary::-webkit-details-marker { display: none; }
 .tree summary:hover { background: var(--panel); }
@@ -137,7 +152,7 @@ section { min-width: 0; }
 .tree .num { text-align: right; color: var(--muted); }
 .bar { height: 7px; background: var(--line); border-radius: 4px; overflow: hidden; }
 .bar > i { display: block; height: 100%; background: var(--accent); }
-.leaf { display: grid; grid-template-columns: 1fr 90px 70px 160px; gap: 8px;
+.leaf { display: grid; grid-template-columns: 1fr 90px 70px 80px 160px; gap: 8px;
   margin-left: 28px; padding: 1px 0; }
 .leaf .nm { color: var(--fg); opacity: .8; }
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -164,6 +179,18 @@ input, select { background: var(--panel); border: 1px solid var(--line);
   color: var(--fg); border-radius: 6px; padding: 5px 9px; font: inherit; }
 input:focus, select:focus { outline: 1px solid var(--accent); }
 label.chk { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+.hist { display: grid; gap: 18px; }
+.hist svg { width: 100%; height: 260px; display: block; }
+.hist .axis { stroke: var(--line); stroke-width: 1; }
+.hist .grid { stroke: var(--line); stroke-width: 1; stroke-dasharray: 2 4; }
+.hist .tick { fill: var(--muted); font-size: 11px; }
+.hist .lbl { fill: var(--muted); font-size: 11px; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px;
+  color: var(--muted); }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px;
+  margin-right: 5px; vertical-align: middle; }
+.delta.up { color: var(--warn); }
+.delta.down { color: var(--ok); }
 """
 
 _SCRIPT = """
@@ -195,11 +222,26 @@ function head() {
   }
 }
 
-function treeRow(name, loc, files, share, isLeaf) {
+// LOC change of a directory between the last two snapshots, or null when
+// history is off or the directory did not exist in the earlier one.
+function dirDelta(path) {
+  const h = DATA.history;
+  if (!h || h.points.length < 2) return null;
+  const now = h.points[h.points.length - 1].dirs || {};
+  const before = h.points[h.points.length - 2].dirs || {};
+  if (!(path in now) && !(path in before)) return null;
+  return (now[path] || 0) - (before[path] || 0);
+}
+
+function treeRow(name, loc, files, share, isLeaf, path) {
   const frag = document.createDocumentFragment();
   frag.append(el("span", "nm", name));
   frag.append(el("span", "num", nf.format(loc)));
   frag.append(el("span", "num", files === null ? "" : nf.format(files)));
+  const d = path === undefined ? null : dirDelta(path);
+  const cls = d === null || d === 0 ? "num" : d > 0 ? "num delta up" : "num delta down";
+  frag.append(el("span", cls,
+    d === null ? "" : (d > 0 ? "+" : "") + nf.format(d)));
   const bar = el("div", "bar");
   const fill = el("i");
   fill.style.width = Math.max(1, Math.round(share * 100)) + "%";
@@ -214,7 +256,8 @@ function renderTree(node, parent, total, depth) {
     const d = el("details");
     if (lvl < 1) d.open = true;
     const s = el("summary");
-    s.append(treeRow(n.name || "/", n.loc, n.files, total ? n.loc / total : 0, false));
+    s.append(treeRow(n.name || "/", n.loc, n.files,
+      total ? n.loc / total : 0, false, n.path));
     d.append(s);
     for (const child of n.children) build(child, d, lvl + 1);
     const own = DATA.files.filter((f) => {
@@ -240,6 +283,7 @@ const COLUMNS = [
   { key: "sym", label: "Symbols", num: true },
   { key: "ll", label: "Longest", num: true },
   { key: "d", label: "Depth", num: true },
+  { key: "ch", label: "Commits", num: true },
   { key: "r", label: "Why", cls: "why" },
 ];
 let sortKey = "s", sortDir = -1;
@@ -314,10 +358,17 @@ function buildTable() {
   }
   renderTable();
 }
+"""
 
+# The chart/hotspot code lives in its own module (repo_map_html_history.py)
+# to keep this file under the repo's 500-line convention; concatenated in
+# here so the page still ships as one inline <script>, no separate load.
+_SCRIPT += HISTORY_SCRIPT
+_SCRIPT += """
 head();
 renderTree(DATA.tree, document.getElementById("tree"), DATA.totals.loc, 0);
 buildTable();
+renderHistory();
 """
 
 _TEMPLATE = f"""<!doctype html>
@@ -335,6 +386,30 @@ _TEMPLATE = f"""<!doctype html>
   <div class="cards" id="cards"></div>
 </header>
 <main>
+  <section id="history" hidden>
+    <h2>Verlauf</h2>
+    <div class="hist">
+      <div>
+        <div class="legend" id="history-legend"></div>
+        <div id="history-chart"></div>
+      </div>
+      <div>
+        <div class="legend" id="flagged-legend"></div>
+        <div id="flagged-chart"></div>
+      </div>
+      <div>
+        <div class="legend" id="score-legend"></div>
+        <div id="score-chart"></div>
+      </div>
+    </div>
+    <h2>Hotspots &mdash; Score &times; Commits</h2>
+    <div class="wrap"><table>
+      <thead><tr><th>File</th><th class="num">Score</th>
+        <th class="num">LOC</th><th class="num">Commits</th>
+        <th class="num">Hotspot</th><th class="num">Last</th></tr></thead>
+      <tbody id="history-hotspots"></tbody>
+    </table></div>
+  </section>
   <section>
     <h2>Directories</h2>
     <div class="tree" id="tree"></div>

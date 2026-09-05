@@ -7,15 +7,20 @@ definition. No third-party dependencies.
 Usage:
     python scripts/repo_map.py                  # writes repo-map.html
     python scripts/repo_map.py -o /tmp/map.html # custom output path
+    python scripts/repo_map.py --history --interval weekly --json history.json
+                                                 # adds the time axis: metric
+                                                 # series over git snapshots
+                                                 # plus per-file churn
 """
 from __future__ import annotations
 
 import argparse
+import json
 import subprocess
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Protocol
 
 from repo_map_metrics import FileEntry, Thresholds, analyze_file
 
@@ -97,34 +102,94 @@ def _read_text(path: Path) -> str | None:
     return None if "\x00" in text else text
 
 
+class ContentSource(Protocol):
+    """Where file content comes from: the worktree, or a commit's tree."""
+
+    def read(self, path: str) -> str | None:
+        """Text of one repo-relative path, or None when binary or absent."""
+
+    def identity(self, path: str) -> str | None:
+        """Stable content id (a blob SHA), or None when there is none.
+
+        None disables caching for that path rather than caching under a key
+        that cannot tell two different contents apart.
+        """
+
+
+class WorktreeSource:
+    """Reads from the checked-out working tree - the original behaviour."""
+
+    def __init__(self, root: Path) -> None:
+        self.root = root
+
+    def read(self, path: str) -> str | None:
+        return _read_text(self.root / path)
+
+    def identity(self, path: str) -> str | None:
+        return None
+
+
+def analyze_paths(
+    source: ContentSource,
+    paths: Iterable[str],
+    *,
+    thresholds: Thresholds,
+    include_generated: bool = False,
+    cache: dict[tuple[str, str], FileEntry] | None = None,
+) -> list[FileEntry]:
+    """Analyse every readable path from a source, reusing cached results.
+
+    The cache key is (content id, path): the path belongs in the key because
+    both the generated-file check and the kind detection are path-dependent.
+    Across history snapshots most files are unchanged blobs, and that is what
+    keeps a full-history run in the seconds range.
+    """
+    entries: list[FileEntry] = []
+    for rel in paths:
+        key: tuple[str, str] | None = None
+        if cache is not None:
+            ident = source.identity(rel)
+            if ident is not None:
+                key = (ident, rel)
+                hit = cache.get(key)
+                if hit is not None:
+                    entries.append(hit)
+                    continue
+
+        text = source.read(rel)
+        if text is None:
+            continue
+        entry = analyze_file(
+            rel, text, thresholds=thresholds, include_generated=include_generated
+        )
+        if key is not None and cache is not None:
+            cache[key] = entry
+        entries.append(entry)
+    return entries
+
+
 def build_report(
-    root: Path,
+    source: ContentSource,
     paths: Iterable[str],
     *,
     thresholds: Thresholds,
     commit: str,
     include_generated: bool = False,
     generated_at: str | None = None,
+    cache: dict[tuple[str, str], FileEntry] | None = None,
 ) -> Report:
-    """Analyse every readable path under root and assemble the report.
+    """Analyse every readable path from the source and assemble the report.
 
     Unreadable and binary files are skipped rather than raising: a repo map
     that dies on one stray blob is useless.
     """
-    entries: list[FileEntry] = []
-    for rel in paths:
-        text = _read_text(root / rel)
-        if text is None:
-            continue
-        entries.append(
-            analyze_file(
-                rel,
-                text,
-                thresholds=thresholds,
-                include_generated=include_generated,
-            )
-        )
-
+    entries = analyze_paths(
+        source,
+        paths,
+        thresholds=thresholds,
+        include_generated=include_generated,
+        cache=cache,
+    )
     return Report(
         commit=commit,
         generated_at=generated_at or datetime.now().strftime("%Y-%m-%d %H:%M"),
@@ -154,7 +219,30 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="score generated files like hand-written ones",
     )
+    parser.add_argument(
+        "--history",
+        action="store_true",
+        help="add the time axis: metric series over git snapshots plus churn",
+    )
+    parser.add_argument(
+        "--interval",
+        default="monthly",
+        choices=("monthly", "weekly"),
+        help="snapshot density for --history (default: monthly)",
+    )
+    parser.add_argument(
+        "--since",
+        default=None,
+        help="limit --history to commits after this date (YYYY-MM-DD)",
+    )
+    parser.add_argument(
+        "--json",
+        default=None,
+        help="also write the raw history data to this path",
+    )
     args = parser.parse_args(argv)
+    if args.json and not args.history:
+        parser.error("--json requires --history")
 
     thresholds = Thresholds(
         max_loc=args.max_loc,
@@ -162,21 +250,58 @@ def main(argv: list[str] | None = None) -> int:
         max_depth=args.max_depth,
     )
     report = build_report(
-        ROOT,
+        WorktreeSource(ROOT),
         tracked_files(ROOT),
         thresholds=thresholds,
         commit=git_commit(ROOT),
         include_generated=args.include_generated,
     )
 
+    history_data = None
+    if args.history:
+        # Imported here for the same reason repo_map_html is: this module is
+        # what repo_map_history imports, and a top-level import would close
+        # the cycle.
+        import repo_map_history
+
+        snapshots = repo_map_history.select_snapshots(
+            ROOT, interval=args.interval, since=args.since
+        )
+        if len(snapshots) < 2:
+            print(
+                f"history skipped: {len(snapshots)} snapshot(s) in range - "
+                "a series needs at least two points"
+            )
+        else:
+            points = repo_map_history.build_history(
+                ROOT,
+                snapshots,
+                thresholds=thresholds,
+                include_generated=args.include_generated,
+            )
+            churn = repo_map_history.collect_churn(ROOT, since=args.since)
+            history_data = repo_map_history.history_json(points, churn)
+
+    if args.json and history_data is not None:
+        data_path = Path(args.json)
+        data_path.parent.mkdir(parents=True, exist_ok=True)
+        data_path.write_text(
+            json.dumps(history_data, indent=2), encoding="utf-8"
+        )
+
     out = Path(args.output)
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(repo_map_html.render(report), encoding="utf-8")
+    out.write_text(
+        repo_map_html.render(report, history=history_data), encoding="utf-8"
+    )
 
     flagged = sum(1 for e in report.entries if e.score > 0)
+    suffix = ""
+    if history_data is not None:
+        suffix = f", {len(history_data['points'])} history points"
     print(
         f"{len(report.entries)} files, {report.tree.loc:,} lines, "
-        f"{flagged} flagged -> {out}"
+        f"{flagged} flagged{suffix} -> {out}"
     )
     return 0
 

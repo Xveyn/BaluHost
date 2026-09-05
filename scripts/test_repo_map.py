@@ -1,9 +1,13 @@
-"""Tests for scripts/repo_map.py and scripts/repo_map_html.py."""
+"""Tests for scripts/repo_map.py."""
 from __future__ import annotations
 
+import json
+
+import pytest
+
 import repo_map
-import repo_map_html
 import repo_map_metrics as metrics
+from repo_map_test_helpers import make_entry
 
 
 class TestCountLines:
@@ -213,11 +217,6 @@ class TestComputeScore:
         assert result.score == 0
 
 
-def make_entry(path: str, text: str, **kwargs):
-    kwargs.setdefault("thresholds", metrics.Thresholds())
-    return metrics.analyze_file(path, text, **kwargs)
-
-
 class TestAnalyzeFile:
     def test_python_file_carries_ast_metrics(self):
         entry = make_entry("backend/app/x.py", "def f():\n    if a:\n        pass\n")
@@ -291,84 +290,15 @@ class TestBuildTree:
         assert (tree.loc, tree.files, tree.children) == (0, 0, {})
 
 
-def make_report(entries=None, commit="abc1234"):
-    entries = list(entries or [])
-    return repo_map.Report(
-        commit=commit,
-        generated_at="2026-09-05T10:00:00",
-        thresholds=metrics.Thresholds(),
-        entries=entries,
-        tree=repo_map.build_tree(entries),
-    )
-
-
-class TestBuildPayload:
-    def test_files_are_ordered_by_score_descending(self):
-        entries = [
-            make_entry("small.py", "x = 1\n"),
-            make_entry("huge.py", "x = 1\n" * 2000),
-            make_entry("medium.py", "x = 1\n" * 700),
-        ]
-        payload = repo_map_html.build_payload(make_report(entries))
-        assert [f["p"] for f in payload["files"]] == ["huge.py", "medium.py", "small.py"]
-
-    def test_equal_scores_fall_back_to_size(self):
-        entries = [
-            make_entry("tiny.py", "x = 1\n" * 10),
-            make_entry("bigger.py", "x = 1\n" * 200),
-        ]
-        payload = repo_map_html.build_payload(make_report(entries))
-        assert [f["p"] for f in payload["files"]] == ["bigger.py", "tiny.py"]
-
-    def test_totals_sum_every_file(self):
-        entries = [make_entry("a.py", "x = 1\n" * 3), make_entry("b.md", "t\n" * 4)]
-        payload = repo_map_html.build_payload(make_report(entries))
-        assert payload["totals"]["files"] == 2
-        assert payload["totals"]["loc"] == 7
-
-    def test_tree_is_nested_by_directory(self):
-        entries = [make_entry("a/b/x.py", "x = 1\n" * 6)]
-        payload = repo_map_html.build_payload(make_report(entries))
-        assert payload["tree"]["children"][0]["name"] == "a"
-        assert payload["tree"]["children"][0]["children"][0]["loc"] == 6
-
-    def test_commit_and_thresholds_travel_with_the_payload(self):
-        payload = repo_map_html.build_payload(make_report(commit="deadbee"))
-        assert payload["commit"] == "deadbee"
-        assert payload["thresholds"]["max_loc"] == 500
-
-
-class TestRender:
-    def test_report_makes_no_external_requests(self):
-        html = repo_map_html.render(make_report([make_entry("a.py", "x = 1\n")]))
-        assert "http://" not in html
-        assert "https://" not in html
-        assert "<script src=" not in html
-        assert "<link rel=\"stylesheet\"" not in html
-
-    def test_script_terminator_in_a_path_cannot_break_out_of_the_payload(self):
-        entry = make_entry("weird/</script><b>x.py", "x = 1\n")
-        html = repo_map_html.render(make_report([entry]))
-        assert "</script><b>x.py" not in html
-
-    def test_every_file_reaches_the_document(self):
-        entries = [make_entry("a/one.py", "x = 1\n"), make_entry("b/two.tsx", "const a=1;\n")]
-        html = repo_map_html.render(make_report(entries))
-        assert "a/one.py" in html
-        assert "b/two.tsx" in html
-
-    def test_document_is_a_complete_html_page(self):
-        html = repo_map_html.render(make_report())
-        assert html.startswith("<!doctype html>")
-        assert html.rstrip().endswith("</html>")
-
-
 class TestBuildReport:
     def test_reads_each_listed_file_from_disk(self, tmp_path):
         (tmp_path / "pkg").mkdir()
         (tmp_path / "pkg" / "a.py").write_text("x = 1\ny = 2\n", encoding="utf-8")
         report = repo_map.build_report(
-            tmp_path, ["pkg/a.py"], thresholds=metrics.Thresholds(), commit="c0ffee"
+            repo_map.WorktreeSource(tmp_path),
+            ["pkg/a.py"],
+            thresholds=metrics.Thresholds(),
+            commit="c0ffee",
         )
         assert [e.path for e in report.entries] == ["pkg/a.py"]
         assert report.entries[0].loc == 2
@@ -377,7 +307,7 @@ class TestBuildReport:
     def test_missing_file_is_skipped_not_fatal(self, tmp_path):
         (tmp_path / "there.py").write_text("x = 1\n", encoding="utf-8")
         report = repo_map.build_report(
-            tmp_path,
+            repo_map.WorktreeSource(tmp_path),
             ["there.py", "gone.py"],
             thresholds=metrics.Thresholds(),
             commit="c0ffee",
@@ -388,7 +318,7 @@ class TestBuildReport:
         (tmp_path / "blob.bin").write_bytes(b"\xff\xfe\x00\x01\x80")
         (tmp_path / "ok.py").write_text("x = 1\n", encoding="utf-8")
         report = repo_map.build_report(
-            tmp_path,
+            repo_map.WorktreeSource(tmp_path),
             ["blob.bin", "ok.py"],
             thresholds=metrics.Thresholds(),
             commit="c0ffee",
@@ -397,9 +327,83 @@ class TestBuildReport:
 
     def test_commit_travels_into_the_report(self, tmp_path):
         report = repo_map.build_report(
-            tmp_path, [], thresholds=metrics.Thresholds(), commit="c0ffee"
+            repo_map.WorktreeSource(tmp_path),
+            [],
+            thresholds=metrics.Thresholds(),
+            commit="c0ffee",
         )
         assert report.commit == "c0ffee"
+
+
+class TestWorktreeSource:
+    def test_reads_a_file_relative_to_its_root(self, tmp_path):
+        (tmp_path / "a.py").write_text("x = 1\n", encoding="utf-8")
+        source = repo_map.WorktreeSource(tmp_path)
+        assert source.read("a.py") == "x = 1\n"
+
+    def test_missing_file_reads_as_none(self, tmp_path):
+        assert repo_map.WorktreeSource(tmp_path).read("nope.py") is None
+
+    def test_binary_file_reads_as_none(self, tmp_path):
+        (tmp_path / "b.bin").write_bytes(b"\xff\xfe\x00\x01")
+        assert repo_map.WorktreeSource(tmp_path).read("b.bin") is None
+
+    def test_identity_is_none_because_the_worktree_has_no_blob_ids(self, tmp_path):
+        (tmp_path / "a.py").write_text("x = 1\n", encoding="utf-8")
+        assert repo_map.WorktreeSource(tmp_path).identity("a.py") is None
+
+
+class TestAnalyzePaths:
+    def test_cache_hit_skips_reanalysis(self):
+        class FakeSource:
+            def __init__(self):
+                self.reads = 0
+
+            def read(self, path):
+                self.reads += 1
+                return "x = 1\n"
+
+            def identity(self, path):
+                return "blob1"
+
+        cache = {}
+        src_a, src_b = FakeSource(), FakeSource()
+        first = repo_map.analyze_paths(
+            src_a, ["a.py"], thresholds=metrics.Thresholds(), cache=cache
+        )
+        second = repo_map.analyze_paths(
+            src_b, ["a.py"], thresholds=metrics.Thresholds(), cache=cache
+        )
+        assert first[0] == second[0]
+        assert src_b.reads == 0, "cache hit must not read content at all"
+
+    def test_same_blob_at_a_different_path_is_analysed_again(self):
+        class FakeSource:
+            def read(self, path):
+                return "x = 1\n"
+
+            def identity(self, path):
+                return "blob1"
+
+        cache = {}
+        repo_map.analyze_paths(
+            FakeSource(), ["a.py"], thresholds=metrics.Thresholds(), cache=cache
+        )
+        repo_map.analyze_paths(
+            FakeSource(), ["b.py"], thresholds=metrics.Thresholds(), cache=cache
+        )
+        assert len(cache) == 2, "path is part of the key: it drives kind and generated"
+
+    def test_none_identity_bypasses_the_cache(self, tmp_path):
+        (tmp_path / "a.py").write_text("x = 1\n", encoding="utf-8")
+        cache = {}
+        repo_map.analyze_paths(
+            repo_map.WorktreeSource(tmp_path),
+            ["a.py"],
+            thresholds=metrics.Thresholds(),
+            cache=cache,
+        )
+        assert cache == {}
 
 
 class TestMain:
@@ -416,3 +420,31 @@ class TestMain:
         out = tmp_path / "map.html"
         assert repo_map.main(["-o", str(out), "--max-loc", "1234"]) == 0
         assert '"max_loc": 1234' in out.read_text(encoding="utf-8")
+
+    def test_history_flag_writes_a_json_sidecar(self, tmp_path):
+        out = tmp_path / "map.html"
+        data = tmp_path / "history.json"
+        code = repo_map.main(
+            ["-o", str(out), "--history", "--since", "2026-06-01", "--json", str(data)]
+        )
+        assert code == 0
+        payload = json.loads(data.read_text(encoding="utf-8"))
+        assert payload["points"], "history run must produce at least one point"
+        assert "churn" in payload, "the --json sidecar is the raw export - churn stays in it"
+
+    def test_json_without_history_is_rejected(self, tmp_path, capsys):
+        out = tmp_path / "map.html"
+        data = tmp_path / "history.json"
+        with pytest.raises(SystemExit):
+            repo_map.main(["-o", str(out), "--json", str(data)])
+        assert not data.exists(), "must fail loudly instead of silently writing nothing"
+        assert "--json requires --history" in capsys.readouterr().err
+
+    def test_without_the_flag_no_history_work_happens(self, tmp_path, monkeypatch):
+        def explode(*args, **kwargs):
+            raise AssertionError("history must not run unless --history is passed")
+
+        import repo_map_history
+
+        monkeypatch.setattr(repo_map_history, "build_history", explode)
+        assert repo_map.main(["-o", str(tmp_path / "map.html")]) == 0
