@@ -14,6 +14,8 @@ from app.models.base import Base
 from app.models.fans import CompositeTempSensor, FanConfig, TempSensorLabel
 from app.services.power.fan_reconcile import (
     ChipFacts,
+    ReconcileReport,
+    _map_sensor,
     reconcile_fan_identities,
 )
 
@@ -234,3 +236,56 @@ def test_unmappable_composite_source_is_left_alone(db):
 
     composite = db.query(CompositeTempSensor).one()
     assert json.loads(composite.source_ids_json) == ["gpu:junction", "hwmon9_temp1"]
+
+
+def test_map_sensor_leaves_already_stable_id_untouched():
+    """R2: eine bereits migrierte Sensor-ID wird nicht erneut abgebildet
+    und erzeugt keinen Fehlalarm."""
+    report = ReconcileReport()
+    result = _map_sensor("hwmon:k10temp-pci-00c3:temp1", SENSOR_MAP,
+                         CPU_DEFAULT, report)
+    assert result == "hwmon:k10temp-pci-00c3:temp1"
+    assert report.unresolved_sensors == []
+
+
+def test_map_sensor_leaves_unknown_form_untouched():
+    """R2: was nicht wie eine Alt-ID aussieht, wird nicht angefasst."""
+    report = ReconcileReport()
+    result = _map_sensor("gpu:junction", SENSOR_MAP, CPU_DEFAULT, report)
+    assert result == "gpu:junction"
+    assert report.unresolved_sensors == []
+
+
+def test_tie_break_on_identical_updated_at_is_deterministic(db):
+    """F2: bei exakt gleichem updated_at entscheidet die hoehere id (die
+    zuletzt angelegte, also aktuellere Zeile) -- nicht die Query-Reihenfolge.
+    """
+    same_ts = _dt("2026-07-06T23:38:15")
+    db.add(FanConfig(fan_id="hwmon6_pwm1", name="amdgpu PWM1", mode="auto",
+                     temp_sensor_id="hwmon3_temp1", is_active=True,
+                     updated_at=same_ts))
+    db.commit()
+
+    newer_row = db.execute(select(FanConfig).where(
+        FanConfig.fan_id == "hwmon6_pwm1")).scalar_one()
+    older_row = db.execute(select(FanConfig).where(
+        FanConfig.fan_id == "hwmon1_pwm1")).scalar_one()
+    assert newer_row.updated_at == older_row.updated_at   # echter Gleichstand
+    assert newer_row.id > older_row.id
+
+    reconcile_fan_identities(db, chips=CHIPS, sensor_map=SENSOR_MAP,
+                             cpu_sensor_id=CPU_DEFAULT)
+    db.commit()
+
+    winner = db.execute(select(FanConfig).where(
+        FanConfig.fan_id == "amdgpu-pci-0300:pwm1")).scalar_one()
+    assert winner.legacy_fan_id == "hwmon6_pwm1"
+
+    # Wiederholter Lauf liefert dasselbe Ergebnis -- kein Ranggleichstands-Flackern.
+    reconcile_fan_identities(db, chips=CHIPS, sensor_map=SENSOR_MAP,
+                             cpu_sensor_id=CPU_DEFAULT)
+    db.commit()
+
+    winner_again = db.execute(select(FanConfig).where(
+        FanConfig.fan_id == "amdgpu-pci-0300:pwm1")).scalar_one()
+    assert winner_again.legacy_fan_id == "hwmon6_pwm1"

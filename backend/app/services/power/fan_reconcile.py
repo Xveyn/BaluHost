@@ -142,7 +142,13 @@ def reconcile_fan_identities(
 
         # Kein None in den Sortierschluessel: zwei Zeilen ohne updated_at
         # liefen sonst in einen TypeError beim Vergleich None < None.
-        winner = max(group, key=lambda r: order.get(r.id) or _EPOCH)
+        # Zweites Kriterium id: bei exaktem Zeitgleichstand (SQLite-Aufloesung,
+        # oder ein Restore/Bulk-Update, das mehrere Zeilen in derselben Sekunde
+        # anfasst) entscheidet sonst die zufaellige Query-Reihenfolge -- genau
+        # das hat den urspruenglichen IntegrityError mitverursacht. Die hoehere
+        # id ist die zuletzt angelegte Zeile und bildet die aktuellere
+        # Hardware-Sicht ab.
+        winner = max(group, key=lambda r: (order.get(r.id) or _EPOCH, r.id or 0))
         for row in group:
             if row is winner:
                 continue
@@ -192,6 +198,13 @@ def _reconcile_sensor_labels(db: Session, sensor_map: Dict[str, str],
     einer Kollision gewinnt die juengste Zeile; die verworfene BLEIBT unter
     ihrem alten Schluessel liegen und wird ignoriert. Kein Loeschen -- das
     ist ein ausdrueckliches Nicht-Ziel der Spec.
+
+    Praefix-Asymmetrie ist Absicht: sensor_id (Primaerschluessel dieser
+    Tabelle) wird OHNE "hwmon:"-Praefix abgelegt -- das ist die interne Form
+    der Registry. FanConfig.temp_sensor_id und die Quell-IDs in
+    composite_temp_sensors behalten das Praefix, weil sie dort die
+    oeffentliche, praefixierte Sensor-Kennung referenzieren. Keine
+    Vereinheitlichung vorgesehen.
     """
     rows = list(db.execute(select(TempSensorLabel)).scalars())
     existing = {row.sensor_id for row in rows}
