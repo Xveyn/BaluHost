@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 import repo_map
 import repo_map_metrics as metrics
 from repo_map_test_helpers import make_entry
@@ -428,6 +430,15 @@ class TestMain:
         assert code == 0
         payload = json.loads(data.read_text(encoding="utf-8"))
         assert payload["points"], "history run must produce at least one point"
+        assert "churn" in payload, "the --json sidecar is the raw export - churn stays in it"
+
+    def test_json_without_history_is_rejected(self, tmp_path, capsys):
+        out = tmp_path / "map.html"
+        data = tmp_path / "history.json"
+        with pytest.raises(SystemExit):
+            repo_map.main(["-o", str(out), "--json", str(data)])
+        assert not data.exists(), "must fail loudly instead of silently writing nothing"
+        assert "--json requires --history" in capsys.readouterr().err
 
     def test_without_the_flag_no_history_work_happens(self, tmp_path, monkeypatch):
         def explode(*args, **kwargs):

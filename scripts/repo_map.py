@@ -7,6 +7,10 @@ definition. No third-party dependencies.
 Usage:
     python scripts/repo_map.py                  # writes repo-map.html
     python scripts/repo_map.py -o /tmp/map.html # custom output path
+    python scripts/repo_map.py --history --interval weekly --json history.json
+                                                 # adds the time axis: metric
+                                                 # series over git snapshots
+                                                 # plus per-file churn
 """
 from __future__ import annotations
 
@@ -237,6 +241,8 @@ def main(argv: list[str] | None = None) -> int:
         help="also write the raw history data to this path",
     )
     args = parser.parse_args(argv)
+    if args.json and not args.history:
+        parser.error("--json requires --history")
 
     thresholds = Thresholds(
         max_loc=args.max_loc,

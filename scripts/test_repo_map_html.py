@@ -91,6 +91,30 @@ class TestBuildPayload:
         assert payload["files"][0]["ch"] == 0
         assert payload["files"][0]["lt"] is None
 
+    def test_embedded_history_omits_the_churn_map(self):
+        """No JS reads DATA.history.churn - every current file already
+        carries its own churn via files[].ch/.lt. The full map (including
+        paths that no longer exist) is dead weight in the embedded page."""
+        hist = {
+            "areas": ["backend/app"],
+            "points": [],
+            "churn": {"a.py": {"commits": 3, "added": 1, "deleted": 0,
+                               "last": "2026-02-01"}},
+        }
+        payload = repo_map_html.build_payload(make_report(), history=hist)
+        assert "churn" not in payload["history"]
+        assert payload["history"]["areas"] == ["backend/app"]
+
+    def test_build_payload_does_not_mutate_the_callers_history_dict(self):
+        hist = {
+            "areas": [],
+            "points": [],
+            "churn": {"a.py": {"commits": 1, "added": 0, "deleted": 0,
+                               "last": "2026-01-01"}},
+        }
+        repo_map_html.build_payload(make_report(), history=hist)
+        assert "churn" in hist, "the --json sidecar needs the original dict intact"
+
 
 class TestRender:
     def test_report_makes_no_external_requests(self):
@@ -210,6 +234,22 @@ class TestRender:
         }
         page = repo_map_html.render(make_report(), history=hist)
         assert "preserveAspectRatio" not in page
+
+    def test_rendered_page_does_not_contain_the_churn_map(self):
+        hist = {
+            "areas": ["backend/app"],
+            "points": [
+                {"label": "2026-01", "commit": "a", "date": "2026-01-31",
+                 "files": 1, "loc": 10, "flagged": 0, "score": 0,
+                 "areas": {"backend/app": 10}},
+            ],
+            "churn": {"gone.py": {"commits": 9, "added": 1, "deleted": 0,
+                                   "last": "2026-02-01"}},
+        }
+        page = repo_map_html.render(make_report([make_entry("a.py", "x = 1\n")]),
+                                    history=hist)
+        assert '"churn"' not in page
+        assert "gone.py" not in page
 
     def test_page_loads_nothing_from_the_network(self):
         """The SVG namespace URI is a name, not a fetch, so the check targets

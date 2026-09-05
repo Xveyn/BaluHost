@@ -1209,9 +1209,10 @@ Expected: PASS, 11 Tests.
 - [ ] **Step 5: Laufzeit gegen das echte Repo messen**
 
 Run: `python -c "import sys,time; sys.path.insert(0,'scripts'); from pathlib import Path; import repo_map_history as h; from repo_map_metrics import Thresholds; t=time.time(); s=h.select_snapshots(Path('.')); p=h.build_history(Path('.'), s, thresholds=Thresholds()); print(len(p),'Punkte in',round(time.time()-t,1),'s'); [print(x.label, x.loc, x.flagged) for x in p]"`
-Expected: rund `11 Punkte in 7 s`, LOC steigend über die Zeit. Die Zahl folgt aus der Messung:
-11 Monats-Snapshots haben 17.708 Pfad-Einträge, aber nur 5.363 distinkte `(Blob, Pfad)`-Paare —
-das ist das Cache-Optimum, und bei ~1 ms Analyse je Datei sind das ~5,3 s plus git-Overhead.
+Expected: rund `11 Punkte in 7 s`, LOC steigend über die Zeit. Das ist `build_history` allein
+(reine Snapshot-Analyse, ohne `select_snapshots`/`collect_churn`/Rendering) — auf dieser Maschine
+gemessen: monthly ≈ 7,0 s, weekly ≈ 15 s. Der komplette Befehl (`repo_map.py --history`, inkl.
+`git log`, Churn-Sammlung und HTML-Rendering) liegt höher: monthly ≈ 11,1 s, weekly ≈ 17,8 s.
 **Falls das über 30 s dauert, greift der Cache nicht** — Schlüsselbildung in `build_history`
 gegen `analyze_paths` prüfen.
 

@@ -99,8 +99,18 @@ class GitTreeSource:
         self.commit = commit
         self._blobs: dict[str, str] = {}
         self._content: dict[str, str | None] = {}
-        for line in _git(root, "ls-tree", "-r", commit).splitlines():
-            meta, _, path = line.partition("\t")
+        # -z switches the record separator from newline to NUL AND disables
+        # git's core.quotePath escaping of "unusual" bytes (it only quotes to
+        # keep paths on one text line) - splitting on "\0" instead of
+        # splitlines() undoes both a literal-tab-in-filename ambiguity and
+        # quoted/octal-escaped paths in one move. The TAB between the meta
+        # fields and the path is unaffected; -z only changes what comes
+        # after and between whole records.
+        out = _git(root, "ls-tree", "-r", "-z", commit)
+        for record in out.split("\0"):
+            if not record:
+                continue
+            meta, _, path = record.partition("\t")
             fields = meta.split()
             if len(fields) >= 3 and fields[1] == "blob":
                 self._blobs[path] = fields[2]
@@ -294,9 +304,12 @@ def collect_churn(root: Path, *, since: str | None = None) -> dict[str, Churn]:
 
 
 # First match wins, so backend/tests must precede the general backend rule.
+# "backend/app" is deliberately narrowed to that exact directory - the rest of
+# backend/ (alembic, scripts, baluhost_tui, root files) falls into sonstiges,
+# so the series matches what the Directories tree reports for backend/app.
 AREA_RULES: tuple[tuple[str, str], ...] = (
     ("backend/tests", "backend/tests/"),
-    ("backend/app", "backend/"),
+    ("backend/app", "backend/app/"),
     ("client/src", "client/src/"),
     ("docs", "docs/"),
 )

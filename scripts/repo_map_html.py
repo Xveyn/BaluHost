@@ -25,6 +25,15 @@ def build_payload(report: Report, *, history: dict | None = None) -> dict:
     """
     files = sorted(report.entries, key=lambda e: (-e.score, -e.loc, e.path))
     churn = (history or {}).get("churn", {})
+    # The page never reads DATA.history.churn - every current file already
+    # carries its own churn via files[].ch/.lt (from `churn` above). The full
+    # map (including entries for paths that no longer exist) is dead weight
+    # in the embedded payload; --json keeps it because that sidecar's whole
+    # purpose is the raw export. Copy rather than mutate: `history` is the
+    # caller's dict (also written verbatim to the --json sidecar).
+    history_view = None
+    if history is not None:
+        history_view = {k: v for k, v in history.items() if k != "churn"}
     return {
         "commit": report.commit,
         "generatedAt": report.generated_at,
@@ -36,7 +45,7 @@ def build_payload(report: Report, *, history: dict | None = None) -> dict:
         "totals": _totals(report.entries),
         "tree": _tree_payload(report.tree),
         "files": [_file_payload(entry, churn.get(entry.path)) for entry in files],
-        "history": history,
+        "history": history_view,
     }
 
 

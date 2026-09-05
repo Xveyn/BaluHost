@@ -5,6 +5,15 @@ Split out of repo_map_html.py to keep that file under the repo's own
 pushed it over). Pure string constant, embedded verbatim into the page's
 inline <script> - no separate load, no module system, still one
 self-contained document.
+
+Because this is a plain string concatenated onto repo_map_html._SCRIPT (see
+_SCRIPT += HISTORY_SCRIPT there) rather than an importable module, nothing
+here is checked by name at import time. This module's JS relies on four
+identifiers defined in that other string: DATA (the embedded payload), el
+(element-builder helper), nf (the Intl.NumberFormat instance), and
+scoreClass (score -> pill-color mapping). Renaming any of them in
+repo_map_html.py's _SCRIPT breaks this page at runtime with no Python test
+failing - only a browser console error would show it.
 """
 from __future__ import annotations
 

@@ -118,7 +118,7 @@ zwei Hälften. Binärdateien liefern `-` statt Zahlen.
 | Flag | Default | Wirkung |
 |---|---|---|
 | `--history` | aus | schaltet Verlauf und Churn ein |
-| `--interval monthly\|weekly` | `monthly` | Snapshot-Dichte (11 Punkte ≈ 2,5 s; 40 ≈ 9 s) |
+| `--interval monthly\|weekly` | `monthly` | Snapshot-Dichte (`build_history` allein: monthly ≈ 7,0 s, weekly ≈ 15 s; kompletter `repo_map.py --history`-Lauf inkl. git log/churn/Rendering: monthly ≈ 11,1 s, weekly ≈ 17,8 s) |
 | `--since YYYY-MM-DD` | Repo-Anfang | grenzt den Zeitraum ein |
 | `--json PFAD` | — | schreibt die Verlaufsdaten roh heraus |
 

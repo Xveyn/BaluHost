@@ -146,6 +146,19 @@ class TestGitTreeSource:
         assert source.read("f0.py") == "x = 0\n" * 40
         assert source.read("f299.py") == "x = 299\n" * 40
 
+    def test_non_ascii_filename_comes_back_unquoted(self, tmp_path):
+        """Under git's default core.quotePath, ls-tree without -z renders a
+        non-ASCII path as an octal-escaped, double-quoted string (e.g.
+        '"\\342\\234\\205 done.txt"'). -z disables that quoting, so the path
+        parsed out of GitTreeSource must be the plain original string."""
+        repo = make_repo(tmp_path)
+        commit_file(repo, "sub/✅ done.txt", "x\n", date="2026-01-10")
+
+        source = history.GitTreeSource(repo, "HEAD")
+
+        assert "sub/✅ done.txt" in source.paths()
+        assert source.read("sub/✅ done.txt") == "x\n"
+
     def test_prefetch_leaves_already_known_content_alone(self, tmp_path):
         repo = make_repo(tmp_path)
         commit_file(repo, "a.py", "1\n", date="2026-01-10")
@@ -246,6 +259,14 @@ class TestClassifyArea:
 
     def test_backend_app_catches_the_rest_of_backend(self):
         assert history.classify_area("backend/app/services/x.py") == "backend/app"
+
+    def test_backend_non_app_subdirs_land_in_the_rest_bucket(self):
+        """backend/app must measure exactly that directory, not all of
+        backend/ - alembic, scripts and baluhost_tui live under backend/ too
+        but are not part of the FastAPI app."""
+        assert history.classify_area("backend/alembic/versions/x.py") == history.REST_AREA
+        assert history.classify_area("backend/scripts/debug/reset.py") == history.REST_AREA
+        assert history.classify_area("backend/baluhost_tui/app.py") == history.REST_AREA
 
     def test_client_source(self):
         assert history.classify_area("client/src/pages/X.tsx") == "client/src"
