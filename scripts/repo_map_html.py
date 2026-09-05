@@ -16,13 +16,14 @@ from repo_map_metrics import FileEntry
 CANDIDATE_SCORE = 1
 
 
-def build_payload(report: Report) -> dict:
+def build_payload(report: Report, *, history: dict | None = None) -> dict:
     """Turn a report into the plain-data structure the page renders from.
 
     Files come out ordered by score, then by size - that ordering IS the work
     list, so it belongs in the data rather than in the browser.
     """
     files = sorted(report.entries, key=lambda e: (-e.score, -e.loc, e.path))
+    churn = (history or {}).get("churn", {})
     return {
         "commit": report.commit,
         "generatedAt": report.generated_at,
@@ -33,7 +34,8 @@ def build_payload(report: Report) -> dict:
         },
         "totals": _totals(report.entries),
         "tree": _tree_payload(report.tree),
-        "files": [_file_payload(entry) for entry in files],
+        "files": [_file_payload(entry, churn.get(entry.path)) for entry in files],
+        "history": history,
     }
 
 
@@ -48,7 +50,7 @@ def _totals(entries: list[FileEntry]) -> dict:
     }
 
 
-def _file_payload(entry: FileEntry) -> dict:
+def _file_payload(entry: FileEntry, churn: dict | None = None) -> dict:
     return {
         "p": entry.path,
         "e": entry.ext,
@@ -68,6 +70,8 @@ def _file_payload(entry: FileEntry) -> dict:
         "gen": entry.generated,
         "s": entry.score,
         "r": list(entry.reasons),
+        "ch": (churn or {}).get("commits", 0),
+        "lt": (churn or {}).get("last"),
     }
 
 
@@ -96,9 +100,10 @@ def _embed(payload: dict) -> str:
     )
 
 
-def render(report: Report) -> str:
+def render(report: Report, *, history: dict | None = None) -> str:
     """Render the full HTML document for a report."""
-    return _TEMPLATE.replace("__PAYLOAD__", _embed(build_payload(report)))
+    payload = build_payload(report, history=history)
+    return _TEMPLATE.replace("__PAYLOAD__", _embed(payload))
 
 
 _STYLE = """
@@ -318,6 +323,10 @@ function buildTable() {
 head();
 renderTree(DATA.tree, document.getElementById("tree"), DATA.totals.loc, 0);
 buildTable();
+
+if (DATA.history && DATA.history.points.length > 1) {
+  document.getElementById("history").hidden = false;
+}
 """
 
 _TEMPLATE = f"""<!doctype html>
@@ -335,6 +344,11 @@ _TEMPLATE = f"""<!doctype html>
   <div class="cards" id="cards"></div>
 </header>
 <main>
+  <section id="history" hidden>
+    <h2>Verlauf</h2>
+    <div id="history-chart"></div>
+    <div id="history-hotspots"></div>
+  </section>
   <section>
     <h2>Directories</h2>
     <div class="tree" id="tree"></div>

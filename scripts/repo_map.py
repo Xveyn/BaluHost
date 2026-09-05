@@ -285,7 +285,9 @@ def main(argv: list[str] | None = None) -> int:
 
     out = Path(args.output)
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(repo_map_html.render(report), encoding="utf-8")
+    out.write_text(
+        repo_map_html.render(report, history=history_data), encoding="utf-8"
+    )
 
     flagged = sum(1 for e in report.entries if e.score > 0)
     suffix = ""

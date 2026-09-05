@@ -53,6 +53,44 @@ class TestBuildPayload:
         assert payload["commit"] == "deadbee"
         assert payload["thresholds"]["max_loc"] == 500
 
+    def test_history_is_none_when_not_requested(self):
+        payload = repo_map_html.build_payload(make_report())
+        assert payload["history"] is None
+
+    def test_history_travels_into_the_payload(self):
+        hist = {
+            "areas": ["backend/app", "sonstiges"],
+            "points": [
+                {"label": "2026-01", "commit": "abc1234", "date": "2026-01-31",
+                 "files": 1, "loc": 10, "flagged": 0, "score": 0,
+                 "areas": {"backend/app": 10, "sonstiges": 0}},
+            ],
+            "churn": {},
+        }
+        payload = repo_map_html.build_payload(make_report(), history=hist)
+        assert payload["history"]["points"][0]["label"] == "2026-01"
+
+    def test_churn_lands_on_the_matching_file_row(self):
+        entry = make_entry("a.py", "x = 1\n")
+        hist = {
+            "areas": [],
+            "points": [],
+            "churn": {"a.py": {"commits": 7, "added": 5, "deleted": 2,
+                               "last": "2026-08-01"}},
+        }
+        payload = repo_map_html.build_payload(
+            make_report([entry]), history=hist
+        )
+        row = payload["files"][0]
+        assert row["ch"] == 7
+        assert row["lt"] == "2026-08-01"
+
+    def test_files_without_churn_report_zero_not_missing(self):
+        entry = make_entry("a.py", "x = 1\n")
+        payload = repo_map_html.build_payload(make_report([entry]))
+        assert payload["files"][0]["ch"] == 0
+        assert payload["files"][0]["lt"] is None
+
 
 class TestRender:
     def test_report_makes_no_external_requests(self):
@@ -77,3 +115,27 @@ class TestRender:
         html = repo_map_html.render(make_report())
         assert html.startswith("<!doctype html>")
         assert html.rstrip().endswith("</html>")
+
+    def test_history_section_starts_hidden_without_data(self):
+        plain = repo_map_html.render(make_report())
+        assert "id=\"history\" hidden" in plain, (
+            "the section is always in the markup; JS reveals it when data exists"
+        )
+        assert "\"history\": null" in plain or "\"history\":null" in plain
+
+    def test_history_section_is_rendered_when_data_is_present(self):
+        hist = {
+            "areas": ["backend/app"],
+            "points": [
+                {"label": "2026-01", "commit": "a", "date": "2026-01-31",
+                 "files": 1, "loc": 10, "flagged": 0, "score": 0,
+                 "areas": {"backend/app": 10}},
+                {"label": "2026-02", "commit": "b", "date": "2026-02-28",
+                 "files": 1, "loc": 20, "flagged": 1, "score": 5,
+                 "areas": {"backend/app": 20}},
+            ],
+            "churn": {},
+        }
+        page = repo_map_html.render(make_report(), history=hist)
+        assert "id=\"history\"" in page
+        assert "2026-02" in page
