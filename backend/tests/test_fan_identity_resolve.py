@@ -97,11 +97,10 @@ def test_platform_without_numeric_suffix_uses_device_name(tmp_path):
     assert identity.key == "asus@asus-nb-wmi"
 
 
-@requires_colon_paths
 def test_unsupported_bus_falls_back(tmp_path):
-    # drivetemp haengt am scsi-Bus. Weiterklettern landete auf dem
-    # AHCI-Controller und gaebe allen Platten dieselbe Kennung.
-    link = _tree(tmp_path, "hwmon7", "pci0000:00/0000:00:17.0/ata1/host0",
+    # drivetemp haengt am scsi-Bus. Die Schleife bricht sofort ab, wenn
+    # subsystem=scsi erkannt wird; der PCI-Baum darueber wird nicht betreten.
+    link = _tree(tmp_path, "hwmon7", "platform/ahci-sim/ata1/host0",
                  "drivetemp", subsystem="scsi")
     identity = derive_chip_identity(link)
     assert identity.stable is False
@@ -121,9 +120,11 @@ def test_missing_device_link_falls_back(tmp_path):
     assert derive_chip_identity(link).stable is False
 
 
-@requires_colon_paths
 def test_missing_name_falls_back(tmp_path):
-    link = _tree(tmp_path, "hwmon4", "pci0000:00/0000:00:18.3", "k10temp")
+    # Namensprüfung läuft vor dem Gerätelauf. Ein vollständiger Baum
+    # mit fehlender name ist trotzdem instabil.
+    link = _tree(tmp_path, "hwmon4", "platform/k10temp-sim.1", "k10temp",
+                 subsystem="platform")
     (link.resolve() / "name").unlink()
     assert derive_chip_identity(link).stable is False
 
