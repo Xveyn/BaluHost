@@ -15,13 +15,14 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
 
-from sqlalchemy import select, desc, func
+from sqlalchemy import select, desc, func, update
 from sqlalchemy.exc import IntegrityError
 
 from app.core import lifespan
 from app.core.config import Settings
 from app.models.fans import FanConfig, FanSample
 from app.schemas.fans import FanMode, FanCurvePoint, PwmControl
+from app.services.power.fan_restore import is_observation, resolve_restore_value
 from app.services.power.fan_schedule import FanScheduleService
 from app.services.power.fan_profiles import FanProfileService
 from app.services.power.fan_reconcile import ChipFacts, reconcile_fan_identities
@@ -168,6 +169,9 @@ class FanControlService:
         self._registry: TempSourceRegistry = TempSourceRegistry()
         self._last_pwm_by_fan: Dict[str, int] = {}
         self._last_tick_ts: float = 0.0
+        # Rueckgabewerte pro Luefter, beim Start aus der DB geladen. stop()
+        # braucht sie ohne Datenbankzugriff (#534).
+        self._restore_values: Dict[str, int] = {}
 
         FanControlService._instance = self
 
@@ -316,6 +320,69 @@ class FanControlService:
             mapping[f"{hwmon_name}_temp{temp_num}"] = f"hwmon:{stable_id}"
         return mapping
 
+    def _collect_pwm_enable_observations(self) -> Dict[str, int]:
+        """Beobachtete Automatikmodi aus dem Scan-Cache.
+
+        GPU-Luefter bleiben draussen: fuer AMD-Karten existiert mit
+        AmdManualState / disable_amd_manual bereits ein eigener Rueckgabeweg,
+        der zusaetzlich das Performance-Level zuruecksetzt, und nouveau hat
+        gar keinen. Der isinstance-Schutz folgt dem Muster, das fuer dieselben
+        Cache-Zugriffe in #532 eingefuehrt wurde.
+        """
+        cache = getattr(self._backend, "_fan_cache", None)
+        if not isinstance(cache, dict):
+            # Gleiche Absicherung wie in _collect_chip_facts/_collect_sensor_map:
+            # ein unspezifizierter Test-Mock (z. B. AsyncMock()) liefert hier
+            # selbst wieder einen Mock statt eines dict -- ohne diese Pruefung
+            # wuerde cache.items() als Coroutine zurueckkommen (AsyncMock-
+            # Kindattribute sind selbst AsyncMock) und die Iteration bricht.
+            cache = {}
+        return {
+            fan_id: info["pwm_enable_at_scan"]
+            for fan_id, info in cache.items()
+            if isinstance(info, dict)
+            and info.get("gpu_vendor") is None
+            and is_observation(info.get("pwm_enable_at_scan"))
+        }
+
+    def _persist_restore_values(self, observations: Dict[str, int]) -> None:
+        """Beobachtete pwm_enable-Werte speichern und in den Speicher laden.
+
+        Nur der Primary schreibt. Geschrieben wird ausschliesslich bei echter
+        Aenderung, und updated_at wird dabei ausdruecklich mitgefuehrt: die
+        Spalte traegt onupdate=func.now() und ist das Rangkriterium des
+        Identitaets-Abgleichs (fan_reconcile.py). Ein Schreibvorgang bei jedem
+        Start setzte jede Zeile auf "gerade angefasst".
+        """
+        if not getattr(lifespan, "IS_PRIMARY_WORKER", False):
+            return
+
+        with self.db_session_factory() as db:
+            rows = list(db.execute(select(FanConfig)).scalars())
+            by_id = {row.fan_id: row for row in rows}
+
+            changed = 0
+            for fan_id, row in by_id.items():
+                target = resolve_restore_value(observations.get(fan_id),
+                                               row.pwm_enable_restore)
+                if target is not None:
+                    self._restore_values[fan_id] = target
+                if target == row.pwm_enable_restore or target is None:
+                    continue
+                db.execute(
+                    update(FanConfig)
+                    .where(FanConfig.id == row.id)
+                    .values(pwm_enable_restore=target,
+                            updated_at=row.updated_at)
+                )
+                changed += 1
+                logger.info(
+                    "Rueckgabewert fuer %s beobachtet: pwm_enable=%s",
+                    fan_id, target,
+                )
+            if changed:
+                db.commit()
+
     async def _load_fan_configs(self):
         """Load fan configurations from database.
 
@@ -338,6 +405,8 @@ class FanControlService:
                     break
         except Exception:
             pass
+
+        observations = self._collect_pwm_enable_observations()
 
         with self.db_session_factory() as db:
             chip_facts = self._collect_chip_facts()
@@ -457,6 +526,7 @@ class FanControlService:
                             cpu_sensor_id or fan.temp_sensor_id
                         ) if (cpu_sensor_id or fan.temp_sensor_id) else None,
                         is_active=True,
+                        pwm_enable_restore=observations.get(fan.fan_id),
                     )
                     try:
                         # Savepoint statt db.rollback() auf der ganzen
@@ -481,6 +551,8 @@ class FanControlService:
                         logger.debug("Fan-Config %s wurde parallel angelegt", fan.fan_id)
 
             db.commit()
+
+        self._persist_restore_values(observations)
 
         logger.info(f"Loaded {len(fans)} fan configuration(s)")
 
