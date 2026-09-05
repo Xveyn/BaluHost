@@ -17,6 +17,13 @@ from app.services.power.fan_identity import (
     derive_chip_identity,
 )
 
+requires_colon_paths = pytest.mark.skipif(
+    os.name == "nt",
+    reason="NTFS erlaubt keine Doppelpunkte in Verzeichnisnamen; PCI-Pfade "
+           "wie pci0000:00/0000:03:00.0 sind unter Windows nicht anlegbar. "
+           "Die CI (Linux) fuehrt diesen Test aus.",
+)
+
 
 def _tree(tmp_path: Path, hwmon_name: str, device_rel: str, chip: str,
           subsystem: str = "pci") -> Path:
@@ -51,11 +58,13 @@ def test_platform_chip_uses_decimal_suffix(tmp_path):
     assert identity.key == "nct6798-isa-0290"
 
 
+@requires_colon_paths
 def test_pci_chip(tmp_path):
     link = _tree(tmp_path, "hwmon2", "pci0000:00/0000:03:00.0", "amdgpu")
     assert derive_chip_identity(link).key == "amdgpu-pci-0300"
 
 
+@requires_colon_paths
 def test_climbs_past_intermediate_class_to_pci_parent(tmp_path):
     # NVMe: der device-Link zeigt auf nvme1, dessen subsystem die Klasse
     # "nvme" ist -- weder pci noch platform, also weiterklettern.
@@ -88,6 +97,7 @@ def test_platform_without_numeric_suffix_uses_device_name(tmp_path):
     assert identity.key == "asus@asus-nb-wmi"
 
 
+@requires_colon_paths
 def test_unsupported_bus_falls_back(tmp_path):
     # drivetemp haengt am scsi-Bus. Weiterklettern landete auf dem
     # AHCI-Controller und gaebe allen Platten dieselbe Kennung.
@@ -111,6 +121,7 @@ def test_missing_device_link_falls_back(tmp_path):
     assert derive_chip_identity(link).stable is False
 
 
+@requires_colon_paths
 def test_missing_name_falls_back(tmp_path):
     link = _tree(tmp_path, "hwmon4", "pci0000:00/0000:00:18.3", "k10temp")
     (link.resolve() / "name").unlink()
