@@ -874,7 +874,9 @@ def collect_churn(root: Path, *, since: str | None = None) -> dict[str, Churn]:
         "--first-parent",
         "--numstat",
         "-M",
-        f"--format={_COMMIT_MARK}%H %as",
+        # %x00 makes git emit the NUL itself. Passing a literal NUL in argv
+        # raises ValueError on Windows, where command lines are NUL-terminated.
+        "--format=%x00%H %as",
     ]
     if since:
         args.append(f"--since={since}")
@@ -931,7 +933,9 @@ Expected: PASS, 10 Tests.
 - [ ] **Step 5: Gegen das echte Repo prüfen**
 
 Run: `python -c "import sys; sys.path.insert(0,'scripts'); from pathlib import Path; import repo_map_history as h; c=h.collect_churn(Path('.'), since='2026-03-05'); top=sorted(c.values(), key=lambda x: -x.commits)[:5]; [print(x.commits, x.path) for x in top]"`
-Expected: oben stehen `CHANGELOG.md`, `client/package-lock.json`, `backend/app/services/power/sleep.py` — Dateien mit vielen Commits.
+Expected: oben stehen die Dateien, die praktisch jeder PR anfasst — `client/package.json`,
+`backend/pyproject.toml`, `CLAUDE.md`, `CHANGELOG.md`. Das sind rohe Commit-Zahlen, nicht
+die Hotspot-Rangliste (Score x Commits) aus Task 8 — die sieht anders aus.
 
 - [ ] **Step 6: Run the whole file und Länge prüfen**
 
