@@ -42,7 +42,7 @@ class TestDevFanControlBackend:
         """Test backend initialization."""
         backend = DevFanControlBackend(mock_settings)
 
-        assert len(backend._fans) == 4
+        assert len(backend._fans) == 5
         assert "dev_cpu_fan" in backend._fans
         assert "dev_case_fan_1" in backend._fans
         assert "dev_case_fan_2" in backend._fans
@@ -70,7 +70,7 @@ class TestDevFanControlBackend:
 
         fans = await backend.get_fans()
 
-        assert len(fans) == 4
+        assert len(fans) == 5
         assert all(isinstance(fan, FanData) for fan in fans)
 
     @pytest.mark.asyncio
@@ -369,7 +369,7 @@ class TestSimulatedStateUpdate:
 
         # RPM values may fluctuate
         # Just verify we get data
-        assert len(fans1) == len(fans2) == 4
+        assert len(fans1) == len(fans2) == 5
 
 
 class TestFanDataStructure:

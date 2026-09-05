@@ -1019,6 +1019,14 @@
         "disable": "Deaktivieren",
         "enabled": "Manueller Modus aktiviert",
         "disabled": "Manueller Modus deaktiviert"
+      },
+      "firmware": {
+        "badge": "Firmware",
+        "badgeHint": "Die Lüfterkurve dieser GPU wird von der Firmware verwaltet und kann von BaluHost nicht gesetzt werden.",
+        "title": "Firmware-verwaltete Lüfterkurve",
+        "explanation": "Ab RDNA3 liegt die Lüfterkurve in der GPU-Firmware. Der amdgpu-Treiber lehnt direkte PWM-Steuerung ab — auch mit gesetztem Kernel-Parameter amdgpu.ppfeaturemask. Drehzahl und Temperatur werden weiter angezeigt.",
+        "resetButton": "Manuellen Modus zurücksetzen",
+        "resetSuccess": "Manueller Modus zurückgesetzt — die GPU steht wieder unter Firmware-Kontrolle."
       }
     }
   },

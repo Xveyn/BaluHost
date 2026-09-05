@@ -1,6 +1,8 @@
 """
 Linux hardware backend for fan control using hwmon sysfs.
 """
+import errno
+import getpass
 import logging
 import os
 import subprocess
@@ -8,10 +10,18 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from app.core.config import Settings
-from app.schemas.fans import FanMode, FanCurvePoint
+from app.schemas.fans import FanMode, FanCurvePoint, PwmControl
 from app.services.power.fan_control import FanControlBackend, FanData, TempSensorData
+from app.services.power.fan_gpu_manual import probe_amd_pwm_control
 
 logger = logging.getLogger(__name__)
+
+FIRMWARE_MANAGED_WRITE_ERROR = (
+    "This GPU manages its fan curve in firmware (RDNA3+). The amdgpu driver "
+    "does not support live PWM control on this card — setting "
+    "amdgpu.ppfeaturemask=0xffffffff does NOT change that. Control is only "
+    "possible through the firmware curve (gpu_od/fan_ctrl), see issue #516."
+)
 
 
 class LinuxFanControlBackend(FanControlBackend):
@@ -107,6 +117,7 @@ class LinuxFanControlBackend(FanControlBackend):
                 gpu_vendor=fan_info.get("gpu_vendor"),
                 device_driver=fan_info.get("device_driver"),
                 last_write_error=fan_info.get("last_write_error"),
+                pwm_control=fan_info.get("pwm_control", PwmControl.SUPPORTED),
             ))
 
         return fans
@@ -118,36 +129,65 @@ class LinuxFanControlBackend(FanControlBackend):
             return False
 
         fan_info = self._fan_cache[fan_id]
+
+        # Firmware besitzt die Kurve: sysfs gar nicht erst anfassen.
+        if fan_info.get("pwm_control") is PwmControl.FIRMWARE_MANAGED:
+            fan_info["last_write_error"] = FIRMWARE_MANAGED_WRITE_ERROR
+            logger.debug(f"{fan_id}: firmware-managed fan curve, PWM write skipped")
+            return False
+
         pwm_path = fan_info["pwm_path"]
         pwm_enable_path = fan_info.get("pwm_enable_path")
 
-        # Clamp to valid range
         pwm_percent = max(0, min(100, pwm_percent))
         pwm_value = self._percent_to_pwm(pwm_percent)
 
-        # First, set PWM enable to manual mode (1)
         if pwm_enable_path:
-            success = await self._write_hwmon_file(pwm_enable_path, "1")
-            if not success:
+            ok_enable, _ = await self._write_hwmon_file(pwm_enable_path, "1")
+            if not ok_enable:
                 logger.warning(f"Failed to set PWM enable for {fan_id}")
 
-        # Write PWM value
-        success = await self._write_hwmon_file(pwm_path, str(pwm_value))
+        success, err_code = await self._write_hwmon_file(pwm_path, str(pwm_value))
         if success:
             fan_info["last_write_error"] = None
+            if fan_info.get("pwm_control") is PwmControl.NO_PERMISSION:
+                # Rechte wurden zur Laufzeit korrigiert.
+                fan_info["pwm_control"] = PwmControl.SUPPORTED
             logger.debug(f"Set {fan_id} PWM to {pwm_percent}% ({pwm_value}/255)")
             return True
 
-        # Capture diagnostic
-        driver = fan_info.get("device_driver", "unknown")
-        enable_val = None
-        if pwm_enable_path:
-            v = await self._read_hwmon_file(pwm_enable_path)
-            enable_val = v if v is not None else "?"
-        fan_info["last_write_error"] = (
-            f"PWM write rejected by kernel (driver={driver}, pwm_enable={enable_val}). "
-            f"For AMD GPUs: enable manual mode in the UI."
-        )
+        if err_code in (errno.EACCES, errno.EPERM):
+            fan_info["pwm_control"] = PwmControl.NO_PERMISSION
+            try:
+                user = getpass.getuser()
+            except Exception:
+                user = "the service user"
+            fan_info["last_write_error"] = (
+                f"No write permission for {pwm_path} "
+                f"({errno.errorcode.get(err_code, err_code)}). The backend runs as "
+                f"'{user}' and the udev rule does not cover hwmon PWM nodes."
+            )
+        elif err_code is None:
+            # _write_hwmon_file() found the path missing before even attempting
+            # the write — the kernel rejected nothing, the sysfs node is gone
+            # (device removed or driver reloaded). Do not claim a kernel
+            # rejection that never happened.
+            fan_info["last_write_error"] = (
+                f"PWM sysfs node {pwm_path} no longer exists (device removed "
+                f"or driver reloaded)."
+            )
+        else:
+            driver = fan_info.get("device_driver", "unknown")
+            enable_val = None
+            if pwm_enable_path:
+                v = await self._read_hwmon_file(pwm_enable_path)
+                enable_val = v if v is not None else "?"
+            fan_info["last_write_error"] = (
+                f"PWM write rejected by kernel (driver={driver}, "
+                f"pwm_enable={enable_val}, "
+                f"errno={errno.errorcode.get(err_code, err_code)})."
+            )
+
         logger.error(f"Failed to write PWM for {fan_id}: {fan_info['last_write_error']}")
         return False
 
@@ -335,6 +375,13 @@ class LinuxFanControlBackend(FanControlBackend):
                         temp_path = temp_file
                         break
 
+                pwm_control = PwmControl.SUPPORTED
+                if gpu_vendor == "amd":
+                    try:
+                        pwm_control = probe_amd_pwm_control(hwmon_dir)
+                    except OSError as exc:
+                        logger.debug(f"pwm_control probe failed for {hwmon_dir}: {exc}")
+
                 new_cache[fan_id] = {
                     "name": f"{hwmon_name_value} PWM{pwm_num}",
                     "pwm_path": pwm_file,
@@ -345,6 +392,7 @@ class LinuxFanControlBackend(FanControlBackend):
                     "is_gpu_fan": is_gpu_fan,
                     "gpu_vendor": gpu_vendor,
                     "device_driver": hwmon_name_value,
+                    "pwm_control": pwm_control,
                 }
 
         if new_cache or not self._fan_cache:
@@ -369,39 +417,48 @@ class LinuxFanControlBackend(FanControlBackend):
             logger.debug(f"Failed to read {path}: {e}")
             return None
 
-    async def _write_hwmon_file(self, path: Path, value: str) -> bool:
-        """Write value to hwmon sysfs file."""
+    async def _write_hwmon_file(self, path: Path, value: str) -> Tuple[bool, Optional[int]]:
+        """Write value to hwmon sysfs file.
+
+        Returns (ok, errno). errno ist der Code des letzten fehlgeschlagenen
+        Versuchs, damit der Aufrufer EACCES (fehlende Rechte) von EINVAL
+        (Treiber lehnt ab) unterscheiden kann — beide brauchen voellig
+        verschiedene Handlungsempfehlungen.
+        """
         if not path or not path.exists():
-            return False
+            return False, None
 
         try:
-            # Try direct write first
             path.write_text(value + "\n")
             self._has_write_permission = True
-            return True
-        except PermissionError:
-            # Try with sudo tee fallback
+            return True, None
+        except OSError as exc:
+            code = exc.errno
+            if code not in (errno.EACCES, errno.EPERM):
+                logger.debug(f"Write to {path} failed: {exc}")
+                return False, code
+
+            # Fehlende Rechte: sudo-tee-Fallback. -n, damit ein fehlender
+            # sudoers-Eintrag sofort scheitert statt in den Timeout zu laufen.
             try:
-                cmd = ["sudo", "tee", str(path)]
                 result = subprocess.run(
-                    cmd,
+                    ["sudo", "-n", "tee", str(path)],
                     input=value.encode(),
                     capture_output=True,
-                    timeout=5
+                    timeout=5,
                 )
                 if result.returncode == 0:
                     self._has_write_permission = True
                     logger.debug(f"Wrote to {path} via sudo tee")
-                    return True
-                else:
-                    logger.warning(f"sudo tee failed for {path}: {result.stderr.decode()}")
-                    return False
-            except Exception as e:
-                logger.error(f"Failed to write {path} with sudo: {e}")
-                return False
-        except Exception as e:
-            logger.error(f"Failed to write {path}: {e}")
-            return False
+                    return True, None
+                logger.warning(f"sudo tee failed for {path}: {result.stderr.decode()}")
+            except Exception as exc2:
+                logger.error(f"Failed to write {path} with sudo: {exc2}")
+            return False, code
+        except Exception as exc:
+            # Catch-all wie bisher: nichts Unerwartetes in den Loop propagieren.
+            logger.error(f"Failed to write {path}: {exc}")
+            return False, None
 
     def _pwm_to_percent(self, pwm_value: int) -> int:
         """Convert PWM value (0-255) to percentage (0-100)."""

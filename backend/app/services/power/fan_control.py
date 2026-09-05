@@ -19,7 +19,7 @@ from sqlalchemy import select, desc, func
 
 from app.core.config import Settings
 from app.models.fans import FanConfig, FanSample
-from app.schemas.fans import FanMode, FanCurvePoint
+from app.schemas.fans import FanMode, FanCurvePoint, PwmControl
 from app.services.power.fan_schedule import FanScheduleService
 from app.services.power.fan_profiles import FanProfileService
 from app.services.power.fan_sources import (
@@ -55,6 +55,7 @@ class FanData:
     gpu_vendor: Optional[str] = None
     device_driver: Optional[str] = None
     last_write_error: Optional[str] = None
+    pwm_control: PwmControl = PwmControl.SUPPORTED
 
 
 @dataclass
@@ -529,19 +530,37 @@ class FanControlService:
                         target_pwm = evaluate_curve(
                             eval_cfg, temperature, prev, other_fan_pwms, _profile_loader, dt,
                         )
-                        # Hysteresis layered on top (existing helper, only for graph-like outputs)
-                        target_pwm = self._calculate_pwm_with_hysteresis(
-                            fan.fan_id, temperature or 0.0, [],
+                        if eval_cfg.curve_type == "graph" and temperature is None:
+                            # #517-Folgeschaden: _interpolate() liefert 0 fuer
+                            # temp=None (kein temp_sensor_id, oder der Sensor
+                            # liefert nicht). Ein ausgefallener Sensor darf die
+                            # Kuehlung nicht abstellen -> aktuellen PWM halten.
+                            target_pwm = fan.pwm_percent
+                        # Hysteresis dampens the already-computed target (only for graph-like outputs)
+                        target_pwm = self._apply_hysteresis(
+                            fan.fan_id, temperature or 0.0,
                             getattr(config, "hysteresis_celsius", 3.0), target_pwm,
                         ) if eval_cfg.curve_type == "graph" else target_pwm
 
                 target_pwm = max(config.min_pwm_percent, min(config.max_pwm_percent, target_pwm))
 
+                if fan.pwm_control is PwmControl.FIRMWARE_MANAGED:
+                    # Die Firmware besitzt die Kurve (RDNA3+). Kein Write-Versuch,
+                    # und der Sample protokolliert den tatsaechlichen Wert.
+                    target_pwm = fan.pwm_percent
+
                 if target_pwm != fan.pwm_percent:
                     await self._backend.set_pwm(fan.fan_id, target_pwm)
                 self._last_pwm_by_fan[fan.fan_id] = target_pwm
 
-                if mode == FanMode.EMERGENCY and config.mode != FanMode.EMERGENCY.value:
+                if (
+                    mode == FanMode.EMERGENCY
+                    and config.mode != FanMode.EMERGENCY.value
+                    and fan.pwm_control is not PwmControl.FIRMWARE_MANAGED
+                ):
+                    # Bei firmware-verwalteten Lueftern brachte EMERGENCY nichts
+                    # ausser einem Zustand, aus dem nur der AUTO-Button wieder
+                    # herausfuehrt. Die Benachrichtigung oben bleibt erhalten.
                     config.mode = FanMode.EMERGENCY.value
                     db.commit()
 
@@ -554,88 +573,51 @@ class FanControlService:
                     "mode": mode.value,
                 })
 
-    def _calculate_pwm_from_curve(self, temperature: float, curve_points: List[dict]) -> int:
-        """Calculate PWM from temperature using curve interpolation."""
-        if not curve_points or len(curve_points) < 2:
-            return 50  # Default
-
-        # Sort points by temperature
-        points = sorted(curve_points, key=lambda p: p["temp"])
-
-        # Below minimum temp
-        if temperature <= points[0]["temp"]:
-            return points[0]["pwm"]
-
-        # Above maximum temp
-        if temperature >= points[-1]["temp"]:
-            return points[-1]["pwm"]
-
-        # Linear interpolation
-        for i in range(len(points) - 1):
-            p1, p2 = points[i], points[i + 1]
-
-            if p1["temp"] <= temperature <= p2["temp"]:
-                # Linear interpolation
-                temp_ratio = (temperature - p1["temp"]) / (p2["temp"] - p1["temp"])
-                pwm = p1["pwm"] + (p2["pwm"] - p1["pwm"]) * temp_ratio
-                return round(pwm)
-
-        return 50  # Fallback
-
-    def _calculate_pwm_with_hysteresis(
+    def _apply_hysteresis(
         self,
         fan_id: str,
         temperature: float,
-        curve_points: List[dict],
         hysteresis: float,
-        current_pwm: int
+        target_pwm: int,
     ) -> int:
-        """
-        Calculate PWM with hysteresis to prevent oscillation.
+        """Daempft ein BEREITS BERECHNETES PWM-Ziel gegen Oszillation.
 
-        Args:
-            fan_id: Fan identifier for state tracking
-            temperature: Current temperature
-            curve_points: Fan curve definition
-            hysteresis: Hysteresis value in Celsius
-            current_pwm: Current PWM percentage
+        Steigende Ziele greifen sofort (Sicherheit); fallende erst, wenn die
+        Temperatur um `hysteresis` Grad unter den Wert gefallen ist, bei dem
+        zuletzt geregelt wurde.
 
-        Returns:
-            Target PWM percentage with hysteresis applied
+        #517: Der Vorgaenger rechnete das Ziel aus einer Kurve NEU — und bekam
+        vom einzigen Aufrufer eine leere Liste, was den Hardcode 50 lieferte und
+        das Ergebnis von evaluate_curve verwarf. Diese Funktion rechnet nichts
+        mehr aus; die Kurvenauswertung gehoert allein fan_curve_eval.py.
         """
-        target_pwm = self._calculate_pwm_from_curve(temperature, curve_points)
         current_time = time.time()
 
-        # Get or initialize hysteresis state
         if fan_id not in self._hysteresis_state:
             self._hysteresis_state[fan_id] = HysteresisState(
-                last_pwm=current_pwm,
+                last_pwm=target_pwm,
                 last_pwm_temp=temperature,
-                last_update=current_time
+                last_update=current_time,
             )
             return target_pwm
 
         state = self._hysteresis_state[fan_id]
 
         if target_pwm > state.last_pwm:
-            # Temperature rising - respond immediately for safety
+            # Temperatur steigt — sofort reagieren.
             state.last_pwm = target_pwm
             state.last_pwm_temp = temperature
             state.last_update = current_time
             return target_pwm
 
-        elif target_pwm < state.last_pwm:
-            # Temperature falling - only reduce PWM if temp dropped by hysteresis amount
+        if target_pwm < state.last_pwm:
             if temperature <= (state.last_pwm_temp - hysteresis):
                 state.last_pwm = target_pwm
                 state.last_pwm_temp = temperature
                 state.last_update = current_time
                 return target_pwm
-            else:
-                # Keep current PWM (within hysteresis deadband)
-                return state.last_pwm
+            return state.last_pwm
 
-        # PWM unchanged
         return state.last_pwm
 
     async def _persist_samples(self):
@@ -707,6 +689,7 @@ class FanControlService:
                         "is_gpu_fan": fan.is_gpu_fan,
                         "gpu_vendor": fan.gpu_vendor,
                         "last_write_error": fan.last_write_error,
+                        "pwm_control": fan.pwm_control,
                         "curve_type": getattr(config, "curve_type", "graph"),
                         "flat_pwm_percent": getattr(config, "flat_pwm_percent", None),
                         "target_temp_celsius": getattr(config, "target_temp_celsius", None),
@@ -755,6 +738,7 @@ class FanControlService:
                         "is_gpu_fan": fan.is_gpu_fan,
                         "gpu_vendor": fan.gpu_vendor,
                         "last_write_error": fan.last_write_error,
+                        "pwm_control": fan.pwm_control,
                         "curve_type": "graph",
                         "flat_pwm_percent": None,
                         "target_temp_celsius": None,

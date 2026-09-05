@@ -7,7 +7,7 @@ import logging
 from typing import Dict, List, Optional
 
 from app.core.config import Settings
-from app.schemas.fans import FanMode, FanCurvePoint
+from app.schemas.fans import FanMode, FanCurvePoint, PwmControl
 from app.services.power.fan_control import FanControlBackend, FanData, TempSensorData
 
 logger = logging.getLogger(__name__)
@@ -23,7 +23,7 @@ class DevFanControlBackend(FanControlBackend):
         self._initialize_simulated_fans()
 
     def _initialize_simulated_fans(self):
-        """Initialize 4 simulated PWM fans (3 CPU + 1 GPU)."""
+        """Initialize 5 simulated PWM fans (3 CPU + 2 GPU)."""
         self._fans = {
             "dev_cpu_fan": {
                 "name": "CPU Fan (Simulated)",
@@ -77,6 +77,20 @@ class DevFanControlBackend(FanControlBackend):
                 "gpu_vendor": "amd",
                 "device_driver": "amdgpu",
             },
+            "dev_gpu_rdna3_pwm1": {
+                "name": "AMD RDNA3 GPU Fan (sim, firmware-managed)",
+                "pwm_percent": 0,
+                "target_rpm": 0,
+                "current_rpm": 0,
+                "min_rpm": 0,
+                "max_rpm": 3000,
+                "temp_sensor_id": "dev_gpu_temp",
+                "last_update": time.time(),
+                "is_gpu_fan": True,
+                "gpu_vendor": "amd",
+                "device_driver": "amdgpu",
+                "pwm_control": PwmControl.FIRMWARE_MANAGED,
+            },
         }
 
         # Initialize simulated temperatures
@@ -116,6 +130,7 @@ class DevFanControlBackend(FanControlBackend):
                 is_gpu_fan=fan_data.get("is_gpu_fan", False),
                 gpu_vendor=fan_data.get("gpu_vendor"),
                 device_driver=fan_data.get("device_driver"),
+                pwm_control=fan_data.get("pwm_control", PwmControl.SUPPORTED),
             ))
 
         return fans
@@ -124,6 +139,10 @@ class DevFanControlBackend(FanControlBackend):
         """Set simulated PWM value."""
         if fan_id not in self._fans:
             logger.warning(f"Fan {fan_id} not found")
+            return False
+
+        if self._fans[fan_id].get("pwm_control") is PwmControl.FIRMWARE_MANAGED:
+            logger.debug(f"{fan_id}: firmware-managed, PWM write skipped")
             return False
 
         pwm_percent = max(0, min(100, pwm_percent))
@@ -189,6 +208,10 @@ class DevFanControlBackend(FanControlBackend):
 
         # Update fan RPM with latency and fluctuation
         for fan_id, fan_data in self._fans.items():
+            # Skip firmware-managed fans (they don't respond to PWM changes)
+            if fan_data.get("pwm_control") is PwmControl.FIRMWARE_MANAGED:
+                continue
+
             elapsed = current_time - fan_data["last_update"]
 
             # Gradual RPM transition (2-3 second lag)

@@ -11,11 +11,15 @@ Covers:
 - Auth checks (admin-only for write operations)
 """
 
+from pathlib import Path
+from types import SimpleNamespace
+
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 from fastapi.testclient import TestClient
 
 from app.api.routes.fans import get_fan_service
+from app.schemas.fans import PwmControl
 
 
 @pytest.fixture(autouse=True)
@@ -265,3 +269,97 @@ class TestFanScheduleRoutes:
 
         response = client.post("/api/fans/fan1/schedule", json={})
         assert response.status_code == 401
+
+
+# ============================================================================
+# Route Guards for Firmware-Managed AMD GPU Fans (#480, Task 7)
+# ============================================================================
+
+class TestFirmwareManagedGpuGuards:
+    """The two route-level guards that keep users from a no-op or a
+    misleading answer on RDNA3+ GPUs, whose fan curve lives in firmware
+    and cannot be driven by raw sysfs PWM writes.
+
+    Key invariant under test: the gpu-manual-mode guard blocks `enable=true`
+    only. `enable=false` must always succeed, or anyone who ever flipped the
+    toggle on such a GPU would be stuck with
+    power_dpm_force_performance_level=manual forever.
+    """
+
+    @staticmethod
+    def _configure_firmware_managed_fan(mock_service, fan_id, last_write_error=None):
+        pwm_path = MagicMock()
+        pwm_path.parent = Path("/fake/sys/class/hwmon/hwmon3")
+        mock_service._backend = SimpleNamespace(_fan_cache={
+            fan_id: {
+                "is_gpu_fan": True,
+                "gpu_vendor": "amd",
+                "pwm_control": PwmControl.FIRMWARE_MANAGED,
+                "pwm_path": pwm_path,
+                "last_write_error": last_write_error,
+            }
+        })
+
+    def test_gpu_manual_mode_disable_succeeds_on_firmware_managed_fan(
+        self, client: TestClient, admin_headers, mock_fan_service, monkeypatch
+    ):
+        """The regression guard: disabling must go through even though the
+        fan is firmware-managed. If the guard were ever hoisted above the
+        enable/disable branch, this would start returning 400."""
+        fan_id = "gpu_fan_disable"
+        self._configure_firmware_managed_fan(mock_fan_service, fan_id)
+
+        enable_mock = AsyncMock()
+        disable_mock = AsyncMock()
+        monkeypatch.setattr("app.services.power.fan_gpu_manual.enable_amd_manual", enable_mock)
+        monkeypatch.setattr("app.services.power.fan_gpu_manual.disable_amd_manual", disable_mock)
+
+        response = client.post(
+            f"/api/fans/{fan_id}/gpu-manual-mode",
+            json={"enable": False},
+            headers=admin_headers,
+        )
+
+        assert response.status_code == 200
+        assert response.json()["enabled"] is False
+        disable_mock.assert_awaited_once()
+        enable_mock.assert_not_awaited()
+
+    def test_gpu_manual_mode_enable_returns_400_on_firmware_managed_fan(
+        self, client: TestClient, admin_headers, mock_fan_service, monkeypatch
+    ):
+        fan_id = "gpu_fan_enable"
+        self._configure_firmware_managed_fan(mock_fan_service, fan_id)
+
+        enable_mock = AsyncMock()
+        monkeypatch.setattr("app.services.power.fan_gpu_manual.enable_amd_manual", enable_mock)
+
+        response = client.post(
+            f"/api/fans/{fan_id}/gpu-manual-mode",
+            json={"enable": True},
+            headers=admin_headers,
+        )
+
+        assert response.status_code == 400
+        enable_mock.assert_not_awaited()
+
+    def test_set_fan_pwm_returns_400_with_firmware_hint_on_firmware_managed_fan(
+        self, client: TestClient, admin_headers, mock_fan_service
+    ):
+        fan_id = "gpu_fan_pwm"
+        last_write_error = (
+            "This GPU manages its fan curve in firmware (RDNA3+). The amdgpu "
+            "driver does not support live PWM control on this card — setting "
+            "amdgpu.ppfeaturemask=0xffffffff does NOT change that."
+        )
+        self._configure_firmware_managed_fan(mock_fan_service, fan_id, last_write_error)
+
+        response = client.post(
+            "/api/fans/pwm",
+            json={"fan_id": fan_id, "pwm_percent": 75},
+            headers=admin_headers,
+        )
+
+        assert response.status_code == 400
+        assert "ppfeaturemask" in response.json()["detail"]
+        mock_fan_service.set_fan_pwm.assert_not_awaited()

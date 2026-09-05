@@ -7,6 +7,7 @@ import CurveEditorMix from './CurveEditorMix';
 import CurveEditorSync from './CurveEditorSync';
 import AdvancedFanSettings from './AdvancedFanSettings';
 import GpuManualModeToggle from './GpuManualModeToggle';
+import FirmwareFanNotice from './FirmwareFanNotice';
 import FanCurveChart from './FanCurveChart';
 import { useTranslation } from 'react-i18next';
 import { useFanCurveEditor } from '../../hooks/useFanCurveEditor';
@@ -30,8 +31,10 @@ interface FanDetailsProps {
 
 export default function FanDetails({ fan, onCurveUpdate, isReadOnly, onEditingChange, onConfigUpdate, profiles, onApplyProfile, allFans }: FanDetailsProps) {
   const { t } = useTranslation(['system', 'common']);
+  const isFirmwareManaged = fan.pwm_control === 'firmware_managed';
+  const editingLocked = isReadOnly || isFirmwareManaged;
   const editor = useFanCurveEditor(fan, {
-    isReadOnly, onCurveUpdate, onConfigUpdate, onEditingChange, onApplyProfile, profiles,
+    isReadOnly: editingLocked, onCurveUpdate, onConfigUpdate, onEditingChange, onApplyProfile, profiles,
   });
 
   return (
@@ -43,7 +46,7 @@ export default function FanDetails({ fan, onCurveUpdate, isReadOnly, onEditingCh
         </h2>
 
         <FanPresetProfileButtons
-          isReadOnly={isReadOnly}
+          isReadOnly={editingLocked}
           systemProfiles={editor.systemProfiles}
           userProfiles={editor.userProfiles}
           showMoreProfiles={editor.showMoreProfiles}
@@ -56,7 +59,7 @@ export default function FanDetails({ fan, onCurveUpdate, isReadOnly, onEditingCh
       {/* Curve Editor */}
       <div className="mb-4">
         <div className="mb-4">
-          <CurveTypeSelector value={editor.curveType} onChange={editor.handleCurveTypeChange} disabled={isReadOnly} />
+          <CurveTypeSelector value={editor.curveType} onChange={editor.handleCurveTypeChange} disabled={editingLocked} />
         </div>
 
         {/* Graph curve: original chart + table editor */}
@@ -66,7 +69,7 @@ export default function FanDetails({ fan, onCurveUpdate, isReadOnly, onEditingCh
               viewMode={editor.viewMode}
               onViewModeChange={editor.setViewMode}
               hasUnsavedChanges={editor.hasUnsavedChanges}
-              isReadOnly={isReadOnly}
+              isReadOnly={editingLocked}
               onSave={editor.handleSaveCurve}
               onDiscard={editor.handleDiscardChanges}
             />
@@ -82,7 +85,7 @@ export default function FanDetails({ fan, onCurveUpdate, isReadOnly, onEditingCh
                   maxPWM={fan.max_pwm_percent}
                   emergencyTemp={fan.emergency_temp_celsius}
                   isEditing={editor.canEdit}
-                  isReadOnly={isReadOnly}
+                  isReadOnly={editingLocked}
                 />
               </div>
             )}
@@ -105,7 +108,7 @@ export default function FanDetails({ fan, onCurveUpdate, isReadOnly, onEditingCh
           <CurveEditorFlat
             value={fan.flat_pwm_percent ?? 50}
             onChange={editor.handleFlatChange}
-            disabled={isReadOnly}
+            disabled={editingLocked}
           />
         )}
 
@@ -114,7 +117,7 @@ export default function FanDetails({ fan, onCurveUpdate, isReadOnly, onEditingCh
             targetTemp={fan.target_temp_celsius ?? 65}
             targetPwm={fan.target_pwm_percent ?? 80}
             onChange={editor.handleTargetChange}
-            disabled={isReadOnly}
+            disabled={editingLocked}
           />
         )}
 
@@ -125,7 +128,7 @@ export default function FanDetails({ fan, onCurveUpdate, isReadOnly, onEditingCh
             curveBId={fan.mix_curve_b_id ?? null}
             fn={(fan.mix_function as 'max' | 'sum') ?? 'max'}
             onChange={editor.handleMixChange}
-            disabled={isReadOnly}
+            disabled={editingLocked}
           />
         )}
 
@@ -135,24 +138,28 @@ export default function FanDetails({ fan, onCurveUpdate, isReadOnly, onEditingCh
             currentFanId={fan.fan_id}
             syncFanId={fan.sync_fan_id ?? null}
             onChange={editor.handleSyncChange}
-            disabled={isReadOnly}
+            disabled={editingLocked}
           />
         )}
       </div>
 
       {/* Advanced Settings */}
       <div className="mt-4">
-        <AdvancedFanSettings fan={fan} onChange={editor.handleAdvancedChange} disabled={isReadOnly} />
+        <AdvancedFanSettings fan={fan} onChange={editor.handleAdvancedChange} disabled={editingLocked} />
       </div>
 
       {/* GPU Manual Mode Toggle (AMD GPU fans only) */}
       {fan.is_gpu_fan && fan.gpu_vendor === 'amd' && (
         <div className="mt-4">
-          <GpuManualModeToggle
-            fanId={fan.fan_id}
-            enabled={editor.localGpuManualEnabled}
-            onChange={editor.setLocalGpuManualEnabled}
-          />
+          {isFirmwareManaged ? (
+            <FirmwareFanNotice fanId={fan.fan_id} />
+          ) : (
+            <GpuManualModeToggle
+              fanId={fan.fan_id}
+              enabled={editor.localGpuManualEnabled}
+              onChange={editor.setLocalGpuManualEnabled}
+            />
+          )}
         </div>
       )}
 

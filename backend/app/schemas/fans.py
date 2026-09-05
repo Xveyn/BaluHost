@@ -15,6 +15,20 @@ class FanMode(str, Enum):
     SCHEDULED = "scheduled"
 
 
+class PwmControl(str, Enum):
+    """Ob PWM-Schreiben fuer einen Luefter moeglich ist — und wenn nicht, warum.
+
+    SUPPORTED:        Default. Schreiben wird versucht.
+    FIRMWARE_MANAGED: RDNA3+ (SMU13). Die Kurve liegt in der Firmware unter
+                      gpu_od/fan_ctrl; der Treiber lehnt PWM mit EINVAL ab (#480).
+    NO_PERMISSION:    EACCES beim Schreiben beobachtet. Laufzeit-Befund, kein
+                      Hardware-Merkmal — wird bei erfolgreichem Write zurueckgesetzt.
+    """
+    SUPPORTED = "supported"
+    FIRMWARE_MANAGED = "firmware_managed"
+    NO_PERMISSION = "no_permission"
+
+
 class CurvePreset(str, Enum):
     """Predefined fan curve presets."""
     SILENT = "silent"
@@ -88,6 +102,7 @@ class FanInfo(BaseModel):
     is_gpu_fan: bool = False
     gpu_vendor: Optional[str] = None
     last_write_error: Optional[str] = None
+    pwm_control: PwmControl = PwmControl.SUPPORTED
     curve_type: str = "graph"
     flat_pwm_percent: Optional[int] = None
     target_temp_celsius: Optional[float] = None

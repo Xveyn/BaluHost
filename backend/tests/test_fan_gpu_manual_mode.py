@@ -43,3 +43,29 @@ async def test_disable_restores_previous(tmp_path):
 
     assert (device / "power_dpm_force_performance_level").read_text().strip() == "auto"
     assert (hwmon / "pwm1_enable").read_text().strip() == "2"
+
+
+@pytest.mark.asyncio
+async def test_enable_rolls_back_performance_level_when_pwm_enable_fails(tmp_path, monkeypatch):
+    device = tmp_path / "sys" / "class" / "drm" / "card0" / "device"
+    hwmon = device / "hwmon" / "hwmon3"
+    hwmon.mkdir(parents=True)
+    (device / "vendor").write_text("0x1002\n")
+    (device / "power_dpm_force_performance_level").write_text("auto\n")
+    (hwmon / "name").write_text("amdgpu\n")
+    (hwmon / "pwm1_enable").write_text("2\n")
+
+    real_write = Path.write_text
+
+    def fail_on_pwm_enable(self_, value, *a, **kw):
+        if self_.name == "pwm1_enable":
+            raise PermissionError(13, "Permission denied")
+        return real_write(self_, value, *a, **kw)
+
+    monkeypatch.setattr(Path, "write_text", fail_on_pwm_enable)
+
+    with pytest.raises(PermissionError):
+        await enable_amd_manual(hwmon_dir=hwmon, drm_root=None)
+
+    monkeypatch.undo()
+    assert (device / "power_dpm_force_performance_level").read_text().strip() == "auto"

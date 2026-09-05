@@ -80,6 +80,8 @@ export default function FanCard({
     }
   };
 
+  const isFirmwareManaged = fan.pwm_control === 'firmware_managed';
+
   return (
     <div
       onClick={onSelect}
@@ -97,6 +99,15 @@ export default function FanCard({
             {fan.is_gpu_fan && (
               <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-xs bg-purple-500/20 text-purple-300 rounded">
                 GPU{fan.gpu_vendor ? ` (${fan.gpu_vendor.toUpperCase()})` : ''}
+              </span>
+            )}
+            {isFirmwareManaged && (
+              <span
+                data-testid="fan-firmware-badge"
+                className="inline-flex items-center px-1.5 py-0.5 text-xs bg-sky-500/20 text-sky-300 rounded"
+                title={t('system:fanControl.gpu.firmware.badgeHint')}
+              >
+                {t('system:fanControl.gpu.firmware.badge')}
               </span>
             )}
             {fan.last_write_error && (
@@ -224,7 +235,7 @@ export default function FanCard({
             max={fan.max_pwm_percent}
             value={localPWM}
             onChange={(e) => handlePWMSliderChange(parseInt(e.target.value))}
-            disabled={isReadOnly}
+            disabled={isReadOnly || isFirmwareManaged}
             className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed accent-purple-500"
           />
         </div>
