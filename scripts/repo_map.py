@@ -11,6 +11,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import json
 import subprocess
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -214,6 +215,27 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="score generated files like hand-written ones",
     )
+    parser.add_argument(
+        "--history",
+        action="store_true",
+        help="add the time axis: metric series over git snapshots plus churn",
+    )
+    parser.add_argument(
+        "--interval",
+        default="monthly",
+        choices=("monthly", "weekly"),
+        help="snapshot density for --history (default: monthly)",
+    )
+    parser.add_argument(
+        "--since",
+        default=None,
+        help="limit --history to commits after this date (YYYY-MM-DD)",
+    )
+    parser.add_argument(
+        "--json",
+        default=None,
+        help="also write the raw history data to this path",
+    )
     args = parser.parse_args(argv)
 
     thresholds = Thresholds(
@@ -229,14 +251,49 @@ def main(argv: list[str] | None = None) -> int:
         include_generated=args.include_generated,
     )
 
+    history_data = None
+    if args.history:
+        # Imported here for the same reason repo_map_html is: this module is
+        # what repo_map_history imports, and a top-level import would close
+        # the cycle.
+        import repo_map_history
+
+        snapshots = repo_map_history.select_snapshots(
+            ROOT, interval=args.interval, since=args.since
+        )
+        if len(snapshots) < 2:
+            print(
+                f"history skipped: {len(snapshots)} snapshot(s) in range - "
+                "a series needs at least two points"
+            )
+        else:
+            points = repo_map_history.build_history(
+                ROOT,
+                snapshots,
+                thresholds=thresholds,
+                include_generated=args.include_generated,
+            )
+            churn = repo_map_history.collect_churn(ROOT, since=args.since)
+            history_data = repo_map_history.history_json(points, churn)
+
+    if args.json and history_data is not None:
+        data_path = Path(args.json)
+        data_path.parent.mkdir(parents=True, exist_ok=True)
+        data_path.write_text(
+            json.dumps(history_data, indent=2), encoding="utf-8"
+        )
+
     out = Path(args.output)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(repo_map_html.render(report), encoding="utf-8")
 
     flagged = sum(1 for e in report.entries if e.score > 0)
+    suffix = ""
+    if history_data is not None:
+        suffix = f", {len(history_data['points'])} history points"
     print(
         f"{len(report.entries)} files, {report.tree.loc:,} lines, "
-        f"{flagged} flagged -> {out}"
+        f"{flagged} flagged{suffix} -> {out}"
     )
     return 0
 

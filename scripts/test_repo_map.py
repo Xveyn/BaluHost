@@ -1,6 +1,8 @@
 """Tests for scripts/repo_map.py and scripts/repo_map_html.py."""
 from __future__ import annotations
 
+import json
+
 import repo_map
 import repo_map_html
 import repo_map_metrics as metrics
@@ -493,3 +495,22 @@ class TestMain:
         out = tmp_path / "map.html"
         assert repo_map.main(["-o", str(out), "--max-loc", "1234"]) == 0
         assert '"max_loc": 1234' in out.read_text(encoding="utf-8")
+
+    def test_history_flag_writes_a_json_sidecar(self, tmp_path):
+        out = tmp_path / "map.html"
+        data = tmp_path / "history.json"
+        code = repo_map.main(
+            ["-o", str(out), "--history", "--since", "2026-06-01", "--json", str(data)]
+        )
+        assert code == 0
+        payload = json.loads(data.read_text(encoding="utf-8"))
+        assert payload["points"], "history run must produce at least one point"
+
+    def test_without_the_flag_no_history_work_happens(self, tmp_path, monkeypatch):
+        def explode(*args, **kwargs):
+            raise AssertionError("history must not run unless --history is passed")
+
+        import repo_map_history
+
+        monkeypatch.setattr(repo_map_history, "build_history", explode)
+        assert repo_map.main(["-o", str(tmp_path / "map.html")]) == 0

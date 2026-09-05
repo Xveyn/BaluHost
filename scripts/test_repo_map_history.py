@@ -351,3 +351,33 @@ class TestBuildHistory:
         repo = make_repo(tmp_path)
         commit_file(repo, "a.py", "1\n", date="2026-01-10")
         assert history.build_history(repo, [], thresholds=metrics.Thresholds()) == []
+
+
+class TestHistoryJson:
+    def test_carries_points_and_churn(self, tmp_path):
+        repo = make_repo(tmp_path)
+        commit_file(repo, "a.py", "1\n", date="2026-01-10")
+        points = history.build_history(
+            repo,
+            history.select_snapshots(repo, interval="monthly"),
+            thresholds=metrics.Thresholds(),
+        )
+        churn = history.collect_churn(repo)
+
+        payload = history.history_json(points, churn)
+
+        assert payload["areas"] == list(history.AREAS)
+        assert payload["points"][0]["label"] == "2026-01"
+        assert payload["churn"]["a.py"]["commits"] == 1
+
+    def test_is_json_serialisable(self, tmp_path):
+        import json
+
+        repo = make_repo(tmp_path)
+        commit_file(repo, "a.py", "1\n", date="2026-01-10")
+        points = history.build_history(
+            repo,
+            history.select_snapshots(repo, interval="monthly"),
+            thresholds=metrics.Thresholds(),
+        )
+        json.dumps(history.history_json(points, history.collect_churn(repo)))

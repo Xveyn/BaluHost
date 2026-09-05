@@ -385,3 +385,35 @@ def build_history(
         )
         points.append(_point(snapshot, entries))
     return points
+
+
+def history_json(
+    points: Iterable[HistoryPoint], churn: dict[str, Churn]
+) -> dict:
+    """Plain-data view of a history run, for the report and for --json."""
+    return {
+        "areas": list(AREAS),
+        "points": [
+            {
+                "label": point.label,
+                "commit": point.commit,
+                "date": point.date,
+                "files": point.files,
+                "loc": point.loc,
+                "flagged": point.flagged,
+                "score": point.score_sum,
+                "areas": dict(point.areas),
+                "dirs": dict(point.dirs),
+            }
+            for point in points
+        ],
+        "churn": {
+            path: {
+                "commits": entry.commits,
+                "added": entry.added,
+                "deleted": entry.deleted,
+                "last": entry.last_date,
+            }
+            for path, entry in churn.items()
+        },
+    }
