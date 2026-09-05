@@ -14,6 +14,11 @@ from app.core.config import Settings
 from app.schemas.fans import FanMode, FanCurvePoint, PwmControl
 from app.services.power.fan_control import FanControlBackend, FanData, TempSensorData
 from app.services.power.fan_gpu_manual import probe_amd_pwm_control
+from app.services.power.fan_identity import (
+    build_fan_id,
+    build_sensor_id,
+    derive_all,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +51,10 @@ class LinuxFanControlBackend(FanControlBackend):
         # Bewusst NICHT in _fan_cache: der wird bei jedem Rescan neu gebaut,
         # der Backoff muss das ueberleben.
         self._write_backoff: Dict[str, Tuple[int, float]] = {}
+        # Rueckabbildung stabile Sensor-Kennung -> tempN_input-Pfad. Ohne sie
+        # kann get_temperature() die ID nicht mehr aufloesen, weil sie nicht
+        # mehr aus dem hwmon-Verzeichnisnamen besteht (#532).
+        self._temp_paths: Dict[str, Path] = {}
         self._monotonic = time.monotonic
 
     async def is_available(self) -> bool:
@@ -251,23 +260,42 @@ class LinuxFanControlBackend(FanControlBackend):
     _CPU_SENSOR_DRIVERS = {"k10temp", "coretemp", "cpu_thermal", "acpi"}
 
     async def get_temperature(self, sensor_id: str) -> Optional[float]:
-        """Get temperature from hwmon sensor."""
+        """Get temperature from hwmon sensor.
+
+        Loest zuerst ueber die Rueckabbildung aus dem Scan auf (stabile
+        Kennungen, #532) und faellt danach auf die Altform hwmon<N>_temp<M>
+        zurueck, die waehrend der Umstellung noch in der Datenbank steht.
+        """
         if not sensor_id:
             return None
 
-        # sensor_id format: "hwmon0_temp1"
-        parts = sensor_id.split("_")
-        if len(parts) != 2:
-            return None
+        if sensor_id.startswith("hwmon:"):
+            sensor_id = sensor_id[len("hwmon:"):]
 
-        hwmon_name, temp_name = parts
-        temp_path = self._hwmon_base / hwmon_name / f"{temp_name}_input"
+        temp_path = self._temp_paths.get(sensor_id)
+        if temp_path is None:
+            temp_path = self._legacy_temp_path(sensor_id)
+        if temp_path is None:
+            return None
 
         temp_value = await self._read_hwmon_file(temp_path)
         if temp_value is not None:
             return float(temp_value) / 1000.0
-
         return None
+
+    def _legacy_temp_path(self, sensor_id: str) -> Optional[Path]:
+        """Altform "hwmon0_temp1" -> Pfad. Nur fuer noch nicht migrierte IDs."""
+        parts = sensor_id.split("_")
+        if len(parts) != 2:
+            return None
+        hwmon_name, temp_name = parts
+        if not hwmon_name.startswith("hwmon") or not temp_name.startswith("temp"):
+            return None
+        if "/" in hwmon_name or "\\" in hwmon_name or ".." in hwmon_name:
+            return None
+        if not temp_name[len("temp"):].isdigit():
+            return None
+        return self._hwmon_base / hwmon_name / f"{temp_name}_input"
 
     def _find_cpu_temp_sensor(self) -> Optional[Tuple[str, Path]]:
         """Find CPU temperature sensor across all hwmon directories.
@@ -280,6 +308,8 @@ class LinuxFanControlBackend(FanControlBackend):
         """
         if not self._hwmon_base.exists():
             return None
+
+        identities = derive_all(self._hwmon_base)
 
         for hwmon_dir in sorted(self._hwmon_base.iterdir()):
             if not hwmon_dir.is_dir() or not hwmon_dir.name.startswith("hwmon"):
@@ -297,10 +327,20 @@ class LinuxFanControlBackend(FanControlBackend):
             if driver_name not in self._CPU_SENSOR_DRIVERS:
                 continue
 
+            identity = identities.get(hwmon_dir.name)
+            if identity is None:
+                continue
+
             # Found a CPU sensor driver — use its first temp input
-            for temp_file in sorted(hwmon_dir.glob("temp*_input")):
+            for temp_file in sorted(hwmon_dir.glob("temp[0-9]*_input")):
                 temp_num = temp_file.name.replace("temp", "").replace("_input", "")
-                sensor_id = f"{hwmon_dir.name}_temp{temp_num}"
+                sensor_id = build_sensor_id(identity, int(temp_num))
+                # I-3: ohne diesen Eintrag bliebe get_temperature() fuer einen
+                # Chip, der erst NACH dem Startscan erscheint (Treiber
+                # nachgeladen), dauerhaft None -- _temp_paths wird sonst
+                # ausschliesslich in _scan_pwm_fans gefuellt, das nur beim
+                # Start und in switch_backend laeuft.
+                self._temp_paths.setdefault(sensor_id, temp_file)
                 logger.info(
                     f"Found CPU temp sensor: {sensor_id} (driver={driver_name})"
                 )
@@ -315,8 +355,14 @@ class LinuxFanControlBackend(FanControlBackend):
         if not self._hwmon_base.exists():
             return sensors
 
+        identities = derive_all(self._hwmon_base)
+
         for hwmon_dir in sorted(self._hwmon_base.iterdir()):
             if not hwmon_dir.is_dir() or not hwmon_dir.name.startswith("hwmon"):
+                continue
+
+            identity = identities.get(hwmon_dir.name)
+            if identity is None:
                 continue
 
             name_file = hwmon_dir / "name"
@@ -329,9 +375,14 @@ class LinuxFanControlBackend(FanControlBackend):
 
             is_cpu = device_name in self._CPU_SENSOR_DRIVERS
 
-            for temp_file in sorted(hwmon_dir.glob("temp*_input")):
+            for temp_file in sorted(hwmon_dir.glob("temp[0-9]*_input")):
                 temp_num = temp_file.name.replace("temp", "").replace("_input", "")
-                sensor_id = f"{hwmon_dir.name}_temp{temp_num}"
+                sensor_id = build_sensor_id(identity, int(temp_num))
+                # I-3: gleicher Grund wie in _find_cpu_temp_sensor -- ohne
+                # diesen Eintrag ist ein erst nachtraeglich gelisteter Sensor
+                # zwar in der Auswahlliste sichtbar, aber get_temperature()
+                # findet ihn nie (kein Scan-Lauf hat ihn eingetragen).
+                self._temp_paths.setdefault(sensor_id, temp_file)
 
                 # Try to read label
                 label = None
@@ -369,6 +420,8 @@ class LinuxFanControlBackend(FanControlBackend):
         board sensors for fan control.
         """
         new_cache: Dict[str, Dict] = {}
+        new_temp_paths: Dict[str, Path] = {}
+        identities = derive_all(self._hwmon_base)
 
         if not self._hwmon_base.exists():
             if not self._fan_cache:
@@ -384,6 +437,19 @@ class LinuxFanControlBackend(FanControlBackend):
         for hwmon_dir in self._hwmon_base.iterdir():
             if not hwmon_dir.is_dir() or not hwmon_dir.name.startswith("hwmon"):
                 continue
+
+            identity = identities.get(hwmon_dir.name)
+            if identity is None:
+                continue
+
+            # Rueckabbildung auf Ebene der hwmon-Schleife eintragen, nicht
+            # erst innerhalb der PWM-Schleife (R1, #532): Chips ohne Luefter
+            # (k10temp, NVMe) liefern Kurvenquellen fuer get_temperature()
+            # und muessten sonst aufloesbar bleiben, obwohl sie hier nie
+            # einen PWM-Kanal durchlaufen.
+            for temp_file in hwmon_dir.glob("temp[0-9]*_input"):
+                num = temp_file.name[len("temp"):-len("_input")]
+                new_temp_paths[build_sensor_id(identity, int(num))] = temp_file
 
             # Read hwmon name
             name_file = hwmon_dir / "name"
@@ -407,7 +473,7 @@ class LinuxFanControlBackend(FanControlBackend):
                     continue
 
                 pwm_num = pwm_file.name.replace("pwm", "")
-                fan_id = f"{hwmon_dir.name}_pwm{pwm_num}"
+                fan_id = build_fan_id(identity, int(pwm_num))
 
                 # Find corresponding fan input
                 fan_input_path = hwmon_dir / f"fan{pwm_num}_input"
@@ -425,9 +491,9 @@ class LinuxFanControlBackend(FanControlBackend):
                     # Fallback: use first temp sensor in same hwmon dir
                     temp_sensor_id = None
                     temp_path = None
-                    for temp_file in hwmon_dir.glob("temp*_input"):
+                    for temp_file in hwmon_dir.glob("temp[0-9]*_input"):
                         temp_num = temp_file.name.replace("temp", "").replace("_input", "")
-                        temp_sensor_id = f"{hwmon_dir.name}_temp{temp_num}"
+                        temp_sensor_id = build_sensor_id(identity, int(temp_num))
                         temp_path = temp_file
                         break
 
@@ -449,10 +515,12 @@ class LinuxFanControlBackend(FanControlBackend):
                     "gpu_vendor": gpu_vendor,
                     "device_driver": hwmon_name_value,
                     "pwm_control": pwm_control,
+                    "identity_stable": identity.stable,
                 }
 
         if new_cache or not self._fan_cache:
             self._fan_cache = new_cache
+            self._temp_paths = new_temp_paths
             # Backoff-Eintraege verschwundener Luefter mitnehmen, sonst waechst
             # das Dict ueber Treiber-Reloads und hwmon-Renumbering hinweg (#533).
             for stale in set(self._write_backoff) - set(self._fan_cache):

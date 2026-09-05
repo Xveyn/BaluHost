@@ -16,12 +16,15 @@ from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
 
 from sqlalchemy import select, desc, func
+from sqlalchemy.exc import IntegrityError
 
+from app.core import lifespan
 from app.core.config import Settings
 from app.models.fans import FanConfig, FanSample
 from app.schemas.fans import FanMode, FanCurvePoint, PwmControl
 from app.services.power.fan_schedule import FanScheduleService
 from app.services.power.fan_profiles import FanProfileService
+from app.services.power.fan_reconcile import ChipFacts, reconcile_fan_identities
 from app.services.power.fan_sources import (
     TempSourceRegistry, HwmonTempSource, GpuTempSource, DiskTempSource, MixTempSource,
 )
@@ -237,6 +240,69 @@ class FanControlService:
             self._backend = DevFanControlBackend(self.config)
             self._use_linux_backend = False
 
+    def _should_reconcile(self, chip_count: int) -> bool:
+        """Beide Vorbedingungen sind hart -- ihr Fehlen bedeutet Totalverlust.
+
+        Ohne Linux-Backend liefe der Abgleich gegen eine Chip-Menge ohne
+        einen einzigen hwmon-Chip; ohne gefundenen Chip gegen eine leere.
+        In beiden Faellen faende keine Altzeile ihren Chip wieder.
+        """
+        if not getattr(lifespan, "IS_PRIMARY_WORKER", False):
+            return False
+        if not self._use_linux_backend:
+            return False
+        return chip_count > 0
+
+    def _collect_chip_facts(self) -> Dict[str, ChipFacts]:
+        """Chipname -> Kennung, vorhandene PWM-Kanaele, Mehrdeutigkeit."""
+        by_prefix: Dict[str, Dict] = {}
+        fan_cache = getattr(self._backend, "_fan_cache", None)
+        if not isinstance(fan_cache, dict):
+            # Schuetzt NICHT vor einer realen Produktionslage -- das echte
+            # LinuxFanControlBackend liefert hier immer ein dict. Der Fall
+            # tritt nur auf, wenn self._backend kein solches Attribut kennt
+            # (DevFanControlBackend) oder ein Test-Double (z. B. ein
+            # unspezifizierter AsyncMock()) ein Attribut liefert, das selbst
+            # wieder ein Mock statt eines dict ist. Beides wird wie ein
+            # leerer Scan behandelt: kein Chip, kein Abgleich.
+            fan_cache = {}
+        for fan_id, info in fan_cache.items():
+            if not info.get("identity_stable"):
+                continue
+            prefix = info.get("device_driver") or "Unknown"
+            key, _, channel = fan_id.rpartition(":pwm")
+            if not channel.isdigit():
+                continue
+            entry = by_prefix.setdefault(prefix, {"keys": set(), "channels": set()})
+            entry["keys"].add(key)
+            entry["channels"].add(int(channel))
+
+        facts: Dict[str, ChipFacts] = {}
+        for prefix, entry in by_prefix.items():
+            keys = entry["keys"]
+            facts[prefix] = ChipFacts(
+                key=next(iter(sorted(keys))),
+                pwm_channels=frozenset(entry["channels"]),
+                ambiguous=len(keys) > 1,
+            )
+        return facts
+
+    def _collect_sensor_map(self) -> Dict[str, str]:
+        """Alt-Sensor-ID (hwmon<N>_temp<M>) -> neue, praefixierte Kennung."""
+        mapping: Dict[str, str] = {}
+        paths = getattr(self._backend, "_temp_paths", None)
+        if not isinstance(paths, dict):
+            # Gleiche Absicherung wie in _collect_chip_facts oben: schuetzt
+            # vor Backend-Attributen, die kein dict sind (unspezifizierter
+            # Test-Mock, ein kuenftiges Backend ohne dieses Attribut) --
+            # nicht vor einer realen Produktionslage.
+            paths = {}
+        for stable_id, path in paths.items():
+            hwmon_name = path.parent.name
+            temp_num = path.name[len("temp"):-len("_input")]
+            mapping[f"{hwmon_name}_temp{temp_num}"] = f"hwmon:{stable_id}"
+        return mapping
+
     async def _load_fan_configs(self):
         """Load fan configurations from database.
 
@@ -261,6 +327,104 @@ class FanControlService:
             pass
 
         with self.db_session_factory() as db:
+            chip_facts = self._collect_chip_facts()
+            if self._should_reconcile(len(chip_facts)):
+                try:
+                    report = reconcile_fan_identities(
+                        db,
+                        chips=chip_facts,
+                        sensor_map=self._collect_sensor_map(),
+                        cpu_sensor_id=TempSourceRegistry._normalize_id(cpu_sensor_id)
+                        if cpu_sensor_id else None,
+                    )
+                    # Eigenstaendiger Commit VOR dem Audit-Eintrag: der
+                    # Abgleich muss die Datenbank erreicht haben, BEVOR die
+                    # Anlage-Schleife unten startet (R4) -- und bevor der
+                    # Audit-Aufruf unten laeuft, damit dessen eigene Session
+                    # (db=None, siehe unten) nicht ueber unsere entscheidet,
+                    # ob unser Commit stattfand. db.commit() steht bewusst
+                    # noch IM try: die eigentlichen ORM-Schreibzugriffe des
+                    # Abgleichs (Umbenennung, Deaktivierung) erreichen die
+                    # Datenbank erst beim Flush, das der Commit ausloest --
+                    # ein UNIQUE-Verstoss aus einem Rename wuerde sonst erst
+                    # hier auftreten und aus dem try entkommen.
+                    db.commit()
+                    if report.renamed or report.deactivated or report.unresolved_sensors:
+                        try:
+                            # Eigene Session (db=None): AuditLoggerDB.log_event
+                            # committet die uebergebene Session selbst. Mit
+                            # unserer db haette ein fehlschlagender Audit-Commit
+                            # unsere bereits erfolgreiche Transaktion getroffen
+                            # und den echten Fehler als Audit-Problem maskiert.
+                            from app.services.audit import get_audit_logger_db
+                            get_audit_logger_db().log_system_event(
+                                action="fan_identity_reconcile",
+                                details={
+                                    "renamed": report.renamed,
+                                    "deactivated": report.deactivated,
+                                    "skipped_absent": report.skipped_absent,
+                                    # M-3: eine nicht aufloesbare Sensor-Zuordnung
+                                    # tauscht die Nutzerwahl stillschweigend gegen
+                                    # den CPU-Default aus -- die einzige
+                                    # Nutzeraenderung dieses Laufs, die sonst
+                                    # nirgends revisionssicher gelandet waere.
+                                    "unresolved_sensors": report.unresolved_sensors,
+                                },
+                                db=None,
+                            )
+                        except Exception:
+                            logger.debug("Audit-Eintrag zum Identitaets-Abgleich fehlgeschlagen")
+                    # M-6: _rebuild_registry() lief in start() VOR diesem Abgleich
+                    # und hat Labels/Composite-Quellen deshalb aus der noch
+                    # NICHT migrierten Datenbank gelesen. Ohne diesen zweiten
+                    # Aufruf gaelten im ersten Start nach dem Upgrade die alten
+                    # Schluessel bis zum naechsten Neustart. Eigenes try: der
+                    # Abgleich selbst ist zu diesem Zeitpunkt bereits committet
+                    # und erfolgreich -- ein Fehler beim Neuaufbau der Registry
+                    # darf nicht als Abgleichs-Fehlschlag geloggt werden und
+                    # nicht die Anlage-Schleife unten blockieren.
+                    try:
+                        await self._rebuild_registry()
+                    except Exception:
+                        logger.debug("Registry-Neuaufbau nach Abgleich fehlgeschlagen")
+                except Exception:
+                    # Nicht weitermachen: die Scan-IDs liegen bereits in der
+                    # neuen Form vor, die DB-Zeilen aber noch in der alten.
+                    # Liefe die Anlage-Schleife trotzdem, legte sie frische
+                    # Default-Configs unter den neuen IDs an -- deren
+                    # updated_at ist "jetzt" und gewaenne beim naechsten
+                    # Abgleich gegen die echte Nutzerkurve. Das waere genau
+                    # der Datenverlust, den dieser Abgleich verhindern soll,
+                    # nur auf einem Umweg. Stattdessen: kein neuer
+                    # Fan-Datensatz -- die Luefter bleiben fuer diesen einen
+                    # Startzyklus ungeregelt (sichtbar: PWM bewegt sich nicht,
+                    # keine Kurve in der UI), aber keine Zeile geht verloren.
+                    # Der naechste Start versucht es erneut.
+                    logger.exception(
+                        "Identitaets-Abgleich fehlgeschlagen -- keine Configs "
+                        "angelegt, um die Altzeilen nicht zu ueberdecken. Die "
+                        "Luefter bleiben bis zum naechsten Start ungeregelt."
+                    )
+                    return
+
+            if not getattr(lifespan, "IS_PRIMARY_WORKER", False):
+                # Die Anlage-Schleife ist ebenso primary-only wie der Abgleich
+                # oben (C1): der Sekundaer-Worker durchlaeuft beim Start KEINE
+                # start_power_manager(primary=True)/check_and_notify_permissions()
+                # zwischen Primary-Flag und Fan-Start (siehe lifespan.py) und
+                # erreicht diese Stelle deshalb plausibel VOR dem Primary.
+                # Legte er hier eine Default-Config unter einer (noch) neuen
+                # Scan-ID an, traegt sie updated_at="jetzt" und gewinnt beim
+                # spaeteren Abgleich des Primary gegen die echte Nutzerkurve
+                # -- genau die Zeile, die der Abgleich schuetzen soll, ginge
+                # ueber den Sekundaer-Worker doch noch verloren. Sekundaer-
+                # Worker lesen daher nur; die Configs liegen in der
+                # gemeinsamen Datenbank, der Primary legt sie an. Ein
+                # Sekundaer, der kurz davor eine Anfrage bedient, zeigt einen
+                # Luefter ohne Config -- transient und harmlos.
+                logger.debug("Sekundaer-Worker: Anlage-Schleife uebersprungen")
+                return
+
             for fan in fans:
                 existing = db.execute(
                     select(FanConfig).where(FanConfig.fan_id == fan.fan_id)
@@ -276,10 +440,32 @@ class FanControlService:
                         min_pwm_percent=fan.min_pwm_percent,
                         max_pwm_percent=fan.max_pwm_percent,
                         emergency_temp_celsius=fan.emergency_temp_celsius,
-                        temp_sensor_id=cpu_sensor_id or fan.temp_sensor_id,
+                        temp_sensor_id=TempSourceRegistry._normalize_id(
+                            cpu_sensor_id or fan.temp_sensor_id
+                        ) if (cpu_sensor_id or fan.temp_sensor_id) else None,
                         is_active=True,
                     )
-                    db.add(config)
+                    try:
+                        # Savepoint statt db.rollback() auf der ganzen
+                        # Transaktion: sonst risse eine kollidierende fuenfte
+                        # Zeile die vier zuvor erfolgreich geflushten wieder
+                        # mit sich (I3). Ein anderer Worker war schneller --
+                        # die Zeile existiert, das ist der gewuenschte
+                        # Endzustand.
+                        #
+                        # M-4: seit dem Primary-only-Gate direkt oberhalb (der
+                        # fruehe return bei nicht-Primary) ist dieser Zweig in
+                        # der Praxis kaum noch erreichbar -- ein weiterer
+                        # Uvicorn-Worker mit demselben Primary-Anspruch waere
+                        # der einzige verbleibende Weg zu einem Wettlauf um
+                        # dieselbe Zeile. Bewusst NICHT entfernen: der
+                        # Savepoint ist billig und die einzige Absicherung
+                        # gegen genau diesen (seltenen) Fall. Nicht als toten
+                        # Code streichen.
+                        with db.begin_nested():
+                            db.add(config)
+                    except IntegrityError:
+                        logger.debug("Fan-Config %s wurde parallel angelegt", fan.fan_id)
 
             db.commit()
 
@@ -673,7 +859,7 @@ class FanControlService:
                     display_temp = fan.temperature_celsius
                     if config.temp_sensor_id:
                         try:
-                            sensor_temp = await self._backend.get_temperature(config.temp_sensor_id)
+                            sensor_temp = await self._registry.get_temp(config.temp_sensor_id)
                             if sensor_temp is not None:
                                 display_temp = sensor_temp
                         except Exception:

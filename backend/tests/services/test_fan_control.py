@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from app.core import lifespan
 from app.schemas.fans import FanCurvePoint, FanMode
 from app.services.power.fan_control import (
     DevFanControlBackend,
@@ -578,10 +579,18 @@ class TestDbAutoCorrection:
 
     The auto-correction was removed in Task 9 (Step 3b): user-chosen sensors
     must survive service restarts unchanged, including composite sensors.
+
+    I-4: the config-creation loop in _load_fan_configs is primary-worker-only
+    since the reconcile gate was added. Without IS_PRIMARY_WORKER=True the
+    method returns before ever reaching that loop, so these tests exercised
+    nothing. monkeypatch forces the flag for the duration of each test;
+    _use_linux_backend=False keeps _should_reconcile() from touching the
+    (unbuilt) reconcile path on this bare, __new__-constructed service.
     """
 
     @pytest.mark.asyncio
-    async def test_user_chosen_non_cpu_sensor_survives_reload(self, mock_settings):
+    async def test_user_chosen_non_cpu_sensor_survives_reload(self, mock_settings, monkeypatch):
+        monkeypatch.setattr(lifespan, "IS_PRIMARY_WORKER", True, raising=False)
         """User's non-CPU sensor must NOT be overwritten even when a CPU sensor is present."""
         from unittest.mock import MagicMock, patch
         from app.models.fans import FanConfig
@@ -635,6 +644,7 @@ class TestDbAutoCorrection:
             service.config = mock_settings
             service.db_session_factory = mock_session_factory
             service._backend = mock_backend
+            service._use_linux_backend = False
 
             await service._load_fan_configs()
 
@@ -644,8 +654,9 @@ class TestDbAutoCorrection:
         )
 
     @pytest.mark.asyncio
-    async def test_composite_sensor_survives_reload(self, mock_settings):
+    async def test_composite_sensor_survives_reload(self, mock_settings, monkeypatch):
         """A composite (mix:) sensor ID must survive service reload unchanged."""
+        monkeypatch.setattr(lifespan, "IS_PRIMARY_WORKER", True, raising=False)
         from unittest.mock import MagicMock, patch
         from app.models.fans import FanConfig
 
@@ -693,6 +704,7 @@ class TestDbAutoCorrection:
             service.config = mock_settings
             service.db_session_factory = mock_session_factory
             service._backend = mock_backend
+            service._use_linux_backend = False
 
             await service._load_fan_configs()
 
@@ -702,8 +714,9 @@ class TestDbAutoCorrection:
         )
 
     @pytest.mark.asyncio
-    async def test_no_change_when_already_cpu_sensor(self, mock_settings):
+    async def test_no_change_when_already_cpu_sensor(self, mock_settings, monkeypatch):
         """Existing CPU-sensor config also stays untouched on reload."""
+        monkeypatch.setattr(lifespan, "IS_PRIMARY_WORKER", True, raising=False)
         from unittest.mock import MagicMock, patch
         from app.models.fans import FanConfig
 
@@ -750,6 +763,7 @@ class TestDbAutoCorrection:
             service.config = mock_settings
             service.db_session_factory = mock_session_factory
             service._backend = mock_backend
+            service._use_linux_backend = False
 
             await service._load_fan_configs()
 

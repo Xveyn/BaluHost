@@ -1,4 +1,5 @@
 """probe_amd_pwm_control: firmware-verwaltete Luefterkurven erkennen (RDNA3+, #480)."""
+import os
 from pathlib import Path
 
 from app.schemas.fans import PwmControl
@@ -11,16 +12,27 @@ def _hardware_shaped_tree(tmp_path: Path, *, with_fan_curve: bool) -> Path:
     Auf der Hardware liegt hwmon unter /sys/class/hwmon/hwmonN und traegt einen
     'device'-Symlink auf das PCI-Geraet. KEIN Elternverzeichnis heisst 'device'
     — genau daran ist der erste Entwurf gescheitert.
+
+    Platform-foermig (kein PCI-Doppelpunkt, #532) mit device/subsystem-Symlink,
+    damit die stabile Identitaetsableitung greift statt in den Fallback zu
+    fallen -- die zwei Scan-Tests unten pruefen genau das.
     """
-    hwmon = tmp_path / "sys" / "class" / "hwmon" / "hwmon2"
-    device = hwmon / "device"
+    sysfs = tmp_path / "sys"
+    device = sysfs / "devices" / "platform" / "amdgpu-sim.1"
     device.mkdir(parents=True)
-    (hwmon / "name").write_text("amdgpu\n")
     (device / "vendor").write_text("0x1002\n")
     if with_fan_curve:
         fan_ctrl = device / "gpu_od" / "fan_ctrl"
         fan_ctrl.mkdir(parents=True)
         (fan_ctrl / "fan_curve").write_text("OD_FAN_CURVE:\n0: 0C 0%\n")
+    bus = sysfs / "bus" / "platform"
+    bus.mkdir(parents=True, exist_ok=True)
+    os.symlink(bus, device / "subsystem", target_is_directory=True)
+
+    hwmon = sysfs / "class" / "hwmon" / "hwmon2"
+    hwmon.mkdir(parents=True)
+    (hwmon / "name").write_text("amdgpu\n")
+    os.symlink(device, hwmon / "device", target_is_directory=True)
     return hwmon
 
 
@@ -93,6 +105,10 @@ async def test_scan_marks_rdna3_fan_firmware_managed(tmp_path, monkeypatch):
     await backend._scan_pwm_fans()
 
     fan_id = next(iter(backend._fan_cache))
+    # Beweis, dass der Scan den stabilen Zweig trifft, nicht den Fallback
+    # ("hwmon2_pwm1"): ohne device/subsystem-Symlink waere die ID instabil.
+    assert fan_id == "amdgpu-isa-0001:pwm1"
+    assert backend._fan_cache[fan_id]["identity_stable"] is True
     assert backend._fan_cache[fan_id]["pwm_control"] is PwmControl.FIRMWARE_MANAGED
 
     fans = await backend.get_fans()
@@ -111,6 +127,8 @@ async def test_scan_marks_normal_fan_supported(tmp_path, monkeypatch):
     await backend._scan_pwm_fans()
 
     fan_id = next(iter(backend._fan_cache))
+    assert fan_id == "amdgpu-isa-0001:pwm1"
+    assert backend._fan_cache[fan_id]["identity_stable"] is True
     assert backend._fan_cache[fan_id]["pwm_control"] is PwmControl.SUPPORTED
 
 

@@ -4,9 +4,17 @@ import { FanMode } from '../../api/fan-control';
 import type { FanInfo, TempSensorInfo } from '../../api/fan-control';
 import { formatNumber } from '../../lib/formatters';
 
+// Namespace-Praefixe wie im Backend (app/services/power/fan_sources.py).
+const SENSOR_ID_NAMESPACES = ['hwmon:', 'gpu:', 'disk:', 'mix:'];
+
 function sensorDisplayName(sensorId: string, sensors: TempSensorInfo[]): string {
-  // Accept both namespaced and legacy unprefixed IDs
-  const found = sensors.find((s) => s.sensor_id === sensorId || s.sensor_id === `hwmon:${sensorId}`);
+  // Accept both namespaced and legacy unprefixed IDs. Die stabile Kennung
+  // (#532) traegt bereits einen Namespace -- ein zweites Praefix ergaebe
+  // "hwmon:hwmon:...", daher nur praefixieren, wenn noch keiner vorhanden ist.
+  const namespacedSensorId = SENSOR_ID_NAMESPACES.some((n) => sensorId.startsWith(n))
+    ? sensorId
+    : `hwmon:${sensorId}`;
+  const found = sensors.find((s) => s.sensor_id === sensorId || s.sensor_id === namespacedSensorId);
   if (!found) return sensorId;
   return found.custom_label || found.label || found.device_name;
 }
