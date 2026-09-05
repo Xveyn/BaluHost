@@ -123,3 +123,6 @@ scripts/fix_umlauts.py
 
 # Superpowers subagent-driven-development scratch (briefs, reports, diffs)
 .superpowers/
+
+# Repo map report (regenerate with: python scripts/repo_map.py)
+repo-map*.html
