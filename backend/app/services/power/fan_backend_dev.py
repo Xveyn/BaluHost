@@ -135,8 +135,13 @@ class DevFanControlBackend(FanControlBackend):
 
         return fans
 
-    async def set_pwm(self, fan_id: str, pwm_percent: int) -> bool:
-        """Set simulated PWM value."""
+    async def set_pwm(self, fan_id: str, pwm_percent: int, force: bool = False) -> bool:
+        """Set simulated PWM value.
+
+        force ist ohne Wirkung: das Dev-Backend schlaegt nie fehl, es gibt also
+        kein Backoff-Fenster zu umgehen. Der Parameter haelt nur die Signatur
+        mit FanControlBackend deckungsgleich.
+        """
         if fan_id not in self._fans:
             logger.warning(f"Fan {fan_id} not found")
             return False
