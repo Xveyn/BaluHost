@@ -47,6 +47,22 @@ def test_platform_address_without_suffix_is_none():
     assert encode_platform_address("eeepc-wmi") is None
 
 
+def test_platform_address_ignores_trailing_garbage_after_the_number():
+    # sscanf' %d liest den fuehrenden Ziffernlauf und stoppt; alles danach
+    # ist ihm gleich. Ein Endanker im Muster waere hier falsch.
+    assert encode_platform_address("nct6775.656.1") == 656
+
+
+def test_platform_address_accepts_hyphen_before_the_suffix():
+    # Zweite bewusste Abweichung: libsensors' Scanset kennt kein "-" und
+    # fiele in den Hex-Unfall (0xabc). Wir lesen den Suffix.
+    assert encode_platform_address("abc-def.5") == 5
+
+
+def test_device_tree_prefix_is_case_insensitive():
+    assert encode_platform_address("F0000000.hwmon") == 0xf0000000
+
+
 @pytest.mark.parametrize("prefix,bus,addr,expected", [
     ("nct6798", "isa", 656, "nct6798-isa-0290"),
     ("amdgpu", "pci", 0x0300, "amdgpu-pci-0300"),

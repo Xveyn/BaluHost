@@ -15,9 +15,9 @@ _PCI_BDF = re.compile(
     r"^([0-9a-fA-F]{4}):([0-9a-fA-F]{2}):([0-9a-fA-F]{2})\.([0-9a-fA-F])$"
 )
 # "nct6775.656" / "foo:42" -- Suffix wird DEZIMAL gelesen
-_PLATFORM_DECIMAL = re.compile(r"^[A-Za-z0-9_-]+[.:](\d+)$")
+_PLATFORM_DECIMAL = re.compile(r"^[A-Za-z0-9_-]+[.:](\d+)")
 # "f0000000.hwmon" -- Device-Tree-Adresse, hexadezimal
-_PLATFORM_HEX = re.compile(r"^([0-9a-f]+)\.")
+_PLATFORM_HEX = re.compile(r"^([0-9a-fA-F]+)\.")
 
 
 def encode_pci_address(dev_name: str) -> Optional[int]:
@@ -32,12 +32,14 @@ def encode_pci_address(dev_name: str) -> Optional[int]:
 def encode_platform_address(dev_name: str) -> Optional[int]:
     """Platform-Adresse: dezimaler Suffix, sonst Device-Tree-Hex, sonst None.
 
-    libsensors' zweiter sscanf ("%x.%*s") liefert bereits 1, wenn %x etwas
-    konsumiert hat -- auch wenn der Punkt danach nie matcht. Daraus werden
-    asus-nb-wmi -> 0x0a und eeepc-wmi -> 0xeee: stabil, aber bedeutungslos.
-    _PLATFORM_HEX verlangt den Punkt tatsaechlich und bildet damit den
-    gemeinten Device-Tree-Fall ab statt des Parser-Unfalls. Betroffen sind nur
-    Chips, die `sensors` ohnehin nicht listet.
+    Erste bewusste Abweichung von libsensors 3.6.2: sscanf ("%d") traegt dem
+    Eintritt ohne Stringende-Anker Rechnung -- "nct6775.656.1" liefert 656.
+    Libsensors' "%*[a-zA-Z0-9_]%*1[.:]%d" haette das gleiche Ergebnis.
+
+    Zweite bewusste Abweichung: Zeichenklasse enthaelt Bindestrich, normatives
+    Scanset %*[a-zA-Z0-9_] nicht. Ohne Bindestrich fiele "abc-def.5" in den
+    Hex-Parser-Unfall (sscanf "%x" liest "abc" -> 0xabc). Stattdessen lesen
+    wir den Suffix. Betroffen sind nur Chips, die `sensors` ohnehin nicht listet.
     """
     match = _PLATFORM_DECIMAL.match(dev_name)
     if match:
