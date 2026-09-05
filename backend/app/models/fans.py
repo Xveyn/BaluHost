@@ -82,6 +82,9 @@ class FanConfig(Base):
     emergency_temp_celsius: Mapped[float] = mapped_column(Float, default=85.0, nullable=False)
     temp_sensor_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True)
+    # Herkunft der Zeile vor der Umstellung auf stabile Kennungen (#532).
+    # Reiner Nachweis: erlaubt, eine Fehlzuordnung nachtraeglich zu erkennen.
+    legacy_fan_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     hysteresis_celsius: Mapped[float] = mapped_column(Float, default=3.0, nullable=False)
     # --- Curve type & params ---
     curve_type: Mapped[str] = mapped_column(String(20), default="graph", nullable=False)
@@ -139,6 +142,7 @@ class TempSensorLabel(Base):
 
     sensor_id: Mapped[str] = mapped_column(String(120), primary_key=True)
     custom_label: Mapped[str] = mapped_column(String(100), nullable=False)
+    legacy_sensor_id: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
