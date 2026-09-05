@@ -1699,10 +1699,13 @@ An `TestRender` in `scripts/test_repo_map.py` anhängen. Die Tests prüfen **Str
         assert "renderHistory" in page, "the chart must be built, not just declared"
         assert "dirDelta" in page, "the tree needs its per-directory delta column"
 
-    def test_page_still_has_no_external_references(self):
+    def test_page_loads_nothing_from_the_network(self):
+        """The SVG namespace URI is a name, not a fetch, so the check targets
+        resource loads rather than the substring http://."""
         hist = {"areas": [], "points": [], "churn": {}}
         page = repo_map_html.render(make_report(), history=hist)
-        for forbidden in ("http://", "https://", "<script src", "<link "):
+        for forbidden in ("<script src", "<link ", "@import", "url(http",
+                          "src=\"http", "href=\"http"):
             assert forbidden not in page, f"page must stay self-contained: {forbidden}"
 ```
 
@@ -1884,8 +1887,14 @@ Spalte erweitern — beide Regeln, sonst laufen Kopf und Zeilen auseinander:
   align-items: center; }
 ```
 
-Dieselbe `grid-template-columns`-Angabe auch auf `.tree .leaf` anwenden, falls
-dort eine eigene Regel existiert.
+**Und dieselbe Angabe auf `.leaf`** — der Selektor heißt `.leaf`, nicht
+`.tree .leaf`, und er trägt heute dasselbe 4-Spalten-Grid. Werden nicht beide
+Regeln geändert, laufen Verzeichniszeilen und Dateizeilen um eine Spalte
+auseinander:
+
+```css
+.leaf { display: grid; grid-template-columns: 1fr 90px 70px 80px 160px; gap: 8px;
+```
 
 Dann in `_SCRIPT` vor `treeRow` einfügen:
 
