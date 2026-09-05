@@ -258,9 +258,13 @@ class FanControlService:
         by_prefix: Dict[str, Dict] = {}
         fan_cache = getattr(self._backend, "_fan_cache", None)
         if not isinstance(fan_cache, dict):
-            # Dev-Backend hat kein _fan_cache; ein Test-Double kann ein
-            # Attribut liefern, das kein echtes Dict ist. Beides bedeutet
-            # dasselbe wie ein leerer Scan: kein Chip, kein Abgleich.
+            # Schuetzt NICHT vor einer realen Produktionslage -- das echte
+            # LinuxFanControlBackend liefert hier immer ein dict. Der Fall
+            # tritt nur auf, wenn self._backend kein solches Attribut kennt
+            # (DevFanControlBackend) oder ein Test-Double (z. B. ein
+            # unspezifizierter AsyncMock()) ein Attribut liefert, das selbst
+            # wieder ein Mock statt eines dict ist. Beides wird wie ein
+            # leerer Scan behandelt: kein Chip, kein Abgleich.
             fan_cache = {}
         for fan_id, info in fan_cache.items():
             if not info.get("identity_stable"):
@@ -288,6 +292,10 @@ class FanControlService:
         mapping: Dict[str, str] = {}
         paths = getattr(self._backend, "_temp_paths", None)
         if not isinstance(paths, dict):
+            # Gleiche Absicherung wie in _collect_chip_facts oben: schuetzt
+            # vor Backend-Attributen, die kein dict sind (unspezifizierter
+            # Test-Mock, ein kuenftiges Backend ohne dieses Attribut) --
+            # nicht vor einer realen Produktionslage.
             paths = {}
         for stable_id, path in paths.items():
             hwmon_name = path.parent.name
@@ -321,12 +329,32 @@ class FanControlService:
         with self.db_session_factory() as db:
             chip_facts = self._collect_chip_facts()
             if self._should_reconcile(len(chip_facts)):
-                report = reconcile_fan_identities(
-                    db,
-                    chips=chip_facts,
-                    sensor_map=self._collect_sensor_map(),
-                    cpu_sensor_id=cpu_sensor_id,
-                )
+                try:
+                    report = reconcile_fan_identities(
+                        db,
+                        chips=chip_facts,
+                        sensor_map=self._collect_sensor_map(),
+                        cpu_sensor_id=cpu_sensor_id,
+                    )
+                except Exception:
+                    # Nicht weitermachen: die Scan-IDs liegen bereits in der
+                    # neuen Form vor, die DB-Zeilen aber noch in der alten.
+                    # Liefe die Anlage-Schleife trotzdem, legte sie frische
+                    # Default-Configs unter den neuen IDs an -- deren
+                    # updated_at ist "jetzt" und gewaenne beim naechsten
+                    # Abgleich gegen die echte Nutzerkurve. Das waere genau
+                    # der Datenverlust, den dieser Abgleich verhindern soll,
+                    # nur auf einem Umweg. Stattdessen: kein Commit, kein
+                    # neuer Fan-Datensatz -- die Luefter bleiben fuer diesen
+                    # einen Startzyklus ungeregelt (sichtbar: PWM bewegt sich
+                    # nicht, keine Kurve in der UI), aber keine Zeile geht
+                    # verloren. Der naechste Start versucht es erneut.
+                    logger.exception(
+                        "Identitaets-Abgleich fehlgeschlagen -- keine Configs "
+                        "angelegt, um die Altzeilen nicht zu ueberdecken. Die "
+                        "Luefter bleiben bis zum naechsten Start ungeregelt."
+                    )
+                    return
                 if report.renamed or report.deactivated:
                     try:
                         from app.services.audit import get_audit_logger_db
