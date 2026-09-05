@@ -1267,19 +1267,19 @@ If the identity-matching logic fails at startup (e.g., due to an unexpected hard
 **Secondary Worker Behavior:**  
 The configuration-creation logic runs only on the primary Uvicorn worker. A backend-switching request (e.g., switching from `dev` to `prod` mode via HTTP) landing on a secondary worker will not create configs for newly-visible fans; these configs are created on the next primary-worker startup cycle (either an immediate restart or the next service restart). This is transparent to the user but introduces a brief window where newly-visible fans lack a configuration row.
 
-#### Rückgabe an die Board-Automatik beim Beenden (#534)
+#### Handback to Board Automation on Shutdown (#534)
 
-Beim Beenden des Dienstes wird `pwm_enable` auf den Automatikmodus zurückgeschrieben, den BaluHost am selben Chip zuvor gelesen hat. Damit regelt nach einem Deploy-Neustart das Board, statt dass die Lüfter auf dem letzten Wert einfrieren.
+When the service stops, `pwm_enable` is written back to the automatic mode that BaluHost previously read from that same chip. After a deploy restart the board takes over the curve again, instead of leaving the fans frozen at their last value.
 
-**Nur beobachtete Werte.** Es wird nichts geraten. Ein Wert wird nur übernommen, wenn der Scan beim Start einen Automatikmodus (`pwm_enable >= 2`) vorfindet — das ist nach einem Kaltstart der Fall, nicht nach einem Dienst-Neustart.
+**Observed values only.** Nothing is guessed. A value is adopted only if the startup scan found an automatic mode (`pwm_enable >= 2`) — which is the case after a cold boot, but not after a service restart.
 
-**Auf einer laufenden Installation greift die Funktion daher erst nach dem nächsten Kaltstart.** Wer nicht warten will, setzt den Wert einmal bei gestopptem Dienst von Hand (`echo 5 > /sys/class/hwmon/hwmonN/pwmM_enable`); der nächste Start übernimmt ihn.
+**On a running installation the feature therefore only takes effect after the next cold boot.** To avoid waiting, set the value once by hand while the service is stopped (`echo 5 > /sys/class/hwmon/hwmonN/pwmM_enable`); the next startup picks it up.
 
-**GPU-Lüfter sind ausgenommen.** Für AMD-Karten existiert ein eigener Rückgabeweg, der zusätzlich das Performance-Level zurücksetzt.
+**GPU fans are excluded.** AMD cards have their own handback path, which additionally resets the performance level.
 
-**Bei `SIGKILL` oder Stromausfall gibt es keine Rückgabe.** `systemctl stop` und der Deploy-Neustart senden `SIGTERM` und sind abgedeckt.
+**On `SIGKILL` or a power loss there is no handback.** `systemctl stop` and the deploy restart send `SIGTERM` and are covered.
 
-Ein Hinweis zum Ablesen: ein Lüfter, der bei 100 % läuft, meldet `pwm_enable` als `0`, nicht als `1`.
+One note on reading the value: a fan running at 100 % reports `pwm_enable` as `0`, not as `1`.
 
 ---
 

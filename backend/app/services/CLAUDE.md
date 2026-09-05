@@ -89,10 +89,7 @@ Business logic layer. Routes delegate to services — services contain the actua
 - `fan_control.py` — Temperature-based fan speed control with curves
 - `fan_identity.py` — Derives stable chip-level fan/sensor identities (`<chip>-<bus>-<adresse>:pwm<N>`) that survive hwmon renumbering; ships with `derive_chip_identity()`, `derive_all()`, `build_fan_id()`, `build_sensor_id()`, `encode_pci_address()`, `encode_platform_address()`, `format_chip_name()`, and hwmon-index fallback for unsupported buses (i2c, spi, scsi, hid, drivetemp)
 - `fan_reconcile.py` — One-time identity reconciliation at backend startup; matches legacy `fan_id`/sensor labels/composite sources to stable equivalents, enforces fail-safe on mismatch (no default config creation). Does NOT create configs for newly-visible fans — that anlage-loop lives in `fan_control.py:_load_fan_configs()` (primary worker only)
-- `fan_restore.py` — Regel fuer die Rueckgabe an die Board-Automatik (#534):
-  `is_observation()`, `resolve_restore_value()`, `needs_release()`. Rein, ohne
-  sysfs- und DB-Zugriff. Zurueckgeschrieben wird ausschliesslich ein selbst
-  beobachteter Wert; es gibt bewusst keinen Treiber-Fallback.
+- `fan_restore.py` — Decision rule for handing fan control back to the board automation (#534): `is_observation()`, `resolve_restore_value()`, `needs_release()`. Pure — no sysfs and no DB access. Only a self-observed `pwm_enable` value (>= 2) is ever written back; there is deliberately no driver fallback
 - `sleep.py` — Soft/hard sleep modes with idle detection
 - `presence.py` — user-presence tracker (heartbeats → presence_sessions table; blocks auto true-suspend, issue #214)
 - `energy.py` — Power consumption tracking and cost estimation
