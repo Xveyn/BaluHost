@@ -15,6 +15,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
+import repo_map
+from repo_map_metrics import FileEntry, Thresholds
+
 INTERVALS = ("monthly", "weekly")
 
 
@@ -288,3 +291,97 @@ def collect_churn(root: Path, *, since: str | None = None) -> dict[str, Churn]:
         )
         for path, row in totals.items()
     }
+
+
+# First match wins, so backend/tests must precede the general backend rule.
+AREA_RULES: tuple[tuple[str, str], ...] = (
+    ("backend/tests", "backend/tests/"),
+    ("backend/app", "backend/"),
+    ("client/src", "client/src/"),
+    ("docs", "docs/"),
+)
+REST_AREA = "sonstiges"
+AREAS: tuple[str, ...] = tuple(name for name, _ in AREA_RULES) + (REST_AREA,)
+
+# Mirrors repo_map_html.CANDIDATE_SCORE. Kept as its own constant so the data
+# module does not import the renderer; a test asserts the two stay equal.
+FLAGGED_SCORE = 1
+
+
+def classify_area(path: str) -> str:
+    """Bucket a repo-relative path into one top-level area."""
+    for name, prefix in AREA_RULES:
+        if path.startswith(prefix):
+            return name
+    return REST_AREA
+
+
+@dataclass(frozen=True)
+class HistoryPoint:
+    """The repo's totals at one snapshot."""
+
+    label: str
+    commit: str
+    date: str
+    files: int
+    loc: int
+    flagged: int
+    score_sum: int
+    areas: dict[str, int]
+    dirs: dict[str, int]
+
+
+def _point(snapshot: Snapshot, entries: list[FileEntry]) -> HistoryPoint:
+    areas = {name: 0 for name in AREAS}
+    dirs: dict[str, int] = {}
+    for entry in entries:
+        areas[classify_area(entry.path)] += entry.loc
+        # Roll the file's LOC up into every ancestor directory, so the tree
+        # can show a per-directory delta against the previous snapshot. Key
+        # "" is the root, matching DirNode.path.
+        dirs[""] = dirs.get("", 0) + entry.loc
+        prefix = ""
+        for part in entry.path.split("/")[:-1]:
+            prefix = f"{prefix}/{part}" if prefix else part
+            dirs[prefix] = dirs.get(prefix, 0) + entry.loc
+    return HistoryPoint(
+        label=snapshot.label,
+        commit=snapshot.commit[:7],
+        date=snapshot.date,
+        files=len(entries),
+        loc=sum(e.loc for e in entries),
+        flagged=sum(1 for e in entries if e.score >= FLAGGED_SCORE),
+        score_sum=sum(e.score for e in entries),
+        areas=areas,
+        dirs=dirs,
+    )
+
+
+def build_history(
+    root: Path,
+    snapshots: Iterable[Snapshot],
+    *,
+    thresholds: Thresholds,
+    include_generated: bool = False,
+) -> list[HistoryPoint]:
+    """Analyse each snapshot and return the series, oldest first.
+
+    One cache spans every snapshot. Files that did not change between two
+    snapshots are the overwhelming majority, and each is analysed once.
+    """
+    cache: dict[tuple[str, str], FileEntry] = {}
+    points: list[HistoryPoint] = []
+    for snapshot in snapshots:
+        source = GitTreeSource(root, snapshot.commit)
+        paths = source.paths()
+        misses = [p for p in paths if (source.identity(p), p) not in cache]
+        source.prefetch(misses)
+        entries = repo_map.analyze_paths(
+            source,
+            paths,
+            thresholds=thresholds,
+            include_generated=include_generated,
+            cache=cache,
+        )
+        points.append(_point(snapshot, entries))
+    return points

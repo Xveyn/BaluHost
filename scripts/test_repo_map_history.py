@@ -7,7 +7,10 @@ from pathlib import Path
 
 import pytest
 
+import repo_map
 import repo_map_history as history
+import repo_map_html
+import repo_map_metrics as metrics
 
 
 def git(repo: Path, *args: str) -> str:
@@ -235,3 +238,116 @@ class TestCollectChurn:
         commit_file(repo, "a.py", "2\n", date="2026-03-10")
         churn = history.collect_churn(repo, since="2026-02-01")
         assert churn["a.py"].commits == 1
+
+
+class TestClassifyArea:
+    def test_backend_tests_wins_over_backend(self):
+        assert history.classify_area("backend/tests/test_x.py") == "backend/tests"
+
+    def test_backend_app_catches_the_rest_of_backend(self):
+        assert history.classify_area("backend/app/services/x.py") == "backend/app"
+
+    def test_client_source(self):
+        assert history.classify_area("client/src/pages/X.tsx") == "client/src"
+
+    def test_docs(self):
+        assert history.classify_area("docs/ARCHITECTURE.md") == "docs"
+
+    def test_anything_else_lands_in_the_rest_bucket(self):
+        assert history.classify_area("scripts/repo_map.py") == history.REST_AREA
+
+    def test_rest_bucket_is_part_of_the_area_list(self):
+        assert history.REST_AREA in history.AREAS
+
+
+class TestFlaggedThreshold:
+    def test_matches_the_renderer_so_the_series_and_the_card_agree(self):
+        assert history.FLAGGED_SCORE == repo_map_html.CANDIDATE_SCORE
+
+
+class TestBuildHistory:
+    def test_one_point_per_snapshot_oldest_first(self, tmp_path):
+        repo = make_repo(tmp_path)
+        commit_file(repo, "backend/app/a.py", "x = 1\n", date="2026-01-10")
+        commit_file(repo, "backend/app/a.py", "x = 1\ny = 2\n", date="2026-02-10")
+
+        snaps = history.select_snapshots(repo, interval="monthly")
+        points = history.build_history(repo, snaps, thresholds=metrics.Thresholds())
+
+        assert [p.label for p in points] == ["2026-01", "2026-02"]
+        assert points[0].loc == 1
+        assert points[1].loc == 2
+
+    def test_area_totals_sum_to_the_overall_loc(self, tmp_path):
+        repo = make_repo(tmp_path)
+        commit_file(repo, "backend/app/a.py", "1\n", date="2026-01-10")
+        commit_file(repo, "backend/tests/t.py", "1\n2\n", date="2026-01-11")
+        commit_file(repo, "scripts/s.py", "1\n2\n3\n", date="2026-01-12")
+
+        points = history.build_history(
+            repo,
+            history.select_snapshots(repo, interval="monthly"),
+            thresholds=metrics.Thresholds(),
+        )
+
+        point = points[-1]
+        assert sum(point.areas.values()) == point.loc
+        assert point.areas["backend/tests"] == 2
+        assert point.areas[history.REST_AREA] == 3
+
+    def test_directory_rollup_reaches_every_ancestor(self, tmp_path):
+        repo = make_repo(tmp_path)
+        commit_file(repo, "backend/app/services/a.py", "1\n2\n", date="2026-01-10")
+
+        point = history.build_history(
+            repo,
+            history.select_snapshots(repo, interval="monthly"),
+            thresholds=metrics.Thresholds(),
+        )[-1]
+
+        assert point.dirs[""] == 2, "root carries the total"
+        assert point.dirs["backend"] == 2
+        assert point.dirs["backend/app/services"] == 2
+
+    def test_flagged_counts_files_over_the_threshold(self, tmp_path):
+        repo = make_repo(tmp_path)
+        commit_file(repo, "big.py", "x = 1\n" * 40, date="2026-01-10")
+
+        points = history.build_history(
+            repo,
+            history.select_snapshots(repo, interval="monthly"),
+            thresholds=metrics.Thresholds(max_loc=10),
+        )
+
+        assert points[-1].flagged == 1
+        assert points[-1].score_sum > 0
+
+    def test_unchanged_files_are_analysed_once_across_snapshots(self, tmp_path):
+        """The blob cache is the whole reason history mode is affordable."""
+        repo = make_repo(tmp_path)
+        commit_file(repo, "stable.py", "x = 1\n", date="2026-01-10")
+        commit_file(repo, "other.py", "y = 2\n", date="2026-02-10")
+
+        calls = []
+        original = repo_map.analyze_file
+
+        def counting(path, text, **kwargs):
+            calls.append(path)
+            return original(path, text, **kwargs)
+
+        repo_map.analyze_file = counting
+        try:
+            history.build_history(
+                repo,
+                history.select_snapshots(repo, interval="monthly"),
+                thresholds=metrics.Thresholds(),
+            )
+        finally:
+            repo_map.analyze_file = original
+
+        assert calls.count("stable.py") == 1, "unchanged blob must not be re-analysed"
+
+    def test_no_snapshots_yields_no_points(self, tmp_path):
+        repo = make_repo(tmp_path)
+        commit_file(repo, "a.py", "1\n", date="2026-01-10")
+        assert history.build_history(repo, [], thresholds=metrics.Thresholds()) == []
