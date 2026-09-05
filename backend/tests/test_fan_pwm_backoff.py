@@ -11,6 +11,7 @@ reproduzierbar sind und die tatsaechlichen Schreibversuche zaehlbar bleiben.
 """
 import json
 import logging
+import os
 import shutil
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
@@ -25,13 +26,29 @@ from app.services.power.fan_control import FanControlService, FanData
 
 
 def _hwmon(tmp_path: Path) -> Path:
-    d = tmp_path / "sys" / "class" / "hwmon" / "hwmon1"
-    d.mkdir(parents=True)
-    (d / "name").write_text("nct6798\n")
-    (d / "pwm1").write_text("128\n")
-    (d / "fan1_input").write_text("1200\n")
-    (d / "pwm1_enable").write_text("1\n")
-    return d
+    """nct6798 an platform/nct6775.656 -- platform-foermiger Baum (#532).
+
+    Die frueher flache Variante ohne device-Symlink liess die Chip-Identitaet
+    als "virtuellen Chip" durchfallen: seit die Identitaetsableitung in
+    _scan_pwm_fans() haengt (#532), loggt das bei jedem Scan eine WARNING und
+    haette test_failure_episode_emits_no_warning_lines faelschlich rot gemacht.
+    """
+    sysfs = tmp_path / "sys"
+    device = sysfs / "devices" / "platform" / "nct6775.656"
+    hwmon = device / "hwmon" / "hwmon1"
+    hwmon.mkdir(parents=True)
+    (hwmon / "name").write_text("nct6798\n")
+    (hwmon / "pwm1").write_text("128\n")
+    (hwmon / "fan1_input").write_text("1200\n")
+    (hwmon / "pwm1_enable").write_text("1\n")
+    bus = sysfs / "bus" / "platform"
+    bus.mkdir(parents=True, exist_ok=True)
+    os.symlink(bus, device / "subsystem", target_is_directory=True)
+    os.symlink(device, hwmon / "device", target_is_directory=True)
+    klass = sysfs / "class" / "hwmon"
+    klass.mkdir(parents=True, exist_ok=True)
+    os.symlink(hwmon, klass / "hwmon1", target_is_directory=True)
+    return hwmon
 
 
 async def _backend(tmp_path, monkeypatch) -> tuple[LinuxFanControlBackend, str]:
@@ -424,9 +441,11 @@ async def test_rescan_prunes_backoff_of_vanished_fans(tmp_path, monkeypatch):
     assert len(backend._write_backoff) == 2
 
     # Ein Kanal verschwindet (Treiber-Reload, Geraet weg)
-    gone = "hwmon1_pwm2"
+    gone = "nct6798-isa-0290:pwm2"
     (d / "pwm2").unlink()
     await backend._scan_pwm_fans()
 
     assert gone not in backend._write_backoff, "verwaister Backoff-Eintrag"
-    assert "hwmon1_pwm1" in backend._write_backoff, "der verbliebene Luefter behaelt sein Fenster"
+    assert "nct6798-isa-0290:pwm1" in backend._write_backoff, (
+        "der verbliebene Luefter behaelt sein Fenster"
+    )

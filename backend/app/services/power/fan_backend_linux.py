@@ -14,6 +14,11 @@ from app.core.config import Settings
 from app.schemas.fans import FanMode, FanCurvePoint, PwmControl
 from app.services.power.fan_control import FanControlBackend, FanData, TempSensorData
 from app.services.power.fan_gpu_manual import probe_amd_pwm_control
+from app.services.power.fan_identity import (
+    build_fan_id,
+    build_sensor_id,
+    derive_all,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +51,10 @@ class LinuxFanControlBackend(FanControlBackend):
         # Bewusst NICHT in _fan_cache: der wird bei jedem Rescan neu gebaut,
         # der Backoff muss das ueberleben.
         self._write_backoff: Dict[str, Tuple[int, float]] = {}
+        # Rueckabbildung stabile Sensor-Kennung -> tempN_input-Pfad. Ohne sie
+        # kann get_temperature() die ID nicht mehr aufloesen, weil sie nicht
+        # mehr aus dem hwmon-Verzeichnisnamen besteht (#532).
+        self._temp_paths: Dict[str, Path] = {}
         self._monotonic = time.monotonic
 
     async def is_available(self) -> bool:
@@ -369,6 +378,8 @@ class LinuxFanControlBackend(FanControlBackend):
         board sensors for fan control.
         """
         new_cache: Dict[str, Dict] = {}
+        new_temp_paths: Dict[str, Path] = {}
+        identities = derive_all(self._hwmon_base)
 
         if not self._hwmon_base.exists():
             if not self._fan_cache:
@@ -384,6 +395,19 @@ class LinuxFanControlBackend(FanControlBackend):
         for hwmon_dir in self._hwmon_base.iterdir():
             if not hwmon_dir.is_dir() or not hwmon_dir.name.startswith("hwmon"):
                 continue
+
+            identity = identities.get(hwmon_dir.name)
+            if identity is None:
+                continue
+
+            # Rueckabbildung auf Ebene der hwmon-Schleife eintragen, nicht
+            # erst innerhalb der PWM-Schleife (R1, #532): Chips ohne Luefter
+            # (k10temp, NVMe) liefern Kurvenquellen fuer get_temperature()
+            # und muessten sonst aufloesbar bleiben, obwohl sie hier nie
+            # einen PWM-Kanal durchlaufen.
+            for temp_file in hwmon_dir.glob("temp[0-9]*_input"):
+                num = temp_file.name[len("temp"):-len("_input")]
+                new_temp_paths[build_sensor_id(identity, int(num))] = temp_file
 
             # Read hwmon name
             name_file = hwmon_dir / "name"
@@ -407,7 +431,7 @@ class LinuxFanControlBackend(FanControlBackend):
                     continue
 
                 pwm_num = pwm_file.name.replace("pwm", "")
-                fan_id = f"{hwmon_dir.name}_pwm{pwm_num}"
+                fan_id = build_fan_id(identity, int(pwm_num))
 
                 # Find corresponding fan input
                 fan_input_path = hwmon_dir / f"fan{pwm_num}_input"
@@ -427,7 +451,7 @@ class LinuxFanControlBackend(FanControlBackend):
                     temp_path = None
                     for temp_file in hwmon_dir.glob("temp*_input"):
                         temp_num = temp_file.name.replace("temp", "").replace("_input", "")
-                        temp_sensor_id = f"{hwmon_dir.name}_temp{temp_num}"
+                        temp_sensor_id = build_sensor_id(identity, int(temp_num))
                         temp_path = temp_file
                         break
 
@@ -449,10 +473,12 @@ class LinuxFanControlBackend(FanControlBackend):
                     "gpu_vendor": gpu_vendor,
                     "device_driver": hwmon_name_value,
                     "pwm_control": pwm_control,
+                    "identity_stable": identity.stable,
                 }
 
         if new_cache or not self._fan_cache:
             self._fan_cache = new_cache
+            self._temp_paths = new_temp_paths
             # Backoff-Eintraege verschwundener Luefter mitnehmen, sonst waechst
             # das Dict ueber Treiber-Reloads und hwmon-Renumbering hinweg (#533).
             for stale in set(self._write_backoff) - set(self._fan_cache):
