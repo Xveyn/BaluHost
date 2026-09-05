@@ -15,7 +15,7 @@ import subprocess
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Protocol
 
 from repo_map_metrics import FileEntry, Thresholds, analyze_file
 
@@ -97,34 +97,94 @@ def _read_text(path: Path) -> str | None:
     return None if "\x00" in text else text
 
 
+class ContentSource(Protocol):
+    """Where file content comes from: the worktree, or a commit's tree."""
+
+    def read(self, path: str) -> str | None:
+        """Text of one repo-relative path, or None when binary or absent."""
+
+    def identity(self, path: str) -> str | None:
+        """Stable content id (a blob SHA), or None when there is none.
+
+        None disables caching for that path rather than caching under a key
+        that cannot tell two different contents apart.
+        """
+
+
+class WorktreeSource:
+    """Reads from the checked-out working tree - the original behaviour."""
+
+    def __init__(self, root: Path) -> None:
+        self.root = root
+
+    def read(self, path: str) -> str | None:
+        return _read_text(self.root / path)
+
+    def identity(self, path: str) -> str | None:
+        return None
+
+
+def analyze_paths(
+    source: ContentSource,
+    paths: Iterable[str],
+    *,
+    thresholds: Thresholds,
+    include_generated: bool = False,
+    cache: dict[tuple[str, str], FileEntry] | None = None,
+) -> list[FileEntry]:
+    """Analyse every readable path from a source, reusing cached results.
+
+    The cache key is (content id, path): the path belongs in the key because
+    both the generated-file check and the kind detection are path-dependent.
+    Across history snapshots most files are unchanged blobs, and that is what
+    keeps a full-history run in the seconds range.
+    """
+    entries: list[FileEntry] = []
+    for rel in paths:
+        key: tuple[str, str] | None = None
+        if cache is not None:
+            ident = source.identity(rel)
+            if ident is not None:
+                key = (ident, rel)
+                hit = cache.get(key)
+                if hit is not None:
+                    entries.append(hit)
+                    continue
+
+        text = source.read(rel)
+        if text is None:
+            continue
+        entry = analyze_file(
+            rel, text, thresholds=thresholds, include_generated=include_generated
+        )
+        if key is not None and cache is not None:
+            cache[key] = entry
+        entries.append(entry)
+    return entries
+
+
 def build_report(
-    root: Path,
+    source: ContentSource,
     paths: Iterable[str],
     *,
     thresholds: Thresholds,
     commit: str,
     include_generated: bool = False,
     generated_at: str | None = None,
+    cache: dict[tuple[str, str], FileEntry] | None = None,
 ) -> Report:
-    """Analyse every readable path under root and assemble the report.
+    """Analyse every readable path from the source and assemble the report.
 
     Unreadable and binary files are skipped rather than raising: a repo map
     that dies on one stray blob is useless.
     """
-    entries: list[FileEntry] = []
-    for rel in paths:
-        text = _read_text(root / rel)
-        if text is None:
-            continue
-        entries.append(
-            analyze_file(
-                rel,
-                text,
-                thresholds=thresholds,
-                include_generated=include_generated,
-            )
-        )
-
+    entries = analyze_paths(
+        source,
+        paths,
+        thresholds=thresholds,
+        include_generated=include_generated,
+        cache=cache,
+    )
     return Report(
         commit=commit,
         generated_at=generated_at or datetime.now().strftime("%Y-%m-%d %H:%M"),
@@ -162,7 +222,7 @@ def main(argv: list[str] | None = None) -> int:
         max_depth=args.max_depth,
     )
     report = build_report(
-        ROOT,
+        WorktreeSource(ROOT),
         tracked_files(ROOT),
         thresholds=thresholds,
         commit=git_commit(ROOT),

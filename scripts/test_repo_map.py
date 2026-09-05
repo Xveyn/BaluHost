@@ -368,7 +368,10 @@ class TestBuildReport:
         (tmp_path / "pkg").mkdir()
         (tmp_path / "pkg" / "a.py").write_text("x = 1\ny = 2\n", encoding="utf-8")
         report = repo_map.build_report(
-            tmp_path, ["pkg/a.py"], thresholds=metrics.Thresholds(), commit="c0ffee"
+            repo_map.WorktreeSource(tmp_path),
+            ["pkg/a.py"],
+            thresholds=metrics.Thresholds(),
+            commit="c0ffee",
         )
         assert [e.path for e in report.entries] == ["pkg/a.py"]
         assert report.entries[0].loc == 2
@@ -377,7 +380,7 @@ class TestBuildReport:
     def test_missing_file_is_skipped_not_fatal(self, tmp_path):
         (tmp_path / "there.py").write_text("x = 1\n", encoding="utf-8")
         report = repo_map.build_report(
-            tmp_path,
+            repo_map.WorktreeSource(tmp_path),
             ["there.py", "gone.py"],
             thresholds=metrics.Thresholds(),
             commit="c0ffee",
@@ -388,7 +391,7 @@ class TestBuildReport:
         (tmp_path / "blob.bin").write_bytes(b"\xff\xfe\x00\x01\x80")
         (tmp_path / "ok.py").write_text("x = 1\n", encoding="utf-8")
         report = repo_map.build_report(
-            tmp_path,
+            repo_map.WorktreeSource(tmp_path),
             ["blob.bin", "ok.py"],
             thresholds=metrics.Thresholds(),
             commit="c0ffee",
@@ -397,9 +400,83 @@ class TestBuildReport:
 
     def test_commit_travels_into_the_report(self, tmp_path):
         report = repo_map.build_report(
-            tmp_path, [], thresholds=metrics.Thresholds(), commit="c0ffee"
+            repo_map.WorktreeSource(tmp_path),
+            [],
+            thresholds=metrics.Thresholds(),
+            commit="c0ffee",
         )
         assert report.commit == "c0ffee"
+
+
+class TestWorktreeSource:
+    def test_reads_a_file_relative_to_its_root(self, tmp_path):
+        (tmp_path / "a.py").write_text("x = 1\n", encoding="utf-8")
+        source = repo_map.WorktreeSource(tmp_path)
+        assert source.read("a.py") == "x = 1\n"
+
+    def test_missing_file_reads_as_none(self, tmp_path):
+        assert repo_map.WorktreeSource(tmp_path).read("nope.py") is None
+
+    def test_binary_file_reads_as_none(self, tmp_path):
+        (tmp_path / "b.bin").write_bytes(b"\xff\xfe\x00\x01")
+        assert repo_map.WorktreeSource(tmp_path).read("b.bin") is None
+
+    def test_identity_is_none_because_the_worktree_has_no_blob_ids(self, tmp_path):
+        (tmp_path / "a.py").write_text("x = 1\n", encoding="utf-8")
+        assert repo_map.WorktreeSource(tmp_path).identity("a.py") is None
+
+
+class TestAnalyzePaths:
+    def test_cache_hit_skips_reanalysis(self):
+        class FakeSource:
+            def __init__(self):
+                self.reads = 0
+
+            def read(self, path):
+                self.reads += 1
+                return "x = 1\n"
+
+            def identity(self, path):
+                return "blob1"
+
+        cache = {}
+        src_a, src_b = FakeSource(), FakeSource()
+        first = repo_map.analyze_paths(
+            src_a, ["a.py"], thresholds=metrics.Thresholds(), cache=cache
+        )
+        second = repo_map.analyze_paths(
+            src_b, ["a.py"], thresholds=metrics.Thresholds(), cache=cache
+        )
+        assert first[0] == second[0]
+        assert src_b.reads == 0, "cache hit must not read content at all"
+
+    def test_same_blob_at_a_different_path_is_analysed_again(self):
+        class FakeSource:
+            def read(self, path):
+                return "x = 1\n"
+
+            def identity(self, path):
+                return "blob1"
+
+        cache = {}
+        repo_map.analyze_paths(
+            FakeSource(), ["a.py"], thresholds=metrics.Thresholds(), cache=cache
+        )
+        repo_map.analyze_paths(
+            FakeSource(), ["b.py"], thresholds=metrics.Thresholds(), cache=cache
+        )
+        assert len(cache) == 2, "path is part of the key: it drives kind and generated"
+
+    def test_none_identity_bypasses_the_cache(self, tmp_path):
+        (tmp_path / "a.py").write_text("x = 1\n", encoding="utf-8")
+        cache = {}
+        repo_map.analyze_paths(
+            repo_map.WorktreeSource(tmp_path),
+            ["a.py"],
+            thresholds=metrics.Thresholds(),
+            cache=cache,
+        )
+        assert cache == {}
 
 
 class TestMain:
