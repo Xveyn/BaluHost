@@ -32,14 +32,22 @@ def encode_pci_address(dev_name: str) -> Optional[int]:
 def encode_platform_address(dev_name: str) -> Optional[int]:
     """Platform-Adresse: dezimaler Suffix, sonst Device-Tree-Hex, sonst None.
 
-    Erste bewusste Abweichung von libsensors 3.6.2: sscanf ("%d") traegt dem
-    Eintritt ohne Stringende-Anker Rechnung -- "nct6775.656.1" liefert 656.
-    Libsensors' "%*[a-zA-Z0-9_]%*1[.:]%d" haette das gleiche Ergebnis.
+    Erste bewusste Abweichung von libsensors 3.6.2: libsensors' zweiter
+    sscanf ("%x.%*s") liefert bereits 1, wenn %x etwas konsumiert hat --
+    auch wenn der Punkt danach nie matcht. Daraus werden asus-nb-wmi -> 0x0a
+    und eeepc-wmi -> 0xeee: stabil, aber bedeutungslos. _PLATFORM_HEX
+    verlangt den Punkt tatsaechlich und bildet damit den gemeinten
+    Device-Tree-Fall ab statt des Parser-Unfalls.
 
-    Zweite bewusste Abweichung: Zeichenklasse enthaelt Bindestrich, normatives
-    Scanset %*[a-zA-Z0-9_] nicht. Ohne Bindestrich fiele "abc-def.5" in den
-    Hex-Parser-Unfall (sscanf "%x" liest "abc" -> 0xabc). Stattdessen lesen
-    wir den Suffix. Betroffen sind nur Chips, die `sensors` ohnehin nicht listet.
+    Zweite bewusste Abweichung: sscanf ("%d") traegt dem Fehlen des
+    Stringende-Ankers Rechnung -- "nct6775.656.1" liefert 656. Libsensors'
+    "%*[a-zA-Z0-9_]%*1[.:]%d" haette das gleiche Ergebnis.
+
+    Dritte bewusste Abweichung: Zeichenklasse enthaelt Bindestrich,
+    normatives Scanset %*[a-zA-Z0-9_] nicht. Ohne Bindestrich fiele
+    "abc-def.5" in den Hex-Parser-Unfall (sscanf "%x" liest "abc" -> 0xabc).
+    Stattdessen lesen wir den Suffix. Betroffen sind nur Chips, die `sensors`
+    ohnehin nicht listet.
     """
     match = _PLATFORM_DECIMAL.match(dev_name)
     if match:
