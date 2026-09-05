@@ -7,8 +7,12 @@ nicht.
 """
 from __future__ import annotations
 
+import logging
+import os
 import re
-from typing import Optional
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Dict, Optional
 
 # "0000:03:00.0" -- Domain, Bus, Slot, Funktion
 _PCI_BDF = re.compile(
@@ -63,3 +67,130 @@ def encode_platform_address(dev_name: str) -> Optional[int]:
 def format_chip_name(prefix: str, bus: str, addr: int) -> str:
     """lib/data.c: "%s-isa-%04x" bzw. "%s-pci-%04x" -- Mindestbreite, nicht fix."""
     return f"{prefix}-{bus}-{addr:04x}"
+
+
+logger = logging.getLogger(__name__)
+
+# Bustypen, deren Adressformat wir bilden koennen.
+_SUPPORTED_BUSES = {"pci": "pci", "platform": "isa", "of_platform": "isa"}
+# Bustypen, die libsensors kennt und wir NICHT bilden. Wird einer davon
+# getroffen, brechen wir sofort ab statt weiterzuklettern: bei drivetemp
+# (scsi) landete man sonst auf dem AHCI-Controller und gaebe allen Platten
+# desselben Controllers dieselbe Kennung.
+_FALLBACK_BUSES = {"i2c", "spi", "scsi", "hid", "acpi", "mdio_bus", "sdio"}
+_MAX_CLIMB = 12
+
+
+@dataclass(frozen=True)
+class ChipIdentity:
+    key: str
+    prefix: str
+    stable: bool
+    hwmon_name: str
+    reason: Optional[str]
+
+
+def _read_name(hwmon_dir: Path) -> Optional[str]:
+    try:
+        value = (hwmon_dir / "name").read_text().strip()
+    except OSError:
+        return None
+    return value or None
+
+
+def _subsystem_of(device: Path) -> Optional[str]:
+    link = device / "subsystem"
+    try:
+        if not link.exists():
+            return None
+        return os.path.basename(os.path.realpath(link))
+    except OSError:
+        return None
+
+
+def _unstable(hwmon_name: str, prefix: Optional[str], reason: str) -> ChipIdentity:
+    logger.warning("hwmon %s: keine stabile Kennung (%s)", hwmon_name, reason)
+    return ChipIdentity(key=hwmon_name, prefix=prefix or "Unknown",
+                        stable=False, hwmon_name=hwmon_name, reason=reason)
+
+
+def derive_chip_identity(hwmon_link: Path) -> ChipIdentity:
+    """Leitet die stabile Kennung eines hwmon-Knotens ab.
+
+    hwmon_link ist der Eintrag unter /sys/class/hwmon -- ein Symlink. Der
+    Aufstieg laeuft ueber den AUFGELOESTEN Pfad; ein lexikalisches
+    Path.parent landete bei /sys/class und faende nie ein subsystem
+    (dieselbe Falle wie in fan_gpu_manual.py:101-127).
+    """
+    hwmon_name = hwmon_link.name
+    hwmon_dir = Path(os.path.realpath(hwmon_link))
+    prefix = _read_name(hwmon_dir)
+    if prefix is None:
+        return _unstable(hwmon_name, None, "hwmon/name fehlt oder ist unlesbar")
+
+    device_link = hwmon_dir / "device"
+    if not device_link.exists():
+        return _unstable(hwmon_name, prefix, "kein device-Symlink (virtueller Chip)")
+
+    current = Path(os.path.realpath(device_link))
+    for _ in range(_MAX_CLIMB):
+        subsystem = _subsystem_of(current)
+        if subsystem in _SUPPORTED_BUSES:
+            bus = _SUPPORTED_BUSES[subsystem]
+            addr = (encode_pci_address(current.name) if subsystem == "pci"
+                    else encode_platform_address(current.name))
+            if addr is None:
+                # Kein extrahierbarer Suffix: Geraetename ist innerhalb
+                # seines Busses eindeutig und damit selbst ein tauglicher Anker.
+                key = f"{prefix}@{current.name}"
+            else:
+                key = format_chip_name(prefix, bus, addr)
+            return ChipIdentity(key=key, prefix=prefix, stable=True,
+                                hwmon_name=hwmon_name, reason=None)
+        if subsystem in _FALLBACK_BUSES:
+            return _unstable(hwmon_name, prefix, f"Bustyp {subsystem} nicht unterstuetzt")
+        parent = current.parent
+        if parent == current or current.name == "devices":
+            break
+        current = parent
+
+    return _unstable(hwmon_name, prefix, "kein pci/platform-Elter gefunden")
+
+
+def derive_all(hwmon_base: Path) -> Dict[str, ChipIdentity]:
+    """Kennungen aller hwmon-Knoten, mit Duplikaterkennung."""
+    identities: Dict[str, ChipIdentity] = {}
+    try:
+        entries = sorted(hwmon_base.iterdir())
+    except OSError:
+        return identities
+
+    for entry in entries:
+        if not entry.name.startswith("hwmon"):
+            continue
+        identities[entry.name] = derive_chip_identity(entry)
+
+    by_key: Dict[str, list] = {}
+    for name, identity in identities.items():
+        if identity.stable:
+            by_key.setdefault(identity.key, []).append(name)
+    for key, names in by_key.items():
+        if len(names) > 1:
+            for name in names:
+                identities[name] = _unstable(
+                    name, identities[name].prefix,
+                    f"Kennung {key} nicht eindeutig ({len(names)} hwmon-Knoten)",
+                )
+    return identities
+
+
+def build_fan_id(identity: ChipIdentity, pwm_num: int) -> str:
+    if identity.stable:
+        return f"{identity.key}:pwm{pwm_num}"
+    return f"{identity.hwmon_name}_pwm{pwm_num}"
+
+
+def build_sensor_id(identity: ChipIdentity, temp_num: int) -> str:
+    if identity.stable:
+        return f"{identity.key}:temp{temp_num}"
+    return f"{identity.hwmon_name}_temp{temp_num}"
