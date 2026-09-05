@@ -172,6 +172,41 @@ def test_losing_incumbent_frees_its_id_for_the_winner(db):
     assert db.query(FanConfig).count() == 16            # nichts geloescht
 
 
+def test_losing_incumbent_does_not_reuse_an_id_the_winner_still_holds(db):
+    """Der Rollback+Roll-forward-Fall: die Altform, die der Inkumbent als
+    legacy_fan_id fuehrt, ist von der Gewinnerin noch belegt.
+
+    Nach einem Rollback auf Code vor #532 legt die alte Anlage-Schleife eine
+    Zeile unter genau dieser Altform an; beim Roll-forward gewinnt sie, weil
+    sie juenger ist. Wuerde legacy_fan_id als Ersatz-ID wiederverwendet, traefe
+    derselbe Unique-Verstoss eine Zeile weiter -- und der Dienst kaeme bei
+    JEDEM folgenden Start ohne Luefter-Configs hoch.
+    """
+    incumbent = db.execute(select(FanConfig).where(
+        FanConfig.fan_id == "hwmon3_pwm1")).scalar_one()
+    incumbent.fan_id = "nct6798-isa-0290:pwm1"
+    incumbent.legacy_fan_id = "hwmon2_pwm1"   # genau die ID der spaeteren Gewinnerin
+    incumbent.updated_at = _dt("2026-01-01T00:00:00")
+    db.commit()
+
+    reconcile_fan_identities(db, chips=CHIPS, sensor_map=SENSOR_MAP,
+                             cpu_sensor_id=CPU_DEFAULT)
+    db.commit()   # darf keinen IntegrityError werfen
+
+    winner = db.execute(select(FanConfig).where(
+        FanConfig.fan_id == "nct6798-isa-0290:pwm1")).scalar_one()
+    assert winner.legacy_fan_id == "hwmon2_pwm1"
+
+    incumbent_after = db.execute(select(FanConfig).where(
+        FanConfig.id == incumbent.id)).scalar_one()
+    assert incumbent_after.is_active is False
+    # Ersatz-ID aus dem Primaerschluessel, nicht aus legacy_fan_id
+    assert incumbent_after.fan_id == f"nct6798-isa-0290:pwm1#legacy{incumbent.id}"
+    assert incumbent_after.legacy_fan_id == "hwmon2_pwm1"   # Herkunft bleibt
+
+    assert db.query(FanConfig).count() == 16
+
+
 def test_unknown_name_is_neither_candidate_nor_deactivated(db):
     db.add(FanConfig(fan_id="hwmon9_pwm1", name="Unknown PWM1", mode="auto",
                      temp_sensor_id=None, is_active=True,

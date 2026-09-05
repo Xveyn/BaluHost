@@ -156,15 +156,21 @@ def reconcile_fan_identities(
                 row.is_active = False
                 report.deactivated.append(row.fan_id)
             if row.fan_id == new_id:
-                # I-2: Ein Inkumbent (bereits in Neuform), der den Rangvergleich
+                # Ein Inkumbent (bereits in Neuform), der den Rangvergleich
                 # verliert, behielte sonst fan_id == new_id. Der Gewinner wird
                 # gleich darunter auf denselben Wert umbenannt -- zwei Zeilen mit
                 # identischem fan_id verletzen den Unique-Index beim Flush. Die
-                # ID freimachen, BEVOR der Gewinner sie uebernimmt. legacy_fan_id
-                # ist der natuerliche Rueckfall (die urspruengliche Altform, aus
-                # einem frueheren Lauf); ohne den erzeugt die id einen
-                # garantiert eindeutigen Ersatz.
-                row.fan_id = row.legacy_fan_id or f"{new_id}#legacy{row.id}"
+                # ID freimachen, BEVOR der Gewinner sie uebernimmt.
+                #
+                # Bewusst NICHT legacy_fan_id als Ersatz: nach einem Rollback auf
+                # Code vor #532 legt die alte Anlage-Schleife eine Zeile unter
+                # exakt der Altform an, die dieser Inkumbent als legacy_fan_id
+                # fuehrt. Beim Roll-forward gewinnt sie (juenger), und der
+                # Inkumbent bekaeme "seine" Altform zurueck -- die die Gewinnerin
+                # noch haelt. Das ist derselbe Unique-Verstoss, nur eine Zeile
+                # weiter. row.id ist Primaerschluessel und damit ohne Rueckfrage
+                # eindeutig; die Herkunft steht ohnehin in legacy_fan_id.
+                row.fan_id = f"{new_id}#legacy{row.id}"
 
         if winner.fan_id != new_id:
             # session.dirty ist ein Set ohne Reihenfolgegarantie: ohne
