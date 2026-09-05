@@ -22,7 +22,7 @@ from app.core import lifespan
 from app.core.config import Settings
 from app.models.fans import FanConfig, FanSample
 from app.schemas.fans import FanMode, FanCurvePoint, PwmControl
-from app.services.power.fan_restore import is_observation, resolve_restore_value
+from app.services.power.fan_restore import is_observation, needs_release, resolve_restore_value
 from app.services.power.fan_schedule import FanScheduleService
 from app.services.power.fan_profiles import FanProfileService
 from app.services.power.fan_reconcile import ChipFacts, reconcile_fan_identities
@@ -235,7 +235,58 @@ class FanControlService:
             except asyncio.CancelledError:
                 pass
 
+        # Erst die Schleife stilllegen, dann zurueckgeben -- umgekehrt schriebe
+        # sie im naechsten Zyklus pwm_enable=1 gegen die Rueckgabe (#534).
+        try:
+            await self._release_all_to_board()
+        except Exception:
+            logger.exception("Rueckgabe an die Board-Automatik fehlgeschlagen")
+
         logger.info("Fan control service stopped")
+
+    async def _release_all_to_board(self) -> None:
+        """Gibt alle Luefter mit bekanntem Rueckgabewert an die Automatik zurueck.
+
+        Entschieden wird am Ist-Wert in sysfs statt an einer Besitz-Buchfuehrung.
+        Ein Luefter im MANUAL-Modus wird vom Regelkreis nie geschrieben (Ziel ==
+        Ist), sein einziger Schreibweg ist die HTTP-Route -- und die landet bei
+        vier Workern meist auf einem Sekundaer. Eine primary-gebundene
+        Besitzverfolgung haette ihn nie erfasst, und genau er stuende am Ende
+        ungeregelt da.
+        """
+        if not getattr(lifespan, "IS_PRIMARY_WORKER", False):
+            return
+        if not self._restore_values:
+            return
+
+        cache = getattr(self._backend, "_fan_cache", None) or {}
+        released = 0
+        failed = 0
+
+        for fan_id, target in self._restore_values.items():
+            info = cache.get(fan_id)
+            if not isinstance(info, dict):
+                continue
+            if info.get("gpu_vendor") is not None:
+                continue
+            pwm_enable_path = info.get("pwm_enable_path")
+            if pwm_enable_path is None:
+                continue
+
+            current = await self._backend._read_hwmon_file(pwm_enable_path)
+            if not needs_release(current, target):
+                continue
+
+            if await self._backend.release_to_board(fan_id, target):
+                released += 1
+            else:
+                failed += 1
+
+        if released or failed:
+            logger.info(
+                "Rueckgabe an die Board-Automatik: %d erfolgreich, %d fehlgeschlagen",
+                released, failed,
+            )
 
     async def _initialize_backend(self):
         """Initialize appropriate backend."""
@@ -1154,6 +1205,25 @@ class FanControlService:
         Returns:
             (success, is_using_linux_backend)
         """
+        # Gleiche Reihenfolge wie in stop(): erst die Schleife stilllegen, dann
+        # zurueckgeben, dann tauschen. Ohne das schriebe die weiterlaufende
+        # Schleife pwm_enable=1 gegen die Rueckgabe, und ein Wechsel auf das
+        # Dev-Backend liesse jeden Kanal in Handsteuerung zurueck -- niemand
+        # regelt, ueber einen Admin-Endpunkt (#534).
+        was_running = self._is_running
+        self._is_running = False
+        if self._monitoring_task:
+            self._monitoring_task.cancel()
+            try:
+                await self._monitoring_task
+            except asyncio.CancelledError:
+                pass
+            self._monitoring_task = None
+        try:
+            await self._release_all_to_board()
+        except Exception:
+            logger.exception("Rueckgabe beim Backend-Wechsel fehlgeschlagen")
+
         if use_linux:
             # Try to switch to Linux backend
             linux_backend = LinuxFanControlBackend(self.config)
@@ -1162,17 +1232,26 @@ class FanControlService:
                 self._use_linux_backend = True
                 await self._load_fan_configs()
                 logger.info("Switched to Linux fan control backend")
-                return True, True
+                result = True, True
             else:
                 logger.warning("Linux backend not available")
-                return False, self._use_linux_backend
+                result = False, self._use_linux_backend
         else:
             # Switch to dev backend
             self._backend = DevFanControlBackend(self.config)
             self._use_linux_backend = False
             await self._load_fan_configs()
             logger.info("Switched to dev fan control backend")
-            return True, False
+            result = True, False
+
+        # Nach dem Tausch die Schleife wieder starten, falls sie lief. Beide
+        # Zweige oben enden mit `return` im Original -- hier stattdessen ueber
+        # `result` gefuehrt, damit dieser Neustart nicht verlorengeht (#534).
+        if was_running:
+            self._is_running = True
+            self._monitoring_task = asyncio.create_task(self._monitoring_loop())
+
+        return result
 
     # --- Delegating methods for backward compatibility ---
 
