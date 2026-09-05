@@ -16,12 +16,15 @@ from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
 
 from sqlalchemy import select, desc, func
+from sqlalchemy.exc import IntegrityError
 
+from app.core import lifespan
 from app.core.config import Settings
 from app.models.fans import FanConfig, FanSample
 from app.schemas.fans import FanMode, FanCurvePoint, PwmControl
 from app.services.power.fan_schedule import FanScheduleService
 from app.services.power.fan_profiles import FanProfileService
+from app.services.power.fan_reconcile import ChipFacts, reconcile_fan_identities
 from app.services.power.fan_sources import (
     TempSourceRegistry, HwmonTempSource, GpuTempSource, DiskTempSource, MixTempSource,
 )
@@ -237,6 +240,61 @@ class FanControlService:
             self._backend = DevFanControlBackend(self.config)
             self._use_linux_backend = False
 
+    def _should_reconcile(self, chip_count: int) -> bool:
+        """Beide Vorbedingungen sind hart -- ihr Fehlen bedeutet Totalverlust.
+
+        Ohne Linux-Backend liefe der Abgleich gegen eine Chip-Menge ohne
+        einen einzigen hwmon-Chip; ohne gefundenen Chip gegen eine leere.
+        In beiden Faellen faende keine Altzeile ihren Chip wieder.
+        """
+        if not getattr(lifespan, "IS_PRIMARY_WORKER", False):
+            return False
+        if not self._use_linux_backend:
+            return False
+        return chip_count > 0
+
+    def _collect_chip_facts(self) -> Dict[str, ChipFacts]:
+        """Chipname -> Kennung, vorhandene PWM-Kanaele, Mehrdeutigkeit."""
+        by_prefix: Dict[str, Dict] = {}
+        fan_cache = getattr(self._backend, "_fan_cache", None)
+        if not isinstance(fan_cache, dict):
+            # Dev-Backend hat kein _fan_cache; ein Test-Double kann ein
+            # Attribut liefern, das kein echtes Dict ist. Beides bedeutet
+            # dasselbe wie ein leerer Scan: kein Chip, kein Abgleich.
+            fan_cache = {}
+        for fan_id, info in fan_cache.items():
+            if not info.get("identity_stable"):
+                continue
+            prefix = info.get("device_driver") or "Unknown"
+            key, _, channel = fan_id.rpartition(":pwm")
+            if not channel.isdigit():
+                continue
+            entry = by_prefix.setdefault(prefix, {"keys": set(), "channels": set()})
+            entry["keys"].add(key)
+            entry["channels"].add(int(channel))
+
+        facts: Dict[str, ChipFacts] = {}
+        for prefix, entry in by_prefix.items():
+            keys = entry["keys"]
+            facts[prefix] = ChipFacts(
+                key=next(iter(sorted(keys))),
+                pwm_channels=frozenset(entry["channels"]),
+                ambiguous=len(keys) > 1,
+            )
+        return facts
+
+    def _collect_sensor_map(self) -> Dict[str, str]:
+        """Alt-Sensor-ID (hwmon<N>_temp<M>) -> neue, praefixierte Kennung."""
+        mapping: Dict[str, str] = {}
+        paths = getattr(self._backend, "_temp_paths", None)
+        if not isinstance(paths, dict):
+            paths = {}
+        for stable_id, path in paths.items():
+            hwmon_name = path.parent.name
+            temp_num = path.name[len("temp"):-len("_input")]
+            mapping[f"{hwmon_name}_temp{temp_num}"] = f"hwmon:{stable_id}"
+        return mapping
+
     async def _load_fan_configs(self):
         """Load fan configurations from database.
 
@@ -261,6 +319,35 @@ class FanControlService:
             pass
 
         with self.db_session_factory() as db:
+            chip_facts = self._collect_chip_facts()
+            if self._should_reconcile(len(chip_facts)):
+                report = reconcile_fan_identities(
+                    db,
+                    chips=chip_facts,
+                    sensor_map=self._collect_sensor_map(),
+                    cpu_sensor_id=cpu_sensor_id,
+                )
+                if report.renamed or report.deactivated:
+                    try:
+                        from app.services.audit import get_audit_logger_db
+                        get_audit_logger_db().log_system_event(
+                            action="fan_identity_reconcile",
+                            details={
+                                "renamed": report.renamed,
+                                "deactivated": report.deactivated,
+                                "skipped_absent": report.skipped_absent,
+                            },
+                            db=db,
+                        )
+                    except Exception:
+                        logger.debug("Audit-Eintrag zum Identitaets-Abgleich fehlgeschlagen")
+
+                # Eigenstaendiger Commit: der Abgleich muss die Datenbank
+                # erreicht haben, BEVOR die Anlage-Schleife unten startet.
+                # Liefe er danach, waeren die Ziel-IDs bereits durch frische
+                # Default-Zeilen belegt und jede Altzeile verloere (R4).
+                db.commit()
+
             for fan in fans:
                 existing = db.execute(
                     select(FanConfig).where(FanConfig.fan_id == fan.fan_id)
@@ -276,10 +363,19 @@ class FanControlService:
                         min_pwm_percent=fan.min_pwm_percent,
                         max_pwm_percent=fan.max_pwm_percent,
                         emergency_temp_celsius=fan.emergency_temp_celsius,
-                        temp_sensor_id=cpu_sensor_id or fan.temp_sensor_id,
+                        temp_sensor_id=TempSourceRegistry._normalize_id(
+                            cpu_sensor_id or fan.temp_sensor_id
+                        ) if (cpu_sensor_id or fan.temp_sensor_id) else None,
                         is_active=True,
                     )
                     db.add(config)
+                    try:
+                        db.flush()
+                    except IntegrityError:
+                        # Ein anderer Worker war schneller. Die Zeile existiert,
+                        # das ist der gewuenschte Endzustand.
+                        db.rollback()
+                        logger.debug("Fan-Config %s wurde parallel angelegt", fan.fan_id)
 
             db.commit()
 
