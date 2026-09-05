@@ -89,3 +89,64 @@ class TestSelectSnapshots:
         repo = make_repo(tmp_path)
         commit_file(repo, "a.py", "1\n", date="2026-01-10")
         assert history.select_snapshots(repo, interval="monthly", since="2027-01-01") == []
+
+
+class TestGitTreeSource:
+    def test_reads_content_as_it_was_at_that_commit(self, tmp_path):
+        repo = make_repo(tmp_path)
+        commit_file(repo, "a.py", "old = 1\n", date="2026-01-10")
+        old = git(repo, "rev-parse", "HEAD").strip()
+        commit_file(repo, "a.py", "new = 2\n", date="2026-02-10")
+
+        source = history.GitTreeSource(repo, old)
+
+        assert source.read("a.py") == "old = 1\n"
+
+    def test_paths_lists_the_tree_at_that_commit(self, tmp_path):
+        repo = make_repo(tmp_path)
+        commit_file(repo, "a.py", "1\n", date="2026-01-10")
+        commit_file(repo, "sub/b.py", "2\n", date="2026-01-11")
+        source = history.GitTreeSource(repo, "HEAD")
+        assert sorted(source.paths()) == ["a.py", "sub/b.py"]
+
+    def test_identity_is_the_blob_sha_so_equal_content_shares_a_key(self, tmp_path):
+        repo = make_repo(tmp_path)
+        commit_file(repo, "a.py", "same\n", date="2026-01-10")
+        commit_file(repo, "b.py", "same\n", date="2026-01-11")
+        source = history.GitTreeSource(repo, "HEAD")
+        assert source.identity("a.py") == source.identity("b.py")
+
+    def test_unknown_path_reads_as_none(self, tmp_path):
+        repo = make_repo(tmp_path)
+        commit_file(repo, "a.py", "1\n", date="2026-01-10")
+        assert history.GitTreeSource(repo, "HEAD").read("gone.py") is None
+
+    def test_binary_blob_reads_as_none(self, tmp_path):
+        repo = make_repo(tmp_path)
+        (repo / "b.bin").write_bytes(b"\xff\xfe\x00\x01\x80")
+        git(repo, "add", "b.bin")
+        commit_all(repo, "bin")
+        assert history.GitTreeSource(repo, "HEAD").read("b.bin") is None
+
+    def test_prefetch_serves_many_files_without_deadlocking(self, tmp_path):
+        """The naive 'write every sha, then read' fills the pipe buffer and
+        hangs. 300 files is enough to blow past that buffer if it regresses."""
+        repo = make_repo(tmp_path)
+        for i in range(300):
+            (repo / f"f{i}.py").write_text(f"x = {i}\n" * 40, encoding="utf-8")
+        git(repo, "add", "-A")
+        commit_all(repo, "many")
+
+        source = history.GitTreeSource(repo, "HEAD")
+        source.prefetch(source.paths())
+
+        assert source.read("f0.py") == "x = 0\n" * 40
+        assert source.read("f299.py") == "x = 299\n" * 40
+
+    def test_prefetch_leaves_already_known_content_alone(self, tmp_path):
+        repo = make_repo(tmp_path)
+        commit_file(repo, "a.py", "1\n", date="2026-01-10")
+        source = history.GitTreeSource(repo, "HEAD")
+        assert source.read("a.py") == "1\n"
+        source.prefetch(["a.py"])
+        assert source.read("a.py") == "1\n"

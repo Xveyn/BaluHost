@@ -71,3 +71,106 @@ def select_snapshots(
         seen.setdefault(label, Snapshot(commit=commit, date=date, label=label))
 
     return sorted(seen.values(), key=lambda s: s.date)
+
+
+def _decode(raw: bytes) -> str | None:
+    """Decode a blob as UTF-8 text, or None when it is binary."""
+    if b"\x00" in raw:
+        return None
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+
+
+class GitTreeSource:
+    """Reads file content out of one commit's tree.
+
+    Satisfies repo_map.ContentSource. identity() returns the blob SHA, which
+    is what lets the analysis cache skip files that did not change between
+    two snapshots.
+    """
+
+    def __init__(self, root: Path, commit: str) -> None:
+        self.root = root
+        self.commit = commit
+        self._blobs: dict[str, str] = {}
+        self._content: dict[str, str | None] = {}
+        for line in _git(root, "ls-tree", "-r", commit).splitlines():
+            meta, _, path = line.partition("\t")
+            fields = meta.split()
+            if len(fields) >= 3 and fields[1] == "blob":
+                self._blobs[path] = fields[2]
+
+    def paths(self) -> list[str]:
+        return list(self._blobs)
+
+    def identity(self, path: str) -> str | None:
+        return self._blobs.get(path)
+
+    def read(self, path: str) -> str | None:
+        if path in self._content:
+            return self._content[path]
+        blob = self._blobs.get(path)
+        if blob is None:
+            return None
+        raw = subprocess.check_output(
+            ["git", "cat-file", "blob", blob], cwd=self.root
+        )
+        text = _decode(raw)
+        self._content[path] = text
+        return text
+
+    def prefetch(self, paths: Iterable[str]) -> None:
+        """Load many blobs through a single `git cat-file --batch` process.
+
+        The request SHAs are fed from a worker thread. Writing them all before
+        reading any output fills the pipe buffer and deadlocks - that is not a
+        theoretical risk, it hangs on this repo's real history.
+        """
+        wanted = [
+            (p, self._blobs[p])
+            for p in paths
+            if p in self._blobs and p not in self._content
+        ]
+        if not wanted:
+            return
+
+        proc = subprocess.Popen(
+            ["git", "cat-file", "--batch"],
+            cwd=self.root,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+        )
+
+        def feed() -> None:
+            try:
+                for _path, blob in wanted:
+                    proc.stdin.write((blob + "\n").encode("ascii"))
+                proc.stdin.close()
+            except (BrokenPipeError, ValueError, OSError):
+                pass
+
+        thread = threading.Thread(target=feed, daemon=True)
+        thread.start()
+        try:
+            for path, _blob in wanted:
+                header = proc.stdout.readline().split()
+                if len(header) < 3:
+                    self._content[path] = None
+                    continue
+                size = int(header[2])
+                chunks: list[bytes] = []
+                remaining = size
+                while remaining > 0:
+                    chunk = proc.stdout.read(remaining)
+                    if not chunk:
+                        break
+                    chunks.append(chunk)
+                    remaining -= len(chunk)
+                proc.stdout.read(1)  # trailing newline after the payload
+                self._content[path] = _decode(b"".join(chunks))
+        finally:
+            proc.stdout.close()
+            thread.join(timeout=5)
+            proc.wait(timeout=5)
