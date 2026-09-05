@@ -202,6 +202,21 @@ class TestCollectChurn:
         assert "old.py" not in churn, "the old name must not survive as its own row"
         assert churn["new.py"].commits == 3, "all three commits belong to this file"
 
+    def test_history_survives_a_double_rename_under_the_final_name(self, tmp_path):
+        repo = make_repo(tmp_path)
+        commit_file(repo, "a.py", "1\n", date="2026-01-10")
+        git(repo, "mv", "a.py", "b.py")
+        commit_all(repo, "rename a to b", date="2026-01-11")
+        commit_file(repo, "b.py", "1\n2\n", date="2026-01-12")
+        git(repo, "mv", "b.py", "c.py")
+        commit_all(repo, "rename b to c", date="2026-01-13")
+
+        churn = history.collect_churn(repo)
+
+        assert "a.py" not in churn, "the first name must not survive as its own row"
+        assert "b.py" not in churn, "the intermediate name must not survive as its own row"
+        assert churn["c.py"].commits == 4, "all four commits belong to this file"
+
     def test_binary_changes_count_as_a_commit_with_no_line_delta(self, tmp_path):
         repo = make_repo(tmp_path)
         (repo / "b.bin").write_bytes(b"\x00\x01\x02")
