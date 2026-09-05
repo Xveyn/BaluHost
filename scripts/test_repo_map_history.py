@@ -150,3 +150,73 @@ class TestGitTreeSource:
         assert source.read("a.py") == "1\n"
         source.prefetch(["a.py"])
         assert source.read("a.py") == "1\n"
+
+
+class TestSplitRename:
+    def test_plain_path_has_no_old_name(self):
+        assert history.split_rename("a/b.py") == ("a/b.py", None)
+
+    def test_plain_rename(self):
+        assert history.split_rename("a.py => b.py") == ("b.py", "a.py")
+
+    def test_braced_rename_inside_a_directory(self):
+        assert history.split_rename("src/{old.py => new.py}") == (
+            "src/new.py",
+            "src/old.py",
+        )
+
+    def test_braced_rename_that_moves_into_a_new_directory(self):
+        assert history.split_rename("{ => sub}/a.py") == ("sub/a.py", "a.py")
+
+    def test_braced_rename_that_moves_out_of_a_directory(self):
+        assert history.split_rename("{sub => }/a.py") == ("a.py", "sub/a.py")
+
+
+class TestCollectChurn:
+    def test_counts_commits_and_line_deltas(self, tmp_path):
+        repo = make_repo(tmp_path)
+        commit_file(repo, "a.py", "1\n", date="2026-01-10")
+        commit_file(repo, "a.py", "1\n2\n3\n", date="2026-01-11")
+
+        churn = history.collect_churn(repo)
+
+        assert churn["a.py"].commits == 2
+        assert churn["a.py"].added == 3
+        assert churn["a.py"].deleted == 0
+
+    def test_last_date_is_the_most_recent_touch(self, tmp_path):
+        repo = make_repo(tmp_path)
+        commit_file(repo, "a.py", "1\n", date="2026-01-10")
+        commit_file(repo, "a.py", "2\n", date="2026-03-20")
+        assert history.collect_churn(repo)["a.py"].last_date == "2026-03-20"
+
+    def test_history_survives_a_rename_under_the_new_name(self, tmp_path):
+        repo = make_repo(tmp_path)
+        commit_file(repo, "old.py", "1\n", date="2026-01-10")
+        git(repo, "mv", "old.py", "new.py")
+        commit_all(repo, "rename", date="2026-01-11")
+        commit_file(repo, "new.py", "1\n2\n", date="2026-01-12")
+
+        churn = history.collect_churn(repo)
+
+        assert "old.py" not in churn, "the old name must not survive as its own row"
+        assert churn["new.py"].commits == 3, "all three commits belong to this file"
+
+    def test_binary_changes_count_as_a_commit_with_no_line_delta(self, tmp_path):
+        repo = make_repo(tmp_path)
+        (repo / "b.bin").write_bytes(b"\x00\x01\x02")
+        git(repo, "add", "b.bin")
+        commit_all(repo, "bin", date="2026-01-10")
+
+        churn = history.collect_churn(repo)
+
+        assert churn["b.bin"].commits == 1
+        assert churn["b.bin"].added == 0
+        assert churn["b.bin"].deleted == 0
+
+    def test_since_clips_the_range(self, tmp_path):
+        repo = make_repo(tmp_path)
+        commit_file(repo, "a.py", "1\n", date="2026-01-10")
+        commit_file(repo, "a.py", "2\n", date="2026-03-10")
+        churn = history.collect_churn(repo, since="2026-02-01")
+        assert churn["a.py"].commits == 1

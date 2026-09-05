@@ -174,3 +174,117 @@ class GitTreeSource:
             proc.stdout.close()
             thread.join(timeout=5)
             proc.wait(timeout=5)
+
+
+# Marks a commit header line inside --numstat output. A NUL can never appear
+# in a path, so it separates headers from stat lines without ambiguity.
+_COMMIT_MARK = "\x00"
+
+
+@dataclass(frozen=True)
+class Churn:
+    """How often and how heavily one file changed over the window."""
+
+    path: str
+    commits: int
+    added: int
+    deleted: int
+    last_date: str
+
+
+def _join_rename(head: str, middle: str, tail: str) -> str:
+    return (head + middle + tail).replace("//", "/").lstrip("/")
+
+
+def split_rename(raw: str) -> tuple[str, str | None]:
+    """Split a --numstat path field into (new path, old path or None).
+
+    git writes renames as `old => new` or, when only part of the path moved,
+    as `keep/{old => new}/keep`.
+    """
+    if " => " not in raw:
+        return raw, None
+    if "{" in raw and "}" in raw:
+        head, rest = raw.split("{", 1)
+        middle, tail = rest.split("}", 1)
+        old_middle, _, new_middle = middle.partition(" => ")
+        return (
+            _join_rename(head, new_middle, tail),
+            _join_rename(head, old_middle, tail),
+        )
+    old, _, new = raw.partition(" => ")
+    return new.strip(), old.strip()
+
+
+def _canonical(alias: dict[str, str], path: str) -> str:
+    """Follow a rename chain to the name the file carries today."""
+    seen: set[str] = set()
+    while path in alias and path not in seen:
+        seen.add(path)
+        path = alias[path]
+    return path
+
+
+def collect_churn(root: Path, *, since: str | None = None) -> dict[str, Churn]:
+    """Commit counts and line deltas per file, keyed by the file's newest name.
+
+    One pass over the log. Because git walks newest-first, a rename is seen
+    before the commits that used the old name, so the alias map is always
+    populated by the time an older name shows up.
+    """
+    args = [
+        "log",
+        "--first-parent",
+        "--numstat",
+        "-M",
+        # %x00 is git's own hex-byte placeholder for the NUL marker: passing
+        # a literal NUL inside a subprocess argv string raises "ValueError:
+        # embedded null character" on Windows (CreateProcess command lines
+        # are NUL-terminated), so git must emit the byte, not Python.
+        "--format=%x00%H %as",
+    ]
+    if since:
+        args.append(f"--since={since}")
+
+    alias: dict[str, str] = {}
+    totals: dict[str, list] = {}  # path -> [commits, added, deleted, last_date]
+    date = ""
+
+    for line in _git(root, *args).splitlines():
+        if line.startswith(_COMMIT_MARK):
+            _commit, _, date = line[len(_COMMIT_MARK):].partition(" ")
+            continue
+        if not line.strip():
+            continue
+        fields = line.split("\t")
+        if len(fields) != 3:
+            continue
+
+        added_raw, deleted_raw, raw_path = fields
+        new_path, old_path = split_rename(raw_path)
+        path = _canonical(alias, new_path)
+        if old_path is not None and old_path != path:
+            alias[old_path] = path
+
+        # Binary files report "-" for both counts; they still changed.
+        added = int(added_raw) if added_raw.isdigit() else 0
+        deleted = int(deleted_raw) if deleted_raw.isdigit() else 0
+
+        row = totals.get(path)
+        if row is None:
+            totals[path] = [1, added, deleted, date]
+        else:
+            row[0] += 1
+            row[1] += added
+            row[2] += deleted
+
+    return {
+        path: Churn(
+            path=path,
+            commits=row[0],
+            added=row[1],
+            deleted=row[2],
+            last_date=row[3],
+        )
+        for path, row in totals.items()
+    }
