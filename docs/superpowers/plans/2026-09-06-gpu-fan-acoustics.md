@@ -124,18 +124,6 @@ from typing import Dict, Optional
 
 logger = logging.getLogger(__name__)
 
-# Die vier Skalare, die BaluHost zu SETZEN anbietet -- die Erlaubnisliste fuer
-# write_acoustic. Gelesen wird mehr (read_acoustics zaehlt auf). fan_curve
-# gehoert bewusst nicht dazu: es schaltet die Karte in den Manual-Modus, in dem
-# diese vier nicht mehr wirken (Kernel-Doku, "works under auto fan control
-# mode only").
-ACOUSTIC_NODES = (
-    "fan_target_temperature",
-    "acoustic_limit_rpm_threshold",
-    "acoustic_target_rpm_threshold",
-    "fan_minimum_pwm",
-)
-
 _RANGE_LINE = re.compile(r"^\s*[A-Z_]+:\s*(-?\d+)\s+(-?\d+)\s*$")
 
 
@@ -287,9 +275,8 @@ async def read_acoustics(fan_ctrl_dir: Path) -> Dict[str, ParsedNode]:
     parse_node-Ergebnis -- und ein kuenftiger Knoten (ab Kernel 6.13
     fan_zero_rpm_enable) kommt ohne Codeaenderung mit.
 
-    Was BaluHost davon zu SETZEN anbietet, entscheidet ACOUSTIC_NODES in
-    write_acoustic. Lesen ist offen, Schreiben ist auf bekannte Namen
-    beschraenkt.
+    Was BaluHost davon zu SETZEN anbietet, entscheidet die Erlaubnisliste in
+    Task 2. Lesen ist offen, Schreiben ist auf bekannte Namen beschraenkt.
     """
     nodes: Dict[str, ParsedNode] = {}
     for path in sorted(fan_ctrl_dir.iterdir()):
@@ -327,7 +314,7 @@ git commit -m "feat(fans): gpu_od/fan_ctrl lesen und positionell parsen (#516)"
 
 **Interfaces:**
 - Consumes: `ParsedNode`, `read_acoustics` aus Task 1
-- Produces: `async write_acoustic(fan_ctrl_dir: Path, name: str, value: int, write) -> bool`, wobei `write` die Signatur `async (Path, str) -> tuple[bool, Optional[int]]` hat — dieselbe wie `LinuxFanControlBackend._write_hwmon_file`
+- Produces: `ACOUSTIC_NODES` (Erlaubnisliste zum Schreiben), `async write_acoustic(fan_ctrl_dir: Path, name: str, value: int, write) -> bool` mit `write` in der Signatur `async (Path, str) -> tuple[bool, Optional[int]]` — dieselbe wie `LinuxFanControlBackend._write_hwmon_file` —, und `resolve_restores(previous_desired: dict, incoming: dict, baseline: dict) -> Dict[str, int]`
 
 - [ ] **Step 1: Den fehlschlagenden Test schreiben**
 
@@ -437,7 +424,53 @@ async def test_an_unknown_node_is_refused(tmp_path):
 
     assert ok is False
     assert calls == []
+
+
+# --- Die Ruecksetz-Entscheidung, rein und ohne sysfs ---------------------
+#
+# Sie steckte im Entwurf als dreifach bedingte Comprehension im Route-Handler.
+# Genau diese Form versteckt Fehler; #534 hat dafuer fan_restore.py gebaut.
+
+def test_unmanaging_a_value_restores_its_baseline():
+    restores = resolve_restores(
+        previous_desired={"fan_target_temperature": 75},
+        incoming={"fan_target_temperature": None},
+        baseline={"fan_target_temperature": 95},
+    )
+    assert restores == {"fan_target_temperature": 95}
+
+
+def test_a_value_that_was_never_managed_is_not_touched():
+    """Sonst schriebe ein Speichern-Klick eine Baseline auf einen Knoten, den
+    BaluHost nie angefasst hat."""
+    restores = resolve_restores(
+        previous_desired={"fan_minimum_pwm": None},
+        incoming={"fan_minimum_pwm": None},
+        baseline={"fan_minimum_pwm": 23},
+    )
+    assert restores == {}
+
+
+def test_without_a_baseline_nothing_is_restored():
+    """Kein Rueckfall auf einen geratenen Herstellerstandard (#534)."""
+    restores = resolve_restores(
+        previous_desired={"fan_target_temperature": 75},
+        incoming={"fan_target_temperature": None},
+        baseline={"fan_target_temperature": None},
+    )
+    assert restores == {}
+
+
+def test_a_changed_value_is_not_a_restore():
+    restores = resolve_restores(
+        previous_desired={"fan_target_temperature": 75},
+        incoming={"fan_target_temperature": 80},
+        baseline={"fan_target_temperature": 95},
+    )
+    assert restores == {}
 ```
+
+Den Import am Dateikopf ergänzen: `from app.services.power.fan_gpu_acoustics import find_fan_ctrl_dir, resolve_restores, write_acoustic`
 
 - [ ] **Step 2: Lauf gegen den fehlenden Code**
 
@@ -449,6 +482,39 @@ Expected: FAIL mit `ImportError: cannot import name 'write_acoustic'`
 An `fan_gpu_acoustics.py` anhängen:
 
 ```python
+# Die vier Skalare, die BaluHost zu SETZEN anbietet. Gelesen wird mehr --
+# read_acoustics zaehlt auf. fan_curve gehoert bewusst nicht dazu: es schaltet
+# die Karte in den Manual-Modus, in dem diese vier nicht mehr wirken
+# (Kernel-Doku: "works under auto fan control mode only").
+ACOUSTIC_NODES = (
+    "fan_target_temperature",
+    "acoustic_limit_rpm_threshold",
+    "acoustic_target_rpm_threshold",
+    "fan_minimum_pwm",
+)
+
+
+def resolve_restores(previous_desired: dict, incoming: dict,
+                     baseline: dict) -> Dict[str, int]:
+    """Welche Knoten auf ihre Baseline zurueckgeschrieben werden muessen.
+
+    Rein: kein sysfs, keine Datenbank. Ein Knoten wird zurueckgesetzt, wenn
+    BaluHost ihn bisher verwaltet hat, der neue Wunsch None ist -- also 'nicht
+    mehr verwalten' -- und eine beobachtete Baseline vorliegt.
+
+    Fehlt die Baseline, passiert nichts. Kein Rueckfall auf einen geratenen
+    Herstellerstandard; zurueckgeschrieben wird nur, was BaluHost selbst
+    gelesen hat (#534).
+    """
+    return {
+        name: baseline[name]
+        for name, value in incoming.items()
+        if value is None
+        and previous_desired.get(name) is not None
+        and baseline.get(name) is not None
+    }
+
+
 async def write_acoustic(fan_ctrl_dir: Path, name: str, value: int, write) -> bool:
     """Einen Akustikwert setzen und uebernehmen.
 
@@ -505,7 +571,7 @@ async def write_acoustic(fan_ctrl_dir: Path, name: str, value: int, write) -> bo
 - [ ] **Step 4: Tests laufen lassen**
 
 Run: `cd backend ; python -m pytest tests/test_fan_gpu_acoustics_write.py --no-cov -q`
-Expected: 4 passed
+Expected: 8 passed
 
 - [ ] **Step 5: Committen**
 
@@ -804,7 +870,7 @@ git commit -m "feat(fans): Datenmodell und Persistenz der GPU-Akustik (#516)"
 
 **Interfaces:**
 - Consumes: `read_acoustics`, `write_acoustic` (Task 1/2), `load_acoustics_config`, `save_acoustics_config` (Task 3)
-- Produces: `FanControlService.apply_gpu_acoustics()` — async, ohne Argumente, idempotent
+- Produces: `FanControlService.apply_acoustics()` — async, **ohne** Primary-Gate, für den `PUT`-Pfad; `FanControlService.apply_gpu_acoustics()` — async, **mit** Primary-Gate, für den Startpfad
 
 - [ ] **Step 1: Den fehlschlagenden Test schreiben**
 
@@ -940,6 +1006,23 @@ async def test_a_follower_writes_no_hardware(session_factory, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_the_put_path_writes_even_on_a_follower(session_factory, monkeypatch):
+    """Der Blocker: eine ausdrueckliche Nutzeraktion landet bei vier Workern
+    in drei von vier Faellen auf einem Follower. Ohne diesen Test quittierte
+    der Endpunkt mit 200 und aenderte an der Karte nichts."""
+    written = []
+    _patch_module(monkeypatch, current=CURRENT, written=written)
+    service = _service(session_factory, monkeypatch, primary=False)
+    with session_factory() as db:
+        save_acoustics_config(db, GpuFanAcousticsConfig(
+            desired=GpuFanAcousticsValues(fan_target_temperature=75)))
+
+    await service.apply_acoustics()
+
+    assert written == [("fan_target_temperature", 75)]
+
+
+@pytest.mark.asyncio
 async def test_start_applies_the_configuration(session_factory, monkeypatch):
     """Verdrahtung: ohne diesen Test koennte man den Aufruf in start()
     entfernen und die Suite bliebe gruen."""
@@ -986,18 +1069,28 @@ In `FanControlService`, neben `_release_all_to_board`:
 
 ```python
     async def apply_gpu_acoustics(self) -> None:
-        """Beobachtet die Baseline und wendet die gewuenschten Werte an (#516).
+        """Startpfad: nur der Primary wendet an.
 
-        Nur der Primary schreibt: es ist ein Hardware-Eingriff, und vier
-        Uvicorn-Worker wuerden dieselben vier Werte gegeneinander setzen
-        (#555, #559).
+        Beim Start wuerden sonst vier Uvicorn-Worker dieselben vier Werte
+        gegeneinander setzen (#555, #559).
 
-        Die Baseline wird nur erfasst, wo sie noch fehlt -- sonst zeichnete
-        der zweite Start den eigenen Eingriff als 'wie es vorher war' auf.
+        Das Gate sitzt bewusst NUR hier und nicht in apply_acoustics: eine
+        ausdrueckliche Nutzeraktion ueber den PUT-Endpunkt landet auf dem
+        Worker, der die Anfrage bedient -- bei vier Workern in drei von vier
+        Faellen auf einem Follower. Steckte das Gate weiter innen, quittierte
+        der Endpunkt mit 200 und aenderte an der Karte nichts.
         """
         if not getattr(lifespan, "IS_PRIMARY_WORKER", False):
             return
+        await self.apply_acoustics()
 
+    async def apply_acoustics(self) -> None:
+        """Beobachtet die Baseline und wendet die gewuenschten Werte an (#516).
+
+        Ohne Primary-Gate -- siehe apply_gpu_acoustics. Die Baseline wird nur
+        erfasst, wo sie noch fehlt: sonst zeichnete der zweite Aufruf den
+        eigenen Eingriff als 'wie es vorher war' auf.
+        """
         fan_ctrl = self._gpu_fan_ctrl_dir()
         if fan_ctrl is None:
             return
@@ -1034,7 +1127,15 @@ In `FanControlService`, neben `_release_all_to_board`:
             )
 
     def _gpu_fan_ctrl_dir(self):
-        """Das fan_ctrl-Verzeichnis der AMD-GPU, falls die Karte es anbietet."""
+        """Das fan_ctrl-Verzeichnis der AMD-GPU, falls die Karte es anbietet.
+
+        Gefunden wird es ueber einen gescannten GPU-Luefter, obwohl die
+        Akustikwerte der KARTE gehoeren. Hat die Karte keinen gescannten
+        Luefter -- etwa weil fan1_input fehlt --, bleibt das Panel aus,
+        obwohl die Schnittstelle vorhanden waere. Auf der Referenzhardware
+        tritt das nicht auf; eine zweite Geraeteaufloesung dafuer zu bauen
+        waere Aufwand ohne belegten Anlass (#516).
+        """
         cache = getattr(self._backend, "_fan_cache", None)
         if not isinstance(cache, dict):
             return None
@@ -1066,14 +1167,16 @@ In `FanControlService.start()`, innerhalb des `async with self._lifecycle_lock:`
 - [ ] **Step 6: Tests laufen lassen**
 
 Run: `cd backend ; python -m pytest tests/test_fan_gpu_acoustics_apply.py --no-cov -q`
-Expected: 5 passed
+Expected: 6 passed
 
 - [ ] **Step 7: Gegenprobe der Verdrahtung**
 
 Den `await self.apply_gpu_acoustics()`-Aufruf aus `start()` vorübergehend durch `pass` ersetzen.
 
 Run: `cd backend ; python -m pytest tests/test_fan_gpu_acoustics_apply.py --no-cov -q`
-Expected: FAIL bei `test_start_applies_the_configuration`. Danach den Aufruf wiederherstellen und erneut laufen lassen: 5 passed.
+Expected: FAIL bei `test_start_applies_the_configuration`. Danach den Aufruf wiederherstellen und erneut laufen lassen: 6 passed.
+
+Zweite Gegenprobe für den Blocker: das Primary-Gate versuchsweise von `apply_gpu_acoustics` nach `apply_acoustics` verschieben. Erwartet: FAIL bei `test_the_put_path_writes_even_on_a_follower`. Danach zurückbauen.
 
 - [ ] **Step 8: Fan- und Power-Suite laufen lassen**
 
@@ -1115,8 +1218,12 @@ class GpuFanAcousticsNode(BaseModel):
 
 
 class GpuFanAcousticsStatus(BaseModel):
+    """Kein zero_rpm-Feld: das Frontend hat die Luefterliste ohnehin und
+    leitet es aus pwm_control und rpm ab. Serverseitig zu bestimmen hiesse,
+    get_status() pro Poll ein zweites Mal zu durchlaufen -- und die beiden
+    Anzeigen koennten auseinanderlaufen (#516)."""
+
     available: bool
-    zero_rpm: bool = False
     competing_manager: Optional[str] = None
     nodes: dict[str, GpuFanAcousticsNode] = {}
 ```
@@ -1140,9 +1247,12 @@ from sqlalchemy.orm import sessionmaker
 
 from app.api.routes import fans as fans_routes
 from app.models.base import Base
-from app.schemas.gpu_fan_acoustics import GpuFanAcousticsValues
+from app.schemas.gpu_fan_acoustics import GpuFanAcousticsConfig, GpuFanAcousticsValues
 from app.services.power.fan_gpu_acoustics import ParsedNode
-from app.services.power.fan_gpu_acoustics_store import load_acoustics_config
+from app.services.power.fan_gpu_acoustics_store import (
+    load_acoustics_config,
+    save_acoustics_config,
+)
 
 
 @pytest.fixture
@@ -1162,7 +1272,9 @@ def service(session_factory):
     svc = SimpleNamespace(db_session_factory=factory)
     svc._backend = MagicMock()
     svc._backend._write_hwmon_file = AsyncMock(return_value=(True, None))
-    svc.apply_gpu_acoustics = AsyncMock()
+    # apply_acoustics, nicht apply_gpu_acoustics: der PUT-Pfad darf nicht am
+    # Primary-Gate haengen (#516).
+    svc.apply_acoustics = AsyncMock()
     svc._gpu_fan_ctrl_dir = lambda: Path("/fake/fan_ctrl")
     return svc
 
@@ -1225,19 +1337,33 @@ async def test_put_stores_and_applies(service, session_factory):
 
     with session_factory() as db:
         assert load_acoustics_config(db).desired.fan_target_temperature == 75
-    service.apply_gpu_acoustics.assert_awaited()
+    service.apply_acoustics.assert_awaited()
 
 
 @pytest.mark.asyncio
-async def test_put_with_null_restores_the_baseline(service, session_factory):
-    """Der Zuruecksetzen-Knopf: alle Felder null."""
-    await _put(service, GpuFanAcousticsValues(fan_target_temperature=75))
+async def test_put_with_null_restores_the_baseline(
+        service, session_factory, monkeypatch):
+    """Der Zuruecksetzen-Knopf: alle Felder null.
+
+    Gepatcht wird ueber monkeypatch, nicht per Zuweisung an das Modul -- eine
+    Zuweisung ueberlebt den Test und leckt in die naechsten.
+    """
+    with session_factory() as db:
+        save_acoustics_config(db, GpuFanAcousticsConfig(
+            desired=GpuFanAcousticsValues(fan_target_temperature=75),
+            baseline=GpuFanAcousticsValues(fan_target_temperature=95)))
+
     written = []
-    monkeypatched = AsyncMock(side_effect=lambda *a, **k: written.append(a))
-    fans_routes.write_acoustic = monkeypatched
+
+    async def recording(fan_ctrl, name, value, writer):
+        written.append((name, value))
+        return True
+
+    monkeypatch.setattr(fans_routes, "write_acoustic", recording)
 
     await _put(service, GpuFanAcousticsValues())
 
+    assert written == [("fan_target_temperature", 95)], "Baseline nicht zurueckgeschrieben"
     with session_factory() as db:
         assert load_acoustics_config(db).desired.fan_target_temperature is None
 ```
@@ -1259,7 +1385,11 @@ from app.schemas.gpu_fan_acoustics import (
     GpuFanAcousticsStatus,
     GpuFanAcousticsValues,
 )
-from app.services.power.fan_gpu_acoustics import read_acoustics, write_acoustic
+from app.services.power.fan_gpu_acoustics import (
+    read_acoustics,
+    resolve_restores,
+    write_acoustic,
+)
 from app.services.power.fan_gpu_acoustics_store import (
     load_acoustics_config,
     save_acoustics_config,
@@ -1280,6 +1410,36 @@ def _competing_manager() -> Optional[str]:
     return None
 
 
+async def _acoustics_status(service) -> GpuFanAcousticsStatus:
+    """Der Zustand, den beide Endpunkte zurueckgeben.
+
+    Eigene Funktion statt eines Aufrufs von get_gpu_acoustics.__wrapped__ aus
+    dem PUT: einen Handler aus einem Handler zu rufen umgeht die
+    Abhaengigkeiten und bricht, sobald jemand einen Dekorator ergaenzt.
+    """
+    fan_ctrl = service._gpu_fan_ctrl_dir()
+    if fan_ctrl is None:
+        return GpuFanAcousticsStatus(available=False)
+
+    current = await read_acoustics(fan_ctrl)
+    with service.db_session_factory() as db:
+        desired = load_acoustics_config(db).desired.model_dump()
+
+    return GpuFanAcousticsStatus(
+        available=True,
+        competing_manager=_competing_manager(),
+        nodes={
+            name: GpuFanAcousticsNode(
+                current=node.value,
+                minimum=node.minimum,
+                maximum=node.maximum,
+                desired=desired.get(name),
+            )
+            for name, node in current.items()
+        },
+    )
+
+
 @router.get("/gpu-acoustics", response_model=GpuFanAcousticsStatus)
 @user_limiter.limit(get_limit("admin_operations"))
 async def get_gpu_acoustics(
@@ -1293,34 +1453,7 @@ async def get_gpu_acoustics(
     kommt available=false statt eines Fehlers, damit die Oberflaeche das Panel
     ausblenden kann.
     """
-    fan_ctrl = service._gpu_fan_ctrl_dir()
-    if fan_ctrl is None:
-        return GpuFanAcousticsStatus(available=False)
-
-    current = await read_acoustics(fan_ctrl)
-    with service.db_session_factory() as db:
-        desired = load_acoustics_config(db).desired.model_dump()
-
-    nodes = {
-        name: GpuFanAcousticsNode(
-            current=node.value,
-            minimum=node.minimum,
-            maximum=node.maximum,
-            desired=desired.get(name),
-        )
-        for name, node in current.items()
-    }
-
-    status = await service.get_status()
-    gpu_fans = [f for f in status["fans"] if f.get("gpu_vendor") == "amd"]
-    zero_rpm = bool(gpu_fans) and all((f.get("rpm") or 0) == 0 for f in gpu_fans)
-
-    return GpuFanAcousticsStatus(
-        available=True,
-        zero_rpm=zero_rpm,
-        competing_manager=_competing_manager(),
-        nodes=nodes,
-    )
+    return await _acoustics_status(service)
 
 
 @router.put("/gpu-acoustics", response_model=GpuFanAcousticsStatus)
@@ -1345,15 +1478,11 @@ async def set_gpu_acoustics(
     with service.db_session_factory() as db:
         config = load_acoustics_config(db)
 
-    baseline = config.baseline.model_dump()
-    incoming = body.model_dump()
-
-    to_restore = {
-        name: baseline[name]
-        for name, value in incoming.items()
-        if value is None and baseline.get(name) is not None
-        and getattr(config.desired, name) is not None
-    }
+    to_restore = resolve_restores(
+        previous_desired=config.desired.model_dump(),
+        incoming=body.model_dump(),
+        baseline=config.baseline.model_dump(),
+    )
 
     config.desired = body
     with service.db_session_factory() as db:
@@ -1364,11 +1493,11 @@ async def set_gpu_acoustics(
             fan_ctrl, name, value, service._backend._write_hwmon_file
         )
 
-    await service.apply_gpu_acoustics()
-    return await get_gpu_acoustics.__wrapped__(
-        request=request, response=response,
-        current_user=current_user, service=service,
-    )
+    # apply_acoustics, NICHT apply_gpu_acoustics: der Aufruf landet bei vier
+    # Workern meist auf einem Follower, und das Primary-Gate gehoert nur an
+    # den Startpfad (#516).
+    await service.apply_acoustics()
+    return await _acoustics_status(service)
 ```
 
 - [ ] **Step 5: Tests laufen lassen**
@@ -1399,9 +1528,57 @@ git commit -m "feat(fans): Endpunkte fuer die GPU-Akustik (#516)"
 
 **Interfaces:** keine Code-Schnittstelle; liefert die Voraussetzung, dass Task 4 und 5 auf echter Hardware schreiben können.
 
-Es gibt für diese Aufgabe **keinen automatisierten Test** — sie wirkt nur auf einer echten Maschine mit einer AMD-Karte. Die Verifikation steht in Task 9.
+Die Regel selbst wirkt nur auf echter Hardware. **Testbar ist aber die Doppelung:** die Dateiliste steht zweimal im Repo — in der Vorlage und im Installationsskript, das die Regel per Here-Doc erzeugt. Genau dieses Auseinanderlaufen hat auf dieser Box schon einmal zu einer Fehldiagnose geführt. Der Test dagegen ist billig.
 
-- [ ] **Step 1: Die udev-Regel erweitern**
+Ergänze `Test: backend/tests/test_amd_gpu_udev_rule.py` in der Dateiliste oben.
+
+- [ ] **Step 1: Den fehlschlagenden Test schreiben**
+
+```python
+"""Vorlage und Installationsskript fuehren dieselbe Dateiliste (#516).
+
+Die udev-Regel existiert zweimal: als Vorlage unter deploy/install/templates
+und als Here-Doc im Installationsskript. Laufen sie auseinander, traegt die
+installierte Regel andere Pfade als die im Repo -- und die Diagnose beginnt
+an der falschen Datei.
+"""
+import re
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parents[2]
+TEMPLATE = REPO / "deploy" / "install" / "templates" / "70-baluhost-amd-gpu.rules"
+SCRIPT = REPO / "deploy" / "scripts" / "install-amd-gpu-permissions.sh"
+
+ACOUSTIC_NODES = (
+    "fan_target_temperature",
+    "acoustic_limit_rpm_threshold",
+    "acoustic_target_rpm_threshold",
+    "fan_minimum_pwm",
+)
+
+_SYSFS = re.compile(r"/sys/class/drm/%k/device/[A-Za-z0-9_/]+")
+
+
+def _sysfs_paths(text: str) -> set:
+    return set(_SYSFS.findall(text))
+
+
+def test_template_and_script_carry_the_same_paths():
+    assert _sysfs_paths(TEMPLATE.read_text()) == _sysfs_paths(SCRIPT.read_text())
+
+
+def test_the_acoustic_nodes_are_covered():
+    paths = _sysfs_paths(TEMPLATE.read_text())
+    for node in ACOUSTIC_NODES:
+        assert any(p.endswith("gpu_od/fan_ctrl/" + node) for p in paths), node
+```
+
+- [ ] **Step 2: Lauf gegen die unveränderte Regel**
+
+Run: `cd backend ; python -m pytest tests/test_amd_gpu_udev_rule.py --no-cov -q`
+Expected: `test_the_acoustic_nodes_are_covered` schlägt fehl — die vier Knoten fehlen noch.
+
+- [ ] **Step 3: Die udev-Regel erweitern**
 
 In `70-baluhost-amd-gpu.rules` die Dateiliste im `RUN+=`-Ausdruck um die vier Akustik-Knoten ergänzen. Der Aufbau bleibt: `for f in <liste>; do [ -e "$f" ] && chgrp video "$f" && chmod g+w "$f"; done`.
 
@@ -1416,18 +1593,20 @@ Ergänzte Pfade:
 
 Im Kopfkommentar der Datei festhalten, warum diese Knoten dazukommen und dass `gpu_od/` erst mit der Overdrive-Initialisierung entsteht — der `[ -e ]`-Schutz fängt das ab, aber es ist der Grund für den Reboot-Test in Task 9.
 
-- [ ] **Step 2: Dieselbe Liste im Installationsskript nachziehen**
+- [ ] **Step 4: Dieselbe Liste im Installationsskript nachziehen**
 
 `install-amd-gpu-permissions.sh` schreibt die Regel per Here-Doc. Die Dateiliste dort muss identisch sein — sonst weichen installierte und im Repo liegende Regel voneinander ab, was auf dieser Box schon einmal zu einer Fehldiagnose geführt hat (siehe `project_deploy_sudoers_provisioning`).
 
-- [ ] **Step 3: Die Betriebsdokumentation ergänzen**
+- [ ] **Step 5: Die Betriebsdokumentation ergänzen**
 
 In `docs/deployment/AMD_GPU_PERMISSIONS.de.md` die vier neuen Knoten aufführen, mit dem Hinweis, dass die Regel erst greift, wenn `gpu_od/` existiert, und dass der Deploy dafür einmal mit `SYNC_PERMISSIONS=1` laufen muss.
 
-- [ ] **Step 4: Committen**
+- [ ] **Step 6: Test laufen lassen und committen**
+
+Run: `cd backend ; python -m pytest tests/test_amd_gpu_udev_rule.py --no-cov -q` — Expected: 2 passed
 
 ```bash
-git add deploy/install/templates/70-baluhost-amd-gpu.rules deploy/scripts/install-amd-gpu-permissions.sh docs/deployment/AMD_GPU_PERMISSIONS.de.md
+git add backend/tests/test_amd_gpu_udev_rule.py deploy/install/templates/70-baluhost-amd-gpu.rules deploy/scripts/install-amd-gpu-permissions.sh docs/deployment/AMD_GPU_PERMISSIONS.de.md
 git commit -m "chore(deploy): Schreibrechte fuer gpu_od/fan_ctrl ueber die udev-Regel (#516)"
 ```
 
@@ -1459,7 +1638,6 @@ export interface GpuAcousticsNode {
 
 export interface GpuAcousticsStatus {
   available: boolean;
-  zero_rpm: boolean;
   competing_manager: string | null;
   nodes: Record<string, GpuAcousticsNode>;
 }
@@ -1501,7 +1679,6 @@ An `FirmwareFanNotice.test.tsx` anhängen:
 ```tsx
 const STATUS = {
   available: true,
-  zero_rpm: true,
   competing_manager: null as string | null,
   nodes: {
     fan_target_temperature: { current: 95, minimum: 25, maximum: 105, desired: null },
