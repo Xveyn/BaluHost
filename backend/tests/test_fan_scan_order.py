@@ -5,7 +5,12 @@ Eingaenge unsortiert. Weder Path.iterdir() noch Path.glob() sortieren -- beide
 liefern os.scandir-Reihenfolge. Damit war die Einfuegereihenfolge von
 _fan_cache und die Wahl des Fallback-Sensors reine readdir-Reihenfolge.
 
-Beide Tests erzwingen eine numerisch absteigende Eingangsreihenfolge, statt
+Die beiden Schwesterfunktionen _find_cpu_temp_sensor und
+get_available_temp_sensors sortierten zwar, aber lexikografisch --
+deterministisch und trotzdem falsch, weil "temp10_input" vor "temp1_input"
+steht.
+
+Die Reihenfolge-Tests erzwingen eine numerisch absteigende Eingangsreihenfolge, statt
 sich auf die Reihenfolge des jeweiligen Dateisystems zu verlassen: auf NTFS
 ist sie alphabetisch, auf ext4 hashbasiert. Ein Test, der die eine Ordnung
 voraussetzt, waere auf dem anderen System gruen, ohne etwas zu pruefen.
@@ -133,3 +138,42 @@ async def test_temp_fallback_picks_lowest_numbered_sensor(
     assert chip_a, "chipa wurde gar nicht gescannt"
     for info in chip_a:
         assert info["temp_path"].name == "temp1_input"
+
+
+def _cpu_chip_tree(tmp_path: Path) -> Path:
+    """Ein coretemp-Chip mit temp1 und temp10, ohne PWM-Kanal.
+
+    coretemp exponiert temp1 als Package-Temperatur und je einen Eingang pro
+    Kern. Ab zehn Eintraegen faellt die lexikografische Ordnung auseinander:
+    "temp10_input" steht dann vor "temp1_input".
+    """
+    sysfs = tmp_path / "sys"
+    _chip(sysfs, "coretemp.0", "hwmon4", "coretemp",
+          pwm_channels=[], temp_inputs={1: "45000", 10: "70000"})
+    return sysfs / "class" / "hwmon"
+
+
+def test_cpu_sensor_is_the_package_not_a_core(tmp_path, monkeypatch):
+    """_find_cpu_temp_sensor nimmt den niedrigsten Eingang, nicht temp10."""
+    klass = _cpu_chip_tree(tmp_path)
+    backend = LinuxFanControlBackend(get_settings())
+    monkeypatch.setattr(backend, "_hwmon_base", klass)
+
+    sensor = backend._find_cpu_temp_sensor()
+
+    assert sensor is not None, "coretemp-Chip wurde nicht gefunden"
+    assert sensor[1].name == "temp1_input"
+
+
+@pytest.mark.asyncio
+async def test_available_sensors_are_listed_numerically(tmp_path, monkeypatch):
+    """Die Auswahlliste folgt der Chip- und Sensornummer, nicht dem Alphabet."""
+    klass = _two_chip_tree(tmp_path)
+    backend = LinuxFanControlBackend(get_settings())
+    monkeypatch.setattr(backend, "_hwmon_base", klass)
+
+    sensors = await backend.get_available_temp_sensors()
+
+    listed = [(entry.device_name, int(entry.sensor_id.rpartition(":temp")[2]))
+              for entry in sensors]
+    assert listed == [("chipa", 1), ("chipa", 10), ("chipb", 1)]
