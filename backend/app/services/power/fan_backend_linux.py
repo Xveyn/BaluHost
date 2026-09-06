@@ -5,6 +5,7 @@ import errno
 import getpass
 import logging
 import os
+import re
 import subprocess
 import time
 from pathlib import Path
@@ -21,6 +22,19 @@ from app.services.power.fan_identity import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _by_leading_number(path: Path) -> Tuple[int, str]:
+    """Sortierschluessel fuer hwmon-Eintraege: numerisch, nicht lexikografisch.
+
+    Ein blosses sorted() stellte "hwmon10" vor "hwmon2" und "temp10_input" vor
+    "temp1_input" -- deterministisch, aber falsch. Auf dem nct6798 traegt der
+    Chip temp1..temp13, und temp10 ist PCH_CHIP_TEMP mit Messwert 0; als
+    Fallback-Kurvenquelle waere das eine tote Zahl (#553).
+    """
+    match = re.search(r"\d+", path.name)
+    return (int(match.group()) if match else -1, path.name)
+
 
 FIRMWARE_MANAGED_WRITE_ERROR = (
     "This GPU manages its fan curve in firmware (RDNA3+). The amdgpu driver "
@@ -478,7 +492,7 @@ class LinuxFanControlBackend(FanControlBackend):
         cpu_sensor_id = cpu_sensor[0] if cpu_sensor else None
         cpu_temp_path = cpu_sensor[1] if cpu_sensor else None
 
-        for hwmon_dir in self._hwmon_base.iterdir():
+        for hwmon_dir in sorted(self._hwmon_base.iterdir(), key=_by_leading_number):
             if not hwmon_dir.is_dir() or not hwmon_dir.name.startswith("hwmon"):
                 continue
 
@@ -491,7 +505,8 @@ class LinuxFanControlBackend(FanControlBackend):
             # (k10temp, NVMe) liefern Kurvenquellen fuer get_temperature()
             # und muessten sonst aufloesbar bleiben, obwohl sie hier nie
             # einen PWM-Kanal durchlaufen.
-            for temp_file in hwmon_dir.glob("temp[0-9]*_input"):
+            for temp_file in sorted(hwmon_dir.glob("temp[0-9]*_input"),
+                                    key=_by_leading_number):
                 num = temp_file.name[len("temp"):-len("_input")]
                 new_temp_paths[build_sensor_id(identity, int(num))] = temp_file
 
@@ -512,7 +527,7 @@ class LinuxFanControlBackend(FanControlBackend):
             )
 
             # Find PWM files
-            for pwm_file in hwmon_dir.glob("pwm[0-9]*"):
+            for pwm_file in sorted(hwmon_dir.glob("pwm[0-9]*"), key=_by_leading_number):
                 if "_" in pwm_file.name:  # Skip pwm1_enable, etc
                     continue
 
@@ -540,10 +555,11 @@ class LinuxFanControlBackend(FanControlBackend):
                     temp_sensor_id = cpu_sensor_id
                     temp_path = cpu_temp_path
                 else:
-                    # Fallback: use first temp sensor in same hwmon dir
+                    # Fallback: lowest-numbered temp sensor in same hwmon dir
                     temp_sensor_id = None
                     temp_path = None
-                    for temp_file in hwmon_dir.glob("temp[0-9]*_input"):
+                    for temp_file in sorted(hwmon_dir.glob("temp[0-9]*_input"),
+                                            key=_by_leading_number):
                         temp_num = temp_file.name.replace("temp", "").replace("_input", "")
                         temp_sensor_id = build_sensor_id(identity, int(temp_num))
                         temp_path = temp_file
