@@ -587,7 +587,7 @@ git commit -m "feat(fans): Akustikwerte schreiben, committen und zurueckpruefen 
 **Files:**
 - Modify: `backend/app/models/fans.py` (am Dateiende anhängen)
 - Create: `backend/app/schemas/gpu_fan_acoustics.py`
-- Create: `backend/alembic/versions/<neue_rev>_gpu_fan_acoustics_config.py`
+- Create: `backend/alembic/versions/d1e5a83f47c2_gpu_fan_acoustics_config.py`
 - Create: `backend/app/services/power/fan_gpu_acoustics_store.py`
 - Test: `backend/tests/test_fan_gpu_acoustics_store.py`
 
@@ -676,7 +676,7 @@ Erwartet: `c9a4e77b2d10 (head)`. Dann von Hand anlegen (kein Autogenerate — es
 ```python
 """gpu fan acoustics config
 
-Revision ID: <neu>
+Revision ID: d1e5a83f47c2
 Revises: c9a4e77b2d10
 """
 from typing import Sequence, Union
@@ -684,7 +684,7 @@ from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
 
-revision: str = "<neu>"
+revision: str = "d1e5a83f47c2"
 down_revision: Union[str, Sequence[str], None] = "c9a4e77b2d10"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
