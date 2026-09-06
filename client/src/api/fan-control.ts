@@ -615,3 +615,38 @@ export async function deleteComposite(id: string): Promise<void> {
 export async function setGpuManualMode(fanId: string, enabled: boolean): Promise<void> {
   await apiClient.post(`/api/fans/${encodeURIComponent(fanId)}/gpu-manual-mode`, { enabled });
 }
+
+// --- GPU Acoustics (firmware fan-control nodes, e.g. amdgpu pmfw) ---
+
+export interface GpuAcousticsNode {
+  current: number;
+  minimum: number;
+  maximum: number;
+  desired: number | null;
+}
+
+export interface GpuAcousticsStatus {
+  available: boolean;
+  competing_manager: string | null;
+  nodes: Record<string, GpuAcousticsNode>;
+}
+
+/**
+ * Get the GPU acoustics status (available fan-control nodes with their
+ * driver-reported ranges, plus any observed desired values).
+ */
+export async function getGpuAcoustics(): Promise<GpuAcousticsStatus> {
+  const response = await apiClient.get<GpuAcousticsStatus>('/api/fans/gpu-acoustics');
+  return response.data;
+}
+
+/**
+ * Set GPU acoustics values. A `null` value for a field means "stop managing
+ * it" and restores the value that stood before BaluHost first touched it.
+ */
+export async function setGpuAcoustics(
+  values: Record<string, number | null>,
+): Promise<GpuAcousticsStatus> {
+  const response = await apiClient.put<GpuAcousticsStatus>('/api/fans/gpu-acoustics', values);
+  return response.data;
+}
