@@ -871,7 +871,8 @@
       "scheduled": "Zeitplan",
       "manualPwm": "Manuelles PWM",
       "noSensor": "Kein Sensor zugewiesen",
-      "pwmError": "PWM-Fehler"
+      "pwmError": "PWM-Fehler",
+      "zeroRpm": "Zero-RPM — die Karte hat den Lüfter angehalten"
     },
     "details": {
       "temperatureCol": "Temperatur (°C)",

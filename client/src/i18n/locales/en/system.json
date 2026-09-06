@@ -876,7 +876,8 @@
       "scheduled": "Schedule",
       "manualPwm": "Manual PWM",
       "noSensor": "No sensor assigned",
-      "pwmError": "PWM error"
+      "pwmError": "PWM error",
+      "zeroRpm": "Zero RPM — the card has stopped the fan"
     },
     "details": {
       "temperatureCol": "Temperature (°C)",
