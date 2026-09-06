@@ -90,6 +90,13 @@ class FanConfig(Base):
     # ein Wert >= 2, den der Scan vor dem ersten Write gelesen hat. NULL heisst:
     # noch nie eine Automatik gesehen, also keine Rueckgabe.
     pwm_enable_restore: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # Der Vorzustand der AMD-GPU vor dem Manual-Mode (#411). Lag frueher in
+    # einem modulweiten Dict in routes/fans.py und war damit pro Uvicorn-Worker
+    # getrennt: schaltete ein anderer Worker ab als eingeschaltet hatte, wurde
+    # ein GERATENER Vorzustand zurueckgeschrieben. NULL heisst: kein
+    # Manual-Mode aktiv, nichts zurueckzunehmen.
+    gpu_manual_prev_level: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    gpu_manual_prev_pwm_enable: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     hysteresis_celsius: Mapped[float] = mapped_column(Float, default=3.0, nullable=False)
     # --- Curve type & params ---
     curve_type: Mapped[str] = mapped_column(String(20), default="graph", nullable=False)
