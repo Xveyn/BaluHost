@@ -140,6 +140,44 @@ async def test_stop_cancels_the_loop_before_releasing(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_switch_backend_restarts_loop_even_when_load_configs_fails(monkeypatch):
+    """Ein gescheiterter Wechsel darf die Regelung nicht dauerhaft stilllegen.
+
+    Review-Fix zu #534: der Vorspann von switch_backend() stoppt die
+    Monitoring-Schleife VOR dem eigentlichen Tausch. Wirft _load_fan_configs()
+    danach (z. B. weil die Datenbank kurz nicht erreichbar ist), muss der
+    Neustart trotzdem laufen -- sonst bleibt die Regelung bis zum
+    Prozess-Neustart tot, obwohl sie vor dem Aufruf lief.
+    """
+    service = _service(monkeypatch)
+    service._backend = _backend(current_enable=1)
+
+    async def loop():
+        await asyncio.sleep(3600)
+
+    service._is_running = True
+    service._monitoring_task = asyncio.create_task(loop())
+    await asyncio.sleep(0)
+
+    async def boom():
+        raise RuntimeError("Datenbank kurz nicht erreichbar")
+
+    monkeypatch.setattr(service, "_load_fan_configs", boom)
+
+    with pytest.raises(RuntimeError):
+        await service.switch_backend(use_linux=False)
+
+    assert service._is_running is True
+    assert service._monitoring_task is not None
+
+    service._monitoring_task.cancel()
+    try:
+        await service._monitoring_task
+    except asyncio.CancelledError:
+        pass
+
+
+@pytest.mark.asyncio
 async def test_release_is_idempotent(monkeypatch):
     """Zweiter Lauf: der Ist-Wert stimmt bereits, es wird nichts geschrieben."""
     service = _service(monkeypatch)

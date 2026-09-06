@@ -6,6 +6,7 @@ davor, unterbliebe die Rueckgabe ausgerechnet bei den Kanaelen, die zuvor
 Schreibfehler hatten -- den kritischsten.
 """
 import errno
+import logging
 import os
 from pathlib import Path
 
@@ -70,7 +71,13 @@ async def test_release_verifies_by_reading_back(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_release_reports_write_failure(tmp_path, monkeypatch):
+async def test_release_reports_write_failure(tmp_path, monkeypatch, caplog):
+    """Die Meldung nennt den errno, deutet ihn aber nicht als Rechteproblem.
+
+    _write_hwmon_file meldet nach einem gescheiterten sudo-tee-Fallback immer
+    EACCES, auch wenn der Kernel eigentlich EINVAL geliefert hat -- die
+    Formulierung darf deshalb nicht "keine Rechte" behaupten (#534).
+    """
     backend, fan_id = await _backend(tmp_path, monkeypatch)
 
     async def refuse(path, value):
@@ -78,7 +85,13 @@ async def test_release_reports_write_failure(tmp_path, monkeypatch):
 
     monkeypatch.setattr(backend, "_write_hwmon_file", refuse)
 
-    assert await backend.release_to_board(fan_id, 5) is False
+    with caplog.at_level(logging.WARNING):
+        assert await backend.release_to_board(fan_id, 5) is False
+
+    assert str(errno.EINVAL) in caplog.text
+    lowered = caplog.text.lower()
+    assert "recht" not in lowered
+    assert "permission" not in lowered
 
 
 @pytest.mark.asyncio

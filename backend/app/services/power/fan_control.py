@@ -1224,32 +1224,35 @@ class FanControlService:
         except Exception:
             logger.exception("Rueckgabe beim Backend-Wechsel fehlgeschlagen")
 
-        if use_linux:
-            # Try to switch to Linux backend
-            linux_backend = LinuxFanControlBackend(self.config)
-            if await linux_backend.is_available():
-                self._backend = linux_backend
-                self._use_linux_backend = True
-                await self._load_fan_configs()
-                logger.info("Switched to Linux fan control backend")
-                result = True, True
+        try:
+            if use_linux:
+                # Try to switch to Linux backend
+                linux_backend = LinuxFanControlBackend(self.config)
+                if await linux_backend.is_available():
+                    self._backend = linux_backend
+                    self._use_linux_backend = True
+                    await self._load_fan_configs()
+                    logger.info("Switched to Linux fan control backend")
+                    result = True, True
+                else:
+                    logger.warning("Linux backend not available")
+                    result = False, self._use_linux_backend
             else:
-                logger.warning("Linux backend not available")
-                result = False, self._use_linux_backend
-        else:
-            # Switch to dev backend
-            self._backend = DevFanControlBackend(self.config)
-            self._use_linux_backend = False
-            await self._load_fan_configs()
-            logger.info("Switched to dev fan control backend")
-            result = True, False
-
-        # Nach dem Tausch die Schleife wieder starten, falls sie lief. Beide
-        # Zweige oben enden mit `return` im Original -- hier stattdessen ueber
-        # `result` gefuehrt, damit dieser Neustart nicht verlorengeht (#534).
-        if was_running:
-            self._is_running = True
-            self._monitoring_task = asyncio.create_task(self._monitoring_loop())
+                # Switch to dev backend
+                self._backend = DevFanControlBackend(self.config)
+                self._use_linux_backend = False
+                await self._load_fan_configs()
+                logger.info("Switched to dev fan control backend")
+                result = True, False
+        finally:
+            # Der Neustart gehoert ins finally: zwischen Abbruch (oben) und
+            # hier koennen is_available() und _load_fan_configs() werfen. Ohne
+            # das bliebe die Regelung nach einem gescheiterten Wechsel bis zum
+            # Prozess-Neustart still stehen -- schlimmer als der Zustand, den
+            # dieser Wechsel beheben sollte.
+            if was_running:
+                self._is_running = True
+                self._monitoring_task = asyncio.create_task(self._monitoring_loop())
 
         return result
 

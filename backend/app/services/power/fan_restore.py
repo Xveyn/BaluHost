@@ -29,10 +29,16 @@ def resolve_restore_value(scanned: Optional[int],
     Ist der gescannte Wert keine Beobachtung, bleibt der gespeicherte
     unveraendert -- er stammt dann aus einem frueheren Kaltstart und ist das
     Beste, was wir haben. Gibt es auch den nicht, gibt es keine Rueckgabe.
+
+    Der gespeicherte Wert wird dabei ebenso gegen is_observation() geprueft
+    wie der gescannte: die Spalte traegt keinen CHECK-Constraint, und die
+    Zusage "nur beobachtete Werte" soll nicht davon abhaengen, wer sie einmal
+    gefuellt hat (manuelle DB-Aenderung, ein kuenftiges Backfill, ein von Hand
+    geflickter Dump).
     """
     if is_observation(scanned):
         return scanned
-    return stored
+    return stored if is_observation(stored) else None
 
 
 def needs_release(current: Optional[int], target: Optional[int]) -> bool:

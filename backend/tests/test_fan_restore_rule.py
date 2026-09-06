@@ -47,6 +47,22 @@ def test_without_observation_there_is_no_target():
     assert resolve_restore_value(scanned=None, stored=None) is None
 
 
+def test_manual_control_value_in_storage_is_never_returned():
+    """Die Spalte hat keinen CHECK-Constraint -- der gespeicherte Wert wird
+    deshalb ebenso geprueft wie der gescannte. Eine "1" in der DB (manuelle
+    Aenderung, Backfill, geflickter Dump) darf beim Beenden nicht als
+    Rueckgabeziel dienen -- das waere genau der kaputte Zustand, den #534
+    beseitigen soll.
+    """
+    assert resolve_restore_value(scanned=None, stored=1) is None
+
+
+def test_full_speed_value_in_storage_is_never_returned():
+    """Wie oben, fuer den anderen Nicht-Automatik-Wert (Vollgas, kein
+    CHECK-Constraint auf der Spalte)."""
+    assert resolve_restore_value(scanned=None, stored=0) is None
+
+
 def test_needs_release_only_with_a_target():
     assert needs_release(current=1, target=5) is True
     assert needs_release(current=5, target=5) is False
