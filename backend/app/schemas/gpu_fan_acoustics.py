@@ -26,3 +26,23 @@ class GpuFanAcousticsConfig(BaseModel):
 
     desired: GpuFanAcousticsValues = GpuFanAcousticsValues()
     baseline: GpuFanAcousticsValues = GpuFanAcousticsValues()
+
+
+class GpuFanAcousticsNode(BaseModel):
+    """Ein Regler: aktueller Stand, Bereich vom Treiber, verwalteter Wert."""
+
+    current: int
+    minimum: int
+    maximum: int
+    desired: Optional[int] = None
+
+
+class GpuFanAcousticsStatus(BaseModel):
+    """Kein zero_rpm-Feld: das Frontend hat die Luefterliste ohnehin und
+    leitet es aus pwm_control und rpm ab. Serverseitig zu bestimmen hiesse,
+    get_status() pro Poll ein zweites Mal zu durchlaufen -- und die beiden
+    Anzeigen koennten auseinanderlaufen (#516)."""
+
+    available: bool
+    competing_manager: Optional[str] = None
+    nodes: dict[str, GpuFanAcousticsNode] = {}
