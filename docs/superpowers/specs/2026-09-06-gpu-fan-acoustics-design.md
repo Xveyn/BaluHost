@@ -49,7 +49,9 @@ FAN_TARGET_TEMPERATURE:
 
 `fan_target_temperature` auf 25 gesetzt, bei Junction ≈ 40 °C: `fan1_input` blieb `0`, `pwm1` blieb `0`. Die Karte schaltet den Lüfter im Leerlauf ab; die Akustikwerte formen das Verhalten erst oberhalb dieser Schwelle.
 
-Ein `fan_zero_rpm_enable` gibt es auf `6.12.74` **nicht** — der Knoten kam erst in späteren Kernelfassungen dazu. BaluHost kann diese Schwelle also nicht verschieben. Sie ist eine Grenze des Entwurfs, keine Aufgabe darin.
+Ein `fan_zero_rpm_enable` gibt es auf `6.12.74` **nicht** — der `ls` oben zeigt fünf Knoten, dieser ist nicht dabei. Recherchiert: er kam mit **Linux 6.13** für SMU13 (RX 7000), zusammen mit `fan_zero_rpm_stop_temperature`; die Patches entstanden im Oktober 2024, geschrieben von einem RX-7900-XTX-Besitzer mit genau diesem Anliegen.
+
+Die Grenze ist damit **nicht dauerhaft, sondern eine Kernel-Version entfernt.** Auf 6.12 kann BaluHost die Schwelle nicht verschieben; auf 6.13+ könnte es. Der Entwurf baut das nicht, aber er verbaut es auch nicht: `read_acoustics` zählt die vorhandenen Knoten auf, statt vier Namen fest zu verdrahten, und das JSON-Feld im Datenmodell nimmt ein fünftes Feld ohne Migration auf.
 
 ## Ziele
 
@@ -60,7 +62,9 @@ Ein `fan_zero_rpm_enable` gibt es auf `6.12.74` **nicht** — der Knoten kam ers
 
 ## Nicht-Ziele
 
-- **`fan_curve`** (fünf Stützstellen, Temperatur → Prozent). Braucht eine eigene Editor-Ansicht, weil der vorhandene Kurveneditor mit freien Stützstellen arbeitet und die Firmware genau fünf Punkte mit festen Bereichen vorgibt. Später, wenn die Skalare sich als tragfähig erwiesen haben.
+- **`fan_curve`** (fünf Stützstellen, Temperatur → Prozent). Nicht bloss „später" — es ist der **andere Modus**. Die Kernel-Doku ist eindeutig: die vier Skalare arbeiten „under auto fan control mode only" und schalten die Karte beim Schreiben implizit in den Auto-Modus; `fan_curve` schaltet sie implizit in den Manual-Modus. Beides gleichzeitig gibt es nicht.
+
+  Daraus folgt eine Nebenwirkung, die in die UI gehört: **wer einen unserer vier Werte setzt, schaltet eine womöglich anderswo gesetzte Firmware-Kurve ab.** Auf BaluNode ist `fan_curve` unbestückt (`0C 0%` ×5), die Karte läuft also ohnehin im Auto-Modus — aber die Warnung gehört an den Regler, nicht in eine Fussnote.
 - **Andere GPU-Familien.** Ältere AMD-Karten mit Live-PWM und NVIDIA/nouveau bleiben außen vor. Eine Abstraktion über Hardware, an der niemand messen kann, wäre eine Behauptung statt eines Entwurfs.
 - **Zero-RPM abschalten.** Auf diesem Kernel nicht exponiert.
 - **Automatisches Zurücksetzen beim Dienst-Ende.** Siehe die Abgrenzung zu #534 unten.
@@ -109,7 +113,9 @@ Beim Start wird nur geschrieben, was gesetzt ist. Ein leeres `desired` bedeutet:
 
 Vor dem ersten Write auf einen Knoten wird sein Ist-Wert erfasst und in `baseline` abgelegt. Die Aktion „auf Standard zurücksetzen" schreibt diesen Wert.
 
-Damit braucht der Entwurf das `r`-Kommando aus der Kernel-Doku nicht, das nicht verifiziert wurde, und rät keinen Herstellerstandard. Es ist das Prinzip aus #534: zurückgeschrieben wird nur, was BaluHost selbst gelesen hat.
+Ein `r` je Knoten ist in der Kernel-Doku als „reset to defaults" dokumentiert — es wäre also verfügbar. Es beantwortet aber eine andere Frage: `r` stellt den **Treiber-Standard** her, die Baseline stellt her, **was vor BaluHost dort stand**. Das ist der Unterschied zwischen „wie es der Hersteller vorsah" und „wie du es hattest".
+
+Der Entwurf wählt die Baseline, weil sie die Frage beantwortet, die der Nutzer stellt, wenn er auf „Zurücksetzen" drückt. Es ist zugleich das Prinzip aus #534: zurückgeschrieben wird nur, was BaluHost selbst gelesen hat.
 
 Auf BaluNode erfasst das den Zustand, den LACT hinterlassen hat (`acoustic_limit = 3000`). Das ist gewollt — „wie es vor BaluHost war" ist die ehrliche Bedeutung von Zurücksetzen.
 
@@ -130,7 +136,7 @@ Ein fünfter Regler — etwa `fan_curve`, wenn er später dazukommt — ist dann
 ```python
 def parse_node(text: str) -> ParsedNode
 def find_fan_ctrl_dir(hwmon_dir: Path) -> Optional[Path]
-async def read_acoustics(fan_ctrl_dir: Path) -> Dict[str, ParsedNode]
+async def read_acoustics(fan_ctrl_dir: Path) -> Dict[str, ParsedNode]   # zaehlt auf, verdrahtet nicht
 async def write_acoustic(fan_ctrl_dir: Path, key: str, value: int, write) -> bool
 ```
 
@@ -141,6 +147,8 @@ Der Wert ist die Zeile nach dem ersten `…:`, der Bereich sind die zwei Zahlen 
 Grund: die Namen sind nicht einheitlich — `FAN_TARGET_TEMPERATURE` gegen `TARGET_TEMPERATURE`, `OD_ACOUSTIC_LIMIT` gegen `ACOUSTIC_LIMIT`. Auf Namen zu parsen hieße, eine Inkonsistenz des Treibers in unseren Code zu übernehmen.
 
 Die Funktion ist rein und ohne Hardware testbar — wie `fan_restore.py` aus #534.
+
+`read_acoustics` zählt aus demselben Grund die vorhandenen Knoten auf, statt vier Namen fest zu verdrahten: auf Kernel 6.13+ kommen `fan_zero_rpm_enable` und `fan_zero_rpm_stop_temperature` dazu, und ein aufzählendes Lesen nimmt sie ohne Codeänderung mit. Was BaluHost davon *anbietet*, entscheidet die Schema-Ebene — die Aufzählung erspart nur, dass ein neuer Knoten unsichtbar bleibt.
 
 ### `find_fan_ctrl_dir` erbt vorhandene Arbeit
 
