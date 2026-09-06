@@ -199,13 +199,24 @@ def register_all_services(
         config_enabled_fn=lambda: settings.gpu_power_management_enabled,
     )
 
-    # Fan Control
+    # Fan Control — start_fn closes over is_primary_worker so a service
+    # restart triggered via the admin UI keeps the worker's primary/follower
+    # role intact, mirroring the CPU and GPU power managers. Ohne den
+    # Wrapper griffe der Default monitoring=True, und ein Sekundaer-Worker
+    # startete eine zweite, vollwertige Regelschleife (#555).
+    _is_primary_worker_for_fans = is_primary_worker
+
+    async def _start_fan_control_for_worker():
+        await fan_control.start_fan_control(
+            monitoring=_is_primary_worker_for_fans
+        )
+
     register_service(
         name="fan_control",
         display_name="Fan Control",
         get_status_fn=fan_control.get_service_status,
         stop_fn=fan_control.stop_fan_control,
-        start_fn=fan_control.start_fan_control,
+        start_fn=_start_fan_control_for_worker,
         config_enabled_fn=lambda: settings.fan_control_enabled,
     )
 

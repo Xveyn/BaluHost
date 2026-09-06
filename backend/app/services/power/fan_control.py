@@ -172,6 +172,10 @@ class FanControlService:
         # Rueckgabewerte pro Luefter, beim Start aus der DB geladen. stop()
         # braucht sie ohne Datenbankzugriff (#534).
         self._restore_values: Dict[str, int] = {}
+        # Serialisiert start/stop/switch_backend: alle drei tauschen
+        # _monitoring_task aus, und eine ueberschriebene Referenz waere eine
+        # Regelschleife, die niemand mehr abbrechen kann (#559).
+        self._lifecycle_lock = asyncio.Lock()
 
         FanControlService._instance = self
 
@@ -202,47 +206,68 @@ class FanControlService:
             monitoring: If True, start the monitoring loop (primary worker).
                         If False, only initialize backend + configs (secondary workers).
         """
-        if not self.config.fan_control_enabled:
-            logger.info("Fan control disabled in config")
+        async with self._lifecycle_lock:
+            if not self.config.fan_control_enabled:
+                logger.info("Fan control disabled in config")
+                return
+
+            # Initialize backend
+            await self._initialize_backend()
+
+            if not self._backend:
+                logger.warning("No fan control backend available")
+                return
+
+            await self._rebuild_registry()
+
+            # Load fan configs from database
+            await self._load_fan_configs()
+
+            # Eine noch laufende Schleife gehoert zum alten Backend und zu
+            # den alten Konfigurationen -- und ihre Referenz ginge bei der
+            # Zuweisung unten verloren (#559).
+            await self._cancel_monitoring_task()
+
+            if monitoring:
+                # Start monitoring loop (primary worker only)
+                self._start_monitoring_task()
+            logger.info("Fan control service started (monitoring=%s)", monitoring)
+
+    async def _cancel_monitoring_task(self) -> None:
+        """Bricht eine laufende Regelschleife ab und gibt die Referenz frei.
+
+        Immer vor einer Neuzuweisung aufzurufen: eine ueberschriebene
+        Referenz laesst die alte Task unerreichbar weiterlaufen.
+        """
+        task = self._monitoring_task
+        self._monitoring_task = None
+        self._is_running = False
+        if task is None:
             return
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
 
-        # Initialize backend
-        await self._initialize_backend()
-
-        if not self._backend:
-            logger.warning("No fan control backend available")
-            return
-
-        await self._rebuild_registry()
-
-        # Load fan configs from database
-        await self._load_fan_configs()
-
-        if monitoring:
-            # Start monitoring loop (primary worker only)
-            self._is_running = True
-            self._monitoring_task = asyncio.create_task(self._monitoring_loop())
-        logger.info("Fan control service started (monitoring=%s)", monitoring)
+    def _start_monitoring_task(self) -> None:
+        self._is_running = True
+        self._monitoring_task = asyncio.create_task(self._monitoring_loop())
 
     async def stop(self):
         """Stop fan control service."""
-        self._is_running = False
+        async with self._lifecycle_lock:
+            # Erst die Schleife stilllegen, dann zurueckgeben -- umgekehrt
+            # schriebe sie im naechsten Zyklus pwm_enable=1 gegen die
+            # Rueckgabe (#534).
+            await self._cancel_monitoring_task()
 
-        if self._monitoring_task:
-            self._monitoring_task.cancel()
             try:
-                await self._monitoring_task
-            except asyncio.CancelledError:
-                pass
+                await self._release_all_to_board()
+            except Exception:
+                logger.exception("Rueckgabe an die Board-Automatik fehlgeschlagen")
 
-        # Erst die Schleife stilllegen, dann zurueckgeben -- umgekehrt schriebe
-        # sie im naechsten Zyklus pwm_enable=1 gegen die Rueckgabe (#534).
-        try:
-            await self._release_all_to_board()
-        except Exception:
-            logger.exception("Rueckgabe an die Board-Automatik fehlgeschlagen")
-
-        logger.info("Fan control service stopped")
+            logger.info("Fan control service stopped")
 
     async def _release_all_to_board(self) -> None:
         """Gibt alle Luefter mit bekanntem Rueckgabewert an die Automatik zurueck.
@@ -1205,56 +1230,50 @@ class FanControlService:
         Returns:
             (success, is_using_linux_backend)
         """
-        # Gleiche Reihenfolge wie in stop(): erst die Schleife stilllegen, dann
-        # zurueckgeben, dann tauschen. Ohne das schriebe die weiterlaufende
-        # Schleife pwm_enable=1 gegen die Rueckgabe, und ein Wechsel auf das
-        # Dev-Backend liesse jeden Kanal in Handsteuerung zurueck -- niemand
-        # regelt, ueber einen Admin-Endpunkt (#534).
-        was_running = self._is_running
-        self._is_running = False
-        if self._monitoring_task:
-            self._monitoring_task.cancel()
+        async with self._lifecycle_lock:
+            # Gleiche Reihenfolge wie in stop(): erst die Schleife stilllegen,
+            # dann zurueckgeben, dann tauschen. Ohne das schriebe die
+            # weiterlaufende Schleife pwm_enable=1 gegen die Rueckgabe, und ein
+            # Wechsel auf das Dev-Backend liesse jeden Kanal in Handsteuerung
+            # zurueck -- niemand regelt, ueber einen Admin-Endpunkt (#534).
+            was_running = self._is_running
+            await self._cancel_monitoring_task()
             try:
-                await self._monitoring_task
-            except asyncio.CancelledError:
-                pass
-            self._monitoring_task = None
-        try:
-            await self._release_all_to_board()
-        except Exception:
-            logger.exception("Rueckgabe beim Backend-Wechsel fehlgeschlagen")
+                await self._release_all_to_board()
+            except Exception:
+                logger.exception("Rueckgabe beim Backend-Wechsel fehlgeschlagen")
 
-        try:
-            if use_linux:
-                # Try to switch to Linux backend
-                linux_backend = LinuxFanControlBackend(self.config)
-                if await linux_backend.is_available():
-                    self._backend = linux_backend
-                    self._use_linux_backend = True
-                    await self._load_fan_configs()
-                    logger.info("Switched to Linux fan control backend")
-                    result = True, True
+            try:
+                if use_linux:
+                    # Try to switch to Linux backend
+                    linux_backend = LinuxFanControlBackend(self.config)
+                    if await linux_backend.is_available():
+                        self._backend = linux_backend
+                        self._use_linux_backend = True
+                        await self._load_fan_configs()
+                        logger.info("Switched to Linux fan control backend")
+                        result = True, True
+                    else:
+                        logger.warning("Linux backend not available")
+                        result = False, self._use_linux_backend
                 else:
-                    logger.warning("Linux backend not available")
-                    result = False, self._use_linux_backend
-            else:
-                # Switch to dev backend
-                self._backend = DevFanControlBackend(self.config)
-                self._use_linux_backend = False
-                await self._load_fan_configs()
-                logger.info("Switched to dev fan control backend")
-                result = True, False
-        finally:
-            # Der Neustart gehoert ins finally: zwischen Abbruch (oben) und
-            # hier koennen is_available() und _load_fan_configs() werfen. Ohne
-            # das bliebe die Regelung nach einem gescheiterten Wechsel bis zum
-            # Prozess-Neustart still stehen -- schlimmer als der Zustand, den
-            # dieser Wechsel beheben sollte.
-            if was_running:
-                self._is_running = True
-                self._monitoring_task = asyncio.create_task(self._monitoring_loop())
+                    # Switch to dev backend
+                    self._backend = DevFanControlBackend(self.config)
+                    self._use_linux_backend = False
+                    await self._load_fan_configs()
+                    logger.info("Switched to dev fan control backend")
+                    result = True, False
+            finally:
+                # Der Neustart gehoert ins finally: zwischen Abbruch (oben)
+                # und hier koennen is_available() und _load_fan_configs()
+                # werfen. Ohne das bliebe die Regelung nach einem
+                # gescheiterten Wechsel bis zum Prozess-Neustart still stehen
+                # -- schlimmer als der Zustand, den dieser Wechsel beheben
+                # sollte.
+                if was_running:
+                    self._start_monitoring_task()
 
-        return result
+            return result
 
     # --- Delegating methods for backward compatibility ---
 
