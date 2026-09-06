@@ -34,6 +34,15 @@ from app.services.power.fan_sources import (
     TempSourceRegistry, HwmonTempSource, GpuTempSource, DiskTempSource, MixTempSource,
 )
 from app.services.power.fan_curve_eval import evaluate_curve
+from app.services.power.fan_gpu_acoustics import (
+    find_fan_ctrl_dir,
+    read_acoustics,
+    write_acoustic,
+)
+from app.services.power.fan_gpu_acoustics_store import (
+    load_acoustics_config,
+    save_acoustics_config,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -230,6 +239,13 @@ class FanControlService:
             # Load fan configs from database
             await self._load_fan_configs()
 
+            # Die GPU-Akustik gehoert zum Start, nicht in den Regelzyklus:
+            # sie ist Konfiguration, kein Regelkreis (#516).
+            try:
+                await self.apply_gpu_acoustics()
+            except Exception:
+                logger.exception("GPU-Akustik konnte nicht angewendet werden")
+
             # Eine noch laufende Schleife gehoert zum alten Backend und zu
             # den alten Konfigurationen -- und ihre Referenz ginge bei der
             # Zuweisung unten verloren (#559).
@@ -345,6 +361,88 @@ class FanControlService:
                 "Rueckgabe an die Board-Automatik: %d erfolgreich, %d fehlgeschlagen",
                 released, failed,
             )
+
+    async def apply_gpu_acoustics(self) -> None:
+        """Startpfad: nur der Primary wendet an.
+
+        Beim Start wuerden sonst vier Uvicorn-Worker dieselben vier Werte
+        gegeneinander setzen (#555, #559).
+
+        Das Gate sitzt bewusst NUR hier und nicht in apply_acoustics: eine
+        ausdrueckliche Nutzeraktion ueber den PUT-Endpunkt landet auf dem
+        Worker, der die Anfrage bedient -- bei vier Workern in drei von vier
+        Faellen auf einem Follower. Steckte das Gate weiter innen, quittierte
+        der Endpunkt mit 200 und aenderte an der Karte nichts.
+        """
+        if not getattr(lifespan, "IS_PRIMARY_WORKER", False):
+            return
+        await self.apply_acoustics()
+
+    async def apply_acoustics(self) -> None:
+        """Beobachtet die Baseline und wendet die gewuenschten Werte an (#516).
+
+        Ohne Primary-Gate -- siehe apply_gpu_acoustics. Die Baseline wird nur
+        erfasst, wo sie noch fehlt: sonst zeichnete der zweite Aufruf den
+        eigenen Eingriff als 'wie es vorher war' auf.
+        """
+        fan_ctrl = self._gpu_fan_ctrl_dir()
+        if fan_ctrl is None:
+            return
+
+        with self.db_session_factory() as db:
+            config = load_acoustics_config(db)
+
+        desired = config.desired.model_dump()
+        if not any(value is not None for value in desired.values()):
+            return
+
+        current = await read_acoustics(fan_ctrl)
+
+        baseline = config.baseline.model_dump()
+        changed_baseline = False
+        for name, value in desired.items():
+            if value is None or baseline.get(name) is not None:
+                continue
+            node = current.get(name)
+            if node is not None:
+                baseline[name] = node.value
+                changed_baseline = True
+
+        if changed_baseline:
+            config.baseline = type(config.baseline)(**baseline)
+            with self.db_session_factory() as db:
+                save_acoustics_config(db, config)
+
+        for name, value in desired.items():
+            if value is None:
+                continue
+            await write_acoustic(
+                fan_ctrl, name, value, self._backend._write_hwmon_file
+            )
+
+    def _gpu_fan_ctrl_dir(self):
+        """Das fan_ctrl-Verzeichnis der AMD-GPU, falls die Karte es anbietet.
+
+        Gefunden wird es ueber einen gescannten GPU-Luefter, obwohl die
+        Akustikwerte der KARTE gehoeren. Hat die Karte keinen gescannten
+        Luefter -- etwa weil fan1_input fehlt --, bleibt das Panel aus,
+        obwohl die Schnittstelle vorhanden waere. Auf der Referenzhardware
+        tritt das nicht auf; eine zweite Geraeteaufloesung dafuer zu bauen
+        waere Aufwand ohne belegten Anlass (#516).
+        """
+        cache = getattr(self._backend, "_fan_cache", None)
+        if not isinstance(cache, dict):
+            return None
+        for info in cache.values():
+            if not isinstance(info, dict) or info.get("gpu_vendor") != "amd":
+                continue
+            pwm_path = info.get("pwm_path")
+            if pwm_path is None:
+                continue
+            found = find_fan_ctrl_dir(pwm_path.parent)
+            if found is not None:
+                return found
+        return None
 
     async def _initialize_backend(self):
         """Initialize appropriate backend."""
