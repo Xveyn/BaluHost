@@ -9,7 +9,11 @@ import logging
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Awaitable, Callable, Dict, Mapping, Optional, Tuple
+
+# Schreibfunktion in der Form von LinuxFanControlBackend._write_hwmon_file:
+# (Pfad, Wert) -> (ok, errno).
+WriteFn = Callable[[Path, str], Awaitable[Tuple[bool, Optional[int]]]]
 
 logger = logging.getLogger(__name__)
 
@@ -85,20 +89,31 @@ async def read_acoustics(fan_ctrl_dir: Path) -> Dict[str, ParsedNode]:
     parse_node-Ergebnis -- und ein kuenftiger Knoten (ab Kernel 6.13
     fan_zero_rpm_enable) kommt ohne Codeaenderung mit.
 
-    Was BaluHost davon zu SETZEN anbietet, entscheidet die Erlaubnisliste in
-    Task 2. Lesen ist offen, Schreiben ist auf bekannte Namen beschraenkt.
+    Was BaluHost davon zu SETZEN anbietet, entscheidet ACOUSTIC_NODES weiter
+    unten. Lesen ist offen, Schreiben ist auf bekannte Namen beschraenkt.
+
+    Verschwindet das Verzeichnis waehrenddessen -- amdgpu-Reload oder
+    Suspend/Resume sind auf dieser Box regulaere Ereignisse --, kommt ein
+    leeres Ergebnis statt einer Exception: die Aufrufer melden dann
+    available=false, statt mit 500 abzubrechen.
     """
     nodes: Dict[str, ParsedNode] = {}
-    for path in sorted(fan_ctrl_dir.iterdir()):
-        if not path.is_file():
-            continue
-        try:
-            parsed = parse_node(path.read_text())
-        except OSError as exc:
-            logger.debug("Akustik-Knoten %s nicht lesbar: %s", path.name, exc)
-            continue
-        if parsed is not None:
-            nodes[path.name] = parsed
+    try:
+        for path in sorted(fan_ctrl_dir.iterdir()):
+            if not path.is_file():
+                continue
+            try:
+                parsed = parse_node(path.read_text())
+            except (OSError, ValueError) as exc:
+                # ValueError deckt UnicodeDecodeError mit ab: ein Knoten in
+                # fremder Kodierung darf kein Lesen der uebrigen verhindern.
+                logger.debug("Akustik-Knoten %s nicht lesbar: %s", path.name, exc)
+                continue
+            if parsed is not None:
+                nodes[path.name] = parsed
+    except OSError as exc:
+        logger.debug("Akustik-Verzeichnis %s nicht lesbar: %s", fan_ctrl_dir, exc)
+        return {}
     return nodes
 
 
@@ -114,8 +129,9 @@ ACOUSTIC_NODES = (
 )
 
 
-def resolve_restores(previous_desired: dict, incoming: dict,
-                     baseline: dict) -> Dict[str, int]:
+def resolve_restores(previous_desired: Mapping[str, Optional[int]],
+                     incoming: Mapping[str, Optional[int]],
+                     baseline: Mapping[str, Optional[int]]) -> Dict[str, int]:
     """Welche Knoten auf ihre Baseline zurueckgeschrieben werden muessen.
 
     Rein: kein sysfs, keine Datenbank. Ein Knoten wird zurueckgesetzt, wenn
@@ -135,7 +151,8 @@ def resolve_restores(previous_desired: dict, incoming: dict,
     }
 
 
-async def write_acoustic(fan_ctrl_dir: Path, name: str, value: int, write) -> bool:
+async def write_acoustic(fan_ctrl_dir: Path, name: str, value: int,
+                         write: WriteFn) -> bool:
     """Einen Akustikwert setzen und uebernehmen.
 
     Args:
