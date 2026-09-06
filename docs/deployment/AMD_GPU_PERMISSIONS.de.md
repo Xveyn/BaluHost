@@ -35,7 +35,12 @@ Verzeichnis schlicht. Die udev-Regel prüft deshalb vor jedem `chgrp`/`chmod`
 mit `[ -e ]`, ob die Datei existiert, und überspringt sie sonst folgenlos.
 Das bedeutet aber auch: ob die Regel für diese vier Dateien tatsächlich
 greift, lässt sich nur nach einem echten Boot mit vorhandenem `gpu_od/`
-verifizieren — daher der Reboot-Test in Task 9 dieses Features.
+verifizieren — und zwar an den Rechten selbst (`ls -la`), nicht daran, ob
+die Akustik-Einstellung wirkt. Das Backend fällt bei `EACCES` auf
+`sudo -n tee` zurück, und der vorhandene sudoers-Eintrag für
+`/sys/class/hwmon/*` deckt den Schreibpfad ab. Die Werte greifen also auch
+dann, wenn die Knoten weiterhin `root:root 0644` tragen — die udev-Regel ist
+hier die unprivilegierte Verbesserung, nicht die Voraussetzung.
 
 Default-Permissions auf Debian 13 sind:
 
@@ -136,8 +141,11 @@ ls -la /sys/class/drm/card0/device/gpu_od/fan_ctrl/
 ```
 
 Fehlt `gpu_od/` (noch) komplett, ist das kein Fehler der Regel — siehe
-„Hintergrund" oben. Der verlässliche Test ist ein echter Reboot (Task 9),
-nicht ein manueller `udevadm trigger` direkt nach der Installation.
+„Hintergrund" oben. Der verlässliche Test ist ein echter Reboot, nicht ein
+manueller `udevadm trigger` direkt nach der Installation — und gemessen wird
+mit diesem `ls -la`, nicht über die Funktion: dass sich Akustikwerte setzen
+lassen, beweist wegen des `sudo -n tee`-Fallbacks nicht, dass die Regel
+gegriffen hat.
 
 **2. Backend-User in `video`-Gruppe:**
 
