@@ -53,6 +53,20 @@ Ein `fan_zero_rpm_enable` gibt es auf `6.12.74` **nicht** — der `ls` oben zeig
 
 Die Grenze ist damit **nicht dauerhaft, sondern eine Kernel-Version entfernt.** Auf 6.12 kann BaluHost die Schwelle nicht verschieben; auf 6.13+ könnte es. Der Entwurf baut das nicht, aber er verbaut es auch nicht: `read_acoustics` zählt die vorhandenen Knoten auf, statt vier Namen fest zu verdrahten, und das JSON-Feld im Datenmodell nimmt ein fünftes Feld ohne Migration auf.
 
+### Kernel-Abhängigkeit
+
+Die Schnittstelle ist kein fester Bestandteil von amdgpu, sondern kam für RDNA3 erst mit einer bestimmten Kernel-Fassung. Für jeden, der BaluHost auf anderer Hardware oder anderer Distribution betreibt, ist das die entscheidende Betriebsbedingung:
+
+| Kernel | Was vorhanden ist |
+|---|---|
+| < 6.7 | `gpu_od/fan_ctrl` fehlt auf RDNA3 — die Steuerung existiert nicht |
+| 6.7 – 6.12 | die fünf Knoten: `fan_curve` plus die vier Skalare |
+| ab 6.13 | zusätzlich `fan_zero_rpm_enable` und `fan_zero_rpm_stop_temperature` |
+
+BaluNode läuft auf `6.12.74+deb13+1-amd64`, also im mittleren Band: die vier Skalare sind da, die Zero-RPM-Steuerung nicht.
+
+Der Entwurf verlangt deshalb **nirgends eine Mindestversion im Code**. Er liest, was vorhanden ist, und meldet `available: false`, wenn nichts da ist. Die Versionsmatrix gehört in die Nutzerdokumentation, damit jemand mit einer leeren Ansicht weiss, woran es liegt — nicht in eine Versionsprüfung, die bei der nächsten Distribution falsch liegt.
+
 ## Ziele
 
 - Die vier Akustik-Skalare der Karte aus BaluHost setzen: `fan_target_temperature`, `acoustic_limit_rpm_threshold`, `acoustic_target_rpm_threshold`, `fan_minimum_pwm`.
