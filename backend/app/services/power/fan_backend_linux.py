@@ -369,7 +369,7 @@ class LinuxFanControlBackend(FanControlBackend):
 
         identities = derive_all(self._hwmon_base)
 
-        for hwmon_dir in sorted(self._hwmon_base.iterdir()):
+        for hwmon_dir in sorted(self._hwmon_base.iterdir(), key=_by_leading_number):
             if not hwmon_dir.is_dir() or not hwmon_dir.name.startswith("hwmon"):
                 continue
 
@@ -389,8 +389,9 @@ class LinuxFanControlBackend(FanControlBackend):
             if identity is None:
                 continue
 
-            # Found a CPU sensor driver — use its first temp input
-            for temp_file in sorted(hwmon_dir.glob("temp[0-9]*_input")):
+            # Found a CPU sensor driver -- use its lowest-numbered temp input
+            for temp_file in sorted(hwmon_dir.glob("temp[0-9]*_input"),
+                                    key=_by_leading_number):
                 temp_num = temp_file.name.replace("temp", "").replace("_input", "")
                 sensor_id = build_sensor_id(identity, int(temp_num))
                 # I-3: ohne diesen Eintrag bliebe get_temperature() fuer einen
@@ -415,7 +416,7 @@ class LinuxFanControlBackend(FanControlBackend):
 
         identities = derive_all(self._hwmon_base)
 
-        for hwmon_dir in sorted(self._hwmon_base.iterdir()):
+        for hwmon_dir in sorted(self._hwmon_base.iterdir(), key=_by_leading_number):
             if not hwmon_dir.is_dir() or not hwmon_dir.name.startswith("hwmon"):
                 continue
 
@@ -433,7 +434,8 @@ class LinuxFanControlBackend(FanControlBackend):
 
             is_cpu = device_name in self._CPU_SENSOR_DRIVERS
 
-            for temp_file in sorted(hwmon_dir.glob("temp[0-9]*_input")):
+            for temp_file in sorted(hwmon_dir.glob("temp[0-9]*_input"),
+                                    key=_by_leading_number):
                 temp_num = temp_file.name.replace("temp", "").replace("_input", "")
                 sensor_id = build_sensor_id(identity, int(temp_num))
                 # I-3: gleicher Grund wie in _find_cpu_temp_sensor -- ohne
