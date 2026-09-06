@@ -23,6 +23,10 @@ from app.core.config import Settings
 from app.models.fans import FanConfig, FanSample
 from app.schemas.fans import FanMode, FanCurvePoint, PwmControl
 from app.services.power.fan_restore import is_observation, needs_release, resolve_restore_value
+from app.services.power.fan_runtime_store import (
+    publish_write_permission,
+    read_write_permission,
+)
 from app.services.power.fan_schedule import FanScheduleService
 from app.services.power.fan_profiles import FanProfileService
 from app.services.power.fan_reconcile import ChipFacts, reconcile_fan_identities
@@ -176,6 +180,9 @@ class FanControlService:
         # _monitoring_task aus, und eine ueberschriebene Referenz waere eine
         # Regelschleife, die niemand mehr abbrechen kann (#559).
         self._lifecycle_lock = asyncio.Lock()
+        # Zuletzt veroeffentlichter Rechtezustand. None heisst: noch nie
+        # geschrieben -- dann wird beim ersten Abgleich veroeffentlicht (#552).
+        self._published_write_permission: Optional[bool] = None
 
         FanControlService._instance = self
 
@@ -228,10 +235,36 @@ class FanControlService:
             # Zuweisung unten verloren (#559).
             await self._cancel_monitoring_task()
 
+            # Der Rechte-Probe ist beim Backend-Init gelaufen -- sein
+            # Ergebnis gehoert zu den Followern, bevor der erste Regelzyklus
+            # ueberhaupt stattfindet (#552).
+            self.publish_write_permission_if_changed()
+
             if monitoring:
                 # Start monitoring loop (primary worker only)
                 self._start_monitoring_task()
             logger.info("Fan control service started (monitoring=%s)", monitoring)
+
+    def publish_write_permission_if_changed(self) -> None:
+        """Veroeffentlicht den Rechtezustand des Primary, wenn er sich aendert.
+
+        Nur der Primary schreibt: er ist der einzige Worker, der die Hardware
+        im Regelbetrieb ueberhaupt anfasst und dessen Stand sich damit heilen
+        kann. Ein Follower wuerde seinen ungeheilten Startwert ueber den
+        gemessenen des Primary schreiben.
+
+        Der Aufruf sitzt im 5-Sekunden-Takt der Regelschleife -- geschrieben
+        wird deshalb nur bei echter Aenderung. Ein Schreibvorgang je Tick
+        waere dieselbe Sorte Last, die #533 beseitigt hat.
+        """
+        if not getattr(lifespan, "IS_PRIMARY_WORKER", False):
+            return
+        current = getattr(self._backend, "_has_write_permission", None)
+        if current is None or current == self._published_write_permission:
+            return
+        with self.db_session_factory() as db:
+            if publish_write_permission(db, current):
+                self._published_write_permission = current
 
     async def _cancel_monitoring_task(self) -> None:
         """Bricht eine laufende Regelschleife ab und gibt die Referenz frei.
@@ -803,6 +836,10 @@ class FanControlService:
         while self._is_running:
             try:
                 await self._monitor_and_control_fans()
+                # Nach dem Regelzyklus: ein erfolgreicher Write kann den
+                # Rechtezustand geheilt haben, den die Follower nur ueber
+                # die veroeffentlichte Zeile erfahren (#552).
+                self.publish_write_permission_if_changed()
 
                 sample_count += 1
 
@@ -1125,7 +1162,15 @@ class FanControlService:
         permission_status = "ok"
         if self._use_linux_backend:
             if isinstance(self._backend, LinuxFanControlBackend):
-                permission_status = "ok" if self._backend._has_write_permission else "readonly"
+                # Der veroeffentlichte Stand des Primary schlaegt die eigene
+                # Messung: ein Follower schreibt im Regelbetrieb nie und
+                # bleibt deshalb auf seinem Startwert stehen. Fehlt die
+                # Zeile (frisch migriert), entscheidet die eigene Messung.
+                with self.db_session_factory() as db:
+                    shared = read_write_permission(db)
+                may_write = (self._backend._has_write_permission
+                             if shared is None else shared)
+                permission_status = "ok" if may_write else "readonly"
 
         return {
             "fans": fan_data_list,

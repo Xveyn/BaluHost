@@ -12,17 +12,30 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
 from app.api.routes import fans as fans_routes
+from app.models.base import Base
 from app.services.power.fan_backend_linux import LinuxFanControlBackend
 from app.services.power.fan_control import FanControlService
+
+
+def _empty_session_factory():
+    """Echte, leere Session: get_status liest den veroeffentlichten
+    Rechtezustand (#552). Ohne Zeile faellt es auf die eigene Messung
+    zurueck -- genau der Pfad, den diese Tests pruefen.
+    """
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    return sessionmaker(bind=engine)
 
 
 def _service(*, backend, use_linux: bool) -> FanControlService:
     FanControlService._instance = None
     config = MagicMock()
     config.is_dev_mode = False
-    svc = FanControlService(config, MagicMock())
+    svc = FanControlService(config, _empty_session_factory())
     svc._backend = backend
     svc._use_linux_backend = use_linux
     return svc

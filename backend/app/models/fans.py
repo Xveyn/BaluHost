@@ -186,3 +186,39 @@ class CompositeTempSensor(Base):
 
     def __repr__(self) -> str:
         return f"<CompositeTempSensor(id={self.id}, function={self.function})>"
+
+
+class FanRuntimeState(Base):
+    """
+    Live runtime state of fan control, shared across Uvicorn workers.
+
+    Singleton row (id=1). The primary worker writes; secondary workers read,
+    so ``GET /api/fans/permissions`` answers the same regardless of which
+    worker handles the request.
+
+    Ohne diese Zeile war ``_has_write_permission`` ein reines Instanz-Attribut:
+    vier Worker, vier Wahrheiten. Geheilt hat sich nur, wer schreibt -- also
+    der Primary ueber den Regelkreis. Die drei Follower blieben auf ihrem
+    Startwert stehen, und der 5-Sekunden-Poll des Frontends landete
+    abwechselnd auf einem geheilten und drei ungeheilten Workern (#552).
+
+    Gleiches Muster wie ``PowerRuntimeState`` und ``GpuPowerRuntimeState``;
+    letztere fuehrt dieselbe Spalte fuer denselben Zweck.
+    """
+
+    __tablename__ = "fan_runtime_state"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    has_write_permission: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+    updated_by_pid: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+
+    def __repr__(self) -> str:
+        return f"<FanRuntimeState(has_write_permission={self.has_write_permission})>"
