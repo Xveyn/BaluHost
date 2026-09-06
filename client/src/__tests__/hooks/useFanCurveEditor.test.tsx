@@ -100,4 +100,22 @@ describe('useFanCurveEditor', () => {
     rerender({ f: fan({ curve_points: [{ temp: 40, pwm: 99 }, { temp: 60, pwm: 99 }] }) });
     expect(result.current.curvePoints[0].pwm).toBe(55);
   });
+  it('resets the AMD manual-mode toggle when a different fan is selected', () => {
+    // Der Toggle ist reiner Client-State: das Backend exponiert den
+    // Manual-Mode nicht. Bleibt er beim Fan-Wechsel stehen, zeigt er den
+    // Zustand des vorher gewaehlten Luefters (#411).
+    const gpuFan = fan({ fan_id: 'amdgpu-pci-0300:pwm1', is_gpu_fan: true, gpu_vendor: 'amd' });
+    const otherFan = fan({ fan_id: 'nct6798-isa-0290:pwm1' });
+    const { result, rerender } = renderHook(
+      ({ f }) => useFanCurveEditor(f, opts()),
+      { initialProps: { f: gpuFan } },
+    );
+
+    act(() => result.current.setLocalGpuManualEnabled(true));
+    expect(result.current.localGpuManualEnabled).toBe(true);
+
+    rerender({ f: otherFan });
+
+    expect(result.current.localGpuManualEnabled).toBe(false);
+  });
 });

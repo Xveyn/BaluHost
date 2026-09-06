@@ -56,10 +56,15 @@ export function useFanCurveEditor(fan: FanInfo, opts: UseFanCurveEditorOptions) 
     }
   }, [fan.fan_id, fan.curve_points]);
 
-  // Reset userEditedRef when switching to a different fan
+  // Reset per-fan local state when switching to a different fan
   useEffect(() => {
     userEditedRef.current = false;
     setCurvePoints(fan.curve_points);
+    // Der AMD-Manual-Mode ist reiner Client-State: das Backend exponiert ihn
+    // nicht, es gibt nur den schreibenden Endpunkt. Ohne diesen Reset zeigte
+    // der Toggle nach einem Fan-Wechsel den Zustand des vorher gewaehlten
+    // Luefters (#411).
+    setLocalGpuManualEnabled(false);
   }, [fan.fan_id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
