@@ -7,12 +7,17 @@ Tests:
 - PWM calculation and temperature hysteresis
 """
 import asyncio
+import json
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from app.core import lifespan
+from app.core.config import get_settings
 from app.schemas.fans import FanCurvePoint, FanMode
+from app.services.power.fan_backend_linux import LinuxFanControlBackend
+from app.services.power.fan_curve_eval import evaluate_curve
 from app.services.power.fan_control import (
     DevFanControlBackend,
     FanData,
@@ -196,91 +201,61 @@ class TestFanCurvePoints:
 
 
 class TestFanControlCurveInterpolation:
-    """Tests for temperature-to-PWM curve interpolation."""
+    """Interpolation der graph-Kurve, gegen evaluate_curve().
 
-    def interpolate_pwm(self, curve: list, temp: float) -> int:
-        """Helper function to interpolate PWM from temperature curve."""
-        if not curve:
-            return 50  # Default
+    Diese Klasse definierte die Interpolation frueher selbst und pruefte die
+    eigene Kopie. Der Produktivcode liegt in fan_curve_eval.evaluate_curve;
+    er haette beliebig kaputt sein koennen, ohne dass ein Test es meldet
+    (#356).
+    """
 
-        # Below lowest point
-        if temp <= curve[0].temp:
-            return curve[0].pwm
+    @staticmethod
+    def _pwm_at(points, temp):
+        config = SimpleNamespace(
+            curve_type="graph",
+            curve_json=json.dumps(points),
+            min_pwm_percent=0,
+            max_pwm_percent=100,
+            stop_below_temp_celsius=None,
+            start_pwm_percent=None,
+            response_time_seconds=0.0,
+            pwm_steps=1,
+        )
+        return evaluate_curve(
+            config,
+            temp=temp,
+            prev_pwm=0,
+            other_fan_pwms={},
+            profile_loader=lambda _: [],
+            dt_seconds=1.0,
+        )
 
-        # Above highest point
-        if temp >= curve[-1].temp:
-            return curve[-1].pwm
+    CURVE = [
+        {"temp": 35, "pwm": 30},
+        {"temp": 50, "pwm": 50},
+        {"temp": 70, "pwm": 80},
+    ]
 
-        # Find surrounding points
-        for i in range(len(curve) - 1):
-            if curve[i].temp <= temp <= curve[i + 1].temp:
-                # Linear interpolation
-                t1, p1 = curve[i].temp, curve[i].pwm
-                t2, p2 = curve[i + 1].temp, curve[i + 1].pwm
-                ratio = (temp - t1) / (t2 - t1)
-                return int(p1 + (p2 - p1) * ratio)
+    def test_below_the_first_point_holds_its_pwm(self):
+        assert self._pwm_at(self.CURVE, 25) == 30
 
-        return curve[-1].pwm
+    def test_above_the_last_point_holds_its_pwm(self):
+        assert self._pwm_at(self.CURVE, 90) == 80
 
-    def test_interpolation_below_curve(self):
-        """Test interpolation below lowest curve point."""
-        curve = [
-            FanCurvePoint(temp=35, pwm=30),
-            FanCurvePoint(temp=50, pwm=50),
-            FanCurvePoint(temp=70, pwm=80),
-        ]
+    def test_an_exact_point_returns_that_point(self):
+        assert self._pwm_at(self.CURVE, 50) == 50
 
-        result = self.interpolate_pwm(curve, 25)
+    def test_midpoint_is_interpolated_linearly(self):
+        points = [{"temp": 40, "pwm": 40}, {"temp": 60, "pwm": 60}]
+        assert self._pwm_at(points, 50) == 50
 
-        assert result == 30  # Should use lowest value
+    def test_quarter_point_is_interpolated_linearly(self):
+        points = [{"temp": 40, "pwm": 40}, {"temp": 80, "pwm": 80}]
+        assert self._pwm_at(points, 50) == 50
 
-    def test_interpolation_above_curve(self):
-        """Test interpolation above highest curve point."""
-        curve = [
-            FanCurvePoint(temp=35, pwm=30),
-            FanCurvePoint(temp=50, pwm=50),
-            FanCurvePoint(temp=70, pwm=80),
-        ]
-
-        result = self.interpolate_pwm(curve, 90)
-
-        assert result == 80  # Should use highest value
-
-    def test_interpolation_exact_point(self):
-        """Test interpolation at exact curve point."""
-        curve = [
-            FanCurvePoint(temp=35, pwm=30),
-            FanCurvePoint(temp=50, pwm=50),
-        ]
-
-        result = self.interpolate_pwm(curve, 50)
-
-        assert result == 50
-
-    def test_interpolation_midpoint(self):
-        """Test interpolation between points."""
-        curve = [
-            FanCurvePoint(temp=40, pwm=40),
-            FanCurvePoint(temp=60, pwm=60),
-        ]
-
-        result = self.interpolate_pwm(curve, 50)
-
-        assert result == 50  # Midpoint should give midpoint PWM
-
-    def test_interpolation_quarter_point(self):
-        """Test interpolation at quarter points."""
-        curve = [
-            FanCurvePoint(temp=40, pwm=40),
-            FanCurvePoint(temp=80, pwm=80),
-        ]
-
-        result = self.interpolate_pwm(curve, 50)
-
-        # 50 is 1/4 of the way from 40 to 80
-        # PWM should be 1/4 of the way from 40 to 80 = 50
-        assert result == 50
-
+    def test_an_empty_curve_falls_back_without_raising(self):
+        """Der Randfall, den die Testkopie mit einer eigenen 50 beantwortete."""
+        assert 0 <= self._pwm_at([], 45) <= 100
 
 class TestFanModes:
     """Tests for fan mode functionality."""
@@ -299,64 +274,57 @@ class TestFanModes:
 
 
 class TestPWMConversion:
-    """Tests for PWM value conversion."""
+    """Prozent <-> PWM, gegen die Umrechnung des Linux-Backends.
 
-    def test_percent_to_pwm_zero(self):
-        """Test converting 0% to PWM."""
-        pwm = round(0 * 255 / 100)
-        assert pwm == 0
+    Vorher rechnete dieser Block die Formel im Test selbst nach und pruefte
+    damit nur Pythons Arithmetik. Eine Aenderung an _percent_to_pwm haette
+    keinen dieser Tests rot gemacht (#356).
+    """
 
-    def test_percent_to_pwm_hundred(self):
-        """Test converting 100% to PWM."""
-        pwm = round(100 * 255 / 100)
-        assert pwm == 255
+    @staticmethod
+    def _backend():
+        return LinuxFanControlBackend(get_settings())
 
-    def test_percent_to_pwm_fifty(self):
-        """Test converting 50% to PWM."""
-        pwm = round(50 * 255 / 100)
-        assert pwm == 128
+    @pytest.mark.parametrize("percent,expected", [(0, 0), (50, 128), (100, 255)])
+    def test_percent_to_pwm(self, percent, expected):
+        assert self._backend()._percent_to_pwm(percent) == expected
 
-    def test_pwm_to_percent_zero(self):
-        """Test converting 0 PWM to percent."""
-        percent = round(0 * 100 / 255)
-        assert percent == 0
+    @pytest.mark.parametrize("pwm,expected", [(0, 0), (128, 50), (255, 100)])
+    def test_pwm_to_percent(self, pwm, expected):
+        assert self._backend()._pwm_to_percent(pwm) == expected
 
-    def test_pwm_to_percent_max(self):
-        """Test converting 255 PWM to percent."""
-        percent = round(255 * 100 / 255)
-        assert percent == 100
-
-    def test_pwm_to_percent_mid(self):
-        """Test converting 128 PWM to percent."""
-        percent = round(128 * 100 / 255)
-        assert percent == 50
-
-    def test_round_trip_all_values(self):
-        """Verify percent→PWM→percent round-trip for all 0-100 values."""
-        for pct in range(101):
-            pwm = round(pct * 255 / 100)
-            back = round(pwm * 100 / 255)
-            assert back == pct, f"Round-trip failed: {pct}% → PWM {pwm} → {back}%"
-
+    def test_round_trip_over_the_full_range(self):
+        """Jeder Prozentwert ueberlebt Hin- und Rueckrechnung."""
+        backend = self._backend()
+        for percent in range(101):
+            pwm = backend._percent_to_pwm(percent)
+            back = backend._pwm_to_percent(pwm)
+            assert back == percent, f"{percent}% -> PWM {pwm} -> {back}%"
 
 class TestSimulatedStateUpdate:
     """Tests for simulated state updates."""
 
-    def test_temperature_fluctuation(self, mock_settings):
-        """Test that temperatures fluctuate over time."""
+    def test_simulation_keeps_its_invariants(self, mock_settings):
+        """Statt `assert True`: die Zusagen, die der Simulator einhalten muss.
+
+        Der Vorgaenger berechnete `changed`, benutzte es nicht und behauptete
+        dann `assert True` -- er konnte nicht fehlschlagen (#356). Geprueft
+        werden jetzt die drei Eigenschaften, die der Code tatsaechlich
+        garantiert: Paket kuehler als CPU, RPM innerhalb der Grenzen, und
+        dass sich ueberhaupt etwas bewegt.
+        """
         backend = DevFanControlBackend(mock_settings)
+        cpu_temps = set()
 
-        temps_before = backend._temps.copy()
-        backend._update_simulated_state()
-        temps_after = backend._temps.copy()
+        for _ in range(50):
+            backend._update_simulated_state()
+            cpu = backend._temps["dev_cpu_temp"]
+            cpu_temps.add(cpu)
+            assert backend._temps["dev_package_temp"] < cpu
+            for fan in backend._fans.values():
+                assert fan["min_rpm"] <= fan["current_rpm"] <= fan["max_rpm"]
 
-        # At least one temperature should have changed
-        changed = any(
-            temps_before[k] != temps_after[k]
-            for k in temps_before
-        )
-        # May or may not change due to randomness
-        assert True  # Just verify no exception
+        assert len(cpu_temps) > 1, "die Simulation bewegt sich nicht"
 
     @pytest.mark.asyncio
     async def test_rpm_updates_on_get_fans(self, mock_settings):

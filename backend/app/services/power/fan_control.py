@@ -583,7 +583,21 @@ class FanControlService:
                 logger.debug("Sekundaer-Worker: Anlage-Schleife uebersprungen")
                 return
 
-            for fan in fans:
+            # Simulierte Luefter gehoeren nur in eine Dev-Datenbank. Ein
+            # Produktionsdienst, der ueber POST /api/fans/backend auf das
+            # Dev-Backend geschaltet wurde, sieht sonst Zeilen an, die
+            # niemand wieder los wird: der Identitaets-Abgleich fasst sie
+            # mangels stabiler Chip-Kennung nicht an, und ein
+            # Zurueckschalten entfernt sie nicht (#558).
+            creatable = fans if (self._use_linux_backend
+                                 or self.config.is_dev_mode) else []
+            if fans and not creatable:
+                logger.info(
+                    "Dev-Backend ausserhalb des Dev-Modus: keine Konfiguration "
+                    "fuer %d simulierte Luefter angelegt", len(fans),
+                )
+
+            for fan in creatable:
                 existing = db.execute(
                     select(FanConfig).where(FanConfig.fan_id == fan.fan_id)
                 ).scalar_one_or_none()
