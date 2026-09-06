@@ -222,3 +222,31 @@ class FanRuntimeState(Base):
 
     def __repr__(self) -> str:
         return f"<FanRuntimeState(has_write_permission={self.has_write_permission})>"
+
+
+class GpuFanAcousticsConfigDb(Base):
+    """Singleton-Zeile (id=1) mit der GPU-Akustik-Konfiguration als JSON.
+
+    Gleiches Muster wie GpuPowerConfigDb. Eigene Tabelle statt einer
+    Erweiterung jener: die Akustikwerte gehoeren nicht in die
+    Power-Konfiguration (#516).
+
+    JSON statt vier Spalten, damit ein fuenfter Regler -- etwa
+    fan_zero_rpm_enable ab Kernel 6.13 -- eine Schema-Aenderung ohne
+    Migration bleibt.
+    """
+
+    __tablename__ = "gpu_fan_acoustics_config"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    config_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+    updated_by_pid: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+
+    def __repr__(self) -> str:
+        return f"<GpuFanAcousticsConfigDb(id={self.id})>"
