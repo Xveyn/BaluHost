@@ -1036,6 +1036,8 @@
         "curveWarning": "Diese Regler schalten die Karte in den Auto-Modus. Eine anderswo gesetzte Firmware-Kurve wird dabei inaktiv.",
         "reset": "Auf den Ausgangszustand zurücksetzen",
         "save": "Übernehmen",
+        "saveSuccess": "Akustik-Einstellungen übernommen.",
+        "resetSuccess": "Akustik-Einstellungen zurückgesetzt — die Karte verwaltet diese Werte wieder selbst.",
         "fan_target_temperature": "Zieltemperatur",
         "acoustic_limit_rpm_threshold": "Maximale Drehzahl",
         "acoustic_target_rpm_threshold": "Angestrebte Drehzahl",

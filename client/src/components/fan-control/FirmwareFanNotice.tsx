@@ -7,6 +7,7 @@ import {
   getGpuAcoustics,
   setGpuAcoustics,
   type GpuAcousticsStatus,
+  type GpuAcousticsNode,
 } from '../../api/fan-control';
 import { handleApiError } from '../../lib/errorHandling';
 
@@ -14,19 +15,29 @@ interface Props {
   fanId: string;
 }
 
+// Derive slider positions from the nodes the server reports: the observed
+// desired value if BaluHost is managing it, otherwise the card's current
+// value. Shared between the initial fetch and every apply/reset response so
+// the sliders always reflect what the server actually holds, never a stale
+// pre-request draft.
+function draftFromNodes(nodes: Record<string, GpuAcousticsNode>): Record<string, number> {
+  return Object.fromEntries(
+    Object.entries(nodes).map(([k, n]) => [k, n.desired ?? n.current]),
+  );
+}
+
 export default function FirmwareFanNotice({ fanId }: Props) {
   const { t } = useTranslation(['system']);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<GpuAcousticsStatus | null>(null);
   const [draft, setDraft] = useState<Record<string, number>>({});
+  const [acousticsBusy, setAcousticsBusy] = useState(false);
 
   useEffect(() => {
     getGpuAcoustics()
       .then((s) => {
         setStatus(s);
-        setDraft(Object.fromEntries(
-          Object.entries(s.nodes).map(([k, n]) => [k, n.desired ?? n.current]),
-        ));
+        setDraft(draftFromNodes(s.nodes));
       })
       .catch((err) => handleApiError(err, t('system:fanControl.gpu.acoustics.title')));
     // Fetch once per fan, not on every render: `t` is only used inside the
@@ -35,12 +46,20 @@ export default function FirmwareFanNotice({ fanId }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fanId]);
 
-  const applyAcoustics = async (values: Record<string, number | null>) => {
+  const applyAcoustics = async (
+    values: Record<string, number | null>,
+    successMessage: string,
+  ) => {
+    setAcousticsBusy(true);
     try {
       const next = await setGpuAcoustics(values);
       setStatus(next);
+      setDraft(draftFromNodes(next.nodes));
+      toast.success(successMessage);
     } catch (err) {
       handleApiError(err, t('system:fanControl.gpu.acoustics.title'));
+    } finally {
+      setAcousticsBusy(false);
     }
   };
 
@@ -119,15 +138,22 @@ export default function FirmwareFanNotice({ fanId }: Props) {
 
               <div className="flex gap-2">
                 <button
-                  onClick={() => applyAcoustics(draft)}
-                  className="px-3 py-1 text-sm rounded bg-sky-500 text-white"
+                  onClick={() => applyAcoustics(
+                    draft,
+                    t('system:fanControl.gpu.acoustics.saveSuccess'),
+                  )}
+                  disabled={acousticsBusy}
+                  className="px-3 py-1 text-sm rounded bg-sky-500 text-white disabled:opacity-50"
                 >
                   {t('system:fanControl.gpu.acoustics.save')}
                 </button>
                 <button
-                  onClick={() => applyAcoustics(Object.fromEntries(
-                    Object.keys(status.nodes).map((k) => [k, null])))}
-                  className="px-3 py-1 text-sm rounded bg-slate-700 text-slate-200"
+                  onClick={() => applyAcoustics(
+                    Object.fromEntries(Object.keys(status.nodes).map((k) => [k, null])),
+                    t('system:fanControl.gpu.acoustics.resetSuccess'),
+                  )}
+                  disabled={acousticsBusy}
+                  className="px-3 py-1 text-sm rounded bg-slate-700 text-slate-200 disabled:opacity-50"
                 >
                   {t('system:fanControl.gpu.acoustics.reset')}
                 </button>
