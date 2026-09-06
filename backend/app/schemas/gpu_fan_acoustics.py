@@ -37,6 +37,21 @@ class GpuFanAcousticsNode(BaseModel):
     desired: Optional[int] = None
 
 
+class GpuFanAcousticsWrite(BaseModel):
+    """Ergebnis EINES Hardware-Writes aus dem PUT.
+
+    Der Rueckgabewert von write_acoustic wurde frueher an beiden
+    Aufrufstellen weggeworfen -- samt dem Ergebnis der Ruecklese-Kontrolle,
+    die eigens gebaut wurde, weil ein angenommener Write auf dieser Karte
+    nichts beweist (#480). Damit blieb ein Fehlschlag fuer den Nutzer
+    unsichtbar; hier steht er.
+    """
+
+    ok: bool
+    value: int
+    restored: bool = False
+
+
 class GpuFanAcousticsStatus(BaseModel):
     """Kein zero_rpm-Feld: das Frontend hat die Luefterliste ohnehin und
     leitet es aus pwm_control und rpm ab. Serverseitig zu bestimmen hiesse,
@@ -46,3 +61,6 @@ class GpuFanAcousticsStatus(BaseModel):
     available: bool
     competing_manager: Optional[str] = None
     nodes: dict[str, GpuFanAcousticsNode] = {}
+    # Nur der PUT fuellt das: je angefasstem Knoten, ob die Karte den Wert
+    # angenommen hat. Der GET laesst es leer.
+    writes: dict[str, GpuFanAcousticsWrite] = {}

@@ -13,7 +13,8 @@ from abc import ABC, abstractmethod
 from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Tuple
+from pathlib import Path
+from typing import Dict, List, Mapping, Optional, Tuple
 
 from sqlalchemy import select, desc, func, update
 from sqlalchemy.exc import IntegrityError
@@ -40,8 +41,9 @@ from app.services.power.fan_gpu_acoustics import (
     write_acoustic,
 )
 from app.services.power.fan_gpu_acoustics_store import (
-    load_acoustics_config,
-    save_acoustics_config,
+    AcousticsConfigError,
+    capture_baseline,
+    load_acoustics_config_fail_soft,
 )
 
 logger = logging.getLogger(__name__)
@@ -189,6 +191,11 @@ class FanControlService:
         # _monitoring_task aus, und eine ueberschriebene Referenz waere eine
         # Regelschleife, die niemand mehr abbrechen kann (#559).
         self._lifecycle_lock = asyncio.Lock()
+        # Serialisiert apply_acoustics gegen sich selbst. Loest den
+        # Vier-Worker-Fall NICHT -- dafuer sorgt das bedingte Schreiben der
+        # Baseline im Store --, wohl aber den haeufigeren Fall zweier
+        # gleichzeitiger Anfragen auf demselben Worker (#516).
+        self._acoustics_lock = asyncio.Lock()
         # Zuletzt veroeffentlichter Rechtezustand. None heisst: noch nie
         # geschrieben -- dann wird beim ersten Abgleich veroeffentlicht (#552).
         self._published_write_permission: Optional[bool] = None
@@ -362,7 +369,7 @@ class FanControlService:
                 released, failed,
             )
 
-    async def apply_gpu_acoustics(self) -> None:
+    async def apply_gpu_acoustics(self) -> Dict[str, bool]:
         """Startpfad: nur der Primary wendet an.
 
         Beim Start wuerden sonst vier Uvicorn-Worker dieselben vier Werte
@@ -375,52 +382,71 @@ class FanControlService:
         der Endpunkt mit 200 und aenderte an der Karte nichts.
         """
         if not getattr(lifespan, "IS_PRIMARY_WORKER", False):
-            return
-        await self.apply_acoustics()
+            return {}
+        return await self.apply_acoustics()
 
-    async def apply_acoustics(self) -> None:
+    async def apply_acoustics(
+        self,
+        desired: Optional[Mapping[str, Optional[int]]] = None,
+    ) -> Dict[str, bool]:
         """Beobachtet die Baseline und wendet die gewuenschten Werte an (#516).
 
-        Ohne Primary-Gate -- siehe apply_gpu_acoustics. Die Baseline wird nur
-        erfasst, wo sie noch fehlt: sonst zeichnete der zweite Aufruf den
-        eigenen Eingriff als 'wie es vorher war' auf.
+        Ohne Primary-Gate -- siehe apply_gpu_acoustics.
+
+        Args:
+            desired: Die anzuwendenden Wuensche. None heisst: das
+                gespeicherte desired nehmen (Startpfad). Der PUT reicht seine
+                Wuensche hier herein, BEVOR er sie persistiert -- gespeichert
+                wird nur, was die Karte angenommen hat.
+
+        Returns:
+            Je angefasstem Knoten, ob der Wert danach tatsaechlich anliegt.
+            Der Rueckgabewert wurde frueher verschluckt, und mit ihm die
+            Ruecklese-Kontrolle, die auf dieser Karte der einzige Beleg fuer
+            einen wirksamen Write ist (#480).
         """
         fan_ctrl = self._gpu_fan_ctrl_dir()
         if fan_ctrl is None:
-            return
+            return {}
 
-        with self.db_session_factory() as db:
-            config = load_acoustics_config(db)
+        async with self._acoustics_lock:
+            if desired is None:
+                # Fail-soft: ein Lesefehler darf den Start nicht verhindern.
+                # Geschrieben wird auf diesem Pfad nichts, was die Baseline
+                # beschaedigen koennte -- capture_baseline liest selbst frisch.
+                with self.db_session_factory() as db:
+                    desired = load_acoustics_config_fail_soft(db).desired.model_dump()
 
-        desired = config.desired.model_dump()
-        if not any(value is not None for value in desired.values()):
-            return
+            wanted = {name: value for name, value in desired.items()
+                      if value is not None}
+            if not wanted:
+                return {}
 
-        current = await read_acoustics(fan_ctrl)
+            current = await read_acoustics(fan_ctrl)
 
-        baseline = config.baseline.model_dump()
-        changed_baseline = False
-        for name, value in desired.items():
-            if value is None or baseline.get(name) is not None:
-                continue
-            node = current.get(name)
-            if node is not None:
-                baseline[name] = node.value
-                changed_baseline = True
+            # Baseline VOR dem ersten Write erfassen -- und nur, wo noch
+            # nichts steht. Das Nur-wenn-leer entscheidet der Store anhand
+            # der frisch gelesenen Zeile, nicht anhand eines Snapshots, der
+            # beim Lesen der Hardware schon ueberholt sein kann.
+            observed = {name: node.value for name, node in current.items()
+                        if name in wanted}
+            if observed:
+                try:
+                    with self.db_session_factory() as db:
+                        capture_baseline(db, observed)
+                except AcousticsConfigError as exc:
+                    logger.warning(
+                        "Baseline nicht erfassbar, kein Akustik-Write: %s", exc)
+                    return {}
 
-        if changed_baseline:
-            config.baseline = type(config.baseline)(**baseline)
-            with self.db_session_factory() as db:
-                save_acoustics_config(db, config)
+            results: Dict[str, bool] = {}
+            for name, value in wanted.items():
+                results[name] = await write_acoustic(
+                    fan_ctrl, name, value, self._backend._write_hwmon_file
+                )
+            return results
 
-        for name, value in desired.items():
-            if value is None:
-                continue
-            await write_acoustic(
-                fan_ctrl, name, value, self._backend._write_hwmon_file
-            )
-
-    def _gpu_fan_ctrl_dir(self):
+    def _gpu_fan_ctrl_dir(self) -> Optional[Path]:
         """Das fan_ctrl-Verzeichnis der AMD-GPU, falls die Karte es anbietet.
 
         Gefunden wird es ueber einen gescannten GPU-Luefter, obwohl die
