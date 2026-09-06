@@ -41,7 +41,16 @@ def service(session_factory):
     svc._backend._write_hwmon_file = AsyncMock(return_value=(True, None))
     # apply_acoustics, nicht apply_gpu_acoustics: der PUT-Pfad darf nicht am
     # Primary-Gate haengen (#516).
-    svc.apply_acoustics = AsyncMock()
+    #
+    # Das side_effect ist nicht Zierde: ein blosses AsyncMock() liefert beim
+    # await wieder ein AsyncMock, dessen .get(name, False) ein Coroutine-Objekt
+    # ist -- immer truthy. Der PUT haette dann jeden Wert als angenommen
+    # gebucht, und der Test waere gruen, ohne noch etwas zu pruefen (dazu eine
+    # RuntimeWarning ueber die nie erwartete Coroutine). Hier antwortet die
+    # Attrappe wie eine Karte, die alles annimmt.
+    svc.apply_acoustics = AsyncMock(
+        side_effect=lambda desired: {name: True for name in desired}
+    )
     svc._gpu_fan_ctrl_dir = lambda: Path("/fake/fan_ctrl")
     return svc
 
