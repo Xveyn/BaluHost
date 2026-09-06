@@ -15,13 +15,14 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
 
-from sqlalchemy import select, desc, func
+from sqlalchemy import select, desc, func, update
 from sqlalchemy.exc import IntegrityError
 
 from app.core import lifespan
 from app.core.config import Settings
 from app.models.fans import FanConfig, FanSample
 from app.schemas.fans import FanMode, FanCurvePoint, PwmControl
+from app.services.power.fan_restore import is_observation, needs_release, resolve_restore_value
 from app.services.power.fan_schedule import FanScheduleService
 from app.services.power.fan_profiles import FanProfileService
 from app.services.power.fan_reconcile import ChipFacts, reconcile_fan_identities
@@ -113,6 +114,19 @@ class FanControlBackend(ABC):
         pass
 
     @abstractmethod
+    async def release_to_board(self, fan_id: str, enable_value: int) -> bool:
+        """pwm_enable auf einen Automatikmodus zurueckschreiben (#534).
+
+        Args:
+            fan_id: Luefter-Kennung
+            enable_value: der beobachtete Automatikmodus (>= 2)
+
+        Returns:
+            True nur, wenn der Wert danach tatsaechlich anliegt.
+        """
+        pass
+
+    @abstractmethod
     async def get_temperature(self, sensor_id: str) -> Optional[float]:
         """Get temperature reading from a sensor."""
         pass
@@ -155,6 +169,9 @@ class FanControlService:
         self._registry: TempSourceRegistry = TempSourceRegistry()
         self._last_pwm_by_fan: Dict[str, int] = {}
         self._last_tick_ts: float = 0.0
+        # Rueckgabewerte pro Luefter, beim Start aus der DB geladen. stop()
+        # braucht sie ohne Datenbankzugriff (#534).
+        self._restore_values: Dict[str, int] = {}
 
         FanControlService._instance = self
 
@@ -218,7 +235,58 @@ class FanControlService:
             except asyncio.CancelledError:
                 pass
 
+        # Erst die Schleife stilllegen, dann zurueckgeben -- umgekehrt schriebe
+        # sie im naechsten Zyklus pwm_enable=1 gegen die Rueckgabe (#534).
+        try:
+            await self._release_all_to_board()
+        except Exception:
+            logger.exception("Rueckgabe an die Board-Automatik fehlgeschlagen")
+
         logger.info("Fan control service stopped")
+
+    async def _release_all_to_board(self) -> None:
+        """Gibt alle Luefter mit bekanntem Rueckgabewert an die Automatik zurueck.
+
+        Entschieden wird am Ist-Wert in sysfs statt an einer Besitz-Buchfuehrung.
+        Ein Luefter im MANUAL-Modus wird vom Regelkreis nie geschrieben (Ziel ==
+        Ist), sein einziger Schreibweg ist die HTTP-Route -- und die landet bei
+        vier Workern meist auf einem Sekundaer. Eine primary-gebundene
+        Besitzverfolgung haette ihn nie erfasst, und genau er stuende am Ende
+        ungeregelt da.
+        """
+        if not getattr(lifespan, "IS_PRIMARY_WORKER", False):
+            return
+        if not self._restore_values:
+            return
+
+        cache = getattr(self._backend, "_fan_cache", None) or {}
+        released = 0
+        failed = 0
+
+        for fan_id, target in self._restore_values.items():
+            info = cache.get(fan_id)
+            if not isinstance(info, dict):
+                continue
+            if info.get("gpu_vendor") is not None:
+                continue
+            pwm_enable_path = info.get("pwm_enable_path")
+            if pwm_enable_path is None:
+                continue
+
+            current = await self._backend._read_hwmon_file(pwm_enable_path)
+            if not needs_release(current, target):
+                continue
+
+            if await self._backend.release_to_board(fan_id, target):
+                released += 1
+            else:
+                failed += 1
+
+        if released or failed:
+            logger.info(
+                "Rueckgabe an die Board-Automatik: %d erfolgreich, %d fehlgeschlagen",
+                released, failed,
+            )
 
     async def _initialize_backend(self):
         """Initialize appropriate backend."""
@@ -303,6 +371,69 @@ class FanControlService:
             mapping[f"{hwmon_name}_temp{temp_num}"] = f"hwmon:{stable_id}"
         return mapping
 
+    def _collect_pwm_enable_observations(self) -> Dict[str, int]:
+        """Beobachtete Automatikmodi aus dem Scan-Cache.
+
+        GPU-Luefter bleiben draussen: fuer AMD-Karten existiert mit
+        AmdManualState / disable_amd_manual bereits ein eigener Rueckgabeweg,
+        der zusaetzlich das Performance-Level zuruecksetzt, und nouveau hat
+        gar keinen. Der isinstance-Schutz folgt dem Muster, das fuer dieselben
+        Cache-Zugriffe in #532 eingefuehrt wurde.
+        """
+        cache = getattr(self._backend, "_fan_cache", None)
+        if not isinstance(cache, dict):
+            # Gleiche Absicherung wie in _collect_chip_facts/_collect_sensor_map:
+            # ein unspezifizierter Test-Mock (z. B. AsyncMock()) liefert hier
+            # selbst wieder einen Mock statt eines dict -- ohne diese Pruefung
+            # wuerde cache.items() als Coroutine zurueckkommen (AsyncMock-
+            # Kindattribute sind selbst AsyncMock) und die Iteration bricht.
+            cache = {}
+        return {
+            fan_id: info["pwm_enable_at_scan"]
+            for fan_id, info in cache.items()
+            if isinstance(info, dict)
+            and info.get("gpu_vendor") is None
+            and is_observation(info.get("pwm_enable_at_scan"))
+        }
+
+    def _persist_restore_values(self, observations: Dict[str, int]) -> None:
+        """Beobachtete pwm_enable-Werte speichern und in den Speicher laden.
+
+        Nur der Primary schreibt. Geschrieben wird ausschliesslich bei echter
+        Aenderung, und updated_at wird dabei ausdruecklich mitgefuehrt: die
+        Spalte traegt onupdate=func.now() und ist das Rangkriterium des
+        Identitaets-Abgleichs (fan_reconcile.py). Ein Schreibvorgang bei jedem
+        Start setzte jede Zeile auf "gerade angefasst".
+        """
+        if not getattr(lifespan, "IS_PRIMARY_WORKER", False):
+            return
+
+        with self.db_session_factory() as db:
+            rows = list(db.execute(select(FanConfig)).scalars())
+            by_id = {row.fan_id: row for row in rows}
+
+            changed = 0
+            for fan_id, row in by_id.items():
+                target = resolve_restore_value(observations.get(fan_id),
+                                               row.pwm_enable_restore)
+                if target is not None:
+                    self._restore_values[fan_id] = target
+                if target == row.pwm_enable_restore or target is None:
+                    continue
+                db.execute(
+                    update(FanConfig)
+                    .where(FanConfig.id == row.id)
+                    .values(pwm_enable_restore=target,
+                            updated_at=row.updated_at)
+                )
+                changed += 1
+                logger.info(
+                    "Rueckgabewert fuer %s beobachtet: pwm_enable=%s",
+                    fan_id, target,
+                )
+            if changed:
+                db.commit()
+
     async def _load_fan_configs(self):
         """Load fan configurations from database.
 
@@ -325,6 +456,8 @@ class FanControlService:
                     break
         except Exception:
             pass
+
+        observations = self._collect_pwm_enable_observations()
 
         with self.db_session_factory() as db:
             chip_facts = self._collect_chip_facts()
@@ -444,6 +577,7 @@ class FanControlService:
                             cpu_sensor_id or fan.temp_sensor_id
                         ) if (cpu_sensor_id or fan.temp_sensor_id) else None,
                         is_active=True,
+                        pwm_enable_restore=observations.get(fan.fan_id),
                     )
                     try:
                         # Savepoint statt db.rollback() auf der ganzen
@@ -468,6 +602,8 @@ class FanControlService:
                         logger.debug("Fan-Config %s wurde parallel angelegt", fan.fan_id)
 
             db.commit()
+
+        self._persist_restore_values(observations)
 
         logger.info(f"Loaded {len(fans)} fan configuration(s)")
 
@@ -1069,25 +1205,56 @@ class FanControlService:
         Returns:
             (success, is_using_linux_backend)
         """
-        if use_linux:
-            # Try to switch to Linux backend
-            linux_backend = LinuxFanControlBackend(self.config)
-            if await linux_backend.is_available():
-                self._backend = linux_backend
-                self._use_linux_backend = True
-                await self._load_fan_configs()
-                logger.info("Switched to Linux fan control backend")
-                return True, True
+        # Gleiche Reihenfolge wie in stop(): erst die Schleife stilllegen, dann
+        # zurueckgeben, dann tauschen. Ohne das schriebe die weiterlaufende
+        # Schleife pwm_enable=1 gegen die Rueckgabe, und ein Wechsel auf das
+        # Dev-Backend liesse jeden Kanal in Handsteuerung zurueck -- niemand
+        # regelt, ueber einen Admin-Endpunkt (#534).
+        was_running = self._is_running
+        self._is_running = False
+        if self._monitoring_task:
+            self._monitoring_task.cancel()
+            try:
+                await self._monitoring_task
+            except asyncio.CancelledError:
+                pass
+            self._monitoring_task = None
+        try:
+            await self._release_all_to_board()
+        except Exception:
+            logger.exception("Rueckgabe beim Backend-Wechsel fehlgeschlagen")
+
+        try:
+            if use_linux:
+                # Try to switch to Linux backend
+                linux_backend = LinuxFanControlBackend(self.config)
+                if await linux_backend.is_available():
+                    self._backend = linux_backend
+                    self._use_linux_backend = True
+                    await self._load_fan_configs()
+                    logger.info("Switched to Linux fan control backend")
+                    result = True, True
+                else:
+                    logger.warning("Linux backend not available")
+                    result = False, self._use_linux_backend
             else:
-                logger.warning("Linux backend not available")
-                return False, self._use_linux_backend
-        else:
-            # Switch to dev backend
-            self._backend = DevFanControlBackend(self.config)
-            self._use_linux_backend = False
-            await self._load_fan_configs()
-            logger.info("Switched to dev fan control backend")
-            return True, False
+                # Switch to dev backend
+                self._backend = DevFanControlBackend(self.config)
+                self._use_linux_backend = False
+                await self._load_fan_configs()
+                logger.info("Switched to dev fan control backend")
+                result = True, False
+        finally:
+            # Der Neustart gehoert ins finally: zwischen Abbruch (oben) und
+            # hier koennen is_available() und _load_fan_configs() werfen. Ohne
+            # das bliebe die Regelung nach einem gescheiterten Wechsel bis zum
+            # Prozess-Neustart still stehen -- schlimmer als der Zustand, den
+            # dieser Wechsel beheben sollte.
+            if was_running:
+                self._is_running = True
+                self._monitoring_task = asyncio.create_task(self._monitoring_loop())
+
+        return result
 
     # --- Delegating methods for backward compatibility ---
 

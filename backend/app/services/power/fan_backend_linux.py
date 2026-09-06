@@ -256,6 +256,50 @@ class LinuxFanControlBackend(FanControlBackend):
             )
         return False
 
+    async def release_to_board(self, fan_id: str, enable_value: int) -> bool:
+        """Gibt die Regelung dieses Kanals an die Chip-Automatik zurueck.
+
+        Umgeht das Write-Backoff aus #533 bewusst: dessen Sperre sitzt in
+        set_pwm, nicht hier. Ein Kanal mit Schreibfehlern ist genau der, bei dem
+        eine abgeschaltete Board-Automatik am meisten weh tut.
+        """
+        fan_info = self._fan_cache.get(fan_id)
+        if fan_info is None:
+            logger.warning(f"Rueckgabe fuer unbekannten Luefter {fan_id}")
+            return False
+
+        pwm_enable_path = fan_info.get("pwm_enable_path")
+        if pwm_enable_path is None:
+            return False
+
+        driver = fan_info.get("device_driver", "unknown")
+        ok, err_code = await self._write_hwmon_file(pwm_enable_path, str(enable_value))
+        if not ok:
+            # Achtung bei der Formulierung: _write_hwmon_file meldet nach einem
+            # gescheiterten sudo-tee-Fallback EACCES, auch wenn der Kernel
+            # eigentlich EINVAL geliefert hat (etwa weil check_trip_points()
+            # nicht-monotone BIOS-Stuetzstellen gefunden hat). Der errno wird
+            # deshalb genannt, aber nicht gedeutet.
+            logger.warning(
+                f"Rueckgabe an die Board-Automatik fehlgeschlagen: {fan_id} "
+                f"(driver={driver}, Ziel={enable_value}, errno={err_code}). "
+                f"Der Luefter bleibt in Handsteuerung -- es regelt niemand."
+            )
+            return False
+
+        readback = await self._read_hwmon_file(pwm_enable_path)
+        if readback != enable_value:
+            logger.warning(
+                f"Rueckgabe an die Board-Automatik ohne Wirkung: {fan_id} "
+                f"(driver={driver}, geschrieben={enable_value}, "
+                f"gelesen={readback}). Der Write wurde stillschweigend "
+                f"verworfen."
+            )
+            return False
+
+        logger.info(f"{fan_id}: an die Board-Automatik zurueckgegeben (pwm_enable={enable_value})")
+        return True
+
     # CPU temperature driver names (same keywords as hardware/sensors.py)
     _CPU_SENSOR_DRIVERS = {"k10temp", "coretemp", "cpu_thermal", "acpi"}
 
@@ -483,6 +527,14 @@ class LinuxFanControlBackend(FanControlBackend):
                 # Find PWM enable
                 pwm_enable_path = hwmon_dir / f"pwm{pwm_num}_enable"
 
+                # pwm_enable EINMAL pro Start lesen, bevor set_pwm es auf 1
+                # setzt. Nach dem ersten Regelzyklus steht dort unser eigener
+                # Wert -- dies ist der einzige Moment, in dem der Board-Wert
+                # sichtbar sein kann (#534).
+                pwm_enable_at_scan = None
+                if pwm_enable_path.exists():
+                    pwm_enable_at_scan = await self._read_hwmon_file(pwm_enable_path)
+
                 # Prefer CPU sensor over local board sensor
                 if cpu_sensor_id:
                     temp_sensor_id = cpu_sensor_id
@@ -508,6 +560,7 @@ class LinuxFanControlBackend(FanControlBackend):
                     "name": f"{hwmon_name_value} PWM{pwm_num}",
                     "pwm_path": pwm_file,
                     "pwm_enable_path": pwm_enable_path if pwm_enable_path.exists() else None,
+                    "pwm_enable_at_scan": pwm_enable_at_scan,
                     "fan_input_path": fan_input_path,
                     "temp_path": temp_path,
                     "temp_sensor_id": temp_sensor_id,

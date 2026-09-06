@@ -85,6 +85,11 @@ class FanConfig(Base):
     # Herkunft der Zeile vor der Umstellung auf stabile Kennungen (#532).
     # Reiner Nachweis: erlaubt, eine Fehlzuordnung nachtraeglich zu erkennen.
     legacy_fan_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    # Der pwm_enable-Wert, auf den beim Dienst-Ende zurueckgeschaltet wird
+    # (#534). Wird ausschliesslich aus einer eigenen Beobachtung gefuellt --
+    # ein Wert >= 2, den der Scan vor dem ersten Write gelesen hat. NULL heisst:
+    # noch nie eine Automatik gesehen, also keine Rueckgabe.
+    pwm_enable_restore: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     hysteresis_celsius: Mapped[float] = mapped_column(Float, default=3.0, nullable=False)
     # --- Curve type & params ---
     curve_type: Mapped[str] = mapped_column(String(20), default="graph", nullable=False)

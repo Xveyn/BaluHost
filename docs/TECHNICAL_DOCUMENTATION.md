@@ -1267,6 +1267,20 @@ If the identity-matching logic fails at startup (e.g., due to an unexpected hard
 **Secondary Worker Behavior:**  
 The configuration-creation logic runs only on the primary Uvicorn worker. A backend-switching request (e.g., switching from `dev` to `prod` mode via HTTP) landing on a secondary worker will not create configs for newly-visible fans; these configs are created on the next primary-worker startup cycle (either an immediate restart or the next service restart). This is transparent to the user but introduces a brief window where newly-visible fans lack a configuration row.
 
+#### Handback to Board Automation on Shutdown (#534)
+
+When the service stops, `pwm_enable` is written back to the automatic mode that BaluHost previously read from that same chip. After a deploy restart the board takes over the curve again, instead of leaving the fans frozen at their last value.
+
+**Observed values only.** Nothing is guessed. A value is adopted only if the startup scan found an automatic mode (`pwm_enable >= 2`) — which is the case after a cold boot, but not after a service restart.
+
+**On a running installation the feature therefore only takes effect after the next cold boot.** To avoid waiting, set the value once by hand while the service is stopped (`echo 5 > /sys/class/hwmon/hwmonN/pwmM_enable`); the next startup picks it up.
+
+**GPU fans are excluded.** AMD cards have their own handback path, which additionally resets the performance level.
+
+**On `SIGKILL` or a power loss there is no handback.** `systemctl stop` and the deploy restart send `SIGTERM` and are covered.
+
+One note on reading the value: a fan running at 100 % reports `pwm_enable` as `0`, not as `1`.
+
 ---
 
 ### 17. Monitoring Orchestrator
