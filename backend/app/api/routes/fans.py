@@ -2,7 +2,7 @@
 Fan control API endpoints.
 """
 import logging
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy import select, func
@@ -983,9 +983,6 @@ class GpuManualModeRequest(_PydanticBase):
     enable: bool
 
 
-# Stash of state across enable/disable per fan
-_gpu_manual_state: Dict[str, AmdManualState] = {}
-
 
 @router.post("/{fan_id}/gpu-manual-mode")
 @user_limiter.limit(get_limit("admin_operations"))
@@ -1004,8 +1001,17 @@ async def set_gpu_manual_mode(
     When disabled, restores the previous values.
 
     Only available for AMD GPU fans. Requires admin role.
+
+    Der Vorzustand liegt in fan_configs, nicht im Prozess: bei vier Uvicorn-
+    Workern bedient statistisch ein anderer Worker das Ausschalten als das
+    Einschalten. Ein prozesslokaler Zwischenspeicher fuehrte dort dazu, dass
+    ein GERATENER Vorzustand zurueckgeschrieben wurde (#411).
     """
     from app.services.power.fan_gpu_manual import enable_amd_manual, disable_amd_manual
+    from app.services.power.fan_gpu_manual_store import (
+        remember_manual_state,
+        take_manual_state,
+    )
 
     # Look up the fan's hwmon dir from the backend cache
     backend = service._backend
@@ -1027,11 +1033,23 @@ async def set_gpu_manual_mode(
                 ),
             )
         state = await enable_amd_manual(hwmon_dir=hwmon_dir, drm_root=None)
-        _gpu_manual_state[fan_id] = state
+        with service.db_session_factory() as db:
+            remember_manual_state(db, fan_id, state)
     else:
-        state = _gpu_manual_state.pop(fan_id, None)
+        with service.db_session_factory() as db:
+            state = take_manual_state(db, fan_id)
         if state is None:
+            # Der Treiber-Default ist der letzte Ausweg, wenn niemand den
+            # Vorzustand kennt -- ein Luefter, der dauerhaft in Handsteuerung
+            # bleibt, waere schlechter. Er darf aber nicht still passieren:
+            # auf der Referenzmaschine stand dort `low`, nicht `auto`.
             state = AmdManualState(previous_level="auto", previous_pwm_enable=2)
+            logger.warning(
+                "Kein gespeicherter Manual-Mode-Vorzustand fuer %s -- es wird "
+                "auf den Treiber-Default zurueckgesetzt (level=auto, "
+                "pwm_enable=2). Eine abweichende Einstellung geht verloren.",
+                fan_id,
+            )
         await disable_amd_manual(hwmon_dir=hwmon_dir, drm_root=None, state=state)
 
     return {"success": True, "fan_id": fan_id, "enabled": body.enable}

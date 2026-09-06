@@ -11,14 +11,23 @@ Covers:
 - Auth checks (admin-only for write operations)
 """
 
+from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from app.api.routes.fans import get_fan_service
+from app.models.base import Base
+# Registriert fan_configs auf Base.metadata, damit create_all() unten die
+# Tabelle anlegt. Ohne diesen Import faellt der DB-Pfad der Routen auf
+# "no such table".
+from app.models.fans import FanConfig  # noqa: F401
 from app.schemas.fans import PwmControl
 
 
@@ -73,6 +82,26 @@ def mock_fan_service(client):
     mock_service.create_schedule_entry.return_value = None  # triggers 422
     mock_service.delete_schedule_entry.return_value = False
     mock_service.get_active_schedule_entry.return_value = (None, None)
+
+    # Routen, die die Datenbank anfassen -- etwa der Manual-Mode-Vorzustand
+    # aus #411 -- brauchen eine echte Session, kein AsyncMock-Attribut.
+    # StaticPool + check_same_thread: der TestClient bedient die Anfrage in
+    # einem anderen Thread als diese Fixture, und In-Memory-SQLite gibt jeder
+    # Verbindung sonst eine eigene, leere Datenbank.
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    _sessions = sessionmaker(bind=engine)
+
+    @contextmanager
+    def _db_session_factory():
+        with _sessions() as db:
+            yield db
+
+    mock_service.db_session_factory = _db_session_factory
 
     from app.main import app
     app.dependency_overrides[get_fan_service] = lambda: mock_service
