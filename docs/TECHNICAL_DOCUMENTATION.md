@@ -1281,6 +1281,39 @@ When the service stops, `pwm_enable` is written back to the automatic mode that 
 
 One note on reading the value: a fan running at 100 % reports `pwm_enable` as `0`, not as `1`.
 
+#### GPU Fan Acoustics (#516)
+
+For firmware-managed AMD GPU fans (see "Stable Fan & Sensor Identities" above and #480), BaluHost cannot drive the PWM channel directly — `pwm{n}_enable` is silently ignored and `pwm{n}` rejects writes with `EINVAL`. The card offers a second, driver-validated control surface for the same fan: four acoustic scalars under `/sys/class/drm/card*/device/gpu_od/fan_ctrl/`.
+
+**The four values:**
+
+| Node | Effect |
+|---|---|
+| `fan_target_temperature` | The junction temperature the firmware regulates the fan towards |
+| `acoustic_limit_rpm_threshold` | Hard upper bound on fan speed, regardless of temperature |
+| `acoustic_target_rpm_threshold` | Preferred fan speed under normal load, below the hard limit |
+| `fan_minimum_pwm` | Floor below which the fan is never throttled while spinning |
+
+Each is optional independently. Setting a value marks it as managed by BaluHost (`desired`); sending `null` for a value means "stop managing it" and writes back the observed baseline instead — the same semantics as the `pwm_enable` handback above: nothing is guessed, only what BaluHost itself read is ever restored. `PUT /api/fans/gpu-acoustics` with every field `null` is exactly the "reset" action; there is no separate reset endpoint.
+
+**Kernel dependency.** This interface is not a fixed part of `amdgpu` — it arrived for RDNA3 with a specific kernel version:
+
+| Kernel | What is present |
+|---|---|
+| < 6.7 | `gpu_od/fan_ctrl` is missing on RDNA3 — the control surface does not exist |
+| 6.7 – 6.12 | the five nodes: `fan_curve` plus the four scalars above |
+| 6.13+ | additionally `fan_zero_rpm_enable` and `fan_zero_rpm_stop_temperature` |
+
+BaluNode runs `6.12.74+deb13+1-amd64` — the middle band: the four scalars are present, the zero-RPM controls are not. If the acoustics panel is empty on your installation, check `uname -r` against this table first.
+
+**Zero-RPM.** On this kernel band the card stops the fan entirely at low temperature, and the acoustic values only take effect once the fan is actually spinning. Setting `fan_target_temperature` while idle produces no visible change — `fan1_input` and `pwm1` stay `0` until the card's own zero-RPM threshold is crossed. This is not a sign the setting failed.
+
+**Auto mode vs. `fan_curve`.** These four scalars work "under auto fan control mode only" (kernel documentation) and implicitly switch the card into auto mode when written. `fan_curve` (five temperature→percent points) is the other mode, not an extension of this one — writing it implicitly switches the card into manual mode, in which the four scalars listed above stop having any effect. BaluHost does not offer `fan_curve` control. Practically: setting any of the four values here overrides a firmware curve that may have been configured elsewhere on the same card.
+
+**LACT manages the same nodes.** If `/etc/lact/config.yaml` contains a `pmfw_options` block, BaluHost detects and surfaces it as a competing-manager warning — it does not disable itself or LACT. To hand control to BaluHost exclusively, remove `pmfw_options` from LACT's config; BaluHost does not attempt to overwrite LACT's writes on an ongoing basis.
+
+**Deploy: write permission comes from udev.** The four nodes are `root:root 0644` by default, unwritable by the unprivileged service user. `deploy/install/templates/70-baluhost-amd-gpu.rules` re-chowns them to `root:video` with group-write on every `add`/`change` event, alongside the existing GPU power-control nodes; `deploy/scripts/install-amd-gpu-permissions.sh` adds the service user to the `video` group. Both are only applied when a deploy runs with `SYNC_PERMISSIONS=1` — without that, the panel loads (`available: true`) but every write fails with `EACCES`.
+
 ---
 
 ### 17. Monitoring Orchestrator
