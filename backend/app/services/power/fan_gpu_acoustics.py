@@ -102,3 +102,89 @@ async def read_acoustics(fan_ctrl_dir: Path) -> Dict[str, ParsedNode]:
     return nodes
 
 
+# Die vier Skalare, die BaluHost zu SETZEN anbietet. Gelesen wird mehr --
+# read_acoustics zaehlt auf. fan_curve gehoert bewusst nicht dazu: es schaltet
+# die Karte in den Manual-Modus, in dem diese vier nicht mehr wirken
+# (Kernel-Doku: "works under auto fan control mode only").
+ACOUSTIC_NODES = (
+    "fan_target_temperature",
+    "acoustic_limit_rpm_threshold",
+    "acoustic_target_rpm_threshold",
+    "fan_minimum_pwm",
+)
+
+
+def resolve_restores(previous_desired: dict, incoming: dict,
+                     baseline: dict) -> Dict[str, int]:
+    """Welche Knoten auf ihre Baseline zurueckgeschrieben werden muessen.
+
+    Rein: kein sysfs, keine Datenbank. Ein Knoten wird zurueckgesetzt, wenn
+    BaluHost ihn bisher verwaltet hat, der neue Wunsch None ist -- also 'nicht
+    mehr verwalten' -- und eine beobachtete Baseline vorliegt.
+
+    Fehlt die Baseline, passiert nichts. Kein Rueckfall auf einen geratenen
+    Herstellerstandard; zurueckgeschrieben wird nur, was BaluHost selbst
+    gelesen hat (#534).
+    """
+    return {
+        name: baseline[name]
+        for name, value in incoming.items()
+        if value is None
+        and previous_desired.get(name) is not None
+        and baseline.get(name) is not None
+    }
+
+
+async def write_acoustic(fan_ctrl_dir: Path, name: str, value: int, write) -> bool:
+    """Einen Akustikwert setzen und uebernehmen.
+
+    Args:
+        write: Schreibfunktion in der Form von
+            LinuxFanControlBackend._write_hwmon_file -- async (Path, str)
+            nach (ok, errno). Sie wird hereingereicht, statt die Leiter aus
+            direktem Write und sudo-tee-Fallback nachzubauen; sie soll genau
+            einen Ort haben (#554).
+
+    Returns:
+        True nur, wenn der Wert danach tatsaechlich anliegt.
+    """
+    if name not in ACOUSTIC_NODES:
+        logger.warning("Unbekannter Akustik-Knoten: %s", name)
+        return False
+
+    nodes = await read_acoustics(fan_ctrl_dir)
+    node = nodes.get(name)
+    if node is None:
+        logger.warning("Akustik-Knoten %s nicht lesbar, kein Write", name)
+        return False
+
+    if not node.minimum <= value <= node.maximum:
+        logger.warning(
+            "%s=%s liegt ausserhalb des gemeldeten Bereichs %s..%s",
+            name, value, node.minimum, node.maximum,
+        )
+        return False
+
+    path = fan_ctrl_dir / name
+    ok, err = await write(path, str(value))
+    if not ok:
+        logger.warning("%s nicht schreibbar (errno=%s)", name, err)
+        return False
+
+    ok, err = await write(path, "c")
+    if not ok:
+        logger.warning("%s: Commit fehlgeschlagen (errno=%s)", name, err)
+        return False
+
+    applied = (await read_acoustics(fan_ctrl_dir)).get(name)
+    if applied is None or applied.value != value:
+        logger.warning(
+            "%s ohne Wirkung: geschrieben=%s, gelesen=%s",
+            name, value, None if applied is None else applied.value,
+        )
+        return False
+
+    logger.info("%s auf %s gesetzt", name, value)
+    return True
+
+
