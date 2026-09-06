@@ -9,6 +9,7 @@ import logging
 import os
 
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from app.models.fans import GpuFanAcousticsConfigDb
 from app.schemas.gpu_fan_acoustics import GpuFanAcousticsConfig
@@ -18,7 +19,7 @@ logger = logging.getLogger(__name__)
 _SINGLETON_ID = 1
 
 
-def load_acoustics_config(db) -> GpuFanAcousticsConfig:
+def load_acoustics_config(db: Session) -> GpuFanAcousticsConfig:
     """Die gespeicherte Konfiguration, sonst leere Vorgaben.
 
     Ein Fehler beim Lesen darf den Start nicht verhindern: ohne Konfiguration
@@ -37,7 +38,7 @@ def load_acoustics_config(db) -> GpuFanAcousticsConfig:
         return GpuFanAcousticsConfig()
 
 
-def save_acoustics_config(db, config: GpuFanAcousticsConfig) -> bool:
+def save_acoustics_config(db: Session, config: GpuFanAcousticsConfig) -> bool:
     """Konfiguration ablegen. False bei einem Datenbankfehler."""
     try:
         row = db.execute(
