@@ -198,7 +198,7 @@ export default function FanCard({
             e.stopPropagation();
             onModeChange(fan.fan_id, FanMode.SCHEDULED);
           }}
-          disabled={fan.mode === FanMode.SCHEDULED || isReadOnly || isLoading}
+          disabled={fan.mode === FanMode.SCHEDULED || isReadOnly || isLoading || isFirmwareManaged}
           className={`flex-1 px-3 py-1 text-xs rounded-lg transition-colors ${
             fan.mode === FanMode.SCHEDULED
               ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/30'
@@ -216,7 +216,7 @@ export default function FanCard({
             e.stopPropagation();
             onModeChange(fan.fan_id, FanMode.MANUAL);
           }}
-          disabled={fan.mode === FanMode.MANUAL || isReadOnly || isLoading}
+          disabled={fan.mode === FanMode.MANUAL || isReadOnly || isLoading || isFirmwareManaged}
           className={`flex-1 px-3 py-1 text-xs rounded-lg transition-colors ${
             fan.mode === FanMode.MANUAL
               ? 'bg-purple-500 text-white shadow-lg shadow-purple-500/30'
@@ -230,6 +230,17 @@ export default function FanCard({
           )}
         </button>
       </div>
+
+      {/* Warum die Regler nichts bewirken. Auto bleibt erreichbar, damit
+          niemand in einem Modus festsitzt -- siehe FanCard.test.tsx. */}
+      {isFirmwareManaged && (
+        <p
+          data-testid="fan-uncontrollable-hint"
+          className="text-xs text-slate-400 mb-3"
+        >
+          {t('system:fanControl.gpu.firmware.cardHint')}
+        </p>
+      )}
 
       {/* Manual PWM Slider */}
       {fan.mode === FanMode.MANUAL && (

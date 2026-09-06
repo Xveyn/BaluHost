@@ -1023,6 +1023,7 @@
       "firmware": {
         "badge": "Firmware",
         "badgeHint": "Die Lüfterkurve dieser GPU wird von der Firmware verwaltet und kann von BaluHost nicht gesetzt werden.",
+        "cardHint": "Die Karte regelt diesen Lüfter selbst. Zeitplan und Manuell hätten hier keine Wirkung.",
         "title": "Firmware-verwaltete Lüfterkurve",
         "explanation": "Ab RDNA3 liegt die Lüfterkurve in der GPU-Firmware. Der amdgpu-Treiber lehnt direkte PWM-Steuerung ab — auch mit gesetztem Kernel-Parameter amdgpu.ppfeaturemask. Drehzahl und Temperatur werden weiter angezeigt.",
         "resetButton": "Manuellen Modus zurücksetzen",
