@@ -64,12 +64,34 @@ describe('FanCard bei firmware-verwalteter GPU', () => {
     expect(slider.disabled).toBe(true);
   });
 
-  it('laesst die Modus-Buttons bedienbar — sonst sperrt sich der Nutzer aus', () => {
+  it('laesst Auto erreichbar — sonst sperrt sich der Nutzer im Modus ein', () => {
+    // Haelt die Absicht des Vorgaengertests fest: es muss einen Weg zurueck
+    // geben. Auto ist der neutrale Modus -- BaluHost haelt den Luefter dann
+    // nicht von Hand, was fuer einen firmware-verwalteten Kanal ohnehin gilt.
+    renderCard(fan({ pwm_control: 'firmware_managed', mode: FanMode.MANUAL }));
+    const auto = screen.getByRole('button', { name: /card\.auto/ }) as HTMLButtonElement;
+    expect(auto.disabled).toBe(false);
+  });
+
+  it('sperrt Manual und Schedule — beide versprechen eine Steuerung, die nicht stattfindet', () => {
+    renderCard(fan({ pwm_control: 'firmware_managed', mode: FanMode.AUTO }));
+    const manual = screen.getByRole('button', { name: /card\.manual/ }) as HTMLButtonElement;
+    const scheduled = screen.getByRole('button', { name: /card\.scheduled/ }) as HTMLButtonElement;
+    expect(manual.disabled).toBe(true);
+    expect(scheduled.disabled).toBe(true);
+  });
+
+  it('nennt den Grund, statt nur zu sperren', () => {
     renderCard(fan({ pwm_control: 'firmware_managed' }));
-    const enabled = screen
-      .getAllByRole('button')
-      .filter((b) => !(b as HTMLButtonElement).disabled);
-    // AUTO und SCHEDULED sind klickbar (MANUAL ist der aktive Modus)
-    expect(enabled.length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByTestId('fan-uncontrollable-hint')).toBeTruthy();
+  });
+
+  it('laesst einen steuerbaren Luefter unangetastet', () => {
+    renderCard(fan({ pwm_control: 'supported', mode: FanMode.AUTO }));
+    const manual = screen.getByRole('button', { name: /card\.manual/ }) as HTMLButtonElement;
+    const scheduled = screen.getByRole('button', { name: /card\.scheduled/ }) as HTMLButtonElement;
+    expect(manual.disabled).toBe(false);
+    expect(scheduled.disabled).toBe(false);
+    expect(screen.queryByTestId('fan-uncontrollable-hint')).toBeNull();
   });
 });
