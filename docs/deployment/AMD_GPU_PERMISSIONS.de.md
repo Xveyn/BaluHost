@@ -20,11 +20,32 @@ Der AMDGPU-Kerneltreiber legt zwei sysfs-Dateien an, die das Power Management vo
 | `/sys/class/drm/card*/device/power_dpm_force_performance_level` | Erzwingt eine Power-Stufe (`auto`, `low`, `high`, `manual`) |
 | `/sys/class/drm/card*/device/pp_power_profile_mode` | Wählt ein Profil (3D, Compute, VR, …) |
 
+Dazu kommen (#516) vier weitere Dateien für die GPU-Lüfterakustik:
+
+| Datei | Zweck |
+|---|---|
+| `/sys/class/drm/card*/device/gpu_od/fan_ctrl/fan_target_temperature` | Ziel-Temperatur der Lüfterkurve |
+| `/sys/class/drm/card*/device/gpu_od/fan_ctrl/acoustic_limit_rpm_threshold` | Obere Lüfterdrehzahl-Grenze (Acoustic Limit) |
+| `/sys/class/drm/card*/device/gpu_od/fan_ctrl/acoustic_target_rpm_threshold` | Ziel-Lüfterdrehzahl (Acoustic Target) |
+| `/sys/class/drm/card*/device/gpu_od/fan_ctrl/fan_minimum_pwm` | Minimale PWM-Stufe des Lüfters |
+
+**Wichtig:** `gpu_od/` entsteht erst, wenn der amdgpu-Treiber Overdrive für die
+Karte initialisiert hat — auf Karten ohne (aktiviertes) Overdrive fehlt das
+Verzeichnis schlicht. Die udev-Regel prüft deshalb vor jedem `chgrp`/`chmod`
+mit `[ -e ]`, ob die Datei existiert, und überspringt sie sonst folgenlos.
+Das bedeutet aber auch: ob die Regel für diese vier Dateien tatsächlich
+greift, lässt sich nur nach einem echten Boot mit vorhandenem `gpu_od/`
+verifizieren — daher der Reboot-Test in Task 9 dieses Features.
+
 Default-Permissions auf Debian 13 sind:
 
 ```
 -rw-r--r-- 1 root root /sys/class/drm/card0/device/power_dpm_force_performance_level
 -rw-r--r-- 1 root root /sys/class/drm/card0/device/pp_power_profile_mode
+-rw-r--r-- 1 root root /sys/class/drm/card0/device/gpu_od/fan_ctrl/fan_target_temperature
+-rw-r--r-- 1 root root /sys/class/drm/card0/device/gpu_od/fan_ctrl/acoustic_limit_rpm_threshold
+-rw-r--r-- 1 root root /sys/class/drm/card0/device/gpu_od/fan_ctrl/acoustic_target_rpm_threshold
+-rw-r--r-- 1 root root /sys/class/drm/card0/device/gpu_od/fan_ctrl/fan_minimum_pwm
 ```
 
 → Nur `root` kann schreiben. Der BaluHost-Backend-Service läuft aber als **`sven`** (oder dem bei der Installation gewählten User), nicht als root. Daraus folgt der `Permission denied`-Fehler.
@@ -33,9 +54,17 @@ Default-Permissions auf Debian 13 sind:
 
 Das Vorgehen ist dasselbe Muster wie für `cpufreq`:
 
-1. Eine udev-Regel ändert beim Boot (und bei jedem `add`/`change`-Event auf der DRM-Subsystem-Ebene) die Group-Ownership der zwei sysfs-Dateien auf `video` und setzt das Group-Write-Bit.
+1. Eine udev-Regel ändert beim Boot (und bei jedem `add`/`change`-Event auf der DRM-Subsystem-Ebene) die Group-Ownership der sysfs-Dateien auf `video` und setzt das Group-Write-Bit.
 2. Der BaluHost-Service-User wird in die `video`-Gruppe aufgenommen.
 3. Service-Restart, damit die neue Gruppenmitgliedschaft greift.
+
+**Bestandsserver mit #516 nachziehen:** Ein Server, auf dem die udev-Regel
+schon vor #516 installiert wurde, trägt noch die alte, kürzere Dateiliste.
+Die Regel muss einmal neu geschrieben werden, damit die vier Akustik-Knoten
+dazukommen — entweder per Weg A (manuell) oder per Weg B mit
+`SYNC_PERMISSIONS=1` (siehe unten). Ohne diesen einmaligen Re-Sync bleibt
+`gpu_od/fan_ctrl/*` weiterhin `root:root 0644`, selbst wenn `gpu_od/` auf der
+Maschine längst existiert.
 
 ## Anwenden in Production
 
@@ -98,6 +127,17 @@ Der Script:
 ls -la /sys/class/drm/card0/device/power_dpm_force_performance_level
 # Erwartet: -rw-rw-r-- 1 root video
 ```
+
+**1b. Akustik-Knoten (#516), nur falls `gpu_od/` existiert:**
+
+```bash
+ls -la /sys/class/drm/card0/device/gpu_od/fan_ctrl/
+# Erwartet: alle vier Dateien -rw-rw-r-- 1 root video
+```
+
+Fehlt `gpu_od/` (noch) komplett, ist das kein Fehler der Regel — siehe
+„Hintergrund" oben. Der verlässliche Test ist ein echter Reboot (Task 9),
+nicht ein manueller `udevadm trigger` direkt nach der Installation.
 
 **2. Backend-User in `video`-Gruppe:**
 
