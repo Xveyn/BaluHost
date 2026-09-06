@@ -4,7 +4,6 @@ Linux hardware backend for fan control using hwmon sysfs.
 import errno
 import getpass
 import logging
-import os
 import re
 import subprocess
 import time
@@ -88,35 +87,43 @@ class LinuxFanControlBackend(FanControlBackend):
         return True
 
     async def _check_write_permission(self) -> None:
-        """Proactively test write permission on first PWM file."""
-        if not self._fan_cache:
-            return
+        """Prueft Schreibrechte auf dem Weg, den set_pwm tatsaechlich nimmt.
 
-        first_fan = next(iter(self._fan_cache.values()))
-        pwm_path = first_fan["pwm_path"]
+        Geschrieben wird pwm_enable mit dem Wert, der dort bereits steht:
+        dieselbe Datei, dieselben Rechte und dieselbe sudoers-Regel wie im
+        Regelbetrieb -- aber ohne den Modus zu veraendern.
 
-        # Fast check: direct write permission
-        if os.access(pwm_path, os.W_OK):
-            self._has_write_permission = True
-            logger.info("Fan control: direct write permission available")
-            return
+        pwm selbst taugt nicht als Probe. Der nct6775 lehnt pwm-Writes mit
+        EBUSY ab, solange pwm_enable >= 2 steht, und seit der Rueckgabe an
+        die Board-Automatik (#534) steht nach jedem Dienst-Ende genau das
+        an. Ein pwm_enable=1, wie set_pwm es setzt, waere umgekehrt ein
+        echter Eingriff als Nebenwirkung einer Frage.
 
-        # Fallback: test sudo tee (read current value, write it back unchanged)
-        current = await self._read_hwmon_file(pwm_path)
-        if current is not None:
-            try:
-                result = subprocess.run(
-                    ["sudo", "-n", "tee", str(pwm_path)],
-                    input=str(current).encode(),
-                    capture_output=True,
-                    timeout=5,
-                )
-                if result.returncode == 0:
-                    self._has_write_permission = True
-                    logger.info("Fan control: write permission available via sudo tee")
-                    return
-            except Exception:
-                pass
+        Geprueft werden alle Kanaele statt nur des ersten: Schreibrecht
+        besteht, sobald EIN steuerbarer Luefter beschreibbar ist. Der erste
+        Cache-Eintrag ist auf dieser Hardware der firmware-verwaltete
+        GPU-Luefter, den set_pwm gar nicht anfasst -- ueber unsere
+        Schreibfaehigkeit sagt er nichts aus (#552).
+        """
+        for fan_id, fan_info in self._fan_cache.items():
+            if fan_info.get("pwm_control") is PwmControl.FIRMWARE_MANAGED:
+                continue
+
+            # Fehlt das Modus-Register, bleibt nur der Duty-Knoten -- ohne
+            # Automatik kann der auch kein EBUSY liefern.
+            probe_path = fan_info.get("pwm_enable_path") or fan_info.get("pwm_path")
+            if probe_path is None:
+                continue
+
+            current = await self._read_hwmon_file(probe_path)
+            if current is None:
+                continue
+
+            ok, _ = await self._write_hwmon_file(probe_path, str(current))
+            if ok:
+                self._has_write_permission = True
+                logger.info(f"Fan control: write permission available ({fan_id})")
+                return
 
         logger.info("Fan control: no write permission (readonly mode)")
 
