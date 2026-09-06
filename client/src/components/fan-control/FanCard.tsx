@@ -91,7 +91,7 @@ export default function FanCard({
   const isFirmwareManaged = fan.pwm_control === 'firmware_managed';
   // Abgeleitet, nicht gelesen: einen fan_zero_rpm_enable-Knoten gibt es erst
   // ab Kernel 6.13. Geschlossen wird aus "firmware-verwaltet und 0 RPM" (#516).
-  const isZeroRpm = isFirmwareManaged && (fan.rpm ?? 0) === 0;
+  const isZeroRpm = isFirmwareManaged && fan.rpm === 0;
 
   return (
     <div

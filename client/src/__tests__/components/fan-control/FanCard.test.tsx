@@ -110,4 +110,11 @@ describe('FanCard bei firmware-verwalteter GPU', () => {
     renderCard(fan({ pwm_control: 'supported', rpm: 0 }));
     expect(screen.queryByTestId('fan-zero-rpm')).toBeNull();
   });
+
+  it('behauptet kein Zero-RPM, wenn gar kein Messwert vorliegt', () => {
+    // rpm null heisst "keine Tacho-Ablesung", nicht "steht still".
+    renderCard(fan({ pwm_control: 'firmware_managed', rpm: null }));
+    expect(screen.queryByTestId('fan-zero-rpm')).toBeNull();
+    expect(screen.getByText('—')).toBeTruthy();
+  });
 });
