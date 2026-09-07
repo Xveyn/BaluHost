@@ -105,6 +105,45 @@ async def test_an_unknown_node_is_refused(tmp_path):
     assert calls == []
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("value", [25, 105])
+async def test_die_grenzen_selbst_sind_eingeschlossen(tmp_path, value):
+    """OD_RANGE meldet 25..105 -- beide Enden sind gueltige Werte.
+
+    Ohne diesen Test bliebe ein < statt <= unbemerkt: der aussenliegende
+    Fall (200) faellt bei beiden Fassungen durch (#570).
+    """
+    fan_ctrl = find_fan_ctrl_dir(_card_tree(tmp_path))
+    calls = []
+
+    ok = await write_acoustic(
+        fan_ctrl, "fan_target_temperature", value,
+        _recording_write(calls, applied=str(value), fan_ctrl=fan_ctrl),
+    )
+
+    assert ok is True
+    assert calls == [
+        ("fan_target_temperature", str(value)),
+        ("fan_target_temperature", "c"),
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("value", [24, 106])
+async def test_ein_schritt_ausserhalb_der_grenzen_wird_abgelehnt(tmp_path, value):
+    """Die Gegenprobe zum Test darueber: direkt neben der Grenze, nicht
+    weit draussen. Es darf kein Write die Karte erreichen."""
+    fan_ctrl = find_fan_ctrl_dir(_card_tree(tmp_path))
+    calls = []
+
+    ok = await write_acoustic(
+        fan_ctrl, "fan_target_temperature", value, _recording_write(calls),
+    )
+
+    assert ok is False
+    assert calls == []
+
+
 # --- Die Ruecksetz-Entscheidung, rein und ohne sysfs ---------------------
 #
 # Sie steckte im Entwurf als dreifach bedingte Comprehension im Route-Handler.
