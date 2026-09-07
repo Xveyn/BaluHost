@@ -210,6 +210,27 @@ it('meldet eine 503 als Konfigurationsproblem, nicht als Hardware-Fehler', async
   expect(error.textContent).toContain('configUnavailable');
 });
 
+it('meldet eine 503 vom Reverse-Proxy nicht als Konfigurationsproblem', async () => {
+  // Ein Proxy-503 traegt kein `detail`, das mit "GPU acoustics configuration"
+  // beginnt -- anders als der Test "meldet eine 503 als Konfigurationsproblem"
+  // weiter unten, der genau das mitschickt. Dieser Fehlerpfad setzt applyError
+  // NICHT (er laeuft ueber handleApiError/Toast statt ueber das
+  // gpu-acoustics-error-Testid), deshalb wird hier ueber den Toast-Aufruf
+  // und das Fehlen des Testids geprueft, nicht ueber dessen Inhalt.
+  vi.mocked(getGpuAcoustics).mockResolvedValue(FULL_STATUS);
+  vi.mocked(setGpuAcoustics).mockRejectedValue({
+    response: { status: 503, data: '<html>503 Service Temporarily Unavailable</html>' },
+  });
+  render(<FirmwareFanNotice fanId="amdgpu-pci-0300:pwm1" />);
+
+  fireEvent.click(await screen.findByText('system:fanControl.gpu.acoustics.save'));
+
+  await waitFor(() => expect(toast.error).toHaveBeenCalled());
+  const lastToastMessage = vi.mocked(toast.error).mock.calls.at(-1)?.[0];
+  expect(lastToastMessage).not.toContain('configUnavailable');
+  expect(screen.queryByTestId('gpu-acoustics-error')).toBeNull();
+});
+
 it('haelt einen Knoten ohne desired als nicht verwaltet: Regler gesperrt, Markierung leer', async () => {
   vi.mocked(getGpuAcoustics).mockResolvedValue(FULL_STATUS);
   render(<FirmwareFanNotice fanId="amdgpu-pci-0300:pwm1" />);
