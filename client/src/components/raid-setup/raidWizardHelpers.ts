@@ -1,10 +1,13 @@
 import { formatBytes } from '../../lib/formatters';
 import { RAID_LEVELS } from './raidLevels';
 
-const MDADM_NAME_REGEX = /^md([0-9]+|_[a-zA-Z0-9]+)$/;
+// md0..md999 (#570): die sudoers-Regeln zaehlen die erlaubten
+// mdadm-Aufrufe einzeln auf und koennen unbegrenzt lange Namen nicht
+// abbilden. Ein Name ausserhalb dieser Form wuerde serverseitig abgelehnt.
+const MDADM_NAME_REGEX = /^md[0-9]{1,3}$/;
 
 export function isValidArrayName(name: string): boolean {
-  return MDADM_NAME_REGEX.test(name) && name.length <= 32;
+  return MDADM_NAME_REGEX.test(name);
 }
 
 export function calculateArrayCapacity(level: string, diskCount: number): string {

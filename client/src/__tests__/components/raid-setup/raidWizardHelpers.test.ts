@@ -29,11 +29,17 @@ describe('calculateArrayCapacity', () => {
 });
 
 describe('isValidArrayName', () => {
-  it('accepts md + digits', () => { expect(isValidArrayName('md0')).toBe(true); });
-  it('accepts md_ + alphanumerics', () => { expect(isValidArrayName('md_backup')).toBe(true); });
+  it('accepts md + one to three digits', () => {
+    expect(isValidArrayName('md0')).toBe(true);
+    expect(isValidArrayName('md127')).toBe(true);
+  });
+  // md_backup war bis #570 gueltig. Die sudoers-Regeln zaehlen die erlaubten
+  // mdadm-Aufrufe einzeln auf und koennen unbegrenzte Namen nicht abbilden --
+  // ein solcher Name wuerde beim Anlegen an sudo scheitern statt hier.
+  it('rejects md_ + alphanumerics', () => { expect(isValidArrayName('md_backup')).toBe(false); });
+  it('rejects more than three digits', () => { expect(isValidArrayName('md1234')).toBe(false); });
   it('rejects a non-md name', () => { expect(isValidArrayName('raid0')).toBe(false); });
   it('rejects bare "md"', () => { expect(isValidArrayName('md')).toBe(false); });
   it('rejects empty', () => { expect(isValidArrayName('')).toBe(false); });
-  it('rejects names longer than 32 chars', () => { expect(isValidArrayName('md' + '1'.repeat(40))).toBe(false); });
   it('rejects special chars', () => { expect(isValidArrayName('md_ab!')).toBe(false); });
 });

@@ -71,12 +71,13 @@ def test_die_vorlage_traegt_ueberhaupt_eintraege():
     einzelner Eintraege auffaellt. Zusammensetzung mdadm: 1 (--detail --scan)
     + 3*3 (--detail/--wait/--stop je Array-Form) + 4 (--zero-superblock je
     Geraeteform) + 5*12 (fuenf Verben x Array x Geraet) + 6 (--grow --bitmap
-    je Array und Option) + 3 (--create je Array-Form) = 83.
-    smartctl: 1 (--scan -j) + 2*4 (Selftest je Typlaenge und Geraeteform)
-    + 2*4 (-t short/long je Geraeteform) = 17.
+    je Array und Option) = 80, dazu 12 fuer --create (3 Array-Formen x 2
+    Level-Laengen x mit/ohne --spare-devices) = 92.
+    smartctl: 1 (--scan -j) + 2*2*4 (Selftest mit und ohne -A, je Typlaenge
+    und Geraeteform) + 2*4 (-t short/long je Geraeteform) = 25.
     """
-    assert len(_entries(MDADM)) == 83
-    assert len(_entries(SMARTCTL)) == 17
+    assert len(_entries(MDADM)) == 92
+    assert len(_entries(SMARTCTL)) == 25
 
 
 def test_kein_eintrag_steht_ohne_argumente():
@@ -125,15 +126,53 @@ def test_das_anlegen_eines_arrays_bleibt_erlaubt():
 
 @pytest.mark.parametrize("args", [
     ("--scan", "-j"),                                                    # collector.py:40
-    ("-H", "-i", "-l", "selftest", "-j", "-d", "sat", "/dev/sda"),       # utils.py:95
-    ("-H", "-i", "-l", "selftest", "-j", "-d", "scsi", "/dev/sdb"),
-    ("-H", "-i", "-l", "selftest", "-j", "-d", "nvme", "/dev/nvme0"),
-    ("-H", "-i", "-l", "selftest", "-j", "-d", "auto", "/dev/nvme1"),
     ("-t", "short", "/dev/sda"),                                         # scheduler.py:76
     ("-t", "long", "/dev/nvme0"),
 ])
 def test_die_smartctl_aufrufe_des_codes_bleiben_erlaubt(args):
     assert _erlaubt(SMARTCTL, *args)
+
+
+@pytest.mark.parametrize("dev_type,device", [
+    ("sat", "/dev/sda"),
+    ("scsi", "/dev/sdb"),
+    ("scsi", "/dev/sdc"),
+    ("auto", "/dev/sda1"),
+    ("nvme", "/dev/nvme0"),
+    ("nvme", "/dev/nvme1"),
+    ("auto", "/dev/nvme0n1"),
+])
+def test_die_selftest_abfrage_wird_aus_dem_code_gewonnen(dev_type, device, monkeypatch):
+    """Die Argumentliste stammt aus _run_smartctl, nicht aus dieser Datei.
+
+    Der Grund ist ein konkreter Fehlschlag: eine frueherere Fassung dieses
+    Tests hat die Form von Hand abgeschrieben und dabei uebersehen, dass
+    utils.py fuer alles ohne 'nvme' ein '-A' an Position 3 EINSCHIEBT. Die
+    sudoers-Vorlage kannte daraufhin nur die Form ohne -A -- auf der
+    Referenzmaschine waeren genau die drei SATA-Platten still aus der
+    SMART-Anzeige gefallen. Wer die Argumente abschreibt, testet seine eigene
+    Lesart des Codes, nicht den Code.
+    """
+    from app.services.hardware.smart import utils
+
+    aufgezeichnet: list[list[str]] = []
+
+    class _Ergebnis:
+        returncode = 0
+        stdout = "{}"
+        stderr = ""
+
+    def _aufzeichnen(argv, **_kwargs):
+        aufgezeichnet.append(list(argv))
+        return _Ergebnis()
+
+    monkeypatch.setattr("subprocess.run", _aufzeichnen)
+    utils._run_smartctl("/usr/sbin/smartctl", dev_type, device)
+
+    assert len(aufgezeichnet) == 1
+    argv = aufgezeichnet[0]
+    assert argv[:2] == ["sudo", "-n"]
+    assert _erlaubt(SMARTCTL, *argv[3:]), f"nicht abgedeckt: {' '.join(argv[2:])}"
 
 
 # --- Was nicht mehr gehen darf ----------------------------------------------

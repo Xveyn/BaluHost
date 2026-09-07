@@ -26,8 +26,19 @@
 # /dev/sd[a-c] und /dev/nvme[0-1], das Array /dev/md1 fuehrt sda1 (Partition)
 # und sdb (ganze Platte) -- deshalb sowohl sd[a-z] als auch sd[a-z][0-9].
 #
-# NUR /usr/sbin: auf Debian 13 (usrmerge) ist /sbin ein Symlink dorthin. Auf
-# einer Distribution ohne usrmerge muessen die Eintraege verdoppelt werden.
+# NUR /usr/sbin: auf Debian 13 (usrmerge) ist /sbin ein Symlink dorthin, und
+# sudo loest den blossen Namen `mdadm` ueber secure_path auf. Auf BaluNode
+# gemessen (2026-09-07):
+#   Defaults secure_path="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+# /usr/sbin steht dort vor /sbin, sudo matcht also gegen /usr/sbin/mdadm. Auf
+# einer Distribution ohne usrmerge oder mit umgekehrter Reihenfolge muessen die
+# Eintraege verdoppelt werden -- sonst greift keine einzige Zeile.
+#
+# Array-Namen: md0..md999. Weiter gehen die Muster nicht, und deshalb ist die
+# Namensvalidierung in schemas/system.py, mdadm_backend.py und dem
+# Frontend-Wizard auf dieselbe Form verengt worden (#570). Ein Platzhalter fuer
+# freie Namen waere hier keine Loesung: er matcht auch Leerzeichen und liesse
+# zusaetzliche Optionen durch.
 
 Cmnd_Alias BALUHOST_MDADM = \
     /usr/sbin/mdadm --detail --scan, \
@@ -111,17 +122,27 @@ Cmnd_Alias BALUHOST_MDADM = \
     /usr/sbin/mdadm /dev/md[0-9][0-9][0-9] --grow --bitmap=internal, \
     /usr/sbin/mdadm /dev/md[0-9][0-9][0-9] --grow --bitmap=none
 
-# Die einzige Zeile mit '*': --create nimmt eine variable Zahl von Geraeten und
-# haengt je nach Einstellung --assume-clean an, laesst sich also nicht auf eine
-# feste Argumentzahl festnageln. Begrenzt ist sie durch den Praefix (Array
-# unter /dev/md, numerisches Level und Geraetezahl); was danach kommt, faengt
-# mdadms eigener Modus-Parser ab, nicht sudo. Das ist schwaecher als der Rest
-# und der Kandidat fuer einen argumentpruefenden Wrapper unter /usr/local/sbin,
-# wie ihn der Plugin-Worker bereits benutzt.
+# Die einzigen Zeilen mit '*': --create nimmt eine variable Zahl von Geraeten
+# und haengt je nach Einstellung --assume-clean an, laesst sich also nicht auf
+# eine feste Argumentzahl festnageln. Begrenzt ist sie durch den Praefix; was
+# nach dem ersten /dev/ kommt, faengt mdadms eigener Modus-Parser ab, nicht
+# sudo. Das ist die schwaechste Stelle dieser Datei und der Kandidat fuer einen
+# argumentpruefenden Wrapper unter /usr/local/sbin, wie ihn der Plugin-Worker
+# bereits benutzt. Level zweistellig wegen raid10, --spare-devices als eigene
+# Form, weil es VOR dem ersten Geraet steht (mdadm_backend.py:613).
 Cmnd_Alias BALUHOST_MDADM_CREATE = \
     /usr/sbin/mdadm --create /dev/md[0-9] --level=[0-9] --raid-devices=[0-9] /dev/*, \
+    /usr/sbin/mdadm --create /dev/md[0-9] --level=[0-9] --raid-devices=[0-9] --spare-devices=[0-9] /dev/*, \
+    /usr/sbin/mdadm --create /dev/md[0-9] --level=[0-9][0-9] --raid-devices=[0-9] /dev/*, \
+    /usr/sbin/mdadm --create /dev/md[0-9] --level=[0-9][0-9] --raid-devices=[0-9] --spare-devices=[0-9] /dev/*, \
     /usr/sbin/mdadm --create /dev/md[0-9][0-9] --level=[0-9] --raid-devices=[0-9] /dev/*, \
-    /usr/sbin/mdadm --create /dev/md[0-9][0-9][0-9] --level=[0-9] --raid-devices=[0-9] /dev/*
+    /usr/sbin/mdadm --create /dev/md[0-9][0-9] --level=[0-9] --raid-devices=[0-9] --spare-devices=[0-9] /dev/*, \
+    /usr/sbin/mdadm --create /dev/md[0-9][0-9] --level=[0-9][0-9] --raid-devices=[0-9] /dev/*, \
+    /usr/sbin/mdadm --create /dev/md[0-9][0-9] --level=[0-9][0-9] --raid-devices=[0-9] --spare-devices=[0-9] /dev/*, \
+    /usr/sbin/mdadm --create /dev/md[0-9][0-9][0-9] --level=[0-9] --raid-devices=[0-9] /dev/*, \
+    /usr/sbin/mdadm --create /dev/md[0-9][0-9][0-9] --level=[0-9] --raid-devices=[0-9] --spare-devices=[0-9] /dev/*, \
+    /usr/sbin/mdadm --create /dev/md[0-9][0-9][0-9] --level=[0-9][0-9] --raid-devices=[0-9] /dev/*, \
+    /usr/sbin/mdadm --create /dev/md[0-9][0-9][0-9] --level=[0-9][0-9] --raid-devices=[0-9] --spare-devices=[0-9] /dev/*
 
 Cmnd_Alias BALUHOST_SMARTCTL = \
     /usr/sbin/smartctl --scan -j, \
@@ -133,6 +154,14 @@ Cmnd_Alias BALUHOST_SMARTCTL = \
     /usr/sbin/smartctl -H -i -l selftest -j -d [a-z][a-z][a-z][a-z] /dev/sd[a-z][0-9], \
     /usr/sbin/smartctl -H -i -l selftest -j -d [a-z][a-z][a-z][a-z] /dev/nvme[0-9], \
     /usr/sbin/smartctl -H -i -l selftest -j -d [a-z][a-z][a-z][a-z] /dev/nvme[0-9]n[0-9], \
+    /usr/sbin/smartctl -A -H -i -l selftest -j -d [a-z][a-z][a-z] /dev/sd[a-z], \
+    /usr/sbin/smartctl -A -H -i -l selftest -j -d [a-z][a-z][a-z] /dev/sd[a-z][0-9], \
+    /usr/sbin/smartctl -A -H -i -l selftest -j -d [a-z][a-z][a-z] /dev/nvme[0-9], \
+    /usr/sbin/smartctl -A -H -i -l selftest -j -d [a-z][a-z][a-z] /dev/nvme[0-9]n[0-9], \
+    /usr/sbin/smartctl -A -H -i -l selftest -j -d [a-z][a-z][a-z][a-z] /dev/sd[a-z], \
+    /usr/sbin/smartctl -A -H -i -l selftest -j -d [a-z][a-z][a-z][a-z] /dev/sd[a-z][0-9], \
+    /usr/sbin/smartctl -A -H -i -l selftest -j -d [a-z][a-z][a-z][a-z] /dev/nvme[0-9], \
+    /usr/sbin/smartctl -A -H -i -l selftest -j -d [a-z][a-z][a-z][a-z] /dev/nvme[0-9]n[0-9], \
     /usr/sbin/smartctl -t short /dev/sd[a-z], \
     /usr/sbin/smartctl -t short /dev/sd[a-z][0-9], \
     /usr/sbin/smartctl -t short /dev/nvme[0-9], \

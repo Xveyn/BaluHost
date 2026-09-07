@@ -45,7 +45,7 @@ export default function RaidConfirmationStep({
           />
           {arrayName && !isArrayNameValid && (
             <p className="mt-1 text-xs text-red-400">
-              {t('raidWizard.confirm.invalidName', 'Name must be "md" + digits (e.g. md0) or "md_" + alphanumerics (e.g. md_backup).')}
+              {t('raidWizard.confirm.invalidName', 'Name must be "md" followed by one to three digits (e.g. md0, md127).')}
             </p>
           )}
         </div>

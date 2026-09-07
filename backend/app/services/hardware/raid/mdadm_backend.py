@@ -581,10 +581,12 @@ class MdadmRaidBackend:
                     raise ValueError(f"Cannot use {dev} for RAID: it is part of the OS disk ({os_disk})")
 
         # Validate array name (safety net in case schema validation is bypassed)
-        if not re.fullmatch(r"md([0-9]+|_[a-zA-Z0-9]+)", payload.name) or len(payload.name) > 32:
+        if not re.fullmatch(r"md[0-9]{1,3}", payload.name):
             raise ValueError(
                 f"Invalid array name '{payload.name}'. "
-                "Name must match 'md<digits>' or 'md_<alphanumerics>' (max 32 chars)."
+                "Name must match 'md<1-3 digits>' (e.g. md0, md127) -- the "
+                "sudoers rules enumerate the permitted mdadm invocations and "
+                "cannot cover unbounded names (#570)."
             )
 
         # Validate RAID level
