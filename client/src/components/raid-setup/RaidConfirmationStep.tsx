@@ -34,8 +34,8 @@ export default function RaidConfirmationStep({
             value={arrayName}
             onChange={(e) => onArrayNameChange(e.target.value)}
             required
-            pattern="^md([0-9]+|_[a-zA-Z0-9]+)$"
-            maxLength={32}
+            pattern="^md[0-9]{1,3}$"
+            maxLength={5}
             placeholder="md0"
             className={`mt-1 w-full rounded-lg border bg-slate-950/70 px-3 py-2 text-sm text-slate-200 focus:outline-none ${
               arrayName && !isArrayNameValid

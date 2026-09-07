@@ -39,6 +39,17 @@
 # Frontend-Wizard auf dieselbe Form verengt worden (#570). Ein Platzhalter fuer
 # freie Namen waere hier keine Loesung: er matcht auch Leerzeichen und liesse
 # zusaetzliche Optionen durch.
+#
+# ACHTUNG bei einer BESTEHENDEN Installation: ein bereits vorhandenes Array mit
+# einem Namen ausserhalb dieser Form (etwa /dev/md_data oder /dev/md1234) laesst
+# sich nach dem Sync nicht mehr verwalten -- `mdadm --detail /dev/md_data` wird
+# von sudo abgelehnt. Weil MdadmRaidBackend._build_array mit check=True in einer
+# Schleife ueber alle Arrays laeuft, reisst ein einziges solches Array die
+# GESAMTE RAID-Statusabfrage mit, nicht nur seine eigene Zeile. Vor dem Sync
+# also `cat /proc/mdstat` pruefen; bei einem abweichenden Namen entweder die
+# Muster oben um diese Form ergaenzen oder das Array umbenennen. Robuster waere,
+# _build_array pro Array degradieren zu lassen statt die Antwort abzubrechen --
+# eigene Arbeit, in #570 vermerkt.
 
 Cmnd_Alias BALUHOST_MDADM = \
     /usr/sbin/mdadm --detail --scan, \

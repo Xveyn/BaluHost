@@ -111,15 +111,47 @@ def test_die_mdadm_aufrufe_des_codes_bleiben_erlaubt(args):
     assert _erlaubt(MDADM, *args)
 
 
-def test_das_anlegen_eines_arrays_bleibt_erlaubt():
-    """create_array baut die Argumentliste in dieser Reihenfolge (:605-624);
-    die Zahl der Geraete ist variabel, deshalb ist dies die einzige Zeile mit
-    einem '*' am Ende."""
-    assert _erlaubt(MDADM, "--create", "/dev/md0", "--level=1",
-                    "--raid-devices=2", "/dev/sda", "/dev/sdb")
-    assert _erlaubt(MDADM, "--create", "/dev/md0", "--level=5",
-                    "--raid-devices=3", "/dev/sda", "/dev/sdb", "/dev/sdc",
-                    "--assume-clean")
+@pytest.mark.parametrize("level,devices,spares", [
+    ("raid1", ["sda", "sdb"], []),
+    ("raid5", ["sda", "sdb", "sdc"], []),
+    ("raid10", ["sda", "sdb", "sdc", "sdb1"], []),   # zweistelliges Level
+    ("raid1", ["sda", "sdb"], ["sdc"]),              # --spare-devices vor den Geraeten
+])
+def test_das_anlegen_eines_arrays_wird_aus_dem_code_gewonnen(
+    level, devices, spares, monkeypatch
+):
+    """Die Argumentliste stammt aus create_array, nicht aus dieser Datei.
+
+    Dieselbe Lehre wie beim Selftest-Aufruf: die handgeschriebene Fassung hatte
+    `--level=10` und `--spare-devices` uebersehen, weil beide nur im Code
+    entstehen -- das Level aus `payload.level.replace('raid','')`, die
+    Spare-Option als eigenes Argument VOR dem ersten Geraet.
+    """
+    from app.schemas.system import CreateArrayRequest
+    from app.services.hardware.raid.mdadm_backend import MdadmRaidBackend
+
+    backend = object.__new__(MdadmRaidBackend)
+    backend._lsblk_available = False
+    aufgezeichnet: list[list[str]] = []
+
+    monkeypatch.setattr(MdadmRaidBackend, "_normalize_device",
+                        lambda self, d: d if d.startswith("/dev/") else f"/dev/{d}")
+    # _get_os_disk_name ruft selbst mdadm/lsblk -- fuer diesen Test still
+    # gelegt, damit nur der create-Aufruf aufgezeichnet wird.
+    monkeypatch.setattr(MdadmRaidBackend, "_get_os_disk_name", lambda self: None)
+    monkeypatch.setattr(MdadmRaidBackend, "_run",
+                        lambda self, cmd, **kw: aufgezeichnet.append(list(cmd)))
+    monkeypatch.setattr("app.services.hardware.raid.mdadm_backend.Path",
+                        lambda *_a, **_k: type("P", (), {"exists": lambda self: False})())
+
+    backend.create_array(CreateArrayRequest(
+        name="md0", level=level, devices=devices, spare_devices=spares,
+    ))
+
+    assert len(aufgezeichnet) == 1
+    argv = aufgezeichnet[0]
+    assert argv[0] == "mdadm"
+    assert _erlaubt(MDADM, *argv[1:]), f"nicht abgedeckt: {' '.join(argv)}"
 
 
 # --- Die Aufrufformen aus services/hardware/smart/ ---------------------------
