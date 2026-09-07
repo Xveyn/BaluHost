@@ -13,7 +13,8 @@ from abc import ABC, abstractmethod
 from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Tuple
+from pathlib import Path
+from typing import Dict, List, Mapping, Optional, Tuple
 
 from sqlalchemy import select, desc, func, update
 from sqlalchemy.exc import IntegrityError
@@ -34,6 +35,16 @@ from app.services.power.fan_sources import (
     TempSourceRegistry, HwmonTempSource, GpuTempSource, DiskTempSource, MixTempSource,
 )
 from app.services.power.fan_curve_eval import evaluate_curve
+from app.services.power.fan_gpu_acoustics import (
+    find_fan_ctrl_dir,
+    read_acoustics,
+    write_acoustic,
+)
+from app.services.power.fan_gpu_acoustics_store import (
+    AcousticsConfigError,
+    capture_baseline,
+    load_acoustics_config_fail_soft,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -180,6 +191,11 @@ class FanControlService:
         # _monitoring_task aus, und eine ueberschriebene Referenz waere eine
         # Regelschleife, die niemand mehr abbrechen kann (#559).
         self._lifecycle_lock = asyncio.Lock()
+        # Serialisiert apply_acoustics gegen sich selbst. Loest den
+        # Vier-Worker-Fall NICHT -- dafuer sorgt das bedingte Schreiben der
+        # Baseline im Store --, wohl aber den haeufigeren Fall zweier
+        # gleichzeitiger Anfragen auf demselben Worker (#516).
+        self._acoustics_lock = asyncio.Lock()
         # Zuletzt veroeffentlichter Rechtezustand. None heisst: noch nie
         # geschrieben -- dann wird beim ersten Abgleich veroeffentlicht (#552).
         self._published_write_permission: Optional[bool] = None
@@ -229,6 +245,13 @@ class FanControlService:
 
             # Load fan configs from database
             await self._load_fan_configs()
+
+            # Die GPU-Akustik gehoert zum Start, nicht in den Regelzyklus:
+            # sie ist Konfiguration, kein Regelkreis (#516).
+            try:
+                await self.apply_gpu_acoustics()
+            except Exception:
+                logger.exception("GPU-Akustik konnte nicht angewendet werden")
 
             # Eine noch laufende Schleife gehoert zum alten Backend und zu
             # den alten Konfigurationen -- und ihre Referenz ginge bei der
@@ -345,6 +368,107 @@ class FanControlService:
                 "Rueckgabe an die Board-Automatik: %d erfolgreich, %d fehlgeschlagen",
                 released, failed,
             )
+
+    async def apply_gpu_acoustics(self) -> Dict[str, bool]:
+        """Startpfad: nur der Primary wendet an.
+
+        Beim Start wuerden sonst vier Uvicorn-Worker dieselben vier Werte
+        gegeneinander setzen (#555, #559).
+
+        Das Gate sitzt bewusst NUR hier und nicht in apply_acoustics: eine
+        ausdrueckliche Nutzeraktion ueber den PUT-Endpunkt landet auf dem
+        Worker, der die Anfrage bedient -- bei vier Workern in drei von vier
+        Faellen auf einem Follower. Steckte das Gate weiter innen, quittierte
+        der Endpunkt mit 200 und aenderte an der Karte nichts.
+        """
+        if not getattr(lifespan, "IS_PRIMARY_WORKER", False):
+            return {}
+        return await self.apply_acoustics()
+
+    async def apply_acoustics(
+        self,
+        desired: Optional[Mapping[str, Optional[int]]] = None,
+    ) -> Dict[str, bool]:
+        """Beobachtet die Baseline und wendet die gewuenschten Werte an (#516).
+
+        Ohne Primary-Gate -- siehe apply_gpu_acoustics.
+
+        Args:
+            desired: Die anzuwendenden Wuensche. None heisst: das
+                gespeicherte desired nehmen (Startpfad). Der PUT reicht seine
+                Wuensche hier herein, BEVOR er sie persistiert -- gespeichert
+                wird nur, was die Karte angenommen hat.
+
+        Returns:
+            Je angefasstem Knoten, ob der Wert danach tatsaechlich anliegt.
+            Der Rueckgabewert wurde frueher verschluckt, und mit ihm die
+            Ruecklese-Kontrolle, die auf dieser Karte der einzige Beleg fuer
+            einen wirksamen Write ist (#480).
+        """
+        fan_ctrl = self._gpu_fan_ctrl_dir()
+        if fan_ctrl is None:
+            return {}
+
+        async with self._acoustics_lock:
+            if desired is None:
+                # Fail-soft: ein Lesefehler darf den Start nicht verhindern.
+                # Geschrieben wird auf diesem Pfad nichts, was die Baseline
+                # beschaedigen koennte -- capture_baseline liest selbst frisch.
+                with self.db_session_factory() as db:
+                    desired = load_acoustics_config_fail_soft(db).desired.model_dump()
+
+            wanted = {name: value for name, value in desired.items()
+                      if value is not None}
+            if not wanted:
+                return {}
+
+            current = await read_acoustics(fan_ctrl)
+
+            # Baseline VOR dem ersten Write erfassen -- und nur, wo noch
+            # nichts steht. Das Nur-wenn-leer entscheidet der Store anhand
+            # der frisch gelesenen Zeile, nicht anhand eines Snapshots, der
+            # beim Lesen der Hardware schon ueberholt sein kann.
+            observed = {name: node.value for name, node in current.items()
+                        if name in wanted}
+            if observed:
+                try:
+                    with self.db_session_factory() as db:
+                        capture_baseline(db, observed)
+                except AcousticsConfigError as exc:
+                    logger.warning(
+                        "Baseline nicht erfassbar, kein Akustik-Write: %s", exc)
+                    return {}
+
+            results: Dict[str, bool] = {}
+            for name, value in wanted.items():
+                results[name] = await write_acoustic(
+                    fan_ctrl, name, value, self._backend._write_hwmon_file
+                )
+            return results
+
+    def _gpu_fan_ctrl_dir(self) -> Optional[Path]:
+        """Das fan_ctrl-Verzeichnis der AMD-GPU, falls die Karte es anbietet.
+
+        Gefunden wird es ueber einen gescannten GPU-Luefter, obwohl die
+        Akustikwerte der KARTE gehoeren. Hat die Karte keinen gescannten
+        Luefter -- etwa weil fan1_input fehlt --, bleibt das Panel aus,
+        obwohl die Schnittstelle vorhanden waere. Auf der Referenzhardware
+        tritt das nicht auf; eine zweite Geraeteaufloesung dafuer zu bauen
+        waere Aufwand ohne belegten Anlass (#516).
+        """
+        cache = getattr(self._backend, "_fan_cache", None)
+        if not isinstance(cache, dict):
+            return None
+        for info in cache.values():
+            if not isinstance(info, dict) or info.get("gpu_vendor") != "amd":
+                continue
+            pwm_path = info.get("pwm_path")
+            if pwm_path is None:
+                continue
+            found = find_fan_ctrl_dir(pwm_path.parent)
+            if found is not None:
+                return found
+        return None
 
     async def _initialize_backend(self):
         """Initialize appropriate backend."""

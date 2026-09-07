@@ -876,7 +876,8 @@
       "scheduled": "Schedule",
       "manualPwm": "Manual PWM",
       "noSensor": "No sensor assigned",
-      "pwmError": "PWM error"
+      "pwmError": "PWM error",
+      "zeroRpm": "Zero RPM — the card has stopped the fan"
     },
     "details": {
       "temperatureCol": "Temperature (°C)",
@@ -1033,6 +1034,25 @@
         "explanation": "From RDNA3 onward the fan curve lives in the GPU firmware. The amdgpu driver rejects direct PWM control — even with the amdgpu.ppfeaturemask kernel parameter set. Speed and temperature are still shown.",
         "resetButton": "Reset manual mode",
         "resetSuccess": "Manual mode reset — the GPU is back under firmware control."
+      },
+      "acoustics": {
+        "title": "Graphics card acoustics",
+        "hint": "These values only take effect once the fan is running. At idle the card stops it (zero RPM).",
+        "competing": "LACT manages the same values. Remove the `pmfw_options` block from `/etc/lact/config.yaml`, otherwise it will overwrite your setting.",
+        "curveWarning": "These controls switch the card to auto mode. A firmware curve set elsewhere becomes inactive.",
+        "reset": "Restore the original state",
+        "save": "Apply",
+        "saveSuccess": "Acoustics settings applied.",
+        "resetSuccess": "Acoustics settings reset — the card manages these values again.",
+        "managed": "Managed by BaluHost",
+        "managedHint": "BaluHost only manages the values you tick and re-applies them on every start. Unticked values are left alone, exactly as the card has them.",
+        "currentLabel": "on the card",
+        "writeFailed": "The card did not accept these values: {{nodes}}. They stay unmanaged.",
+        "configUnavailable": "The acoustics configuration is currently unreadable or cannot be saved. The setting was not stored — the card itself is not the problem.",
+        "fan_target_temperature": "Target temperature",
+        "acoustic_limit_rpm_threshold": "Maximum fan speed",
+        "acoustic_target_rpm_threshold": "Target fan speed",
+        "fan_minimum_pwm": "Minimum duty"
       }
     }
   },

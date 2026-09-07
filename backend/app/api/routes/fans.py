@@ -2,12 +2,14 @@
 Fan control API endpoints.
 """
 import logging
-from typing import List, Optional
+from pathlib import Path
+from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy import select, func
 
 from app.api.deps import get_current_user, get_current_admin
+from app.core.exceptions import ServiceUnavailableError
 from app.core.rate_limiter import user_limiter, get_limit
 from app.models.user import User
 from app.schemas.fans import (
@@ -53,7 +55,24 @@ from app.schemas.fans import (
     CompositeSensorInfo,
     CompositeSensorListResponse,
 )
+from app.schemas.gpu_fan_acoustics import (
+    GpuFanAcousticsNode,
+    GpuFanAcousticsStatus,
+    GpuFanAcousticsValues,
+    GpuFanAcousticsWrite,
+)
 from app.services.power.fan_control import get_fan_control_service, FanControlService
+from app.services.power.fan_gpu_acoustics import (
+    read_acoustics,
+    resolve_restores,
+    write_acoustic,
+)
+from app.services.power.fan_gpu_acoustics_store import (
+    AcousticsConfigError,
+    load_acoustics_config,
+    load_acoustics_config_fail_soft,
+    store_desired,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -1053,3 +1072,166 @@ async def set_gpu_manual_mode(
         await disable_amd_manual(hwmon_dir=hwmon_dir, drm_root=None, state=state)
 
     return {"success": True, "fan_id": fan_id, "enabled": body.enable}
+
+
+# --- GPU Acoustics Endpoints (#516) ---
+
+# Erkennung eines zweiten Verwalters ueber die Konfigurationsdatei statt ueber
+# pgrep: kein Subprozess, keine Testflakiness, und die Warnung verschwindet von
+# selbst, sobald der Block entfernt wird (#516).
+LACT_CONFIG_PATH = Path("/etc/lact/config.yaml")
+
+
+def _competing_manager() -> Optional[str]:
+    try:
+        if LACT_CONFIG_PATH.exists() and "pmfw_options" in LACT_CONFIG_PATH.read_text():
+            return "lact"
+    except (OSError, ValueError):
+        # ValueError deckt UnicodeDecodeError mit ab: eine von Hand
+        # geschriebene Datei in Latin-1 darf den GET nicht zur 500 machen.
+        pass
+    return None
+
+
+async def _acoustics_status(service: FanControlService) -> GpuFanAcousticsStatus:
+    """Der Zustand, den beide Endpunkte zurueckgeben.
+
+    Eigene Funktion statt eines Aufrufs von get_gpu_acoustics.__wrapped__ aus
+    dem PUT: einen Handler aus einem Handler zu rufen umgeht die
+    Abhaengigkeiten und bricht, sobald jemand einen Dekorator ergaenzt.
+    """
+    fan_ctrl = service._gpu_fan_ctrl_dir()
+    if fan_ctrl is None:
+        return GpuFanAcousticsStatus(available=False)
+
+    current = await read_acoustics(fan_ctrl)
+    # Fail-soft: eine unlesbare Zeile darf die Anzeige nicht kippen. Der
+    # Schreibpfad im PUT nimmt bewusst die harte Variante.
+    with service.db_session_factory() as db:
+        desired = load_acoustics_config_fail_soft(db).desired.model_dump()
+
+    return GpuFanAcousticsStatus(
+        available=True,
+        competing_manager=_competing_manager(),
+        nodes={
+            name: GpuFanAcousticsNode(
+                current=node.value,
+                minimum=node.minimum,
+                maximum=node.maximum,
+                desired=desired.get(name),
+            )
+            for name, node in current.items()
+        },
+    )
+
+
+@router.get("/gpu-acoustics", response_model=GpuFanAcousticsStatus)
+@user_limiter.limit(get_limit("admin_operations"))
+async def get_gpu_acoustics(
+    request: Request, response: Response,
+    current_user: User = Depends(get_current_user),
+    service: FanControlService = Depends(get_fan_service),
+):
+    """Akustikwerte der GPU samt der vom Treiber gemeldeten Bereiche.
+
+    Fehlt die Schnittstelle -- aeltere Kernel haben gpu_od/fan_ctrl nicht --,
+    kommt available=false statt eines Fehlers, damit die Oberflaeche das Panel
+    ausblenden kann.
+    """
+    return await _acoustics_status(service)
+
+
+@router.put("/gpu-acoustics", response_model=GpuFanAcousticsStatus)
+@user_limiter.limit(get_limit("admin_operations"))
+async def set_gpu_acoustics(
+    request: Request, response: Response,
+    body: GpuFanAcousticsValues,
+    current_user: User = Depends(get_current_admin),
+    service: FanControlService = Depends(get_fan_service),
+):
+    """Akustikwerte setzen.
+
+    null fuer ein Feld heisst 'nicht mehr verwalten' und schreibt die
+    beobachtete Baseline zurueck. Der Zuruecksetzen-Knopf ist damit ein PUT
+    mit lauter null. Gibt es keine Baseline, passiert nichts -- es wird kein
+    Herstellerstandard geraten (#534).
+
+    Reihenfolge: erst schreiben, dann persistieren. Ein Wert, den die Karte
+    abgelehnt hat, wird NICHT gespeichert -- sonst versuchte ihn jeder Start
+    erneut, sichtbar nur als WARNING im Log. Das Feld behaelt dann seinen
+    bisherigen Wunsch, und ein zweiter Versuch greift wieder.
+    """
+    fan_ctrl = service._gpu_fan_ctrl_dir()
+    if fan_ctrl is None:
+        return GpuFanAcousticsStatus(available=False)
+
+    # Harte Ladevariante: auf einem fehlgeschlagenen Load darf dieser
+    # Schreibpfad nicht aufbauen. Er wuerde sonst leere Vorgaben ueber die
+    # echte Zeile legen und die beobachtete Baseline unwiederbringlich
+    # loeschen (#516).
+    try:
+        with service.db_session_factory() as db:
+            config = load_acoustics_config(db)
+    except AcousticsConfigError:
+        logger.warning(
+            "GPU-Akustik: Konfiguration nicht lesbar, PUT abgebrochen -- "
+            "die gespeicherte Baseline bleibt unangetastet"
+        )
+        raise ServiceUnavailableError(
+            "GPU acoustics configuration is currently unreadable")
+
+    previous = config.desired.model_dump()
+    incoming = body.model_dump()
+    to_restore = resolve_restores(
+        previous_desired=previous,
+        incoming=incoming,
+        baseline=config.baseline.model_dump(),
+    )
+
+    writes: Dict[str, GpuFanAcousticsWrite] = {}
+    accepted: Dict[str, Optional[int]] = {}
+
+    # 1. Zuruecksetzen auf die beobachtete Baseline.
+    for name, value in to_restore.items():
+        ok = await write_acoustic(
+            fan_ctrl, name, value, service._backend._write_hwmon_file
+        )
+        writes[name] = GpuFanAcousticsWrite(ok=ok, value=value, restored=True)
+        if ok:
+            accepted[name] = None
+        # Sonst bleibt der bisherige Wunsch stehen. Nur so greift ein zweiter
+        # Klick auf 'Zuruecksetzen' erneut: resolve_restores verlangt einen
+        # vorherigen Wunsch, und ein geleertes desired machte jeden weiteren
+        # Versuch zum stillen No-Op.
+
+    # 2. Felder ohne Ruecksetzarbeit gelten als nicht mehr verwaltet -- es
+    #    wurde nichts geschrieben, also kann nichts scheitern.
+    for name, value in incoming.items():
+        if value is None and name not in to_restore:
+            accepted[name] = None
+
+    # 3. Neue Wuensche anwenden. apply_acoustics, NICHT apply_gpu_acoustics:
+    #    der Aufruf landet bei vier Workern meist auf einem Follower, und das
+    #    Primary-Gate gehoert nur an den Startpfad (#516). Die Wuensche gehen
+    #    hinein, BEVOR sie gespeichert sind -- gespeichert wird nur, was die
+    #    Karte angenommen hat.
+    wanted = {name: value for name, value in incoming.items() if value is not None}
+    results = await service.apply_acoustics(desired=wanted) if wanted else {}
+    for name, value in wanted.items():
+        ok = bool(results.get(name, False))
+        writes[name] = GpuFanAcousticsWrite(ok=ok, value=value)
+        if ok:
+            accepted[name] = value
+
+    if accepted:
+        try:
+            with service.db_session_factory() as db:
+                store_desired(db, accepted)
+        except AcousticsConfigError:
+            logger.warning("GPU-Akustik: desired nicht speicherbar")
+            raise ServiceUnavailableError(
+                "GPU acoustics configuration could not be saved")
+
+    status = await _acoustics_status(service)
+    status.writes = writes
+    return status

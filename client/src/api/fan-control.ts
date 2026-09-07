@@ -615,3 +615,55 @@ export async function deleteComposite(id: string): Promise<void> {
 export async function setGpuManualMode(fanId: string, enabled: boolean): Promise<void> {
   await apiClient.post(`/api/fans/${encodeURIComponent(fanId)}/gpu-manual-mode`, { enabled });
 }
+
+// --- GPU Acoustics (firmware fan-control nodes, e.g. amdgpu pmfw) ---
+
+export interface GpuAcousticsNode {
+  current: number;
+  minimum: number;
+  maximum: number;
+  desired: number | null;
+}
+
+/**
+ * Result of one hardware write from the PUT, including the read-back check:
+ * `ok: false` means the card did not take the value, even though the request
+ * itself returned 200. `restored: true` marks a baseline write-back rather
+ * than a new wish.
+ */
+export interface GpuAcousticsWrite {
+  ok: boolean;
+  value: number;
+  restored?: boolean;
+}
+
+export interface GpuAcousticsStatus {
+  available: boolean;
+  competing_manager: string | null;
+  nodes: Record<string, GpuAcousticsNode>;
+  /** Only the PUT fills this — one entry per node it actually touched. */
+  writes?: Record<string, GpuAcousticsWrite>;
+}
+
+/**
+ * Get the GPU acoustics status (available fan-control nodes with their
+ * driver-reported ranges, plus any observed desired values).
+ */
+export async function getGpuAcoustics(): Promise<GpuAcousticsStatus> {
+  const response = await apiClient.get<GpuAcousticsStatus>('/api/fans/gpu-acoustics');
+  return response.data;
+}
+
+/**
+ * Set GPU acoustics values. A `null` value for a field means "stop managing
+ * it" and restores the value that stood before BaluHost first touched it.
+ *
+ * Responds with 503 when the stored configuration is neither readable nor
+ * saveable — that is a configuration problem, not a rejected hardware write.
+ */
+export async function setGpuAcoustics(
+  values: Record<string, number | null>,
+): Promise<GpuAcousticsStatus> {
+  const response = await apiClient.put<GpuAcousticsStatus>('/api/fans/gpu-acoustics', values);
+  return response.data;
+}

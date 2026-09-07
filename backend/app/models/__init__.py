@@ -39,7 +39,15 @@ from app.models.gpu_power import (
     GpuPowerDemand,
     GpuPowerCommand,
 )
-from app.models.fans import FanConfig, FanSample, FanScheduleEntry, FanCurveProfile, TempSensorLabel, CompositeTempSensor
+from app.models.fans import (
+    FanConfig,
+    FanSample,
+    FanScheduleEntry,
+    FanCurveProfile,
+    TempSensorLabel,
+    CompositeTempSensor,
+    GpuFanAcousticsConfigDb,
+)
 from app.models.scheduler_history import (
     SchedulerExecution,
     SchedulerConfig,
@@ -152,6 +160,7 @@ __all__ = [
     "FanCurveProfile",
     "TempSensorLabel",
     "CompositeTempSensor",
+    "GpuFanAcousticsConfigDb",
     "SchedulerExecution",
     "SchedulerConfig",
     "SchedulerStatus",

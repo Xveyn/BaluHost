@@ -94,4 +94,27 @@ describe('FanCard bei firmware-verwalteter GPU', () => {
     expect(scheduled.disabled).toBe(false);
     expect(screen.queryByTestId('fan-uncontrollable-hint')).toBeNull();
   });
+
+  it('benennt Zero-RPM, statt eine nackte Null zu zeigen', () => {
+    renderCard(fan({ pwm_control: 'firmware_managed', rpm: 0 }));
+    expect(screen.getByTestId('fan-zero-rpm')).toBeTruthy();
+  });
+
+  it('zeigt den Hinweis nicht, wenn der Luefter laeuft', () => {
+    renderCard(fan({ pwm_control: 'firmware_managed', rpm: 900 }));
+    expect(screen.queryByTestId('fan-zero-rpm')).toBeNull();
+  });
+
+  it('zeigt ihn nicht bei einem gewoehnlichen Luefter mit 0 RPM', () => {
+    // Ein stehender Gehaeuseluefter ist ein Befund, kein Zero-RPM-Modus.
+    renderCard(fan({ pwm_control: 'supported', rpm: 0 }));
+    expect(screen.queryByTestId('fan-zero-rpm')).toBeNull();
+  });
+
+  it('behauptet kein Zero-RPM, wenn gar kein Messwert vorliegt', () => {
+    // rpm null heisst "keine Tacho-Ablesung", nicht "steht still".
+    renderCard(fan({ pwm_control: 'firmware_managed', rpm: null }));
+    expect(screen.queryByTestId('fan-zero-rpm')).toBeNull();
+    expect(screen.getByText('—')).toBeTruthy();
+  });
 });

@@ -871,7 +871,8 @@
       "scheduled": "Zeitplan",
       "manualPwm": "Manuelles PWM",
       "noSensor": "Kein Sensor zugewiesen",
-      "pwmError": "PWM-Fehler"
+      "pwmError": "PWM-Fehler",
+      "zeroRpm": "Zero-RPM — die Karte hat den Lüfter angehalten"
     },
     "details": {
       "temperatureCol": "Temperatur (°C)",
@@ -1028,6 +1029,25 @@
         "explanation": "Ab RDNA3 liegt die Lüfterkurve in der GPU-Firmware. Der amdgpu-Treiber lehnt direkte PWM-Steuerung ab — auch mit gesetztem Kernel-Parameter amdgpu.ppfeaturemask. Drehzahl und Temperatur werden weiter angezeigt.",
         "resetButton": "Manuellen Modus zurücksetzen",
         "resetSuccess": "Manueller Modus zurückgesetzt — die GPU steht wieder unter Firmware-Kontrolle."
+      },
+      "acoustics": {
+        "title": "Akustik der Grafikkarte",
+        "hint": "Diese Werte greifen erst, wenn der Lüfter läuft. Im Leerlauf hält die Karte ihn an (Zero-RPM).",
+        "competing": "LACT verwaltet dieselben Werte. Entferne den Block `pmfw_options` aus `/etc/lact/config.yaml`, sonst überschreibt es deine Einstellung.",
+        "curveWarning": "Diese Regler schalten die Karte in den Auto-Modus. Eine anderswo gesetzte Firmware-Kurve wird dabei inaktiv.",
+        "reset": "Auf den Ausgangszustand zurücksetzen",
+        "save": "Übernehmen",
+        "saveSuccess": "Akustik-Einstellungen übernommen.",
+        "resetSuccess": "Akustik-Einstellungen zurückgesetzt — die Karte verwaltet diese Werte wieder selbst.",
+        "managed": "Von BaluHost verwaltet",
+        "managedHint": "Nur markierte Werte verwaltet BaluHost und schreibt sie bei jedem Start wieder auf die Karte. Nicht markierte bleiben unangetastet, so wie die Karte sie hat.",
+        "currentLabel": "auf der Karte",
+        "writeFailed": "Die Karte hat diese Werte nicht angenommen: {{nodes}}. Sie bleiben unverwaltet.",
+        "configUnavailable": "Die Akustik-Konfiguration ist gerade nicht les- oder speicherbar. Die Einstellung wurde nicht gespeichert — die Karte selbst ist nicht das Problem.",
+        "fan_target_temperature": "Zieltemperatur",
+        "acoustic_limit_rpm_threshold": "Maximale Drehzahl",
+        "acoustic_target_rpm_threshold": "Angestrebte Drehzahl",
+        "fan_minimum_pwm": "Minimale Leistung"
       }
     }
   },

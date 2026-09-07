@@ -9,6 +9,25 @@
 # running as ${BALUHOST_USER} therefore hits PermissionError ([Errno 13])
 # when the GPU power manager tries to switch states.
 #
+# #516: the same problem applies to the four GPU fan acoustics nodes under
+# gpu_od/fan_ctrl/ (fan target temperature, acoustic limit/target RPM
+# thresholds, minimum PWM). gpu_od/ only exists once the amdgpu driver has
+# initialized Overdrive for that card — on a card where Overdrive is off or
+# unsupported, the directory is simply absent. The `[ -e ]` guard below
+# already covers that: the loop skips missing files instead of failing, so
+# adding these paths is safe even on hardware without gpu_od/. Whether the
+# rule really fires for them can therefore only be established after a boot
+# on which gpu_od/ exists — and it has to be measured on the permissions
+# themselves:
+#
+#   ls -la /sys/class/drm/card0/device/gpu_od/fan_ctrl/
+#   # expected: root video, group-write set
+#
+# Checking that the acoustics feature works proves nothing here: the backend
+# falls back to `sudo -n tee`, which is covered by the pre-existing sudoers
+# entry for /sys/class/hwmon/*, so the values take effect even while these
+# nodes are still root:root 0644.
+#
 # This udev rule re-chowns the relevant sysfs nodes to the "video" group
 # and adds the group-write bit. ${BALUHOST_USER} must be a member of
 # "video" — the install script ensures this via `usermod -aG video`.
@@ -17,4 +36,4 @@
 # permissions stay correct across reboots.
 #
 ACTION=="add|change", SUBSYSTEM=="drm", KERNEL=="card[0-9]*", \
-    RUN+="/bin/sh -c 'for f in /sys/class/drm/%k/device/power_dpm_force_performance_level /sys/class/drm/%k/device/pp_power_profile_mode; do [ -e \"$f\" ] && chgrp video \"$f\" && chmod g+w \"$f\"; done'"
+    RUN+="/bin/sh -c 'for f in /sys/class/drm/%k/device/power_dpm_force_performance_level /sys/class/drm/%k/device/pp_power_profile_mode /sys/class/drm/%k/device/gpu_od/fan_ctrl/fan_target_temperature /sys/class/drm/%k/device/gpu_od/fan_ctrl/acoustic_limit_rpm_threshold /sys/class/drm/%k/device/gpu_od/fan_ctrl/acoustic_target_rpm_threshold /sys/class/drm/%k/device/gpu_od/fan_ctrl/fan_minimum_pwm; do [ -e \"$f\" ] && chgrp video \"$f\" && chmod g+w \"$f\"; done'"
