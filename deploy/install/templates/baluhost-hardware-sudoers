@@ -8,12 +8,143 @@
 #   deploy/scripts/install-hardware-sudoers.sh manually. A routine deploy
 #   does NOT re-render it.
 
-# RAID management (mdadm)
-@@BALUHOST_USER@@ ALL=(root) NOPASSWD: /sbin/mdadm
-@@BALUHOST_USER@@ ALL=(root) NOPASSWD: /usr/sbin/mdadm
+# RAID management (mdadm) und Disk-Health (smartctl)
+#
+# Bis #570 standen hier `NOPASSWD: /sbin/mdadm` und `/usr/sbin/smartctl` OHNE
+# Argumente. Ein sudoers-Eintrag ohne Argumente erlaubt JEDE Argumentliste --
+# darunter `mdadm --monitor --program /pfad/zu/beliebigem/programm`, also
+# Codeausfuehrung als root, und `--create`/`--zero-superblock` auf beliebigen
+# Block-Geraeten. Das war der laengste Hebel in dieser Datei.
+#
+# Aufgezaehlt sind jetzt genau die Aufrufformen, die der Code kennt
+# (services/hardware/raid/mdadm_backend.py, services/hardware/smart/).
+# Zeichenklassen statt '*', weil Wildcards in sudoers-ARGUMENTEN auch '/'
+# matchen; die einzige Ausnahme ist die --create-Zeile, siehe unten.
+# Gehalten wird die Liste von backend/tests/test_raid_sudoers_scope.py.
+#
+# Geraeteformen nach Messung auf BaluNode (2026-09-07): smartctl --scan meldet
+# /dev/sd[a-c] und /dev/nvme[0-1], das Array /dev/md1 fuehrt sda1 (Partition)
+# und sdb (ganze Platte) -- deshalb sowohl sd[a-z] als auch sd[a-z][0-9].
+#
+# NUR /usr/sbin: auf Debian 13 (usrmerge) ist /sbin ein Symlink dorthin. Auf
+# einer Distribution ohne usrmerge muessen die Eintraege verdoppelt werden.
 
-# Disk health (smartctl)
-@@BALUHOST_USER@@ ALL=(root) NOPASSWD: /usr/sbin/smartctl
+Cmnd_Alias BALUHOST_MDADM = \
+    /usr/sbin/mdadm --detail --scan, \
+    /usr/sbin/mdadm --detail /dev/md[0-9], \
+    /usr/sbin/mdadm --detail /dev/md[0-9][0-9], \
+    /usr/sbin/mdadm --detail /dev/md[0-9][0-9][0-9], \
+    /usr/sbin/mdadm --wait /dev/md[0-9], \
+    /usr/sbin/mdadm --wait /dev/md[0-9][0-9], \
+    /usr/sbin/mdadm --wait /dev/md[0-9][0-9][0-9], \
+    /usr/sbin/mdadm --stop /dev/md[0-9], \
+    /usr/sbin/mdadm --stop /dev/md[0-9][0-9], \
+    /usr/sbin/mdadm --stop /dev/md[0-9][0-9][0-9], \
+    /usr/sbin/mdadm --zero-superblock /dev/sd[a-z], \
+    /usr/sbin/mdadm --zero-superblock /dev/sd[a-z][0-9], \
+    /usr/sbin/mdadm --zero-superblock /dev/nvme[0-9]n[0-9], \
+    /usr/sbin/mdadm --zero-superblock /dev/nvme[0-9]n[0-9]p[0-9], \
+    /usr/sbin/mdadm /dev/md[0-9] --fail /dev/sd[a-z], \
+    /usr/sbin/mdadm /dev/md[0-9] --fail /dev/sd[a-z][0-9], \
+    /usr/sbin/mdadm /dev/md[0-9] --fail /dev/nvme[0-9]n[0-9], \
+    /usr/sbin/mdadm /dev/md[0-9] --fail /dev/nvme[0-9]n[0-9]p[0-9], \
+    /usr/sbin/mdadm /dev/md[0-9][0-9] --fail /dev/sd[a-z], \
+    /usr/sbin/mdadm /dev/md[0-9][0-9] --fail /dev/sd[a-z][0-9], \
+    /usr/sbin/mdadm /dev/md[0-9][0-9] --fail /dev/nvme[0-9]n[0-9], \
+    /usr/sbin/mdadm /dev/md[0-9][0-9] --fail /dev/nvme[0-9]n[0-9]p[0-9], \
+    /usr/sbin/mdadm /dev/md[0-9][0-9][0-9] --fail /dev/sd[a-z], \
+    /usr/sbin/mdadm /dev/md[0-9][0-9][0-9] --fail /dev/sd[a-z][0-9], \
+    /usr/sbin/mdadm /dev/md[0-9][0-9][0-9] --fail /dev/nvme[0-9]n[0-9], \
+    /usr/sbin/mdadm /dev/md[0-9][0-9][0-9] --fail /dev/nvme[0-9]n[0-9]p[0-9], \
+    /usr/sbin/mdadm /dev/md[0-9] --remove /dev/sd[a-z], \
+    /usr/sbin/mdadm /dev/md[0-9] --remove /dev/sd[a-z][0-9], \
+    /usr/sbin/mdadm /dev/md[0-9] --remove /dev/nvme[0-9]n[0-9], \
+    /usr/sbin/mdadm /dev/md[0-9] --remove /dev/nvme[0-9]n[0-9]p[0-9], \
+    /usr/sbin/mdadm /dev/md[0-9][0-9] --remove /dev/sd[a-z], \
+    /usr/sbin/mdadm /dev/md[0-9][0-9] --remove /dev/sd[a-z][0-9], \
+    /usr/sbin/mdadm /dev/md[0-9][0-9] --remove /dev/nvme[0-9]n[0-9], \
+    /usr/sbin/mdadm /dev/md[0-9][0-9] --remove /dev/nvme[0-9]n[0-9]p[0-9], \
+    /usr/sbin/mdadm /dev/md[0-9][0-9][0-9] --remove /dev/sd[a-z], \
+    /usr/sbin/mdadm /dev/md[0-9][0-9][0-9] --remove /dev/sd[a-z][0-9], \
+    /usr/sbin/mdadm /dev/md[0-9][0-9][0-9] --remove /dev/nvme[0-9]n[0-9], \
+    /usr/sbin/mdadm /dev/md[0-9][0-9][0-9] --remove /dev/nvme[0-9]n[0-9]p[0-9], \
+    /usr/sbin/mdadm /dev/md[0-9] --add /dev/sd[a-z], \
+    /usr/sbin/mdadm /dev/md[0-9] --add /dev/sd[a-z][0-9], \
+    /usr/sbin/mdadm /dev/md[0-9] --add /dev/nvme[0-9]n[0-9], \
+    /usr/sbin/mdadm /dev/md[0-9] --add /dev/nvme[0-9]n[0-9]p[0-9], \
+    /usr/sbin/mdadm /dev/md[0-9][0-9] --add /dev/sd[a-z], \
+    /usr/sbin/mdadm /dev/md[0-9][0-9] --add /dev/sd[a-z][0-9], \
+    /usr/sbin/mdadm /dev/md[0-9][0-9] --add /dev/nvme[0-9]n[0-9], \
+    /usr/sbin/mdadm /dev/md[0-9][0-9] --add /dev/nvme[0-9]n[0-9]p[0-9], \
+    /usr/sbin/mdadm /dev/md[0-9][0-9][0-9] --add /dev/sd[a-z], \
+    /usr/sbin/mdadm /dev/md[0-9][0-9][0-9] --add /dev/sd[a-z][0-9], \
+    /usr/sbin/mdadm /dev/md[0-9][0-9][0-9] --add /dev/nvme[0-9]n[0-9], \
+    /usr/sbin/mdadm /dev/md[0-9][0-9][0-9] --add /dev/nvme[0-9]n[0-9]p[0-9], \
+    /usr/sbin/mdadm /dev/md[0-9] --readwrite /dev/sd[a-z], \
+    /usr/sbin/mdadm /dev/md[0-9] --readwrite /dev/sd[a-z][0-9], \
+    /usr/sbin/mdadm /dev/md[0-9] --readwrite /dev/nvme[0-9]n[0-9], \
+    /usr/sbin/mdadm /dev/md[0-9] --readwrite /dev/nvme[0-9]n[0-9]p[0-9], \
+    /usr/sbin/mdadm /dev/md[0-9][0-9] --readwrite /dev/sd[a-z], \
+    /usr/sbin/mdadm /dev/md[0-9][0-9] --readwrite /dev/sd[a-z][0-9], \
+    /usr/sbin/mdadm /dev/md[0-9][0-9] --readwrite /dev/nvme[0-9]n[0-9], \
+    /usr/sbin/mdadm /dev/md[0-9][0-9] --readwrite /dev/nvme[0-9]n[0-9]p[0-9], \
+    /usr/sbin/mdadm /dev/md[0-9][0-9][0-9] --readwrite /dev/sd[a-z], \
+    /usr/sbin/mdadm /dev/md[0-9][0-9][0-9] --readwrite /dev/sd[a-z][0-9], \
+    /usr/sbin/mdadm /dev/md[0-9][0-9][0-9] --readwrite /dev/nvme[0-9]n[0-9], \
+    /usr/sbin/mdadm /dev/md[0-9][0-9][0-9] --readwrite /dev/nvme[0-9]n[0-9]p[0-9], \
+    /usr/sbin/mdadm /dev/md[0-9] --write-mostly /dev/sd[a-z], \
+    /usr/sbin/mdadm /dev/md[0-9] --write-mostly /dev/sd[a-z][0-9], \
+    /usr/sbin/mdadm /dev/md[0-9] --write-mostly /dev/nvme[0-9]n[0-9], \
+    /usr/sbin/mdadm /dev/md[0-9] --write-mostly /dev/nvme[0-9]n[0-9]p[0-9], \
+    /usr/sbin/mdadm /dev/md[0-9][0-9] --write-mostly /dev/sd[a-z], \
+    /usr/sbin/mdadm /dev/md[0-9][0-9] --write-mostly /dev/sd[a-z][0-9], \
+    /usr/sbin/mdadm /dev/md[0-9][0-9] --write-mostly /dev/nvme[0-9]n[0-9], \
+    /usr/sbin/mdadm /dev/md[0-9][0-9] --write-mostly /dev/nvme[0-9]n[0-9]p[0-9], \
+    /usr/sbin/mdadm /dev/md[0-9][0-9][0-9] --write-mostly /dev/sd[a-z], \
+    /usr/sbin/mdadm /dev/md[0-9][0-9][0-9] --write-mostly /dev/sd[a-z][0-9], \
+    /usr/sbin/mdadm /dev/md[0-9][0-9][0-9] --write-mostly /dev/nvme[0-9]n[0-9], \
+    /usr/sbin/mdadm /dev/md[0-9][0-9][0-9] --write-mostly /dev/nvme[0-9]n[0-9]p[0-9], \
+    /usr/sbin/mdadm /dev/md[0-9] --grow --bitmap=internal, \
+    /usr/sbin/mdadm /dev/md[0-9] --grow --bitmap=none, \
+    /usr/sbin/mdadm /dev/md[0-9][0-9] --grow --bitmap=internal, \
+    /usr/sbin/mdadm /dev/md[0-9][0-9] --grow --bitmap=none, \
+    /usr/sbin/mdadm /dev/md[0-9][0-9][0-9] --grow --bitmap=internal, \
+    /usr/sbin/mdadm /dev/md[0-9][0-9][0-9] --grow --bitmap=none
+
+# Die einzige Zeile mit '*': --create nimmt eine variable Zahl von Geraeten und
+# haengt je nach Einstellung --assume-clean an, laesst sich also nicht auf eine
+# feste Argumentzahl festnageln. Begrenzt ist sie durch den Praefix (Array
+# unter /dev/md, numerisches Level und Geraetezahl); was danach kommt, faengt
+# mdadms eigener Modus-Parser ab, nicht sudo. Das ist schwaecher als der Rest
+# und der Kandidat fuer einen argumentpruefenden Wrapper unter /usr/local/sbin,
+# wie ihn der Plugin-Worker bereits benutzt.
+Cmnd_Alias BALUHOST_MDADM_CREATE = \
+    /usr/sbin/mdadm --create /dev/md[0-9] --level=[0-9] --raid-devices=[0-9] /dev/*, \
+    /usr/sbin/mdadm --create /dev/md[0-9][0-9] --level=[0-9] --raid-devices=[0-9] /dev/*, \
+    /usr/sbin/mdadm --create /dev/md[0-9][0-9][0-9] --level=[0-9] --raid-devices=[0-9] /dev/*
+
+Cmnd_Alias BALUHOST_SMARTCTL = \
+    /usr/sbin/smartctl --scan -j, \
+    /usr/sbin/smartctl -H -i -l selftest -j -d [a-z][a-z][a-z] /dev/sd[a-z], \
+    /usr/sbin/smartctl -H -i -l selftest -j -d [a-z][a-z][a-z] /dev/sd[a-z][0-9], \
+    /usr/sbin/smartctl -H -i -l selftest -j -d [a-z][a-z][a-z] /dev/nvme[0-9], \
+    /usr/sbin/smartctl -H -i -l selftest -j -d [a-z][a-z][a-z] /dev/nvme[0-9]n[0-9], \
+    /usr/sbin/smartctl -H -i -l selftest -j -d [a-z][a-z][a-z][a-z] /dev/sd[a-z], \
+    /usr/sbin/smartctl -H -i -l selftest -j -d [a-z][a-z][a-z][a-z] /dev/sd[a-z][0-9], \
+    /usr/sbin/smartctl -H -i -l selftest -j -d [a-z][a-z][a-z][a-z] /dev/nvme[0-9], \
+    /usr/sbin/smartctl -H -i -l selftest -j -d [a-z][a-z][a-z][a-z] /dev/nvme[0-9]n[0-9], \
+    /usr/sbin/smartctl -t short /dev/sd[a-z], \
+    /usr/sbin/smartctl -t short /dev/sd[a-z][0-9], \
+    /usr/sbin/smartctl -t short /dev/nvme[0-9], \
+    /usr/sbin/smartctl -t short /dev/nvme[0-9]n[0-9], \
+    /usr/sbin/smartctl -t long /dev/sd[a-z], \
+    /usr/sbin/smartctl -t long /dev/sd[a-z][0-9], \
+    /usr/sbin/smartctl -t long /dev/nvme[0-9], \
+    /usr/sbin/smartctl -t long /dev/nvme[0-9]n[0-9]
+
+@@BALUHOST_USER@@ ALL=(root) NOPASSWD: BALUHOST_MDADM
+@@BALUHOST_USER@@ ALL=(root) NOPASSWD: BALUHOST_MDADM_CREATE
+@@BALUHOST_USER@@ ALL=(root) NOPASSWD: BALUHOST_SMARTCTL
 
 # Fan control & CPU frequency (write to sysfs via tee)
 #
