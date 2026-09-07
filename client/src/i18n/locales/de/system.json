@@ -880,7 +880,9 @@
       "abandoned": "Niemand regelt",
       "abandonedHint": "BaluHost konnte diesen Kanal nicht schreiben und die Rueckgabe an die Board-Automatik ist ebenfalls fehlgeschlagen. Der Luefter laeuft auf seinem letzten Wert weiter; die Temperaturueberwachung laeuft weiter.",
       "reacquire": "Wieder uebernehmen",
-      "reacquireSuccess": "Luefter wieder uebernommen"
+      "reacquireSuccess": "Luefter wieder uebernommen",
+      "causeNotControllable": "Grund: BaluHost konnte diesen Kanal wiederholt nicht schreiben.",
+      "causeNoTarget": "Grund: die Temperaturquelle dieses Luefters liefert seit laengerem keinen Messwert."
     },
     "details": {
       "temperatureCol": "Temperatur (°C)",

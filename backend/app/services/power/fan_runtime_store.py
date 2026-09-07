@@ -99,7 +99,24 @@ def read_released_fans(db: Session) -> dict:
     except (ValueError, TypeError) as exc:
         logger.debug("released_fans nicht lesbar: %s", exc)
         return {}
-    return werte if isinstance(werte, dict) else {}
+    if not isinstance(werte, dict):
+        return {}
+
+    # Zwei Formen werden gelesen: der blosse Zustand als Zeichenkette (die
+    # Form, mit der #534 Punkt 1 ausgeliefert wurde) und das Objekt mit
+    # Zustand UND Grund (seit Punkt 2). Ohne diese Nachsicht saehe der erste
+    # Zyklus nach dem Deploy die alte Zeile als unlesbar an und verloere den
+    # Freigabe-Zustand still.
+    vereinheitlicht = {}
+    for fan_id, wert in werte.items():
+        if isinstance(wert, str):
+            vereinheitlicht[fan_id] = {"state": wert, "reason": None}
+        elif isinstance(wert, dict) and "state" in wert:
+            vereinheitlicht[fan_id] = {
+                "state": wert["state"],
+                "reason": wert.get("reason"),
+            }
+    return vereinheitlicht
 
 
 def publish_released_fans(db: Session, released: dict) -> bool:

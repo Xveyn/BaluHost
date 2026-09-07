@@ -189,3 +189,78 @@ def test_die_wiederuebernahme_raeumt_den_zaehler(tmp_path):
     backend.clear_write_failures("nct6798:pwm1")
 
     assert backend.write_failure_state("nct6798:pwm1") == (0, False)
+
+
+# --- Punkt 2: kein Zielwert -> Board uebernimmt (#534) ----------------------
+
+from app.services.power.fan_ownership import (  # noqa: E402
+    KEIN_ZIELWERT_SEKUNDEN,
+    braucht_temperatur,
+    should_release_for_missing_target,
+)
+
+
+def _ohne_zielwert(**abweichungen):
+    basis = dict(
+        mode_value="auto",
+        curve_type="graph",
+        has_sensor_configured=True,
+        missing_seconds=KEIN_ZIELWERT_SEKUNDEN,
+        ownership=FanOwnership.OWNED,
+        has_observed_restore_value=True,
+        is_firmware_managed=False,
+        is_active=True,
+    )
+    basis.update(abweichungen)
+    return basis
+
+
+def test_lange_ohne_temperatur_wird_abgegeben():
+    assert should_release_for_missing_target(**_ohne_zielwert()) is True
+
+
+def test_kurz_ohne_temperatur_passiert_nichts():
+    """Ein Aussetzer ist kein Ausfall -- sonst gaebe ein Neustart des
+    Monitoring-Workers den Luefter ab."""
+    assert should_release_for_missing_target(
+        **_ohne_zielwert(missing_seconds=KEIN_ZIELWERT_SEKUNDEN - 1)) is False
+
+
+@pytest.mark.parametrize("modus", ["manual", "emergency"])
+def test_ausserhalb_von_auto_und_scheduled_passiert_nichts(modus):
+    """In MANUAL laeuft der Kurvenzweig gar nicht. Der Nutzer verloere seine
+    Handeinstellung, ohne dass etwas ausgefallen waere."""
+    assert should_release_for_missing_target(**_ohne_zielwert(mode_value=modus)) is False
+
+
+@pytest.mark.parametrize("typ", ["flat", "sync"])
+def test_kurven_ohne_temperaturbedarf_werden_nicht_abgegeben(typ):
+    """`flat` liefert eine Konstante, `sync` kopiert einen anderen Luefter --
+    beide rechnen ohne Temperatur (fan_curve_eval.py:33-54). Ein fehlender
+    Messwert ist dort folgenlos."""
+    assert should_release_for_missing_target(**_ohne_zielwert(curve_type=typ)) is False
+
+
+@pytest.mark.parametrize("typ", ["graph", "target", "mix"])
+def test_temperaturgefuehrte_kurven_werden_abgegeben(typ):
+    assert should_release_for_missing_target(**_ohne_zielwert(curve_type=typ)) is True
+    assert braucht_temperatur(typ) is True
+
+
+def test_ohne_konfigurierten_sensor_passiert_nichts():
+    """`temperature is None` gilt auch, wenn GAR KEIN Sensor eingestellt ist.
+    Das ist eine Konfiguration, kein Ausfall -- der Befund, an dem die
+    naheliegende Bedingung des ersten Anlaufs scheiterte."""
+    assert should_release_for_missing_target(
+        **_ohne_zielwert(has_sensor_configured=False)) is False
+
+
+def test_die_gemeinsamen_wachen_gelten_auch_hier():
+    """Insbesondere die geerbte Randbedingung: ohne beobachteten
+    pwm_enable-Wert wird nichts zurueckgegeben (#556)."""
+    assert should_release_for_missing_target(
+        **_ohne_zielwert(has_observed_restore_value=False)) is False
+    assert should_release_for_missing_target(
+        **_ohne_zielwert(is_firmware_managed=True)) is False
+    assert should_release_for_missing_target(
+        **_ohne_zielwert(ownership=FanOwnership.RELEASED)) is False
