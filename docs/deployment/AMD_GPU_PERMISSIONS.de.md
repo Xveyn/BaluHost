@@ -37,12 +37,19 @@ Das bedeutet aber auch: ob die Regel für diese vier Dateien tatsächlich
 greift, lässt sich nur nach einem echten Boot mit vorhandenem `gpu_od/`
 verifizieren — und zwar an den Rechten selbst (`ls -la`), nicht daran, ob
 die Akustik-Einstellung wirkt. Das Backend fällt bei `EACCES` auf
-`sudo -n tee` zurück, und der vorhandene sudoers-Eintrag für
-`/sys/class/hwmon/*` deckt den Schreibpfad ab — Wildcards
-in sudoers-*Argumenten* matchen auch `/`, der Eintrag greift also bis in
-`hwmonN/device/gpu_od/fan_ctrl/`. Die Werte greifen damit auch dann, wenn die
-Knoten weiterhin `root:root 0644` tragen; die udev-Regel ist hier die
-unprivilegierte Verbesserung, nicht die Voraussetzung.
+`sudo -n tee` zurück, und die sudoers-Einträge in
+`deploy/install/templates/baluhost-hardware-sudoers` decken den Schreibpfad ab:
+sie nennen die vier Akustik-Knoten unter `hwmon[0-9]*/device/gpu_od/fan_ctrl/`
+seit #570 ausdrücklich, statt sie über eine Wildcard mitzunehmen. Die Werte
+greifen damit auch dann, wenn die Knoten weiterhin `root:root 0644` tragen; die
+udev-Regel ist hier die unprivilegierte Verbesserung, nicht die Voraussetzung.
+
+> Bis #570 stand dort ein einzelnes `tee /sys/class/hwmon/*`. Weil Wildcards in
+> sudoers-*Argumenten* auch `/` matchen und sudo Argumente nicht normalisiert,
+> deckte das nicht nur die Akustik-Knoten ab, sondern jeden Pfad — inklusive
+> `../`-Ausbrüchen aus `/sys/class/hwmon/`. Wer die Einträge wieder auf eine
+> Wildcard zusammenfasst, stellt diesen Zustand her;
+> `backend/tests/test_hardware_sudoers_scope.py` schlägt dann an.
 
 **Diese Zusage gilt nur, solange der Primärzweig der Gerätepfad-Auflösung
 greift.** `_device_from_hwmon()` (`backend/app/services/power/fan_gpu_manual.py`)
