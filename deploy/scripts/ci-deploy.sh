@@ -475,7 +475,19 @@ if [[ "${SYNC_PERMISSIONS:-0}" == "1" || "${SYNC_PERMISSIONS,,}" == "true" ]]; t
     POWER_SUDOERS_SCRIPT="$INSTALL_DIR/deploy/scripts/install-power-sudoers.sh"
     if [[ -f "$POWER_SUDOERS_SCRIPT" ]]; then
         log_info "Re-applying power sudoers..."
-        if sudo bash "$POWER_SUDOERS_SCRIPT"; then
+        if ! sudo -n -l bash "$POWER_SUDOERS_SCRIPT" >/dev/null 2>&1; then
+            # Die Diagnose, die hier bisher fehlte. /etc/sudoers.d/baluhost-deploy
+            # ist die EINZIGE der vier sudoers-Dateien, die dieser Deploy nicht
+            # neu rendern kann -- sie enthaelt genau die Erlaubnis, mit der die
+            # anderen drei installiert werden. Neue Zeilen der Vorlage erreichen
+            # eine bereits installierte Box deshalb nie, und der Aufruf unten
+            # scheiterte mit "sudo: a password is required" hinter einer
+            # nichtssagenden WARN-Zeile.
+            log_warn "Power sudoers sync NOT PERMITTED: /etc/sudoers.d/baluhost-deploy on this box"
+            log_warn "  predates the entry for install-power-sudoers.sh. One-time fix, as root:"
+            log_warn "    sudo BALUHOST_USER=\$USER bash $INSTALL_DIR/deploy/scripts/install-deploy-sudoers.sh"
+            log_warn "  Until then the power sudoers template (PPD authority) stays at its installed state."
+        elif sudo bash "$POWER_SUDOERS_SCRIPT"; then
             log_info "Power sudoers sync OK."
         else
             log_warn "Power sudoers sync failed (non-fatal — deploy continues)."

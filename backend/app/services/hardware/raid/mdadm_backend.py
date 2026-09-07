@@ -63,7 +63,29 @@ class MdadmRaidBackend:
         arrays: List[RaidArray] = []
         for name in sorted(array_names):
             info = mdstat_info.get(name)
-            arrays.append(self._build_array(name, info, disk_type_map))
+            try:
+                arrays.append(self._build_array(name, info, disk_type_map))
+            except Exception as exc:
+                # Ein Array darf die Antwort fuer alle anderen nicht mitnehmen.
+                # _build_array ruft `mdadm --detail` mit check=True; scheitert
+                # das fuer EIN Array -- fehlende sudoers-Abdeckung fuer einen
+                # ungewoehnlichen Namen, ein gerade verschwundenes Geraet --,
+                # brach bisher die gesamte RAID-Statusabfrage ab. Der Nutzer
+                # sah dann gar keine Arrays statt eines fehlerhaften.
+                logger.warning("RAID-Details fuer %s nicht lesbar: %s", name, exc)
+                # Was /proc/mdstat hergibt, bleibt sichtbar: die Mitglieder
+                # stehen dort auch dann, wenn `mdadm --detail` scheitert.
+                # MdstatInfo fuehrt kein Level -- deshalb "unknown".
+                arrays.append(RaidArray(
+                    name=name,
+                    level="unknown",
+                    size_bytes=0,
+                    status="unknown",
+                    devices=[
+                        RaidDevice(name=m, state="unknown")
+                        for m in (info.members if info else [])
+                    ],
+                ))
 
         speed_limits = self._read_speed_limits()
 
