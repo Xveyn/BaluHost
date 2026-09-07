@@ -164,6 +164,19 @@ class LinuxFanControlBackend(FanControlBackend):
             logger.info("Fan control: no write permission (readonly mode)")
         self._letzte_probe_erfolgreich = False
 
+    def clear_write_failures(self, fan_id: str) -> None:
+        """Den Fehlerzaehler dieses Kanals zuruecksetzen (#534).
+
+        Gebraucht bei der Wiederuebernahme eines freigegebenen Kanals: der
+        Zaehler lebt im Prozess, die Anfrage kommt aber ueber einen beliebigen
+        der vier Worker. Ohne dieses Zuruecksetzen im PRIMARY saehe dessen
+        Regelkreis den Kanal zwar wieder als besessen, fragte aber seinen
+        eigenen -- weiterhin am Deckel stehenden -- Zaehler und gaebe ihn
+        binnen eines Sample-Intervalls erneut ab. Der Nutzer bekaeme einen
+        Erfolg gemeldet und fuenf Sekunden spaeter wieder "Board regelt".
+        """
+        self._write_backoff.pop(fan_id, None)
+
     def write_failure_state(self, fan_id: str) -> Tuple[int, bool]:
         """Wie oft der Regelkreis auf diesem Kanal nacheinander gescheitert ist.
 

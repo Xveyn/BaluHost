@@ -9,7 +9,7 @@ die diese Entscheidung nachbaut, wuerde genau das nicht messen.
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 
 from app.models.base import Base
@@ -173,8 +173,25 @@ async def test_der_notfall_wird_weiter_gemeldet(session_factory, monkeypatch):
     service._registry.get_temp = AsyncMock(return_value=95.0)
 
     await service._monitor_and_control_fans()
-
     assert gemeldet, "die Ueberhitzung eines freigegebenen Kanals muss gemeldet werden"
+
+    # ZWEI Zyklen, und das ist der Punkt: ein Test mit nur einem Aufruf war
+    # blind gegen den eigentlichen Fehler. Der EMERGENCY-Zweig schrieb
+    # config.mode in die Datenbank; im naechsten Zyklus las der Regelkreis
+    # daraus mode == EMERGENCY, uebersprang den AUTO/SCHEDULED-Zweig -- und
+    # damit die Meldung. Ein freigegebener Kanal waere nach dem ersten Tick
+    # dauerhaft verstummt, ausgerechnet der, den niemand regelt.
+    gemeldet.clear()
+    await service._monitor_and_control_fans()
+    assert gemeldet, "auch im zweiten Zyklus muss gemeldet werden"
+
+    with session_factory() as db:
+        config = db.execute(
+            select(FanConfig).where(FanConfig.fan_id == "nct6798:pwm1")
+        ).scalar_one()
+        assert config.mode == FanMode.AUTO.value, (
+            "der gespeicherte Nutzer-Modus darf nicht ueberschrieben werden -- "
+            "es fand kein einziger Write statt")
 
 
 @pytest.mark.asyncio
@@ -190,21 +207,55 @@ async def test_last_pwm_traegt_den_ist_wert(session_factory, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_wieder_uebernehmen_erzwingt_genau_einen_write(
-    session_factory, monkeypatch
-):
-    """Ohne den erzwungenen Write bliebe pwm_enable auf dem Auto-Wert stehen,
-    falls das Board zufaellig denselben PWM eingestellt hat, den die Kurve
-    berechnet -- der Regelkreis schreibt nur bei Wertaenderung."""
+async def test_wieder_uebernehmen_wirkt_im_primary(session_factory, monkeypatch):
+    """Der Rueckweg muss dort wirken, wo der Fehlerzaehler lebt.
+
+    Die Route laeuft auf einem beliebigen der vier Worker, das Backoff ist
+    prozesslokal im Primary. Setzt die Wiederuebernahme nur den Zaehler ihres
+    EIGENEN Prozesses zurueck, saehe der Primary den Kanal zwar wieder als
+    besessen, fragte aber seinen weiterhin am Deckel stehenden Zaehler und
+    gaebe ihn im selben Zyklus erneut ab -- Erfolgs-Toast, fuenf Sekunden
+    spaeter wieder "Board regelt".
+
+    Geprueft wird deshalb der ganze Weg: Freigabe, Wiederuebernahme ueber die
+    Dienstmethode, und danach EIN Regelzyklus des Primary.
+    """
     service, backend = _service(session_factory, monkeypatch,
                                 fans=[_fan()], am_deckel=True)
     await service._monitor_and_control_fans()
     backend.set_pwm.reset_mock()
 
     assert await service.reacquire_fan("nct6798:pwm1") is True
+    with session_factory() as db:
+        assert read_released_fans(db) == {}
 
-    backend.set_pwm.assert_awaited_once()
-    assert backend.set_pwm.await_args.kwargs.get("force") is True
+    # Der Kanal ist weiterhin am Deckel -- ohne das Zuruecksetzen im Primary
+    # faellt er in diesem Zyklus sofort wieder heraus.
+    await service._monitor_and_control_fans()
+
+    backend.clear_write_failures.assert_called_once_with("nct6798:pwm1")
+    backend.set_pwm.assert_awaited()
+    assert backend.set_pwm.await_args_list[0].kwargs.get("force") is True
+
+
+@pytest.mark.asyncio
+async def test_ein_neustart_gibt_jedem_kanal_eine_neue_chance(
+    session_factory, monkeypatch
+):
+    """Der Fehlerzaehler, der zur Freigabe fuehrte, lebte im Prozess und ist
+    nach einem Neustart weg. Bliebe die Freigabe stehen, haette ein Betreiber,
+    der die Ursache behebt und neu startet, keinen automatischen Rueckweg."""
+    service, backend = _service(session_factory, monkeypatch,
+                                fans=[_fan()], am_deckel=True)
+    await service._monitor_and_control_fans()
+    with session_factory() as db:
+        assert read_released_fans(db) != {}
+
+    service._monitoring_task = None
+    service._is_running = False
+    backend.is_available = MagicMock(return_value=True)
+    await service.start(monitoring=False)
+
     with session_factory() as db:
         assert read_released_fans(db) == {}
 

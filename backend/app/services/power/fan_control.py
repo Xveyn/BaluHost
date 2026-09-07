@@ -150,6 +150,14 @@ class FanControlBackend(ABC):
         """
         pass
 
+    def clear_write_failures(self, fan_id: str) -> None:
+        """Den Fehlerzaehler dieses Kanals zuruecksetzen (#534).
+
+        Kein @abstractmethod, aus demselben Grund wie write_failure_state:
+        ein Backend ohne Backoff hat nichts zurueckzusetzen.
+        """
+        return None
+
     def write_failure_state(self, fan_id: str) -> Tuple[int, bool]:
         """Wie oft der Regelkreis auf diesem Kanal nacheinander gescheitert ist.
 
@@ -226,6 +234,10 @@ class FanControlService:
         # Zuletzt veroeffentlichte Menge gesperrter Kanaele. None heisst wie
         # oben: noch nie geschrieben (#568).
         self._published_denied_fans: Optional[set] = None
+        # Die zuletzt im Regelkreis gesehene Freigabe-Menge. Nur dazu da,
+        # eine Wiederuebernahme zu ERKENNEN -- sie geschieht ueber einen
+        # anderen Worker (#534).
+        self._zuletzt_freigegeben: set = set()
 
         FanControlService._instance = self
 
@@ -272,6 +284,23 @@ class FanControlService:
 
             # Load fan configs from database
             await self._load_fan_configs()
+
+            # Jeder Neustart gibt jedem Kanal eine neue Chance (#534): der
+            # Fehlerzaehler, der zur Freigabe gefuehrt hat, lebte im Prozess
+            # und ist jetzt weg. Bliebe die Freigabe stehen, haette ein
+            # Betreiber, der die Ursache behebt und neu startet, keinen
+            # automatischen Rueckweg -- die Karte zeigte weiter "Board regelt"
+            # oder, schlimmer, "niemand regelt". Faellt der Kanal wieder aus,
+            # ist er nach acht Fehlschlaegen erneut freigegeben; das kostet
+            # eine Logzeile und stellt den ehrlichen Zustand her.
+            if getattr(lifespan, "IS_PRIMARY_WORKER", False):
+                with self.db_session_factory() as db:
+                    if read_released_fans(db):
+                        publish_released_fans(db, {})
+                        logger.info(
+                            "Freigaben an die Board-Automatik zurueckgesetzt -- "
+                            "jeder Kanal wird neu versucht")
+                self._zuletzt_freigegeben = set()
 
             # Die GPU-Akustik gehoert zum Start, nicht in den Regelzyklus:
             # sie ist Konfiguration, kein Regelkreis (#516).
@@ -1067,6 +1096,27 @@ class FanControlService:
             freigegeben = read_released_fans(db)
         freigaben_vorher = dict(freigegeben)
 
+        # Eine Wiederuebernahme kommt ueber einen BELIEBIGEN Worker (die Route
+        # laeuft dort, wo die Anfrage landet), der Fehlerzaehler lebt aber im
+        # Prozess des Primary. Ohne diesen Abgleich saehe er den Kanal zwar
+        # wieder als besessen, fragte aber seinen eigenen -- weiterhin am
+        # Deckel stehenden -- Zaehler und gaebe ihn im selben Zyklus erneut ab.
+        # Der Nutzer bekaeme einen Erfolg gemeldet und fuenf Sekunden spaeter
+        # wieder "Board regelt" (#534).
+        zurueckgeholt = self._zuletzt_freigegeben - set(freigegeben)
+        for fan_id in zurueckgeholt:
+            self._backend.clear_write_failures(fan_id)
+            self._hysteresis_state.pop(fan_id, None)
+            aktuell = next((f for f in fans if f.fan_id == fan_id), None)
+            if aktuell is not None:
+                # Genau EIN erzwungener Write, sonst bliebe pwm_enable auf dem
+                # Auto-Wert stehen, falls das Board zufaellig denselben PWM
+                # eingestellt hat, den die Kurve berechnet -- der Regelkreis
+                # schreibt nur bei Wertaenderung.
+                await self._backend.set_pwm(fan_id, aktuell.pwm_percent, force=True)
+            logger.info("%s: wieder uebernommen, Fehlerzaehler zurueckgesetzt", fan_id)
+        self._zuletzt_freigegeben = set(freigegeben)
+
         with self.db_session_factory() as db:
             for fan in fans:
                 config = db.execute(
@@ -1218,6 +1268,7 @@ class FanControlService:
                     mode == FanMode.EMERGENCY
                     and config.mode != FanMode.EMERGENCY.value
                     and fan.pwm_control is not PwmControl.FIRMWARE_MANAGED
+                    and not is_released(zustand)
                 ):
                     # Bei firmware-verwalteten Lueftern brachte EMERGENCY nichts
                     # ausser einem Zustand, aus dem nur der AUTO-Button wieder
@@ -1238,7 +1289,18 @@ class FanControlService:
         # dieselbe Sorte Last, die #533 beseitigt hat.
         if freigegeben != freigaben_vorher:
             with self.db_session_factory() as db:
-                publish_released_fans(db, freigegeben)
+                if publish_released_fans(db, freigegeben):
+                    self._zuletzt_freigegeben = set(freigegeben)
+                else:
+                    # Scheitert der Schreibvorgang, darf der Stand NICHT als
+                    # veroeffentlicht gelten: sonst haelte dieser Prozess den
+                    # Kanal fuer freigegeben, waehrend die anderen Worker und
+                    # der naechste Zyklus nichts davon wissen -- und die
+                    # Zusage "Zustand statt Flanke" haenge an einem Write, der
+                    # nicht stattgefunden hat.
+                    logger.warning(
+                        "Freigabe-Zustand nicht veroeffentlicht -- naechster "
+                        "Zyklus versucht es erneut")
 
     def _apply_hysteresis(
         self,
@@ -1522,17 +1584,13 @@ class FanControlService:
             del freigegeben[fan_id]
             publish_released_fans(db, freigegeben)
 
-        # Genau EIN erzwungener Write, sonst bliebe pwm_enable auf dem
-        # Auto-Wert stehen, falls das Board zufaellig denselben PWM eingestellt
-        # hat, den die Kurve berechnet -- der Regelkreis schreibt nur bei
-        # Wertaenderung, und BaluHost hielte sich fuer zustaendig, waehrend das
-        # Board weiterregelt (#534).
-        fans = await self._backend.get_fans()
-        aktuell = next((f for f in fans if f.fan_id == fan_id), None)
-        if aktuell is not None:
-            await self._backend.set_pwm(fan_id, aktuell.pwm_percent, force=True)
-        self._hysteresis_state.pop(fan_id, None)
-        logger.info("%s: wieder uebernommen", fan_id)
+        # Der erzwungene Write und das Zuruecksetzen des Fehlerzaehlers
+        # geschehen NICHT hier, sondern im naechsten Zyklus des Primary. Diese
+        # Route laeuft auf einem beliebigen der vier Worker, und der Zaehler
+        # lebt im Prozess: ein Reset hier traefe den falschen. Der Primary
+        # erkennt die Wiederuebernahme daran, dass der Kanal aus der
+        # veroeffentlichten Menge verschwunden ist (#534).
+        logger.info("%s: Wiederuebernahme angefordert", fan_id)
         return True
 
     async def set_fan_mode(self, fan_id: str, mode: FanMode) -> bool:
