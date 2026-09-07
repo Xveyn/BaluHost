@@ -14,6 +14,7 @@ from app.core.exceptions import ServiceUnavailableError
 from app.core.rate_limiter import user_limiter, get_limit
 from app.models.user import User
 from app.schemas.fans import (
+    ReacquireFanRequest,
     FanStatusResponse,
     FanInfo,
     SetFanModeRequest,
@@ -125,6 +126,32 @@ async def list_fans(
     status = await service.get_status()
     fans = [FanInfo(**fan_data) for fan_data in status["fans"]]
     return fans
+
+
+@router.post("/reacquire")
+@user_limiter.limit(get_limit("admin_operations"))
+async def reacquire_fan(
+    request: Request, response: Response,
+    body: ReacquireFanRequest,
+    current_user: User = Depends(get_current_admin),  # Admin only
+    service: FanControlService = Depends(get_fan_service),
+):
+    """Einen an die Board-Automatik zurueckgegebenen Luefter wieder uebernehmen.
+
+    Der Rueckweg zu #534 Punkt 1. Er MUSS ein eigener Endpunkt sein: die
+    Bedienelemente eines freigegebenen Luefters sind in der Oberflaeche
+    gesperrt, und ein Rueckweg ueber Modus oder PWM waere damit selbst
+    gesperrt -- ein Zustand ohne Ausgang.
+
+    Requires admin role.
+    """
+    erfolg = await service.reacquire_fan(body.fan_id)
+    if not erfolg:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Fan {body.fan_id} is not released to the board",
+        )
+    return {"success": True, "fan_id": body.fan_id}
 
 
 @router.post("/mode", response_model=SetFanModeResponse)

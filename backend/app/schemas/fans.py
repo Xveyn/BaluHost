@@ -96,6 +96,16 @@ class FanInfo(BaseModel):
     max_pwm_percent: int = Field(default=100, ge=0, le=100)
     emergency_temp_celsius: float = Field(default=85.0, ge=0, le=150)
     temp_sensor_id: Optional[str] = Field(default=None, description="Associated temperature sensor ID")
+    ownership: str = Field(
+        default="owned",
+        description=(
+            "Wer den Kanal regelt: 'owned' (BaluHost), 'released' (die "
+            "Board-Automatik, nach einer geglueckten Rueckgabe) oder "
+            "'abandoned' (niemand -- die Rueckgabe scheiterte). Eigenes Feld "
+            "statt eines Werts in `mode`: das ist ein validiertes Enum, ein "
+            "fremder Wert darin waere eine 500 (#534)."
+        ),
+    )
     curve_points: List[FanCurvePoint] = Field(default_factory=list)
     hysteresis_celsius: float = Field(default=3.0, ge=0, le=15, description="Temperature hysteresis to prevent oscillation")
     active_schedule: Optional[FanActiveSchedule] = None
@@ -159,6 +169,12 @@ class FanStatusResponse(BaseModel):
                 "backend_available": True
             }
         }
+
+
+class ReacquireFanRequest(BaseModel):
+    """Einen freigegebenen Luefter wieder uebernehmen (#534)."""
+
+    fan_id: str = Field(..., description="Fan identifier")
 
 
 class SetFanModeRequest(BaseModel):

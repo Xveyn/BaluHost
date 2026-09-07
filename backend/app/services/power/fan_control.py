@@ -24,8 +24,16 @@ from app.core.config import Settings
 from app.models.fans import FanConfig, FanSample
 from app.schemas.fans import FanMode, FanCurvePoint, PwmControl
 from app.services.power.fan_restore import is_observation, needs_release, resolve_restore_value
+from app.services.power.fan_ownership import (
+    FanOwnership,
+    is_released,
+    ownership_after_release,
+    should_release,
+)
 from app.services.power.fan_runtime_store import (
+    publish_released_fans,
     read_denied_fans,
+    read_released_fans,
     publish_write_permission,
     read_write_permission,
 )
@@ -142,6 +150,29 @@ class FanControlBackend(ABC):
         """
         pass
 
+    def clear_write_failures(self, fan_id: str) -> None:
+        """Den Fehlerzaehler dieses Kanals zuruecksetzen (#534).
+
+        Kein @abstractmethod, aus demselben Grund wie write_failure_state:
+        ein Backend ohne Backoff hat nichts zurueckzusetzen.
+        """
+        return None
+
+    def write_failure_state(self, fan_id: str) -> Tuple[int, bool]:
+        """Wie oft der Regelkreis auf diesem Kanal nacheinander gescheitert ist.
+
+        Returns:
+            (fail_count, at_cap). `at_cap` heisst: das Backoff-Fenster steht am
+            Maximum, der Kanal lehnt also seit acht aufeinanderfolgenden
+            Versuchen ab.
+
+        Kein @abstractmethod, sondern eine Vorgabe: ein Backend ohne Backoff
+        (Dev) hat nie einen nicht steuerbaren Kanal, und ein neues Backend soll
+        nicht an einer Methode scheitern, die nur die Rueckgabe-Entscheidung
+        aus #534 braucht.
+        """
+        return 0, False
+
     @abstractmethod
     async def get_temperature(self, sensor_id: str) -> Optional[float]:
         """Get temperature reading from a sensor."""
@@ -203,6 +234,10 @@ class FanControlService:
         # Zuletzt veroeffentlichte Menge gesperrter Kanaele. None heisst wie
         # oben: noch nie geschrieben (#568).
         self._published_denied_fans: Optional[set] = None
+        # Die zuletzt im Regelkreis gesehene Freigabe-Menge. Nur dazu da,
+        # eine Wiederuebernahme zu ERKENNEN -- sie geschieht ueber einen
+        # anderen Worker (#534).
+        self._zuletzt_freigegeben: set = set()
 
         FanControlService._instance = self
 
@@ -261,6 +296,28 @@ class FanControlService:
             # den alten Konfigurationen -- und ihre Referenz ginge bei der
             # Zuweisung unten verloren (#559).
             await self._cancel_monitoring_task()
+
+            # Jeder Neustart gibt jedem Kanal eine neue Chance (#534): der
+            # Fehlerzaehler, der zur Freigabe gefuehrt hat, lebte im Prozess
+            # und ist jetzt weg. Bliebe die Freigabe stehen, haette ein
+            # Betreiber, der die Ursache behebt und neu startet, keinen
+            # automatischen Rueckweg -- die Karte zeigte weiter "Board regelt"
+            # oder, schlimmer, "niemand regelt". Faellt der Kanal wieder aus,
+            # ist er nach acht Fehlschlaegen erneut freigegeben; das kostet
+            # eine Logzeile und stellt den ehrlichen Zustand her.
+            if getattr(lifespan, "IS_PRIMARY_WORKER", False):
+                with self.db_session_factory() as db:
+                    if read_released_fans(db):
+                        publish_released_fans(db, {})
+                        logger.info(
+                            "Freigaben an die Board-Automatik zurueckgesetzt -- "
+                            "jeder Kanal wird neu versucht")
+                self._zuletzt_freigegeben = set()
+            # Bewusst HINTER _cancel_monitoring_task(): ein noch laufender
+            # Zyklus der alten Schleife koennte sonst direkt danach seine
+            # veraltete Gesamtkarte veroeffentlichen und den Reset still
+            # rueckgaengig machen.
+
 
             # Der Rechte-Probe ist beim Backend-Init gelaufen -- sein
             # Ergebnis gehoert zu den Followern, bevor der erste Regelzyklus
@@ -1038,6 +1095,36 @@ class FanControlService:
         # Map for sync curve type
         other_fan_pwms = {f.fan_id: f.pwm_percent for f in fans}
 
+        # Der Besitzzustand je Kanal (#534). Einmal je Zyklus gelesen statt je
+        # Luefter: es ist dieselbe Singleton-Zeile.
+        with self.db_session_factory() as db:
+            freigegeben = read_released_fans(db)
+        freigaben_vorher = dict(freigegeben)
+
+        # Eine Wiederuebernahme kommt ueber einen BELIEBIGEN Worker (die Route
+        # laeuft dort, wo die Anfrage landet), der Fehlerzaehler lebt aber im
+        # Prozess des Primary. Ohne diesen Abgleich saehe er den Kanal zwar
+        # wieder als besessen, fragte aber seinen eigenen -- weiterhin am
+        # Deckel stehenden -- Zaehler und gaebe ihn im selben Zyklus erneut ab.
+        # Der Nutzer bekaeme einen Erfolg gemeldet und fuenf Sekunden spaeter
+        # wieder "Board regelt" (#534).
+        zurueckgeholt = (
+            self._zuletzt_freigegeben - set(freigegeben)
+            if getattr(lifespan, "IS_PRIMARY_WORKER", False) else set()
+        )
+        for fan_id in zurueckgeholt:
+            self._backend.clear_write_failures(fan_id)
+            self._hysteresis_state.pop(fan_id, None)
+            aktuell = next((f for f in fans if f.fan_id == fan_id), None)
+            if aktuell is not None:
+                # Genau EIN erzwungener Write, sonst bliebe pwm_enable auf dem
+                # Auto-Wert stehen, falls das Board zufaellig denselben PWM
+                # eingestellt hat, den die Kurve berechnet -- der Regelkreis
+                # schreibt nur bei Wertaenderung.
+                await self._backend.set_pwm(fan_id, aktuell.pwm_percent, force=True)
+            logger.info("%s: wieder uebernommen, Fehlerzaehler zurueckgesetzt", fan_id)
+        self._zuletzt_freigegeben = set(freigegeben)
+
         with self.db_session_factory() as db:
             for fan in fans:
                 config = db.execute(
@@ -1119,6 +1206,63 @@ class FanControlService:
                     # und der Sample protokolliert den tatsaechlichen Wert.
                     target_pwm = fan.pwm_percent
 
+                # --- Rueckgabe an die Board-Automatik (#534 Punkt 1) ---------
+                #
+                # Die Stelle ist mit Bedacht gewaehlt: KEIN `continue` weiter
+                # oben. Der Uebersprung sitzt hier, weil damit alles darueber
+                # weiterlaeuft -- die Temperaturlesung, die Notfall-Emitter und
+                # weiter unten der Sample-Puffer. Ein `continue` nach dem
+                # Config-Load haette die Messwerte mitgenommen, und der
+                # Verlaufsgraph risse genau dort ab, wo man nachsieht.
+                #
+                # Wirksam wird die Freigabe ueber denselben Weg wie
+                # FIRMWARE_MANAGED zwei Zeilen darueber: target_pwm auf den
+                # Ist-Wert, damit die Write-Bedingung nicht greift. Das schreibt
+                # nebenbei _last_pwm_by_fan auf den echten Wert fort -- sonst
+                # ginge nach einer Wiederuebernahme ein minutenalter Wert in die
+                # Glaettung ein.
+                zustand = FanOwnership(freigegeben.get(fan.fan_id, FanOwnership.OWNED))
+
+                # Die Rueckgabe ist ein Hardware-Write und gehoert dem
+                # Primary -- so wie _release_all_to_board() beim Dienst-Ende
+                # (#465). Der Regelkreis laeuft ohnehin nur dort; die Pruefung
+                # steht trotzdem da, weil die Folge eines Irrtums ein Luefter
+                # waere, den zwei Prozesse gegeneinander umschalten.
+                ist_primary = getattr(lifespan, "IS_PRIMARY_WORKER", False)
+                if zustand is FanOwnership.OWNED and ist_primary:
+                    fehlschlaege, am_deckel = self._backend.write_failure_state(
+                        fan.fan_id)
+                    if should_release(
+                        at_write_cap=am_deckel,
+                        ownership=zustand,
+                        has_observed_restore_value=(
+                            self._restore_values.get(fan.fan_id) is not None
+                        ),
+                        is_firmware_managed=(
+                            fan.pwm_control is PwmControl.FIRMWARE_MANAGED
+                        ),
+                        is_active=bool(config.is_active),
+                    ):
+                        geglueckt = await self._backend.release_to_board(
+                            fan.fan_id, self._restore_values[fan.fan_id]
+                        )
+                        zustand = ownership_after_release(geglueckt)
+                        freigegeben[fan.fan_id] = zustand.value
+                        # Die Hysterese eingefroren stehen zu lassen, hiesse
+                        # nach der Wiederuebernahme gegen einen alten
+                        # Referenzwert zu daempfen.
+                        self._hysteresis_state.pop(fan.fan_id, None)
+                        logger.warning(
+                            "%s: nicht steuerbar (%d Fehlschlaege in Folge) -- "
+                            "%s", fan.fan_id, fehlschlaege,
+                            "an die Board-Automatik zurueckgegeben"
+                            if geglueckt else
+                            "Rueckgabe gescheitert, es regelt niemand",
+                        )
+
+                if is_released(zustand):
+                    target_pwm = fan.pwm_percent
+
                 if target_pwm != fan.pwm_percent:
                     # Im Notfall das Backoff-Fenster umgehen (#533): ein
                     # Ueberhitzungsfall ist per Definition kein Dauerzustand,
@@ -1132,6 +1276,7 @@ class FanControlService:
                     mode == FanMode.EMERGENCY
                     and config.mode != FanMode.EMERGENCY.value
                     and fan.pwm_control is not PwmControl.FIRMWARE_MANAGED
+                    and not is_released(zustand)
                 ):
                     # Bei firmware-verwalteten Lueftern brachte EMERGENCY nichts
                     # ausser einem Zustand, aus dem nur der AUTO-Button wieder
@@ -1147,6 +1292,23 @@ class FanControlService:
                     "temperature_celsius": temperature,
                     "mode": mode.value,
                 })
+
+        # Nur bei echter Aenderung schreiben -- ein Schreibvorgang je Tick waere
+        # dieselbe Sorte Last, die #533 beseitigt hat.
+        if freigegeben != freigaben_vorher:
+            with self.db_session_factory() as db:
+                if publish_released_fans(db, freigegeben):
+                    self._zuletzt_freigegeben = set(freigegeben)
+                else:
+                    # Scheitert der Schreibvorgang, darf der Stand NICHT als
+                    # veroeffentlicht gelten: sonst haelte dieser Prozess den
+                    # Kanal fuer freigegeben, waehrend die anderen Worker und
+                    # der naechste Zyklus nichts davon wissen -- und die
+                    # Zusage "Zustand statt Flanke" haenge an einem Write, der
+                    # nicht stattgefunden hat.
+                    logger.warning(
+                        "Freigabe-Zustand nicht veroeffentlicht -- naechster "
+                        "Zyklus versucht es erneut")
 
     def _apply_hysteresis(
         self,
@@ -1356,6 +1518,13 @@ class FanControlService:
             with self.db_session_factory() as db:
                 gesperrt = read_denied_fans(db)
                 shared_permission = read_write_permission(db)
+                freigegeben = read_released_fans(db)
+            # Der Besitzzustand kommt ausschliesslich aus der gemeinsamen
+            # Zeile (#534): er entsteht im Primary, und ein prozesslokaler
+            # Wert lieferte bei drei von vier Workern None.
+            for eintrag in fan_data_list:
+                eintrag["ownership"] = freigegeben.get(
+                    eintrag["fan_id"], FanOwnership.OWNED.value)
             if gesperrt is not None:
                 for eintrag in fan_data_list:
                     if eintrag.get("pwm_control") is PwmControl.FIRMWARE_MANAGED:
@@ -1397,6 +1566,55 @@ class FanControlService:
             "permission_status": permission_status,
             "backend_available": True,
         }
+
+    async def reacquire_fan(self, fan_id: str) -> bool:
+        """Einen freigegebenen Kanal wieder uebernehmen (#534 Punkt 1).
+
+        Der Rueckweg muss ausdruecklich existieren: eine Oberflaeche, die einen
+        freigegebenen Luefter wie einen firmware-verwalteten sperrt, deaktiviert
+        genau die Bedienelemente, ueber die man zurueckkaeme -- ein Zustand ohne
+        Ausgang.
+
+        Entfernt wird nur der veroeffentlichte Zustand. Den erzwungenen Write
+        UND das Zuruecksetzen des Fehlerzaehlers uebernimmt der naechste
+        Regelzyklus des Primary -- diese Route laeuft auf einem beliebigen der
+        vier Worker, der Zaehler lebt aber im Prozess.
+
+        Was das fuer einen weiterhin defekten Kanal heisst, und zwar
+        absichtlich: der Zaehler startet bei null, es braucht also wieder acht
+        Fehlschlaege bis zur naechsten Freigabe. Weil das Backoff-Fenster
+        dazwischen waechst (10, 20, 40 ... 640 Sekunden) und set_pwm innerhalb
+        des Fensters gar nicht erst schreibt, dauert das rund 21 Minuten. In
+        dieser Zeit zeigt die Karte "BaluHost regelt", obwohl kein Write
+        stattfindet.
+
+        Das ist der Preis gegen ein Pendeln zwischen zwei Reglern -- den
+        Zustand, den #534 ausdruecklich vermeiden will. Die Alternative waere,
+        sofort wieder freizugeben, und dann waere der Knopf wirkungslos.
+
+        Returns:
+            False, wenn der Kanal gar nicht freigegeben war.
+        """
+        with self.db_session_factory() as db:
+            freigegeben = read_released_fans(db)
+            if fan_id not in freigegeben:
+                return False
+            del freigegeben[fan_id]
+            if not publish_released_fans(db, freigegeben):
+                # Ohne diesen Write ist die Wiederuebernahme nicht passiert --
+                # der Primary sieht den Kanal weiter als freigegeben. Einen
+                # Erfolg zu melden waere eine Luege im Erfolgs-Toast.
+                logger.warning("%s: Wiederuebernahme nicht veroeffentlicht", fan_id)
+                return False
+
+        # Der erzwungene Write und das Zuruecksetzen des Fehlerzaehlers
+        # geschehen NICHT hier, sondern im naechsten Zyklus des Primary. Diese
+        # Route laeuft auf einem beliebigen der vier Worker, und der Zaehler
+        # lebt im Prozess: ein Reset hier traefe den falschen. Der Primary
+        # erkennt die Wiederuebernahme daran, dass der Kanal aus der
+        # veroeffentlichten Menge verschwunden ist (#534).
+        logger.info("%s: Wiederuebernahme angefordert", fan_id)
+        return True
 
     async def set_fan_mode(self, fan_id: str, mode: FanMode) -> bool:
         """Set fan operation mode."""

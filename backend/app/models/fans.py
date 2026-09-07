@@ -221,6 +221,13 @@ class FanRuntimeState(Base):
     # erschiene und verschwaende im 5-Sekunden-Poll, je nachdem welcher
     # Worker gerade antwortet.
     denied_fan_ids: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Die freigegebenen Kanaele als JSON-Objekt fan_id -> Zustand
+    # ("released" = die Board-Automatik regelt, "abandoned" = die Rueckgabe
+    # scheiterte, es regelt niemand). Aus demselben Grund hier und nicht im
+    # Prozess wie die Spalte darueber: get_status() laeuft in einem
+    # beliebigen der vier Worker, ein prozesslokaler Besitzzustand lieferte
+    # bei dreien davon None und die Anzeige flackerte (#534).
+    released_fans: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

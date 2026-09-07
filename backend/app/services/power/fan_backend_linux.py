@@ -164,6 +164,39 @@ class LinuxFanControlBackend(FanControlBackend):
             logger.info("Fan control: no write permission (readonly mode)")
         self._letzte_probe_erfolgreich = False
 
+    def clear_write_failures(self, fan_id: str) -> None:
+        """Den Fehlerzaehler dieses Kanals zuruecksetzen (#534).
+
+        Gebraucht bei der Wiederuebernahme eines freigegebenen Kanals: der
+        Zaehler lebt im Prozess, die Anfrage kommt aber ueber einen beliebigen
+        der vier Worker. Ohne dieses Zuruecksetzen im PRIMARY saehe dessen
+        Regelkreis den Kanal zwar wieder als besessen, fragte aber seinen
+        eigenen -- weiterhin am Deckel stehenden -- Zaehler und gaebe ihn
+        binnen eines Sample-Intervalls erneut ab. Der Nutzer bekaeme einen
+        Erfolg gemeldet und fuenf Sekunden spaeter wieder "Board regelt".
+        """
+        self._write_backoff.pop(fan_id, None)
+
+    def write_failure_state(self, fan_id: str) -> Tuple[int, bool]:
+        """Wie oft der Regelkreis auf diesem Kanal nacheinander gescheitert ist.
+
+        Returns:
+            (fail_count, at_cap). `at_cap` heisst: das Backoff-Fenster ist auf
+            PWM_BACKOFF_MAX_SECONDS gedeckelt, der Kanal lehnt also seit acht
+            aufeinanderfolgenden Versuchen ab (mit den heutigen Konstanten).
+
+        Ohne diesen Zugriff waere die Rueckgabe-Entscheidung aus #534 nicht
+        formulierbar: `_write_backoff` ist privat, das aktuelle Fenster wird
+        nicht gespeichert, und ein Aufrufer muesste den Deckel aus fail_count
+        nachrechnen -- eine Verdopplung der Backoff-Formel an einer zweiten
+        Stelle.
+        """
+        fail_count = self._write_backoff.get(fan_id, (0, 0.0))[0]
+        if fail_count <= 0:
+            return 0, False
+        fenster = PWM_BACKOFF_BASE_SECONDS * (2 ** (fail_count - 1))
+        return fail_count, fenster >= PWM_BACKOFF_MAX_SECONDS
+
     async def recheck_write_permission(self) -> None:
         """Die Probe erneut fahren, wenn die Ableitung gerade `readonly` sagt.
 
@@ -362,6 +395,25 @@ class LinuxFanControlBackend(FanControlBackend):
                 f"pwm_enable={enable_val}, "
                 f"errno={errno.errorcode.get(err_code, err_code)})."
             )
+
+        if force:
+            # Erzwungene Writes zaehlen nicht ins Backoff (#534): der Zaehler
+            # traegt seit #568 eine zweite Bedeutung -- am Deckel gilt ein Kanal
+            # als nicht steuerbar und wird an die Board-Automatik
+            # zurueckgegeben. Acht erfolglose Nutzer-Klicks (oder Notfall-Writes)
+            # duerfen den Luefter nicht abgeben; gezaehlt wird nur, was der
+            # Regelkreis von sich aus versucht hat.
+            #
+            # Gemeldet wird trotzdem, und zwar als ERROR: ein erzwungener
+            # Write kommt von einer Nutzeraktion oder aus dem Notfall -- beide
+            # will man im Log sehen, unabhaengig davon, ob der Zaehler laeuft.
+            # Fuer die Log-Hygiene aus #533 ist das unschaedlich: erzwungene
+            # Writes sind selten und umgehen das Fenster ohnehin.
+            logger.error(
+                f"{fan_id}: erzwungener PWM-Write fehlgeschlagen -- "
+                f"{fan_info.get('last_write_error')}"
+            )
+            return False
 
         fail_count = self._write_backoff.get(fan_id, (0, 0.0))[0] + 1
         delay = min(
