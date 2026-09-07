@@ -273,3 +273,73 @@ async def test_reconcile_runs_before_anlage_and_no_duplicate_row(monkeypatch):
         row = rows[0]
         assert row.fan_id == "nct6798-isa-0290:pwm1"
         assert row.legacy_fan_id == "hwmon5_pwm1"
+
+
+# --- Rueckweg: Fakten ueber instabile Chips (#585) ---------------------------
+
+
+class _NurCache:
+    """Backend-Double mit echten dict-Attributen, ohne get_fans()."""
+
+    def __init__(self, fan_cache, temp_paths):
+        self._fan_cache = fan_cache
+        self._temp_paths = temp_paths
+
+
+def _cache(**eintraege):
+    return {fan_id: {"device_driver": treiber, "identity_stable": stabil}
+            for fan_id, (treiber, stabil) in eintraege.items()}
+
+
+def test_instabile_chips_werden_mit_praefix_und_kanaelen_gesammelt(monkeypatch):
+    from pathlib import Path as _Path
+    service = _service(monkeypatch, primary=True, linux=True)
+    service._backend = _NurCache(
+        _cache(hwmon2_pwm1=("nct6798", False),
+               hwmon2_pwm7=("nct6798", False),
+               **{"amdgpu-pci-0300:pwm1": ("amdgpu", True)}),
+        {"hwmon2_temp6": _Path("/sys/class/hwmon/hwmon2/temp6_input")},
+    )
+
+    chips = service._collect_unstable_chips()
+
+    assert set(chips) == {"nct6798"}          # der stabile amdgpu ist draussen
+    chip = chips["nct6798"]
+    assert chip.hwmon_name == "hwmon2"
+    assert chip.pwm_channels == frozenset({1, 7})
+    assert chip.temp_channels == frozenset({6})
+    assert chip.ambiguous is False
+
+
+def test_zwei_knoten_desselben_praefix_gelten_als_mehrdeutig(monkeypatch):
+    service = _service(monkeypatch, primary=True, linux=True)
+    service._backend = _NurCache(
+        _cache(hwmon2_pwm1=("nct6798", False), hwmon5_pwm1=("nct6798", False)), {})
+
+    assert service._collect_unstable_chips()["nct6798"].ambiguous is True
+
+
+def test_instabile_kennungen_ausserhalb_der_hwmon_form_werden_uebergangen(monkeypatch):
+    """Ein Dev-Backend-Luefter oder eine GPU-Kennung ist zwar instabil, aber
+    fuer sie gibt es nichts zurueckzunehmen."""
+    service = _service(monkeypatch, primary=True, linux=True)
+    service._backend = _NurCache(_cache(dev_cpu_fan=("Simulated", False)), {})
+
+    assert service._collect_unstable_chips() == {}
+
+
+def test_ein_backend_ohne_cache_liefert_keine_chips(monkeypatch):
+    service = _service(monkeypatch, primary=True, linux=True)
+    service._backend = MagicMock()          # _fan_cache ist selbst ein Mock
+
+    assert service._collect_unstable_chips() == {}
+
+
+def test_der_abgleich_laeuft_auch_wenn_kein_chip_stabil_ist(monkeypatch):
+    """Der Vollfall des Rueckfalls. Zaehlte die Vorbedingung nur die stabilen
+    Chips, liefe hier gar kein Abgleich -- also ausgerechnet dann nicht, wenn
+    der Rueckweg gebraucht wird."""
+    service = _service(monkeypatch, primary=True, linux=True)
+
+    assert service._should_reconcile(chip_count=0) is False
+    assert service._should_reconcile(chip_count=1) is True

@@ -1,4 +1,10 @@
-"""Ueberfuehrt hwmon-indizierte fan_configs auf stabile Kennungen (#532).
+"""Fuehrt fan_configs auf die heute gescannte Kennung nach.
+
+Hinweg (#532): hwmon-indizierte Zeilen auf stabile Kennungen.
+Rueckweg (#585): stabile Zeilen zurueck auf hwmon-Kennungen, wenn die
+Ableitung fuer einen Chip nicht mehr stabil ist. Ohne ihn bliebe ein Kanal,
+dessen Chip in den Rueckfall faellt, an einer deaktivierten Altzeile haengen
+und wuerde stillschweigend nicht geregelt.
 
 Reines Modul: es bekommt die Scan-Fakten uebergeben und fasst kein sysfs an.
 Der Aufrufer haelt die Transaktion.
@@ -37,12 +43,30 @@ class ChipFacts:
     ambiguous: bool
 
 
+@dataclass(frozen=True)
+class UnstableChip:
+    """Ein Chip, fuer den der Scan gerade keine stabile Kennung bilden kann.
+
+    Der Anker fuer die Zuordnung ist `prefix` -- der Inhalt von hwmon/name.
+    Eine instabile ChipIdentity fuehrt ihn weiter, und jede stabile Kennung
+    beginnt mit genau diesem Praefix (format_chip_name bildet
+    "<prefix>-<bus>-<addr>", der adresslose Zweig "<prefix>@<devname>").
+    """
+    hwmon_name: str
+    prefix: str
+    pwm_channels: frozenset
+    temp_channels: frozenset
+    ambiguous: bool
+
+
 @dataclass
 class ReconcileReport:
     renamed: List[Tuple[str, str]] = field(default_factory=list)
     deactivated: List[str] = field(default_factory=list)
     skipped_absent: List[str] = field(default_factory=list)
     unresolved_sensors: List[str] = field(default_factory=list)
+    readopted: List[Tuple[str, str]] = field(default_factory=list)
+    orphaned_inactive: List[str] = field(default_factory=list)
 
 
 def _chip_from_name(name: Optional[str]) -> Optional[str]:
@@ -199,6 +223,209 @@ def reconcile_fan_identities(
         "Identitaets-Abgleich: %d uebernommen, %d deaktiviert, %d ohne Chip",
         len(report.renamed), len(report.deactivated), len(report.skipped_absent),
     )
+    return report
+
+
+# --- Rueckweg: stabil -> hwmon-indiziert (#585) ------------------------------
+
+
+def split_legacy_fan_id(fan_id: str):
+    """"hwmon2_pwm7" -> (2, 7); alles andere -> None.
+
+    Oeffentlich, damit der Aufrufer die Altform erkennen kann, ohne das
+    Modulmuster zu importieren -- die Form ist Teil des Vertrags zwischen
+    build_fan_id() und diesem Abgleich, nicht ein Detail dieses Moduls.
+    """
+    match = _LEGACY_FAN_ID.match(fan_id or "")
+    if not match:
+        return None
+    return int(match.group(1)), int(match.group(2))
+
+
+
+def _stable_form(prefix: str, kind: str, num: int) -> "re.Pattern":
+    """Muster fuer die stabile Form eines Kanals dieses Chips.
+
+    `.*` statt `[^:]*`, weil der adresslose Zweig von derive_chip_identity
+    den Geraetenamen anhaengt ("nct6798@0000:03:00.0") und der einen
+    Doppelpunkt enthalten kann. Der Endanker plus die woertliche Kanalnummer
+    halten das Muster trotzdem eng: ":pwm1$" trifft "…:pwm11" nicht.
+    """
+    return re.compile(rf"^{re.escape(prefix)}[-@].*:{kind}{num}$")
+
+
+def _reverse_sensor_id(sensor_id: Optional[str],
+                       chips: Dict[str, "UnstableChip"]) -> Optional[str]:
+    """Stabile Sensorkennung auf die heutige hwmon-Form zuruecknehmen.
+
+    Ohne diesen Schritt zeigte die Zeile nach dem Rueckweg auf einen Sensor,
+    den der Scan nicht mehr kennt -- get_temp() lieferte None, und seit #534
+    Punkt 2 gaebe der Regelkreis den Kanal nach 300 s an die Board-Automatik
+    ab. Der Rueckweg reichte dann gerade so weit, den Fehler zu verschieben.
+
+    Sensoren fremder Chips bleiben unberuehrt: ein k10temp-Sensor ist von
+    der Instabilitaet des nct6798 nicht betroffen.
+    """
+    if not sensor_id:
+        return sensor_id
+    bare = sensor_id[len("hwmon:"):] if sensor_id.startswith("hwmon:") else sensor_id
+    for chip in chips.values():
+        if chip.ambiguous or chip.prefix in ("", "Unknown"):
+            continue
+        for num in chip.temp_channels:
+            if _stable_form(chip.prefix, "temp", num).match(bare):
+                return f"hwmon:{chip.hwmon_name}_temp{num}"
+    return sensor_id
+
+
+def _reverse_labels_and_composites(db: Session,
+                                   chips: Dict[str, "UnstableChip"]) -> None:
+    """Nutzer-Labels und Composite-Quellen ziehen mit.
+
+    Beides spiegelt den Hinweg: bei einer Kollision bleibt die vorhandene
+    Zeile stehen und die umzuschluesselnde wird ignoriert -- geloescht wird
+    nichts. Composites sind nicht bloss Kosmetik: eine Composite-Quelle, die
+    niemand mehr aufloest, endet in derselben Abgabe nach 300 s wie ein
+    direkt zugewiesener Sensor.
+    """
+    rows = list(db.execute(select(TempSensorLabel)).scalars())
+    belegt = {row.sensor_id for row in rows}
+    for row in rows:
+        neu = _reverse_sensor_id(row.sensor_id, chips)
+        if neu == row.sensor_id or neu in belegt:
+            continue
+        row.legacy_sensor_id = row.sensor_id
+        row.sensor_id = neu
+        belegt.add(neu)
+        logger.info("Sensor-Label zurueckgenommen: %s -> %s",
+                    row.legacy_sensor_id, neu)
+
+    for composite in db.execute(select(CompositeTempSensor)).scalars():
+        try:
+            sources = json.loads(composite.source_ids_json)
+        except (TypeError, ValueError):
+            logger.warning("Composite %s: source_ids_json unlesbar", composite.id)
+            continue
+        if not isinstance(sources, list):
+            continue
+        umgeschrieben = [_reverse_sensor_id(s, chips) if isinstance(s, str) else s
+                         for s in sources]
+        if umgeschrieben != sources:
+            composite.source_ids_json = json.dumps(umgeschrieben)
+            logger.info("Composite %s: Quell-IDs zurueckgenommen", composite.id)
+
+
+def reconcile_unstable_identities(
+    db: Session,
+    *,
+    chips: Dict[str, "UnstableChip"],
+) -> ReconcileReport:
+    """Nimmt stabile Zeilen auf die heutige hwmon-Kennung zurueck. Committet NICHT.
+
+    Gegenstueck zu reconcile_fan_identities(): aufgerufen fuer die Chips,
+    deren Kennung der Scan gerade NICHT stabil bilden kann. Der Rueckfall in
+    build_fan_id() ist lebender Code, kein Altbestand -- auf BaluNode hat er
+    zwei Generationen von Zeilen hinterlassen.
+
+    Im Zweifel geschieht nichts: ein falsch zugeordneter Luefter ist
+    schlimmer als ein nicht zugeordneter.
+    """
+    report = ReconcileReport()
+    rows = list(db.execute(select(FanConfig)).scalars())
+    # Rangfolge VOR dem ersten Schreibzugriff festhalten -- updated_at traegt
+    # ein onupdate=func.now() und aenderte sich sonst waehrend des Laufs.
+    order = {row.id: row.updated_at for row in rows}
+    vorhanden = {row.fan_id: row for row in rows}
+
+    for chip in chips.values():
+        if chip.ambiguous or chip.prefix in ("", "Unknown"):
+            # Mehrere Chips desselben Praefix (deren Indizes koennen ueber
+            # Boots tauschen), oder hwmon/name war unlesbar -- "Unknown"
+            # waere ueber Chips hinweg mehrdeutig.
+            continue
+        for kanal in sorted(chip.pwm_channels):
+            ziel = f"{chip.hwmon_name}_pwm{kanal}"
+            muster = _stable_form(chip.prefix, "pwm", kanal)
+            kandidaten = [row for row in rows
+                          if row.is_active and muster.match(row.fan_id or "")]
+
+            if len(kandidaten) != 1:
+                if len(kandidaten) > 1:
+                    logger.warning(
+                        "Rueckweg %s: %d aktive Zeilen passen auf %s -- keine "
+                        "Zuordnung", ziel, len(kandidaten), chip.prefix,
+                    )
+                inkumbent = vorhanden.get(ziel)
+                if inkumbent is not None and not inkumbent.is_active:
+                    # Der Restfall: eine Zeile unter der heutigen Kennung
+                    # existiert, ist deaktiviert, und es gibt keine stabile
+                    # Vorgaengerin, die sie erklaert. Sie bleibt inaktiv --
+                    # deaktiviert wurde sie einmal bewusst zugunsten einer
+                    # anderen. Der Regelkreis wird sie ueberspringen, und
+                    # ohne diese Zeile stuende nirgends, warum.
+                    report.orphaned_inactive.append(ziel)
+                    logger.warning(
+                        "Luefter %s ist deaktiviert und wird NICHT geregelt: "
+                        "keine stabile Vorgaengerzeile zuzuordnen (#585)", ziel,
+                    )
+                continue
+
+            gewinner = kandidaten[0]
+            inkumbent = vorhanden.get(ziel)
+            if inkumbent is not None and inkumbent is not gewinner:
+                gruppe = [gewinner, inkumbent]
+                gewinner = max(gruppe,
+                               key=lambda r: (order.get(r.id) or _EPOCH, r.id or 0))
+                verlierer = next(r for r in gruppe if r is not gewinner)
+                if verlierer.is_active:
+                    verlierer.is_active = False
+                    report.deactivated.append(verlierer.fan_id)
+                if verlierer.fan_id == ziel:
+                    # Dieselbe Falle wie I-2 auf dem Hinweg: die Zielkennung
+                    # muss frei sein, BEVOR der Gewinner sie uebernimmt --
+                    # sonst halten zwei Zeilen denselben fan_id und der
+                    # Unique-Index schlaegt beim Flush zu. row.id ist
+                    # Primaerschluessel und damit ohne Rueckfrage eindeutig.
+                    verlierer.fan_id = f"{ziel}#legacy{verlierer.id}"
+                    db.flush()
+
+            if gewinner.fan_id != ziel:
+                alt = gewinner.fan_id
+                gewinner.legacy_fan_id = alt
+                gewinner.fan_id = ziel
+                report.readopted.append((alt, ziel))
+                logger.info("Fan-Identitaet zurueckgenommen: %s -> %s", alt, ziel)
+                _rewrite_references(db, alt, ziel)
+
+            # Der Kanal wurde gerade gescannt -- er existiert. Eine Zeile,
+            # die ihn traegt, gehoert aktiv. is_active wird sonst NUR beim
+            # Anlegen gesetzt (fan_control.py:875), und ein Rueckfall auf eine
+            # deaktivierte Altzeile liesse den Luefter ungeregelt -- ohne eine
+            # Logzeile, ohne ein Zeichen in der Oberflaeche.
+            #
+            # Wirksam wird die Zeile nur in einem Fall: wenn die Altzeile den
+            # Rangvergleich gewinnt und deshalb ein inaktiver Gewinner
+            # dasteht. Im Normalfall traegt die stabile Zeile ihre Aktivitaet
+            # durch die Umbenennung mit. Trotzdem hier und nicht im
+            # Rangzweig -- die Aussage gilt fuer jeden gescannten Kanal, und
+            # sie an die Bedingung zu haengen hiesse, sie beim naechsten
+            # Umbau zu verlieren.
+            #
+            # Es ueberschreibt keine Nutzerentscheidung: die API kennt das
+            # Feld nicht (routes/fans.py enthaelt is_active nirgends), nur
+            # dieser Abgleich setzt es je auf False. Kaeme ein Bedienelement
+            # dafuer hinzu, muesste diese Zeile neu bewertet werden.
+            gewinner.is_active = True
+            gewinner.temp_sensor_id = _reverse_sensor_id(
+                gewinner.temp_sensor_id, chips)
+
+    _reverse_labels_and_composites(db, chips)
+
+    if report.readopted or report.orphaned_inactive:
+        logger.info(
+            "Rueckweg: %d zurueckgenommen, %d ohne Zuordnung deaktiviert",
+            len(report.readopted), len(report.orphaned_inactive),
+        )
     return report
 
 
