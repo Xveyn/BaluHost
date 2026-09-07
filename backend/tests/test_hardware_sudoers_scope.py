@@ -45,9 +45,17 @@ def _tee_patterns() -> list[str]:
     Zeilenfortsetzungen ('\\' am Zeilenende) werden vorher zusammengezogen --
     ohne das findet der Ausdruck in einem Cmnd_Alias-Block keinen einzigen
     Eintrag.
+
+    Kommentarzeilen fallen VOR dem Zusammenziehen heraus. Sonst haette ein
+    auskommentierter Eintrag die Erlaubnis-Tests gruen gelassen, waehrend die
+    Regelung auf der Maschine stillsteht -- die eine Richtung, in der dieser
+    Test falsch gruen sein koennte.
     """
-    text = TEMPLATE.read_text(encoding="utf-8")
-    text = re.sub(r"\\\s*\n\s*", " ", text)
+    zeilen = [
+        z for z in TEMPLATE.read_text(encoding="utf-8").splitlines()
+        if not z.lstrip().startswith("#")
+    ]
+    text = re.sub(r"\\\s*\n\s*", " ", "\n".join(zeilen))
     return re.findall(r"/usr/bin/tee\s+([^\s,]+)", text)
 
 
@@ -55,11 +63,17 @@ def _erlaubt(path: str) -> bool:
     return any(fnmatch.fnmatchcase(path, p) for p in _tee_patterns())
 
 
-def test_die_vorlage_ist_ueberhaupt_lesbar_und_traegt_muster():
+def test_die_vorlage_ist_ueberhaupt_lesbar_und_traegt_alle_muster():
     """Schutz gegen einen vakuum-gruenen Test: findet der Ausdruck nichts,
-    waeren alle Ablehnungs-Zusicherungen unten trivial erfuellt."""
+    waeren alle Ablehnungs-Zusicherungen unten trivial erfuellt.
+
+    Die Zahl ist die tatsaechliche Anzahl, keine untere Schranke mit Luft:
+    2 pwm-Muster + 2 pwm_enable + 4 Akustik-Knoten + 4 cpufreq-Dateien, jeweils
+    ein- und zweistellig, also 2*(2+4+4). Bei einer Schranke wie '>= 12' waere
+    der Verlust mehrerer Eintraege stumm geblieben.
+    """
     assert TEMPLATE.is_file()
-    assert len(_tee_patterns()) >= 12
+    assert len(_tee_patterns()) == 2 * (2 + len(ACOUSTIC_NODES) + len(CPUFREQ_NODES))
 
 
 @pytest.mark.parametrize("path", [
@@ -79,8 +93,14 @@ def test_die_pwm_knoten_bleiben_erlaubt(path):
 def test_jeder_akustik_knoten_bleibt_erlaubt(node):
     """An ACOUSTIC_NODES gekoppelt statt abgeschrieben: kommt ein fuenfter
     Knoten dazu (ab Kernel 6.13 fan_zero_rpm_enable), schlaegt dieser Test an,
-    solange die sudoers-Vorlage nicht nachgezogen wurde."""
+    solange die sudoers-Vorlage nicht nachgezogen wurde.
+
+    Ein- UND zweistellig geprueft: die hwmon-Nummer haengt an der
+    Registrierungsreihenfolge des Kernels, auf einer Maschine mit mehr Sensoren
+    traegt dieselbe Karte zweistellig. Waere nur hwmon2 geprueft, koennten die
+    sechs zweistelligen Eintraege unbemerkt fehlen."""
     assert _erlaubt(f"/sys/class/hwmon/hwmon2/device/gpu_od/fan_ctrl/{node}")
+    assert _erlaubt(f"/sys/class/hwmon/hwmon12/device/gpu_od/fan_ctrl/{node}")
 
 
 @pytest.mark.parametrize("node", CPUFREQ_NODES)
