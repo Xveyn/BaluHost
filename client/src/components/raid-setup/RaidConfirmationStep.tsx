@@ -34,8 +34,8 @@ export default function RaidConfirmationStep({
             value={arrayName}
             onChange={(e) => onArrayNameChange(e.target.value)}
             required
-            pattern="^md([0-9]+|_[a-zA-Z0-9]+)$"
-            maxLength={32}
+            pattern="^md[0-9]{1,3}$"
+            maxLength={5}
             placeholder="md0"
             className={`mt-1 w-full rounded-lg border bg-slate-950/70 px-3 py-2 text-sm text-slate-200 focus:outline-none ${
               arrayName && !isArrayNameValid
@@ -45,7 +45,7 @@ export default function RaidConfirmationStep({
           />
           {arrayName && !isArrayNameValid && (
             <p className="mt-1 text-xs text-red-400">
-              {t('raidWizard.confirm.invalidName', 'Name must be "md" + digits (e.g. md0) or "md_" + alphanumerics (e.g. md_backup).')}
+              {t('raidWizard.confirm.invalidName', 'Name must be "md" followed by one to three digits (e.g. md0, md127).')}
             </p>
           )}
         </div>

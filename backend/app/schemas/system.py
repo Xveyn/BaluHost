@@ -275,14 +275,18 @@ class CreateArrayRequest(BaseModel):
     @field_validator("name")
     @classmethod
     def validate_mdadm_name(cls, v: str) -> str:
-        if not re.fullmatch(r"md([0-9]+|_[a-zA-Z0-9]+)", v):
+        # Auf md<1-3 Ziffern> begrenzt (#570): die sudoers-Regeln zaehlen die
+        # erlaubten mdadm-Aufrufe einzeln auf, und ein unbegrenzt langer Name
+        # laesst sich dort nur mit einem Platzhalter abbilden. Ein Platzhalter
+        # mitten im Muster ist aber gefaehrlich -- er matcht auch Leerzeichen
+        # und liesse zusaetzliche Optionen durch. Ein Name ausserhalb dieser
+        # Form wuerde spaeter an sudo scheitern; besser hier melden.
+        if not re.fullmatch(r"md[0-9]{1,3}", v):
             raise ValueError(
                 f"Invalid array name '{v}'. "
-                "Name must start with 'md' followed by digits (e.g. md0, md127) "
-                "or 'md_' followed by alphanumerics (e.g. md_backup)."
+                "Name must be 'md' followed by one to three digits "
+                "(e.g. md0, md1, md127)."
             )
-        if len(v) > 32:
-            raise ValueError("Array name must not exceed 32 characters.")
         return v
 
 
