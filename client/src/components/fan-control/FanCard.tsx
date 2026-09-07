@@ -89,6 +89,13 @@ export default function FanCard({
   };
 
   const isFirmwareManaged = fan.pwm_control === 'firmware_managed';
+  // Hinweis, KEINE Sperre (#568): fehlende Rechte sind ein voruebergehender
+  // Laufzeit-Befund, den set_pwm nach dem naechsten erfolgreichen Write selbst
+  // zuruecknimmt. Wer die Bedienelemente hier sperrt, behandelt einen
+  // behebbaren Zustand wie eine dauerhafte Hardware-Eigenschaft -- der Nutzer
+  // koennte dann nicht einmal den Modus vorbereiten, in dem der Luefter danach
+  // laufen soll.
+  const isDenied = fan.pwm_control === 'no_permission';
   // Abgeleitet, nicht gelesen: einen fan_zero_rpm_enable-Knoten gibt es erst
   // ab Kernel 6.13. Geschlossen wird aus "firmware-verwaltet und 0 RPM" (#516).
   const isZeroRpm = isFirmwareManaged && fan.rpm === 0;
@@ -119,6 +126,15 @@ export default function FanCard({
                 title={t('system:fanControl.gpu.firmware.badgeHint')}
               >
                 {t('system:fanControl.gpu.firmware.badge')}
+              </span>
+            )}
+            {isDenied && (
+              <span
+                data-testid="fan-no-permission-badge"
+                className="inline-flex items-center px-1.5 py-0.5 text-xs bg-amber-500/20 text-amber-300 rounded"
+                title={t('system:fanControl.card.noPermissionHint')}
+              >
+                {t('system:fanControl.card.noPermission')}
               </span>
             )}
             {fan.last_write_error && (

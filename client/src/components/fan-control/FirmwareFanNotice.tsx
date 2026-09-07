@@ -192,9 +192,17 @@ export default function FirmwareFanNotice({ fanId }: Props) {
                         aria-label={`${t('system:fanControl.gpu.acoustics.managed')}: ${
                           t(`system:fanControl.gpu.acoustics.${name}`)}`}
                         checked={managed[name] ?? false}
+                        // Waehrend einer laufenden Anfrage gesperrt (#574) --
+                        // anders als der Regler daneben OHNE !managed[name],
+                        // denn dieses Kaestchen ist das Bedienelement, mit dem
+                        // man einen unverwalteten Knoten ueberhaupt erst in die
+                        // Verwaltung holt. Ungesperrt liess sich der Zustand
+                        // umschalten und wurde beim Eintreffen der Antwort von
+                        // setManaged(managedFromNodes(...)) still ueberschrieben.
+                        disabled={acousticsBusy}
                         onChange={(e) =>
                           setManaged({ ...managed, [name]: e.target.checked })}
-                        className="accent-sky-500"
+                        className="accent-sky-500 disabled:opacity-40"
                       />
                       <span>
                         {t(`system:fanControl.gpu.acoustics.${name}`)}: {draft[name]}

@@ -282,7 +282,12 @@ class FanControlService:
         """
         if not getattr(lifespan, "IS_PRIMARY_WORKER", False):
             return
-        current = getattr(self._backend, "_has_write_permission", None)
+        # has_write_permission() statt des rohen Attributs (#568): das
+        # Attribut kann nur True werden, die Methode leitet den Stand aus
+        # den Kanalzustaenden ab und kann damit auch zurueckfallen.
+        holen = getattr(self._backend, "has_write_permission", None)
+        current = holen() if callable(holen) else getattr(
+            self._backend, "_has_write_permission", None)
         if current is None or current == self._published_write_permission:
             return
         with self.db_session_factory() as db:
@@ -1292,7 +1297,7 @@ class FanControlService:
                 # Zeile (frisch migriert), entscheidet die eigene Messung.
                 with self.db_session_factory() as db:
                     shared = read_write_permission(db)
-                may_write = (self._backend._has_write_permission
+                may_write = (self._backend.has_write_permission()
                              if shared is None else shared)
                 permission_status = "ok" if may_write else "readonly"
 

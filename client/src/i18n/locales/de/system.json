@@ -872,7 +872,9 @@
       "manualPwm": "Manuelles PWM",
       "noSensor": "Kein Sensor zugewiesen",
       "pwmError": "PWM-Fehler",
-      "zeroRpm": "Zero-RPM — die Karte hat den Lüfter angehalten"
+      "zeroRpm": "Zero-RPM — die Karte hat den Lüfter angehalten",
+      "noPermission": "Kein Schreibrecht",
+      "noPermissionHint": "BaluHost darf diesen Kanal gerade nicht schreiben. Die Regelung greift hier nicht, bis die Rechte wieder passen; die Einstellungen bleiben bedienbar und wirken, sobald ein Schreibvorgang wieder gelingt."
     },
     "details": {
       "temperatureCol": "Temperatur (°C)",

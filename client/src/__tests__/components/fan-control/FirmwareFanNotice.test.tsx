@@ -288,6 +288,29 @@ it('sendet fuer nicht markierte Knoten null: nur die Zieltemperatur wird verwalt
   });
 });
 
+it('sperrt auch das Verwalten-Kaestchen, solange eine Anfrage laeuft', async () => {
+  // #574: der Regler war seit #570 gesperrt, das Kaestchen daneben nicht --
+  // sein Zustand liess sich umschalten und wurde beim Eintreffen der Antwort
+  // still ueberschrieben. Schwerer als beim Regler: ein verlorener Klick hier
+  // entscheidet, ob BaluHost den Knoten kuenftig bei jedem Start setzt.
+  vi.mocked(getGpuAcoustics).mockResolvedValue(FULL_STATUS);
+  let resolvePut: (v: unknown) => void = () => {};
+  vi.mocked(setGpuAcoustics).mockReturnValue(
+    new Promise((res) => { resolvePut = res; }) as ReturnType<typeof setGpuAcoustics>,
+  );
+  render(<FirmwareFanNotice fanId="amdgpu-pci-0300:pwm1" />);
+
+  const box = await screen.findByRole('checkbox', { name: /fan_target_temperature/ });
+  expect(box).not.toBeDisabled();
+
+  fireEvent.click(screen.getByText('system:fanControl.gpu.acoustics.save'));
+
+  await waitFor(() => expect(box).toBeDisabled());
+
+  resolvePut(FULL_STATUS);
+  await waitFor(() => expect(box).not.toBeDisabled());
+});
+
 it('sperrt auch die Regler, solange eine Anfrage laeuft', async () => {
   // Ein VERWALTETER Knoten, sonst waere der Regler schon durch
   // !managed[name] gesperrt und der Test bewiese nichts -- dieselbe

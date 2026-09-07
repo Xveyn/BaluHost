@@ -127,6 +127,51 @@ class LinuxFanControlBackend(FanControlBackend):
 
         logger.info("Fan control: no write permission (readonly mode)")
 
+    def has_write_permission(self) -> bool:
+        """Ob BaluHost derzeit ueberhaupt einen Luefter schreiben kann.
+
+        `_has_write_permission` allein taugt dafuer nicht: es wird auf True
+        gesetzt (Probe beim Start, erfolgreicher Write) und von NIEMANDEM auf
+        False zurueck (#568 Punkt 1). Gingen die Rechte zur Laufzeit verloren
+        -- eine udev-Regel, die nach einem Treiber-Reload nicht mehr greift,
+        eine sudoers-Aenderung, die die Box nie erreicht hat --, meldete
+        `GET /api/fans/permissions` weiter `ok`, waehrend nichts mehr
+        geschrieben wurde. Die Bedienelemente blieben frei und jede Eingabe
+        verpuffte.
+
+        Abgeleitet wird deshalb aus dem Zustand je Kanal, den set_pwm ohnehin
+        pflegt: NO_PERMISSION bei beobachtetem EACCES/EPERM, zurueck auf
+        SUPPORTED nach dem naechsten erfolgreichen Write.
+
+        NICHT am Backoff aus #533 aufgehaengt, obwohl das Issue es vorschlaegt:
+        die Sperre zaehlt Fehlschlaege jeder Art, auch EINVAL vom Treiber. Das
+        waere eine Aussage ueber "der Write klappt nicht", nicht ueber "wir
+        duerfen nicht" -- und die Rechteanzeige soll das zweite sagen.
+
+        Der Geltungsbereich ist bewusst global-restriktiv: ein einzelner
+        gesperrter Kanal macht die Steuerung nicht tot (auf dieser Hardware ist
+        genau ein Kanal firmware-verwaltet und vier sind steuerbar). Erst wenn
+        JEDER steuerbare Kanal ein EACCES gesehen hat, ist die Anzeige
+        `readonly`. Was einzelne Kanaele betrifft, zeigt die Karte je Luefter
+        (#568 Punkt 2).
+        """
+        if not self._has_write_permission:
+            return False
+
+        steuerbar = [
+            info for info in self._fan_cache.values()
+            if info.get("pwm_control") is not PwmControl.FIRMWARE_MANAGED
+        ]
+        if not steuerbar:
+            # Nichts Steuerbares erkannt: die Frage stellt sich nicht, und der
+            # Startwert der Probe ist die beste vorhandene Aussage.
+            return self._has_write_permission
+
+        return any(
+            info.get("pwm_control") is not PwmControl.NO_PERMISSION
+            for info in steuerbar
+        )
+
     async def get_fans(self) -> List[FanData]:
         """Get hardware fans from hwmon (uses cache from startup scan)."""
 
