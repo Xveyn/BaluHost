@@ -9,7 +9,8 @@ import { Fan, Settings, AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { handleApiError } from '../lib/errorHandling';
 import { LoadingOverlay } from '../components/ui/Spinner';
-import { setFanMode, setFanPWM, updateFanCurve, switchBackend, FanMode, listProfiles, applyProfileToFan, listTempSensors, listComposites } from '../api/fan-control';
+import {
+  reacquireFan, setFanMode, setFanPWM, updateFanCurve, switchBackend, FanMode, listProfiles, applyProfileToFan, listTempSensors, listComposites } from '../api/fan-control';
 import type { FanCurvePoint, FanCurveProfile, TempSensorInfo, CompositeSensorInfo } from '../api/fan-control';
 import { useFanControl } from '../hooks/useFanControl';
 import { FanCard, FanDetails, FanSchedulePanel, ProfileManager, SensorsPanel } from '../components/fan-control';
@@ -84,6 +85,19 @@ export default function FanControl() {
       setOperationLoading(prev => ({ ...prev, [opKey]: false }));
     }
   }, [refetch, t]);
+
+  // Der Rueckweg aus der Freigabe an die Board-Automatik (#534). Danach neu
+  // laden, damit das Badge verschwindet, statt bis zum naechsten Poll zu
+  // stehen.
+  const handleReacquire = async (fanId: string) => {
+    try {
+      await reacquireFan(fanId);
+      toast.success(t('system:fanControl.card.reacquireSuccess'));
+      refetch();
+    } catch (err) {
+      handleApiError(err, t('system:fanControl.card.reacquire'));
+    }
+  };
 
   const handlePWMChange = useCallback(async (fanId: string, pwm: number) => {
     try {
@@ -263,6 +277,7 @@ export default function FanControl() {
             onSelect={() => setSelectedFan(fan.fan_id)}
             onModeChange={handleModeChange}
             onPWMChange={handlePWMChange}
+            onReacquire={handleReacquire}
             isReadOnly={isReadOnly}
             isLoading={operationLoading[`mode-${fan.fan_id}`] || false}
             sensors={sensors}

@@ -25,6 +25,7 @@ interface FanCardProps {
   onSelect: () => void;
   onModeChange: (fanId: string, mode: FanMode) => void;
   onPWMChange: (fanId: string, pwm: number) => void;
+  onReacquire?: (fanId: string) => void;
   isReadOnly: boolean;
   isLoading: boolean;
   sensors: TempSensorInfo[];
@@ -36,6 +37,7 @@ export default function FanCard({
   onSelect,
   onModeChange,
   onPWMChange,
+  onReacquire,
   isReadOnly,
   isLoading,
   sensors
@@ -96,6 +98,14 @@ export default function FanCard({
   // koennte dann nicht einmal den Modus vorbereiten, in dem der Luefter danach
   // laufen soll.
   const isDenied = fan.pwm_control === 'no_permission';
+  // Freigegeben an die Board-Automatik (#534). Zwei Zustaende, weil sie
+  // Verschiedenes bedeuten: bei 'released' regelt der Chip, bei 'abandoned'
+  // regelt NIEMAND -- die Rueckgabe selbst ist gescheitert. Eine Karte, die
+  // beides gleich anzeigt, behauptet im zweiten Fall eine Regelung, die es
+  // nicht gibt.
+  const isReleased = fan.ownership === 'released';
+  const isAbandoned = fan.ownership === 'abandoned';
+  const isHandedOver = isReleased || isAbandoned;
   // Abgeleitet, nicht gelesen: einen fan_zero_rpm_enable-Knoten gibt es erst
   // ab Kernel 6.13. Geschlossen wird aus "firmware-verwaltet und 0 RPM" (#516).
   const isZeroRpm = isFirmwareManaged && fan.rpm === 0;
@@ -126,6 +136,23 @@ export default function FanCard({
                 title={t('system:fanControl.gpu.firmware.badgeHint')}
               >
                 {t('system:fanControl.gpu.firmware.badge')}
+              </span>
+            )}
+            {isHandedOver && (
+              <span
+                data-testid={isReleased ? 'fan-released-badge' : 'fan-abandoned-badge'}
+                className={`inline-flex items-center px-1.5 py-0.5 text-xs rounded ${
+                  isReleased
+                    ? 'bg-sky-500/20 text-sky-300'
+                    : 'bg-red-500/20 text-red-300'
+                }`}
+                title={t(isReleased
+                  ? 'system:fanControl.card.releasedHint'
+                  : 'system:fanControl.card.abandonedHint')}
+              >
+                {t(isReleased
+                  ? 'system:fanControl.card.released'
+                  : 'system:fanControl.card.abandoned')}
               </span>
             )}
             {isDenied && (
@@ -223,7 +250,7 @@ export default function FanCard({
             e.stopPropagation();
             onModeChange(fan.fan_id, FanMode.SCHEDULED);
           }}
-          disabled={fan.mode === FanMode.SCHEDULED || isReadOnly || isLoading || isFirmwareManaged}
+          disabled={fan.mode === FanMode.SCHEDULED || isReadOnly || isLoading || isFirmwareManaged || isHandedOver}
           className={`flex-1 px-3 py-1 text-xs rounded-lg transition-colors ${
             fan.mode === FanMode.SCHEDULED
               ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/30'
@@ -241,7 +268,7 @@ export default function FanCard({
             e.stopPropagation();
             onModeChange(fan.fan_id, FanMode.MANUAL);
           }}
-          disabled={fan.mode === FanMode.MANUAL || isReadOnly || isLoading || isFirmwareManaged}
+          disabled={fan.mode === FanMode.MANUAL || isReadOnly || isLoading || isFirmwareManaged || isHandedOver}
           className={`flex-1 px-3 py-1 text-xs rounded-lg transition-colors ${
             fan.mode === FanMode.MANUAL
               ? 'bg-purple-500 text-white shadow-lg shadow-purple-500/30'
@@ -265,6 +292,29 @@ export default function FanCard({
         >
           {t('system:fanControl.gpu.firmware.cardHint')}
         </p>
+      )}
+
+      {/* Der Rueckweg (#534). Er ist von der Sperre AUSGENOMMEN: eine
+          Oberflaeche, die einen freigegebenen Luefter wie einen
+          firmware-verwalteten sperrt, deaktiviert genau das Bedienelement,
+          ueber das man zurueckkaeme -- ein Zustand ohne Ausgang. Deshalb
+          haengt der Knopf nur an isLoading, nicht an isReadOnly. */}
+      {isHandedOver && onReacquire && (
+        <div className="mb-3" onClick={(e) => e.stopPropagation()}>
+          <p className="text-xs text-slate-400 mb-2">
+            {t(isReleased
+              ? 'system:fanControl.card.releasedHint'
+              : 'system:fanControl.card.abandonedHint')}
+          </p>
+          <button
+            data-testid="fan-reacquire-button"
+            onClick={() => onReacquire(fan.fan_id)}
+            disabled={isLoading}
+            className="px-3 py-1 text-xs rounded-lg bg-slate-700 text-slate-200 hover:bg-slate-600 disabled:opacity-50"
+          >
+            {t('system:fanControl.card.reacquire')}
+          </button>
+        </div>
       )}
 
       {/* Manual PWM Slider */}

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import FanCard from '../../../components/fan-control/FanCard';
 import { FanMode } from '../../../api/fan-control';
 import type { FanInfo } from '../../../api/fan-control';
@@ -153,5 +153,83 @@ describe('FanCard bei fehlendem Schreibrecht (#568 Punkt 2)', () => {
   it('zeigt das Firmware-Badge nicht mit', () => {
     renderCard(fan({ pwm_control: 'no_permission' }));
     expect(screen.queryByTestId('fan-firmware-badge')).toBeNull();
+  });
+});
+
+describe('FanCard bei Rueckgabe an die Board-Automatik (#534)', () => {
+  function renderMitRueckweg(f: FanInfo, onReacquire = vi.fn()) {
+    render(
+      <FanCard
+        fan={f}
+        isSelected={false}
+        onSelect={noop}
+        onModeChange={noop}
+        onPWMChange={noop}
+        onReacquire={onReacquire}
+        isReadOnly={false}
+        isLoading={false}
+        sensors={[]}
+      />
+    );
+    return onReacquire;
+  }
+
+  it('zeigt im Normalfall kein Badge', () => {
+    renderMitRueckweg(fan({ ownership: 'owned' }));
+    expect(screen.queryByTestId('fan-released-badge')).toBeNull();
+    expect(screen.queryByTestId('fan-abandoned-badge')).toBeNull();
+    expect(screen.queryByTestId('fan-reacquire-button')).toBeNull();
+  });
+
+  it('sagt bei geglueckter Rueckgabe, dass das Board regelt', () => {
+    renderMitRueckweg(fan({ ownership: 'released' }));
+    expect(screen.getByTestId('fan-released-badge')).toBeInTheDocument();
+    expect(screen.queryByTestId('fan-abandoned-badge')).toBeNull();
+  });
+
+  it('sagt bei gescheiterter Rueckgabe, dass NIEMAND regelt', () => {
+    // Der Unterschied ist der Kern von #534: bei 'abandoned' ist die
+    // Rueckgabe selbst fehlgeschlagen -- eine Karte, die auch hier "das Board
+    // regelt" anzeigt, behauptet eine Regelung, die es nicht gibt.
+    renderMitRueckweg(fan({ ownership: 'abandoned' }));
+    expect(screen.getByTestId('fan-abandoned-badge')).toBeInTheDocument();
+    expect(screen.queryByTestId('fan-released-badge')).toBeNull();
+  });
+
+  it('bietet den Rueckweg an und meldet ihn', () => {
+    const onReacquire = renderMitRueckweg(fan({ ownership: 'released' }));
+    fireEvent.click(screen.getByTestId('fan-reacquire-button'));
+    expect(onReacquire).toHaveBeenCalledWith('hwmon2_pwm1');
+  });
+
+  it('laesst den Rueckweg auch dann erreichbar, wenn alles andere gesperrt ist', () => {
+    // Der Befund, an dem der erste Anlauf haengenblieb: eine Sperre analog zu
+    // firmware_managed wuerde genau das Bedienelement deaktivieren, ueber das
+    // man zurueckkaeme -- ein Zustand ohne Ausgang.
+    render(
+      <FanCard
+        fan={fan({ ownership: 'abandoned', mode: FanMode.AUTO })}
+        isSelected={false}
+        onSelect={noop}
+        onModeChange={noop}
+        onPWMChange={noop}
+        onReacquire={vi.fn()}
+        isReadOnly={true}
+        isLoading={false}
+        sensors={[]}
+      />
+    );
+    const zurueck = screen.getByTestId('fan-reacquire-button') as HTMLButtonElement;
+    expect(zurueck.disabled).toBe(false);
+    const manual = screen.getByRole('button', { name: /card\.manual/ }) as HTMLButtonElement;
+    expect(manual.disabled).toBe(true);
+  });
+
+  it('sperrt die Modus-Knoepfe eines freigegebenen Luefters', () => {
+    // Schreiben ist ohnehin ausgesetzt -- ein bedienbarer Regler waere hier
+    // dasselbe leere Versprechen wie bei firmware_managed.
+    renderMitRueckweg(fan({ ownership: 'released', mode: FanMode.AUTO }));
+    const manual = screen.getByRole('button', { name: /card\.manual/ }) as HTMLButtonElement;
+    expect(manual.disabled).toBe(true);
   });
 });

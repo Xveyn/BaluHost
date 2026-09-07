@@ -74,6 +74,11 @@ export interface FanInfo {
   gpu_vendor?: string | null;
   last_write_error?: string | null;
   pwm_control?: 'supported' | 'firmware_managed' | 'no_permission';
+  // Wer den Kanal regelt (#534): 'owned' = BaluHost, 'released' = die
+  // Board-Automatik nach einer geglueckten Rueckgabe, 'abandoned' = niemand,
+  // weil die Rueckgabe scheiterte. Eigenes Feld statt eines Werts in `mode` --
+  // das ist serverseitig ein validiertes Enum.
+  ownership?: 'owned' | 'released' | 'abandoned';
   // Curve type and tuning fields (Task 15)
   curve_type?: 'graph' | 'flat' | 'target' | 'mix' | 'sync';
   flat_pwm_percent?: number | null;
@@ -612,6 +617,13 @@ export async function deleteComposite(id: string): Promise<void> {
 /**
  * Set GPU manual PWM mode (AMD only)
  */
+// Einen an die Board-Automatik zurueckgegebenen Luefter wieder uebernehmen.
+// Eigener Endpunkt, weil die Bedienelemente eines freigegebenen Luefters
+// gesperrt sind -- ein Rueckweg ueber Modus oder PWM waere selbst gesperrt.
+export async function reacquireFan(fanId: string): Promise<void> {
+  await apiClient.post('/api/fans/reacquire', { fan_id: fanId });
+}
+
 export async function setGpuManualMode(fanId: string, enabled: boolean): Promise<void> {
   await apiClient.post(`/api/fans/${encodeURIComponent(fanId)}/gpu-manual-mode`, { enabled });
 }

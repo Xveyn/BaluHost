@@ -874,7 +874,13 @@
       "pwmError": "PWM-Fehler",
       "zeroRpm": "Zero-RPM — die Karte hat den Lüfter angehalten",
       "noPermission": "Kein Schreibrecht",
-      "noPermissionHint": "BaluHost darf diesen Kanal gerade nicht schreiben. Die Regelung greift hier nicht, bis die Rechte wieder passen; die Einstellungen bleiben bedienbar und wirken, sobald ein Schreibvorgang wieder gelingt."
+      "noPermissionHint": "BaluHost darf diesen Kanal gerade nicht schreiben. Die Regelung greift hier nicht, bis die Rechte wieder passen; die Einstellungen bleiben bedienbar und wirken, sobald ein Schreibvorgang wieder gelingt.",
+      "released": "Board regelt",
+      "releasedHint": "BaluHost konnte diesen Kanal wiederholt nicht schreiben und hat die Regelung an die Automatik des Mainboards zurueckgegeben. Die Temperaturueberwachung laeuft weiter.",
+      "abandoned": "Niemand regelt",
+      "abandonedHint": "BaluHost konnte diesen Kanal nicht schreiben und die Rueckgabe an die Board-Automatik ist ebenfalls fehlgeschlagen. Der Luefter laeuft auf seinem letzten Wert weiter; die Temperaturueberwachung laeuft weiter.",
+      "reacquire": "Wieder uebernehmen",
+      "reacquireSuccess": "Luefter wieder uebernommen"
     },
     "details": {
       "temperatureCol": "Temperatur (°C)",

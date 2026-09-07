@@ -76,6 +76,56 @@ def read_denied_fans(db: Session) -> Optional[set]:
     return set(werte) if isinstance(werte, list) else None
 
 
+def read_released_fans(db: Session) -> dict:
+    """Die freigegebenen Kanaele mit ihrem Zustand (#534).
+
+    Returns:
+        `{fan_id: "released" | "abandoned"}`. Eine leere Abbildung heisst
+        "kein Kanal freigegeben" -- anders als bei read_denied_fans gibt es
+        hier kein None, weil der Besitzzustand ausschliesslich hier lebt und
+        nicht mit einer prozesslokalen Sicht zusammengefuehrt wird.
+    """
+    try:
+        row = db.execute(
+            select(FanRuntimeState).where(FanRuntimeState.id == _SINGLETON_ID)
+        ).scalar_one_or_none()
+    except Exception as exc:
+        logger.debug("fan_runtime_state nicht lesbar: %s", exc)
+        return {}
+    if row is None or not row.released_fans:
+        return {}
+    try:
+        werte = json.loads(row.released_fans)
+    except (ValueError, TypeError) as exc:
+        logger.debug("released_fans nicht lesbar: %s", exc)
+        return {}
+    return werte if isinstance(werte, dict) else {}
+
+
+def publish_released_fans(db: Session, released: dict) -> bool:
+    """Die freigegebenen Kanaele hinterlegen. Nur der Primary schreibt.
+
+    Returns:
+        False bei einem Datenbankfehler -- der Aufrufer soll seinen Stand dann
+        NICHT als veroeffentlicht verbuchen.
+    """
+    try:
+        row = db.execute(
+            select(FanRuntimeState).where(FanRuntimeState.id == _SINGLETON_ID)
+        ).scalar_one_or_none()
+        if row is None:
+            row = FanRuntimeState(id=_SINGLETON_ID)
+            db.add(row)
+        row.released_fans = json.dumps(released, sort_keys=True)
+        row.updated_by_pid = os.getpid()
+        db.commit()
+        return True
+    except Exception as exc:
+        db.rollback()
+        logger.warning("released_fans nicht schreibbar: %s", exc)
+        return False
+
+
 def publish_write_permission(db: Session, may_write: bool,
                              denied_fan_ids: Optional[set] = None) -> bool:
     """Den eigenen Stand hinterlegen. Legt die Zeile an, falls noetig.
