@@ -42,7 +42,14 @@ from app.services.power.fan_runtime_store import (
 )
 from app.services.power.fan_schedule import FanScheduleService
 from app.services.power.fan_profiles import FanProfileService
-from app.services.power.fan_reconcile import ChipFacts, reconcile_fan_identities
+from app.services.power.fan_reconcile import (
+    ChipFacts,
+    ReconcileReport,
+    UnstableChip,
+    reconcile_fan_identities,
+    reconcile_unstable_identities,
+    split_legacy_fan_id,
+)
 from app.services.power.fan_sources import (
     TempSourceRegistry, HwmonTempSource, GpuTempSource, DiskTempSource, MixTempSource,
 )
@@ -596,6 +603,11 @@ class FanControlService:
         Ohne Linux-Backend liefe der Abgleich gegen eine Chip-Menge ohne
         einen einzigen hwmon-Chip; ohne gefundenen Chip gegen eine leere.
         In beiden Faellen faende keine Altzeile ihren Chip wieder.
+
+        chip_count zaehlt seit #585 stabile UND instabile Chips. Zaehlte es
+        nur die stabilen, liefe im Vollfall des Rueckfalls -- keine einzige
+        Kennung mehr stabil -- gar kein Abgleich, also ausgerechnet dann
+        nicht, wenn der Rueckweg gebraucht wird.
         """
         if not getattr(lifespan, "IS_PRIMARY_WORKER", False):
             return False
@@ -636,6 +648,70 @@ class FanControlService:
                 ambiguous=len(keys) > 1,
             )
         return facts
+
+    def _collect_unstable_chips(self) -> Dict[str, UnstableChip]:
+        """Chips ohne stabile Kennung: Praefix -> Kanaele (#585).
+
+        Gegenstueck zu _collect_chip_facts(), das genau diese Chips
+        ueberspringt. Geschluesselt wird nach Praefix, weil er der Anker der
+        Rueckzuordnung ist; treten zwei hwmon-Knoten mit demselben Praefix
+        auf, wird der Eintrag als mehrdeutig markiert statt geraten -- ihre
+        Indizes koennen ueber Boots tauschen.
+        """
+        fan_cache = getattr(self._backend, "_fan_cache", None)
+        if not isinstance(fan_cache, dict):
+            # Gleiche Absicherung wie in _collect_chip_facts: ein
+            # unspezifizierter Test-Mock liefert hier selbst wieder ein Mock.
+            fan_cache = {}
+
+        gesammelt: Dict[str, Dict] = {}
+        for fan_id, info in fan_cache.items():
+            if info.get("identity_stable"):
+                continue
+            treffer = split_legacy_fan_id(fan_id or "")
+            if treffer is None:
+                # Instabil, aber nicht in der hwmon-Form: ein Dev-Backend-
+                # Luefter oder eine GPU-Kennung. Fuer die gibt es nichts
+                # zurueckzunehmen.
+                continue
+            prefix = info.get("device_driver") or "Unknown"
+            knoten_nr, kanal_nr = treffer
+            hwmon_name = f"hwmon{knoten_nr}"
+            eintrag = gesammelt.setdefault(
+                prefix, {"hwmon_names": set(), "pwm": set()})
+            eintrag["hwmon_names"].add(hwmon_name)
+            eintrag["pwm"].add(kanal_nr)
+
+        # Temperaturkanaele haengen am hwmon-Knoten, nicht am PWM-Kanal. Der
+        # Pfad ist die verlaessliche Quelle: der Schluessel in _temp_paths
+        # traegt bereits die aktuelle (hier: instabile) Kennung, aber
+        # path.parent.name nennt den Knoten unabhaengig von der Namensform.
+        temps_je_knoten: Dict[str, set] = {}
+        paths = getattr(self._backend, "_temp_paths", None)
+        if isinstance(paths, dict):
+            for path in paths.values():
+                try:
+                    knoten = path.parent.name
+                    nummer = int(path.name[len("temp"):-len("_input")])
+                except (AttributeError, ValueError):
+                    continue
+                temps_je_knoten.setdefault(knoten, set()).add(nummer)
+
+        chips: Dict[str, UnstableChip] = {}
+        for prefix, eintrag in gesammelt.items():
+            namen = eintrag["hwmon_names"]
+            hwmon_name = next(iter(sorted(namen)))
+            temps = set()
+            for knoten in namen:
+                temps |= temps_je_knoten.get(knoten, set())
+            chips[prefix] = UnstableChip(
+                hwmon_name=hwmon_name,
+                prefix=prefix,
+                pwm_channels=frozenset(eintrag["pwm"]),
+                temp_channels=frozenset(temps),
+                ambiguous=len(namen) > 1,
+            )
+        return chips
 
     def _collect_sensor_map(self) -> Dict[str, str]:
         """Alt-Sensor-ID (hwmon<N>_temp<M>) -> neue, praefixierte Kennung."""
@@ -743,15 +819,41 @@ class FanControlService:
 
         with self.db_session_factory() as db:
             chip_facts = self._collect_chip_facts()
-            if self._should_reconcile(len(chip_facts)):
+            unstable_chips = self._collect_unstable_chips()
+            if self._should_reconcile(len(chip_facts) + len(unstable_chips)):
                 try:
-                    report = reconcile_fan_identities(
-                        db,
-                        chips=chip_facts,
-                        sensor_map=self._collect_sensor_map(),
-                        cpu_sensor_id=TempSourceRegistry._normalize_id(cpu_sensor_id)
-                        if cpu_sensor_id else None,
-                    )
+                    # Der Hinweg braucht mindestens einen stabilen Chip. Seit
+                    # #585 kann die Vorbedingung oben auch allein von
+                    # instabilen Chips erfuellt sein -- dann liefe er gegen
+                    # eine leere Faktenmenge, in der keine Altzeile ihren Chip
+                    # wiederfaende. Er deaktivierte dabei zwar nichts (dafuer
+                    # braucht es Fakten), aber die Zusage aus
+                    # _should_reconcile gilt unveraendert: gegen eine leere
+                    # Menge laeuft er gar nicht erst.
+                    report = ReconcileReport()
+                    if chip_facts:
+                        report = reconcile_fan_identities(
+                            db,
+                            chips=chip_facts,
+                            sensor_map=self._collect_sensor_map(),
+                            cpu_sensor_id=TempSourceRegistry._normalize_id(cpu_sensor_id)
+                            if cpu_sensor_id else None,
+                        )
+                    # Der Rueckweg (#585) in derselben Transaktion: ein Chip
+                    # ist entweder stabil oder nicht, die beiden Wege fassen
+                    # also disjunkte Chips an. Gemeinsam scheitern sollen sie
+                    # trotzdem -- die Fehlerbehandlung unten ("keine Configs
+                    # anlegen") gilt fuer beide Richtungen gleichermassen.
+                    if unstable_chips:
+                        rueckweg = reconcile_unstable_identities(
+                            db, chips=unstable_chips)
+                        # renamed bleibt dem Hinweg: der Rueckweg fuellt
+                        # ausschliesslich readopted, und die zwei Richtungen
+                        # im selben Feld zu mischen machte den Audit-Eintrag
+                        # unlesbar.
+                        report.deactivated.extend(rueckweg.deactivated)
+                        report.readopted.extend(rueckweg.readopted)
+                        report.orphaned_inactive.extend(rueckweg.orphaned_inactive)
                     # Eigenstaendiger Commit VOR dem Audit-Eintrag: der
                     # Abgleich muss die Datenbank erreicht haben, BEVOR die
                     # Anlage-Schleife unten startet (R4) -- und bevor der
@@ -764,7 +866,9 @@ class FanControlService:
                     # ein UNIQUE-Verstoss aus einem Rename wuerde sonst erst
                     # hier auftreten und aus dem try entkommen.
                     db.commit()
-                    if report.renamed or report.deactivated or report.unresolved_sensors:
+                    if (report.renamed or report.deactivated
+                            or report.unresolved_sensors or report.readopted
+                            or report.orphaned_inactive):
                         try:
                             # Eigene Session (db=None): AuditLoggerDB.log_event
                             # committet die uebergebene Session selbst. Mit
@@ -784,6 +888,12 @@ class FanControlService:
                                     # Nutzeraenderung dieses Laufs, die sonst
                                     # nirgends revisionssicher gelandet waere.
                                     "unresolved_sensors": report.unresolved_sensors,
+                                    # #585: eine zurueckgenommene Kennung und
+                                    # ein Luefter, der ungeregelt bleibt, sind
+                                    # beide revisionswuerdig -- der zweite
+                                    # besonders, weil ihn sonst nichts nennt.
+                                    "readopted": report.readopted,
+                                    "orphaned_inactive": report.orphaned_inactive,
                                 },
                                 db=None,
                             )
