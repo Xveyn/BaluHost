@@ -24,9 +24,9 @@
 #   # expected: root video, group-write set
 #
 # Checking that the acoustics feature works proves nothing here: the backend
-# falls back to `sudo -n tee`, which is covered by the pre-existing sudoers
-# entry for /sys/class/hwmon/*, so the values take effect even while these
-# nodes are still root:root 0644.
+# falls back to `sudo -n tee`, and the hardware sudoers template lists these
+# four nodes by name (narrowed from a /sys/class/hwmon/* wildcard in #570), so
+# the values take effect even while these nodes are still root:root 0644.
 #
 # This udev rule re-chowns the relevant sysfs nodes to the "video" group
 # and adds the group-write bit. ${BALUHOST_USER} must be a member of

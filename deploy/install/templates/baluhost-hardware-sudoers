@@ -16,8 +16,52 @@
 @@BALUHOST_USER@@ ALL=(root) NOPASSWD: /usr/sbin/smartctl
 
 # Fan control & CPU frequency (write to sysfs via tee)
-@@BALUHOST_USER@@ ALL=(root) NOPASSWD: /usr/bin/tee /sys/class/hwmon/*
-@@BALUHOST_USER@@ ALL=(root) NOPASSWD: /usr/bin/tee /sys/devices/system/cpu/cpu*/cpufreq/*
+#
+# KEIN '*' in diesen Pfadmustern, und das ist der ganze Punkt (#570 Punkt 5):
+# Wildcards in sudoers-ARGUMENTEN matchen auch '/' (anders als im Kommandopfad),
+# und sudo normalisiert Argumente nicht. Ein '*' erlaubt damit den Ausbruch aus
+# dem gemeinten Verzeichnis -- die frueheren Muster
+# '/sys/class/hwmon/*' und '/sys/devices/system/cpu/cpu*/cpufreq/*' deckten
+# unter anderem '/sys/class/hwmon/../../etc/shadow' ab, also einen Root-Write
+# auf beliebige Dateien, sowie '<hwmon>/device/driver/unbind' und
+# '<hwmon>/device/remove' (auf dieser Hardware auch fuer die NVMe-Controller).
+#
+# Zeichenklassen matchen kein '/'. '[0-9]' bzw. '[0-9][0-9]' lassen die
+# Geraetenummer offen, ohne einen Verzeichniswechsel zu erlauben. Die Liste ist
+# vollstaendig gegen die Schreibstellen im Code aufgezaehlt und wird von
+# backend/tests/test_hardware_sudoers_scope.py dagegen gehalten -- kommt ein
+# Knoten hinzu (etwa fan_zero_rpm_enable ab Kernel 6.13), schlaegt der Test an.
+#
+# Grenze, die benannt gehoert: dreistellige Nummern (hwmon100, cpu100) sind
+# nicht abgedeckt. Ein Write dorthin scheitert laut -- mit EACCES, Backoff und
+# einer ERROR-Zeile --, nicht still.
+
+Cmnd_Alias BALUHOST_FAN_WRITE = \
+    /usr/bin/tee /sys/class/hwmon/hwmon[0-9]/pwm[0-9], \
+    /usr/bin/tee /sys/class/hwmon/hwmon[0-9][0-9]/pwm[0-9], \
+    /usr/bin/tee /sys/class/hwmon/hwmon[0-9]/pwm[0-9]_enable, \
+    /usr/bin/tee /sys/class/hwmon/hwmon[0-9][0-9]/pwm[0-9]_enable, \
+    /usr/bin/tee /sys/class/hwmon/hwmon[0-9]/device/gpu_od/fan_ctrl/fan_target_temperature, \
+    /usr/bin/tee /sys/class/hwmon/hwmon[0-9][0-9]/device/gpu_od/fan_ctrl/fan_target_temperature, \
+    /usr/bin/tee /sys/class/hwmon/hwmon[0-9]/device/gpu_od/fan_ctrl/acoustic_limit_rpm_threshold, \
+    /usr/bin/tee /sys/class/hwmon/hwmon[0-9][0-9]/device/gpu_od/fan_ctrl/acoustic_limit_rpm_threshold, \
+    /usr/bin/tee /sys/class/hwmon/hwmon[0-9]/device/gpu_od/fan_ctrl/acoustic_target_rpm_threshold, \
+    /usr/bin/tee /sys/class/hwmon/hwmon[0-9][0-9]/device/gpu_od/fan_ctrl/acoustic_target_rpm_threshold, \
+    /usr/bin/tee /sys/class/hwmon/hwmon[0-9]/device/gpu_od/fan_ctrl/fan_minimum_pwm, \
+    /usr/bin/tee /sys/class/hwmon/hwmon[0-9][0-9]/device/gpu_od/fan_ctrl/fan_minimum_pwm
+
+Cmnd_Alias BALUHOST_CPUFREQ_WRITE = \
+    /usr/bin/tee /sys/devices/system/cpu/cpu[0-9]/cpufreq/scaling_governor, \
+    /usr/bin/tee /sys/devices/system/cpu/cpu[0-9][0-9]/cpufreq/scaling_governor, \
+    /usr/bin/tee /sys/devices/system/cpu/cpu[0-9]/cpufreq/scaling_min_freq, \
+    /usr/bin/tee /sys/devices/system/cpu/cpu[0-9][0-9]/cpufreq/scaling_min_freq, \
+    /usr/bin/tee /sys/devices/system/cpu/cpu[0-9]/cpufreq/scaling_max_freq, \
+    /usr/bin/tee /sys/devices/system/cpu/cpu[0-9][0-9]/cpufreq/scaling_max_freq, \
+    /usr/bin/tee /sys/devices/system/cpu/cpu[0-9]/cpufreq/energy_performance_preference, \
+    /usr/bin/tee /sys/devices/system/cpu/cpu[0-9][0-9]/cpufreq/energy_performance_preference
+
+@@BALUHOST_USER@@ ALL=(root) NOPASSWD: BALUHOST_FAN_WRITE
+@@BALUHOST_USER@@ ALL=(root) NOPASSWD: BALUHOST_CPUFREQ_WRITE
 
 # System info
 @@BALUHOST_USER@@ ALL=(root) NOPASSWD: /usr/sbin/dmidecode

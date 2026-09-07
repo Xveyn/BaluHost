@@ -322,10 +322,19 @@ async def get_permission_status(
         message = "Full fan control access available"
     elif perm_status == "readonly":
         message = "Read-only access (no write permissions to /sys/class/hwmon)"
+        # Kein Wildcard-Beispiel mehr (#570): Wildcards in sudoers-ARGUMENTEN
+        # matchen auch '/', und sudo normalisiert Argumente nicht -- ein
+        # Eintrag mit '*' erlaubt den Ausbruch aus dem gemeinten Verzeichnis
+        # und damit einen Root-Write auf beliebige Dateien. Verwiesen wird auf
+        # die Vorlage, die die Ziele einzeln aufzaehlt, statt hier ein Muster
+        # zum Abtippen anzubieten.
         suggestions = [
             "Add user to cpufreq group: sudo usermod -aG cpufreq $USER",
-            "Or configure sudoers for tee access to hwmon files",
-            "Example sudoers entry: user ALL=(ALL) NOPASSWD: /usr/bin/tee /sys/class/hwmon/*/*",
+            "Or install the maintained sudoers rules: "
+            "sudo BALUHOST_USER=$USER bash deploy/scripts/install-hardware-sudoers.sh",
+            "Do not grant tee on a wildcard path such as /sys/class/hwmon/* -- "
+            "sudoers wildcards match '/' in arguments, which permits writing "
+            "any file as root",
         ]
     else:
         message = "Fan control backend unavailable"
