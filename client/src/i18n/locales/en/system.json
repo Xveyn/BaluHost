@@ -877,7 +877,9 @@
       "manualPwm": "Manual PWM",
       "noSensor": "No sensor assigned",
       "pwmError": "PWM error",
-      "zeroRpm": "Zero RPM — the card has stopped the fan"
+      "zeroRpm": "Zero RPM — the card has stopped the fan",
+      "noPermission": "No write access",
+      "noPermissionHint": "BaluHost currently cannot write this channel. Control does not take effect here until permissions are restored; the settings stay editable and apply as soon as a write succeeds again."
     },
     "details": {
       "temperatureCol": "Temperature (°C)",

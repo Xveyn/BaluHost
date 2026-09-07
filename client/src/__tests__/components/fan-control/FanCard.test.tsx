@@ -118,3 +118,40 @@ describe('FanCard bei firmware-verwalteter GPU', () => {
     expect(screen.getByText('—')).toBeTruthy();
   });
 });
+
+describe('FanCard bei fehlendem Schreibrecht (#568 Punkt 2)', () => {
+  it('zeigt kein Badge, solange der Kanal schreibbar ist', () => {
+    renderCard(fan({ pwm_control: 'supported' }));
+    expect(screen.queryByTestId('fan-no-permission-badge')).toBeNull();
+  });
+
+  it('benennt den Kanal, der gerade nicht geschrieben wird', () => {
+    // Vorher sagte nur ein globales Banner "readonly" -- welcher der fuenf
+    // Kanaele betroffen ist, stand nirgends.
+    renderCard(fan({ pwm_control: 'no_permission' }));
+    expect(screen.getByTestId('fan-no-permission-badge')).toBeInTheDocument();
+  });
+
+  it('sperrt die Bedienelemente NICHT -- der Zustand ist behebbar', () => {
+    // Anders als firmware_managed: BaluHost wuerde den Kanal steuern, sobald
+    // es darf. Ihn zu sperren hiesse, einen voruebergehenden Laufzeit-Befund
+    // wie eine dauerhafte Hardware-Eigenschaft zu behandeln -- der Nutzer
+    // koennte dann nicht einmal den Modus vorbereiten.
+    // mode: AUTO, sonst waere der Manual-Knopf schon deshalb gesperrt, weil er
+    // der aktive Modus ist -- das haette die Zusicherung ohne Aussagekraft
+    // gemacht (und tat es beim ersten Lauf).
+    renderCard(fan({
+      pwm_control: 'no_permission', is_gpu_fan: false, gpu_vendor: null,
+      mode: FanMode.AUTO,
+    }));
+    const manual = screen.getByRole('button', { name: /card\.manual/ }) as HTMLButtonElement;
+    const scheduled = screen.getByRole('button', { name: /card\.scheduled/ }) as HTMLButtonElement;
+    expect(manual.disabled).toBe(false);
+    expect(scheduled.disabled).toBe(false);
+  });
+
+  it('zeigt das Firmware-Badge nicht mit', () => {
+    renderCard(fan({ pwm_control: 'no_permission' }));
+    expect(screen.queryByTestId('fan-firmware-badge')).toBeNull();
+  });
+});

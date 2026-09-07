@@ -55,6 +55,12 @@ PWM_BACKOFF_MAX_SECONDS = 900.0  # 15 Minuten
 class LinuxFanControlBackend(FanControlBackend):
     """Linux hardware backend using hwmon sysfs."""
 
+    # Abstand zwischen zwei Rechte-Proben, wenn die Ableitung `readonly`
+    # sagt. Lang genug, dass ein dauerhaft rechteloser Zustand keine Last
+    # erzeugt, kurz genug, dass eine reparierte Rechtelage von selbst
+    # zurueckfindet (#568).
+    _PERMISSION_RECHECK_SECONDS = 60.0
+
     def __init__(self, config: Settings):
         self.config = config
         self._hwmon_base = Path("/sys/class/hwmon")
@@ -64,6 +70,11 @@ class LinuxFanControlBackend(FanControlBackend):
         # Bewusst NICHT in _fan_cache: der wird bei jedem Rescan neu gebaut,
         # der Backoff muss das ueberleben.
         self._write_backoff: Dict[str, Tuple[int, float]] = {}
+        # Fruehestens erlaubter Zeitpunkt der naechsten Rechte-Probe (#568).
+        self._next_permission_recheck: float = 0.0
+        # Ergebnis der letzten Probe -- nur fuer die Log-Hygiene: die
+        # Probe laeuft periodisch, gemeldet wird nur der Wechsel (#568).
+        self._letzte_probe_erfolgreich: Optional[bool] = None
         # Rueckabbildung stabile Sensor-Kennung -> tempN_input-Pfad. Ohne sie
         # kann get_temperature() die ID nicht mehr aufloesen, weil sie nicht
         # mehr aus dem hwmon-Verzeichnisnamen besteht (#532).
@@ -105,6 +116,7 @@ class LinuxFanControlBackend(FanControlBackend):
         GPU-Luefter, den set_pwm gar nicht anfasst -- ueber unsere
         Schreibfaehigkeit sagt er nichts aus (#552).
         """
+        erster_erfolg = None
         for fan_id, fan_info in self._fan_cache.items():
             if fan_info.get("pwm_control") is PwmControl.FIRMWARE_MANAGED:
                 continue
@@ -122,10 +134,106 @@ class LinuxFanControlBackend(FanControlBackend):
             ok, _ = await self._write_hwmon_file(probe_path, str(current))
             if ok:
                 self._has_write_permission = True
-                logger.info(f"Fan control: write permission available ({fan_id})")
-                return
+                # Auch den Kanalzustand zuruecknehmen (#568): sonst bliebe die
+                # Ableitung in has_write_permission() auf NO_PERMISSION stehen,
+                # obwohl die Probe gerade bewiesen hat, dass geschrieben werden
+                # darf.
+                if fan_info.get("pwm_control") is PwmControl.NO_PERMISSION:
+                    fan_info["pwm_control"] = PwmControl.SUPPORTED
+                    fan_info["last_write_error"] = None
+                if erster_erfolg is None:
+                    erster_erfolg = fan_id
 
-        logger.info("Fan control: no write permission (readonly mode)")
+        # KEIN frueher Ausstieg nach dem ersten Erfolg: bis #568 kehrte die
+        # Probe dort zurueck, und die Kanaele dahinter blieben auf ihrem alten
+        # NO_PERMISSION stehen. Solange das nur der Primary sah, war es ein
+        # Schoenheitsfehler; seit der Kanalzustand an alle Worker verteilt wird,
+        # behauptete es dauerhaft "kein Schreibrecht" auf funktionierenden
+        # Kanaelen -- und in MANUAL raeumt kein set_pwm das je auf.
+        if erster_erfolg is not None:
+            if not self._letzte_probe_erfolgreich:
+                logger.info(
+                    f"Fan control: write permission available ({erster_erfolg})")
+            self._letzte_probe_erfolgreich = True
+            return
+
+        # Nur beim Wechsel loggen: die Probe laeuft jetzt periodisch, eine
+        # Zeile je Lauf waere 1440 am Tag -- dieselbe Sorte Rauschen, die #533
+        # beseitigt hat.
+        if self._letzte_probe_erfolgreich is not False:
+            logger.info("Fan control: no write permission (readonly mode)")
+        self._letzte_probe_erfolgreich = False
+
+    async def recheck_write_permission(self) -> None:
+        """Die Probe erneut fahren, wenn die Ableitung gerade `readonly` sagt.
+
+        Ohne das kann sich der abgeleitete Zustand FESTSETZEN. Geheilt wird er
+        nur ueber einen erfolgreichen Write, und den loest im Regelbetrieb
+        allein der Regelkreis aus -- der einen Luefter im MANUAL-Modus nie
+        schreibt (Ziel == Ist, siehe fan_control._apply_fan_curve). Sind die
+        Rechte weg, meldet die Anzeige `readonly` und SPERRT die
+        Bedienelemente; damit faellt auch der einzige verbliebene Schreibweg
+        weg, die HTTP-Route. Der Nutzer kaeme ohne Dienst-Neustart nicht mehr
+        heraus -- ein lauter Fehler statt des behobenen stillen, und ein
+        schlechterer Tausch.
+
+        Die Probe schreibt pwm_enable mit dem Wert, der dort bereits steht, ist
+        also kein Eingriff. Sie laeuft hoechstens alle
+        `_PERMISSION_RECHECK_SECONDS`, damit ein dauerhaft rechteloser Zustand
+        nicht jeden Regelzyklus einen Schreibversuch je Kanal ausloest.
+        """
+        if self.has_write_permission():
+            return
+        jetzt = self._monotonic()
+        if jetzt < self._next_permission_recheck:
+            return
+        self._next_permission_recheck = jetzt + self._PERMISSION_RECHECK_SECONDS
+        await self._check_write_permission()
+
+    def has_write_permission(self) -> bool:
+        """Ob BaluHost derzeit ueberhaupt einen Luefter schreiben kann.
+
+        `_has_write_permission` allein taugt dafuer nicht: es wird auf True
+        gesetzt (Probe beim Start, erfolgreicher Write) und von NIEMANDEM auf
+        False zurueck (#568 Punkt 1). Gingen die Rechte zur Laufzeit verloren
+        -- eine udev-Regel, die nach einem Treiber-Reload nicht mehr greift,
+        eine sudoers-Aenderung, die die Box nie erreicht hat --, meldete
+        `GET /api/fans/permissions` weiter `ok`, waehrend nichts mehr
+        geschrieben wurde. Die Bedienelemente blieben frei und jede Eingabe
+        verpuffte.
+
+        Abgeleitet wird deshalb aus dem Zustand je Kanal, den set_pwm ohnehin
+        pflegt: NO_PERMISSION bei beobachtetem EACCES/EPERM, zurueck auf
+        SUPPORTED nach dem naechsten erfolgreichen Write.
+
+        NICHT am Backoff aus #533 aufgehaengt, obwohl das Issue es vorschlaegt:
+        die Sperre zaehlt Fehlschlaege jeder Art, auch EINVAL vom Treiber. Das
+        waere eine Aussage ueber "der Write klappt nicht", nicht ueber "wir
+        duerfen nicht" -- und die Rechteanzeige soll das zweite sagen.
+
+        Der Geltungsbereich ist bewusst global-restriktiv: ein einzelner
+        gesperrter Kanal macht die Steuerung nicht tot (auf dieser Hardware ist
+        genau ein Kanal firmware-verwaltet und vier sind steuerbar). Erst wenn
+        JEDER steuerbare Kanal ein EACCES gesehen hat, ist die Anzeige
+        `readonly`. Was einzelne Kanaele betrifft, zeigt die Karte je Luefter
+        (#568 Punkt 2).
+        """
+        if not self._has_write_permission:
+            return False
+
+        steuerbar = [
+            info for info in self._fan_cache.values()
+            if info.get("pwm_control") is not PwmControl.FIRMWARE_MANAGED
+        ]
+        if not steuerbar:
+            # Nichts Steuerbares erkannt: die Frage stellt sich nicht, und der
+            # Startwert der Probe ist die beste vorhandene Aussage.
+            return self._has_write_permission
+
+        return any(
+            info.get("pwm_control") is not PwmControl.NO_PERMISSION
+            for info in steuerbar
+        )
 
     async def get_fans(self) -> List[FanData]:
         """Get hardware fans from hwmon (uses cache from startup scan)."""
