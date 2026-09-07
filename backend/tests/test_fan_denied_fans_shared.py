@@ -45,8 +45,15 @@ def test_veroeffentlichte_kanaele_kommen_zurueck(session_factory):
 
 def test_eine_leere_menge_ist_eine_aussage(session_factory):
     """'Kein Kanal ist gesperrt' muss sich von 'nichts veroeffentlicht'
-    unterscheiden lassen -- sonst koennte ein Follower einen veralteten
-    eigenen Befund nie zuruecknehmen."""
+    unterscheiden lassen.
+
+    Die Unterscheidung traegt auf der SCHREIBSEITE: None laesst die
+    gespeicherte Liste unberuehrt (ein Aufrufer, der nur das Flag kennt, darf
+    sie nicht loeschen), die leere Menge ersetzt sie. Auf der Leseseite ist sie
+    seit der Umstellung auf Vereinigung ohne Wirkung -- get_status nimmt einen
+    eigenen Befund ohnehin nicht mehr zurueck. Die urspruengliche Begruendung
+    hier ("sonst koennte ein Follower einen veralteten Befund nie
+    zuruecknehmen") galt nur fuer die verworfene Ersetzungs-Variante."""
     with session_factory() as db:
         publish_write_permission(db, False, {"nct6798:pwm1"})
     with session_factory() as db:

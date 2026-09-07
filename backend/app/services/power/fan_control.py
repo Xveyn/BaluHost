@@ -1336,6 +1336,19 @@ class FanControlService:
         gesperrt = None
         shared_permission = None
         if self._use_linux_backend:
+            # Die erneute Probe gehoert auch hierher, nicht nur in den
+            # Regelkreis (#568): der laeuft NUR im Primary. Ein Follower, der
+            # ueber eine Nutzer-Eingabe ein EACCES gesehen hat, schreibt von
+            # sich aus nie wieder -- sein NO_PERMISSION haette ohne diesen
+            # Aufruf keinen Rueckweg ausser einem Dienst-Neustart. Dieselbe
+            # Sackgasse wie beim globalen Flag, nur eine Ebene tiefer.
+            #
+            # Kein Lastproblem: die Methode taktet sich selbst auf hoechstens
+            # einen Lauf je 60 s und ist ein No-op, solange geschrieben werden
+            # darf -- im Normalbetrieb kostet sie einen Attributzugriff.
+            erneut = getattr(self._backend, "recheck_write_permission", None)
+            if erneut is not None:
+                await erneut()
             # EINE Sitzung fuer beide Leser: sie holen dieselbe
             # Singleton-Zeile, und get_status() bedient sowohl
             # GET /api/fans/status als auch GET /api/fans/permissions -- im
