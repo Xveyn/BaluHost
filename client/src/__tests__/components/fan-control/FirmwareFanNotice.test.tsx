@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import FirmwareFanNotice from '../../../components/fan-control/FirmwareFanNotice';
 
@@ -31,6 +31,15 @@ vi.mock('../../../api/fan-control', () => ({
 
 import toast from 'react-hot-toast';
 import { getGpuAcoustics, setGpuAcoustics } from '../../../api/fan-control';
+
+// Ohne dieses beforeEach liefen Aufrufzaehler ueber Tests hinweg zusammen:
+// `clearAllMocks` loescht nur Aufrufe/Ergebnisse, nicht die per
+// mockResolvedValue gesetzten Rueckgabewerte -- die auf Modulebene im
+// vi.mock-Block gesetzte Standardantwort von getGpuAcoustics bleibt also
+// erhalten (Befund A, #570).
+beforeEach(() => {
+  vi.clearAllMocks();
+});
 
 describe('FirmwareFanNotice: Ausstieg aus dem manuellen Modus bleibt erreichbar', () => {
   it('bietet einen Reset-Button, der setGpuManualMode(fanId, false) aufruft', async () => {
@@ -175,10 +184,6 @@ it('zeigt den aktuellen Wert der Karte je Knoten an, nicht nur den Entwurf', asy
 });
 
 it('meldet einen von der Karte abgelehnten Write, statt Erfolg zu behaupten', async () => {
-  // Die Toast-Mocks werden zwischen den Tests dieser Datei nicht
-  // zurueckgesetzt; ohne mockClear zaehlte hier der Erfolg eines
-  // frueheren Tests mit.
-  vi.mocked(toast.success).mockClear();
   vi.mocked(getGpuAcoustics).mockResolvedValue(FULL_STATUS);
   vi.mocked(setGpuAcoustics).mockResolvedValue({
     ...FULL_STATUS,
@@ -213,7 +218,7 @@ it('meldet eine 503 als Konfigurationsproblem, nicht als Hardware-Fehler', async
 it('meldet eine 503 vom Reverse-Proxy nicht als Konfigurationsproblem', async () => {
   // Ein Proxy-503 traegt kein `detail`, das mit "GPU acoustics configuration"
   // beginnt -- anders als der Test "meldet eine 503 als Konfigurationsproblem"
-  // weiter unten, der genau das mitschickt. Dieser Fehlerpfad setzt applyError
+  // weiter oben, der genau das mitschickt. Dieser Fehlerpfad setzt applyError
   // NICHT (er laeuft ueber handleApiError/Toast statt ueber das
   // gpu-acoustics-error-Testid), deshalb wird hier ueber den Toast-Aufruf
   // und das Fehlen des Testids geprueft, nicht ueber dessen Inhalt.

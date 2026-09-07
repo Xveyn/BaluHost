@@ -44,15 +44,24 @@ in sudoers-*Argumenten* matchen auch `/`, der Eintrag greift also bis in
 Knoten weiterhin `root:root 0644` tragen; die udev-Regel ist hier die
 unprivilegierte Verbesserung, nicht die Voraussetzung.
 
-**Diese Zusage gilt nur auf dem Primärzweig der Gerätepfad-Auflösung.**
-`_device_from_hwmon()` (`backend/app/services/power/fan_gpu_manual.py`) liefert
-dort `<hwmon>/device` unaufgelöst — der Pfad beginnt mit `/sys/class/hwmon/`
-und fällt unter den Glob. Greift stattdessen der Fallback-Zweig (Aufwärtslauf
-über den aufgelösten Pfad), liegt der Pfad unter `/sys/devices/…`, der
-sudoers-Eintrag greift nicht, und ohne die udev-Regel schlägt der Write mit
-`EACCES` fehl. Auf BaluNode läuft der an der Hardware verifizierte
-Primärzweig; auf abweichender Hardware ist die udev-Regel deshalb unter
-Umständen doch Voraussetzung (#570).
+**Diese Zusage gilt nur, solange der Primärzweig der Gerätepfad-Auflösung
+greift.** `_device_from_hwmon()` (`backend/app/services/power/fan_gpu_manual.py`)
+liefert dort `<hwmon>/device` unaufgelöst — der Pfad beginnt mit
+`/sys/class/hwmon/` und fällt unter den Glob. Der Fallback-Zweig
+(Aufwärtslauf über den aufgelösten Pfad) greift laut Docstring der Funktion
+nur in synthetischen Bäumen: ein echtes `readlink -f` enthält auf realer
+Hardware keine Komponente namens `device`. Schlägt der Primärzweig auf
+abweichender Hardware fehl, liefert `_device_from_hwmon()` also `None`, und
+`find_fan_ctrl_dir()` (`backend/app/services/power/fan_gpu_acoustics.py`, die
+diese Funktion für die Akustik-Knoten wiederverwendet) findet gar kein
+Verzeichnis. Die API meldet dann `available=false`, und das Akustik-Panel
+bleibt schlicht aus — es kommt gar nicht erst zu einem Schreibversuch, also
+auch zu keinem `EACCES`. Auf BaluNode läuft der an der Hardware verifizierte
+Primärzweig; ob er auf abweichender AMD-Hardware ebenso zuverlässig greift,
+ist unverifiziert. Weil ein Fehlschlagen dort als fehlende Schnittstelle
+auftritt und nicht als Berechtigungsfehler, bleibt die udev-Regel dennoch die
+konservative Absicherung: sie kostet nichts, solange `gpu_od/` existiert, und
+deckt Fälle ab, die diese Analyse nicht vorhergesehen hat (#570).
 
 Default-Permissions auf Debian 13 sind:
 
