@@ -99,8 +99,6 @@ def test_der_regelkreis_laesst_beide_freigabe_zustaende_in_ruhe(zustand, erwarte
 # abgegeben wird, die andere verhindert, dass acht erfolglose Nutzer-Klicks
 # das ausloesen.
 
-from unittest.mock import MagicMock  # noqa: E402
-
 from app.services.power.fan_backend_linux import (  # noqa: E402
     PWM_BACKOFF_BASE_SECONDS,
     PWM_BACKOFF_MAX_SECONDS,

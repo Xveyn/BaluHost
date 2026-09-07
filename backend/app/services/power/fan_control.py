@@ -285,6 +285,18 @@ class FanControlService:
             # Load fan configs from database
             await self._load_fan_configs()
 
+            # Die GPU-Akustik gehoert zum Start, nicht in den Regelzyklus:
+            # sie ist Konfiguration, kein Regelkreis (#516).
+            try:
+                await self.apply_gpu_acoustics()
+            except Exception:
+                logger.exception("GPU-Akustik konnte nicht angewendet werden")
+
+            # Eine noch laufende Schleife gehoert zum alten Backend und zu
+            # den alten Konfigurationen -- und ihre Referenz ginge bei der
+            # Zuweisung unten verloren (#559).
+            await self._cancel_monitoring_task()
+
             # Jeder Neustart gibt jedem Kanal eine neue Chance (#534): der
             # Fehlerzaehler, der zur Freigabe gefuehrt hat, lebte im Prozess
             # und ist jetzt weg. Bliebe die Freigabe stehen, haette ein
@@ -301,18 +313,11 @@ class FanControlService:
                             "Freigaben an die Board-Automatik zurueckgesetzt -- "
                             "jeder Kanal wird neu versucht")
                 self._zuletzt_freigegeben = set()
+            # Bewusst HINTER _cancel_monitoring_task(): ein noch laufender
+            # Zyklus der alten Schleife koennte sonst direkt danach seine
+            # veraltete Gesamtkarte veroeffentlichen und den Reset still
+            # rueckgaengig machen.
 
-            # Die GPU-Akustik gehoert zum Start, nicht in den Regelzyklus:
-            # sie ist Konfiguration, kein Regelkreis (#516).
-            try:
-                await self.apply_gpu_acoustics()
-            except Exception:
-                logger.exception("GPU-Akustik konnte nicht angewendet werden")
-
-            # Eine noch laufende Schleife gehoert zum alten Backend und zu
-            # den alten Konfigurationen -- und ihre Referenz ginge bei der
-            # Zuweisung unten verloren (#559).
-            await self._cancel_monitoring_task()
 
             # Der Rechte-Probe ist beim Backend-Init gelaufen -- sein
             # Ergebnis gehoert zu den Followern, bevor der erste Regelzyklus
@@ -1103,7 +1108,10 @@ class FanControlService:
         # Deckel stehenden -- Zaehler und gaebe ihn im selben Zyklus erneut ab.
         # Der Nutzer bekaeme einen Erfolg gemeldet und fuenf Sekunden spaeter
         # wieder "Board regelt" (#534).
-        zurueckgeholt = self._zuletzt_freigegeben - set(freigegeben)
+        zurueckgeholt = (
+            self._zuletzt_freigegeben - set(freigegeben)
+            if getattr(lifespan, "IS_PRIMARY_WORKER", False) else set()
+        )
         for fan_id in zurueckgeholt:
             self._backend.clear_write_failures(fan_id)
             self._hysteresis_state.pop(fan_id, None)
@@ -1568,11 +1576,21 @@ class FanControlService:
         Ausgang.
 
         Entfernt wird nur der veroeffentlichte Zustand. Den erzwungenen Write
-        uebernimmt der naechste Regelzyklus: er sieht den Kanal wieder als
-        besessen, und weil der Zaehler des Backoffs beim Freigeben nicht
-        zurueckgesetzt wurde, faellt der Kanal bei anhaltendem Fehler nach einem
-        weiteren Fehlschlag erneut heraus -- gewollt, sonst pendelte die
-        Anzeige.
+        UND das Zuruecksetzen des Fehlerzaehlers uebernimmt der naechste
+        Regelzyklus des Primary -- diese Route laeuft auf einem beliebigen der
+        vier Worker, der Zaehler lebt aber im Prozess.
+
+        Was das fuer einen weiterhin defekten Kanal heisst, und zwar
+        absichtlich: der Zaehler startet bei null, es braucht also wieder acht
+        Fehlschlaege bis zur naechsten Freigabe. Weil das Backoff-Fenster
+        dazwischen waechst (10, 20, 40 ... 640 Sekunden) und set_pwm innerhalb
+        des Fensters gar nicht erst schreibt, dauert das rund 21 Minuten. In
+        dieser Zeit zeigt die Karte "BaluHost regelt", obwohl kein Write
+        stattfindet.
+
+        Das ist der Preis gegen ein Pendeln zwischen zwei Reglern -- den
+        Zustand, den #534 ausdruecklich vermeiden will. Die Alternative waere,
+        sofort wieder freizugeben, und dann waere der Knopf wirkungslos.
 
         Returns:
             False, wenn der Kanal gar nicht freigegeben war.
@@ -1582,7 +1600,12 @@ class FanControlService:
             if fan_id not in freigegeben:
                 return False
             del freigegeben[fan_id]
-            publish_released_fans(db, freigegeben)
+            if not publish_released_fans(db, freigegeben):
+                # Ohne diesen Write ist die Wiederuebernahme nicht passiert --
+                # der Primary sieht den Kanal weiter als freigegeben. Einen
+                # Erfolg zu melden waere eine Luege im Erfolgs-Toast.
+                logger.warning("%s: Wiederuebernahme nicht veroeffentlicht", fan_id)
+                return False
 
         # Der erzwungene Write und das Zuruecksetzen des Fehlerzaehlers
         # geschehen NICHT hier, sondern im naechsten Zyklus des Primary. Diese

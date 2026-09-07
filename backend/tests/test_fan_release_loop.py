@@ -51,7 +51,15 @@ def _service(session_factory, monkeypatch, *, fans, am_deckel, beobachtet=5,
     backend.get_fans = AsyncMock(return_value=fans)
     backend.set_pwm = AsyncMock(return_value=True)
     backend.release_to_board = AsyncMock(return_value=rueckgabe_glueckt)
-    backend.write_failure_state = MagicMock(return_value=(8 if am_deckel else 1, am_deckel))
+    # Zustandsbehaftet statt konstant: ein Mock, der immer (8, True) meldet,
+    # laesst clear_write_failures wirkungslos aussehen -- der Kanal faellt im
+    # selben Zyklus wieder heraus, und ein Test kann dann nur noch den AUFRUF
+    # pruefen, nicht die WIRKUNG.
+    zaehler = {"deckel": am_deckel}
+    backend.write_failure_state = MagicMock(
+        side_effect=lambda fan_id: (8, True) if zaehler["deckel"] else (0, False))
+    backend.clear_write_failures = MagicMock(
+        side_effect=lambda fan_id: zaehler.__setitem__("deckel", False))
     service._backend = backend
 
     service._restore_values = (
@@ -236,6 +244,11 @@ async def test_wieder_uebernehmen_wirkt_im_primary(session_factory, monkeypatch)
     backend.clear_write_failures.assert_called_once_with("nct6798:pwm1")
     backend.set_pwm.assert_awaited()
     assert backend.set_pwm.await_args_list[0].kwargs.get("force") is True
+    # Die eigentliche Zusage: der Kanal bleibt uebernommen. Ohne das
+    # Zuruecksetzen im Primary stuende er nach diesem Zyklus wieder in der
+    # Menge -- Erfolgs-Toast, und fuenf Sekunden spaeter "Board regelt".
+    with session_factory() as db:
+        assert read_released_fans(db) == {}
 
 
 @pytest.mark.asyncio
