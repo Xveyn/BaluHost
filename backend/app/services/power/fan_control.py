@@ -308,11 +308,17 @@ class FanControlService:
                 self._published_write_permission = current
                 self._published_denied_fans = denied
 
-    def _denied_fan_ids(self) -> set:
-        """Die Kanaele, auf denen der Backend-Cache ein EACCES vermerkt hat."""
+    def _denied_fan_ids(self) -> Optional[set]:
+        """Die Kanaele, auf denen der Backend-Cache ein EACCES vermerkt hat.
+
+        None heisst "unbekannt" -- etwa beim Dev-Backend, das gar keinen
+        solchen Cache fuehrt. Eine leere Menge waere hier die Behauptung "kein
+        Kanal ist gesperrt", und die wuerde veroeffentlicht; None laesst die
+        gespeicherte Liste unberuehrt.
+        """
         cache = getattr(self._backend, "_fan_cache", None)
         if not isinstance(cache, dict):
-            return set()
+            return None
         return {
             fan_id for fan_id, info in cache.items()
             if isinstance(info, dict)
@@ -1327,9 +1333,16 @@ class FanControlService:
         # es aber nur von dem, der schreibt. Ohne diese Ueberlagerung meldeten
         # die drei Follower fuer denselben Kanal weiter `supported`, und das
         # Badge in der Karte erschiene und verschwaende im 5-Sekunden-Poll.
+        gesperrt = None
+        shared_permission = None
         if self._use_linux_backend:
+            # EINE Sitzung fuer beide Leser: sie holen dieselbe
+            # Singleton-Zeile, und get_status() bedient sowohl
+            # GET /api/fans/status als auch GET /api/fans/permissions -- im
+            # 5-Sekunden-Poll je Client und Worker.
             with self.db_session_factory() as db:
                 gesperrt = read_denied_fans(db)
+                shared_permission = read_write_permission(db)
             if gesperrt is not None:
                 for eintrag in fan_data_list:
                     if eintrag.get("pwm_control") is PwmControl.FIRMWARE_MANAGED:
@@ -1338,10 +1351,19 @@ class FanControlService:
                         continue
                     if eintrag["fan_id"] in gesperrt:
                         eintrag["pwm_control"] = PwmControl.NO_PERMISSION
-                    elif eintrag.get("pwm_control") is PwmControl.NO_PERMISSION:
-                        # Der Primary meldet den Kanal nicht mehr als gesperrt:
-                        # ein eigener, veralteter Befund wird zurueckgenommen.
-                        eintrag["pwm_control"] = PwmControl.SUPPORTED
+                    # KEINE Ruecknahme in der Gegenrichtung: eine
+                    # Nutzer-Eingabe geht ueber irgendeinen Worker, und bei
+                    # EACCES vermerkt genau DER den Kanal. Der Primary hat
+                    # diesen Write nie versucht -- in MANUAL schreibt er gar
+                    # nicht --, seine Liste kennt den Kanal also nicht. Wuerde
+                    # die Ueberlagerung ihn deshalb auf SUPPORTED zuruecksetzen,
+                    # verschwaende der frische Befund sofort wieder, und
+                    # dieselbe Antwort truege `last_write_error` neben
+                    # `pwm_control: supported` -- ein sich selbst
+                    # widersprechender Payload. Vereinigung statt Ersetzung:
+                    # zurueckgenommen wird ein NO_PERMISSION nur von dem
+                    # Worker, der es gesetzt hat, durch einen eigenen
+                    # erfolgreichen Write oder die eigene Probe.
 
         # Determine permission status
         permission_status = "ok"
@@ -1351,10 +1373,8 @@ class FanControlService:
                 # Messung: ein Follower schreibt im Regelbetrieb nie und
                 # bleibt deshalb auf seinem Startwert stehen. Fehlt die
                 # Zeile (frisch migriert), entscheidet die eigene Messung.
-                with self.db_session_factory() as db:
-                    shared = read_write_permission(db)
                 may_write = (self._backend.has_write_permission()
-                             if shared is None else shared)
+                             if shared_permission is None else shared_permission)
                 permission_status = "ok" if may_write else "readonly"
 
         return {

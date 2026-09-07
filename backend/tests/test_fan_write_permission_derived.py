@@ -122,6 +122,7 @@ def _backend_mit_probe(*, kanaele: dict, schreibbar: bool, uhr: list):
     backend = _backend(geprueft=True, kanaele=kanaele)
     backend._write_backoff = {}
     backend._next_permission_recheck = 0.0
+    backend._letzte_probe_erfolgreich = None
     backend._monotonic = lambda: uhr[0]
 
     async def _read(path):

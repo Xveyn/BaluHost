@@ -72,6 +72,9 @@ class LinuxFanControlBackend(FanControlBackend):
         self._write_backoff: Dict[str, Tuple[int, float]] = {}
         # Fruehestens erlaubter Zeitpunkt der naechsten Rechte-Probe (#568).
         self._next_permission_recheck: float = 0.0
+        # Ergebnis der letzten Probe -- nur fuer die Log-Hygiene: die
+        # Probe laeuft periodisch, gemeldet wird nur der Wechsel (#568).
+        self._letzte_probe_erfolgreich: Optional[bool] = None
         # Rueckabbildung stabile Sensor-Kennung -> tempN_input-Pfad. Ohne sie
         # kann get_temperature() die ID nicht mehr aufloesen, weil sie nicht
         # mehr aus dem hwmon-Verzeichnisnamen besteht (#532).
@@ -113,6 +116,7 @@ class LinuxFanControlBackend(FanControlBackend):
         GPU-Luefter, den set_pwm gar nicht anfasst -- ueber unsere
         Schreibfaehigkeit sagt er nichts aus (#552).
         """
+        erster_erfolg = None
         for fan_id, fan_info in self._fan_cache.items():
             if fan_info.get("pwm_control") is PwmControl.FIRMWARE_MANAGED:
                 continue
@@ -137,10 +141,28 @@ class LinuxFanControlBackend(FanControlBackend):
                 if fan_info.get("pwm_control") is PwmControl.NO_PERMISSION:
                     fan_info["pwm_control"] = PwmControl.SUPPORTED
                     fan_info["last_write_error"] = None
-                logger.info(f"Fan control: write permission available ({fan_id})")
-                return
+                if erster_erfolg is None:
+                    erster_erfolg = fan_id
 
-        logger.info("Fan control: no write permission (readonly mode)")
+        # KEIN frueher Ausstieg nach dem ersten Erfolg: bis #568 kehrte die
+        # Probe dort zurueck, und die Kanaele dahinter blieben auf ihrem alten
+        # NO_PERMISSION stehen. Solange das nur der Primary sah, war es ein
+        # Schoenheitsfehler; seit der Kanalzustand an alle Worker verteilt wird,
+        # behauptete es dauerhaft "kein Schreibrecht" auf funktionierenden
+        # Kanaelen -- und in MANUAL raeumt kein set_pwm das je auf.
+        if erster_erfolg is not None:
+            if not self._letzte_probe_erfolgreich:
+                logger.info(
+                    f"Fan control: write permission available ({erster_erfolg})")
+            self._letzte_probe_erfolgreich = True
+            return
+
+        # Nur beim Wechsel loggen: die Probe laeuft jetzt periodisch, eine
+        # Zeile je Lauf waere 1440 am Tag -- dieselbe Sorte Rauschen, die #533
+        # beseitigt hat.
+        if self._letzte_probe_erfolgreich is not False:
+            logger.info("Fan control: no write permission (readonly mode)")
+        self._letzte_probe_erfolgreich = False
 
     async def recheck_write_permission(self) -> None:
         """Die Probe erneut fahren, wenn die Ableitung gerade `readonly` sagt.
