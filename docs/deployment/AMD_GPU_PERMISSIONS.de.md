@@ -38,9 +38,21 @@ greift, lässt sich nur nach einem echten Boot mit vorhandenem `gpu_od/`
 verifizieren — und zwar an den Rechten selbst (`ls -la`), nicht daran, ob
 die Akustik-Einstellung wirkt. Das Backend fällt bei `EACCES` auf
 `sudo -n tee` zurück, und der vorhandene sudoers-Eintrag für
-`/sys/class/hwmon/*` deckt den Schreibpfad ab. Die Werte greifen also auch
-dann, wenn die Knoten weiterhin `root:root 0644` tragen — die udev-Regel ist
-hier die unprivilegierte Verbesserung, nicht die Voraussetzung.
+`/sys/class/hwmon/*` deckt den Schreibpfad ab — Wildcards
+in sudoers-*Argumenten* matchen auch `/`, der Eintrag greift also bis in
+`hwmonN/device/gpu_od/fan_ctrl/`. Die Werte greifen damit auch dann, wenn die
+Knoten weiterhin `root:root 0644` tragen; die udev-Regel ist hier die
+unprivilegierte Verbesserung, nicht die Voraussetzung.
+
+**Diese Zusage gilt nur auf dem Primärzweig der Gerätepfad-Auflösung.**
+`_device_from_hwmon()` (`backend/app/services/power/fan_gpu_manual.py`) liefert
+dort `<hwmon>/device` unaufgelöst — der Pfad beginnt mit `/sys/class/hwmon/`
+und fällt unter den Glob. Greift stattdessen der Fallback-Zweig (Aufwärtslauf
+über den aufgelösten Pfad), liegt der Pfad unter `/sys/devices/…`, der
+sudoers-Eintrag greift nicht, und ohne die udev-Regel schlägt der Write mit
+`EACCES` fehl. Auf BaluNode läuft der an der Hardware verifizierte
+Primärzweig; auf abweichender Hardware ist die udev-Regel deshalb unter
+Umständen doch Voraussetzung (#570).
 
 Default-Permissions auf Debian 13 sind:
 
