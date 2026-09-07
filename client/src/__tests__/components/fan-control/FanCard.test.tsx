@@ -233,3 +233,40 @@ describe('FanCard bei Rueckgabe an die Board-Automatik (#534)', () => {
     expect(manual.disabled).toBe(true);
   });
 });
+
+describe('FanCard benennt den Grund der Abgabe (#534 Punkt 2)', () => {
+  function renderMitGrund(f: FanInfo) {
+    render(
+      <FanCard
+        fan={f}
+        isSelected={false}
+        onSelect={noop}
+        onModeChange={noop}
+        onPWMChange={noop}
+        onReacquire={vi.fn()}
+        isReadOnly={false}
+        isLoading={false}
+        sensors={[]}
+      />
+    );
+  }
+
+  it('nennt fehlende Schreibrechte als Grund', () => {
+    renderMitGrund(fan({ ownership: 'released', release_reason: 'not_controllable' }));
+    expect(screen.getByTestId('fan-release-reason').textContent)
+      .toContain('causeNotControllable');
+  });
+
+  it('nennt die tote Temperaturquelle als Grund', () => {
+    // Der Unterschied zaehlt: der Nutzer muss wissen, ob er Rechte oder einen
+    // Sensor reparieren soll.
+    renderMitGrund(fan({ ownership: 'released', release_reason: 'no_target' }));
+    expect(screen.getByTestId('fan-release-reason').textContent)
+      .toContain('causeNoTarget');
+  });
+
+  it('zeigt ohne Grund keine Zeile', () => {
+    renderMitGrund(fan({ ownership: 'released', release_reason: null }));
+    expect(screen.queryByTestId('fan-release-reason')).toBeNull();
+  });
+});

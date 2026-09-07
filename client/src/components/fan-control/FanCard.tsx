@@ -306,6 +306,15 @@ export default function FanCard({
               ? 'system:fanControl.card.releasedHint'
               : 'system:fanControl.card.abandonedHint')}
           </p>
+          {/* Der Grund entscheidet, was der Nutzer reparieren muss --
+              Schreibrechte oder Temperaturquelle (#534). */}
+          {fan.release_reason && (
+            <p data-testid="fan-release-reason" className="text-xs text-slate-500 mb-2">
+              {t(fan.release_reason === 'no_target'
+                ? 'system:fanControl.card.causeNoTarget'
+                : 'system:fanControl.card.causeNotControllable')}
+            </p>
+          )}
           <button
             data-testid="fan-reacquire-button"
             onClick={() => onReacquire(fan.fan_id)}

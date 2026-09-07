@@ -96,6 +96,16 @@ class FanInfo(BaseModel):
     max_pwm_percent: int = Field(default=100, ge=0, le=100)
     emergency_temp_celsius: float = Field(default=85.0, ge=0, le=150)
     temp_sensor_id: Optional[str] = Field(default=None, description="Associated temperature sensor ID")
+    release_reason: Optional[str] = Field(
+        default=None,
+        description=(
+            "Warum der Kanal abgegeben wurde: 'not_controllable' (BaluHost "
+            "konnte ihn wiederholt nicht schreiben) oder 'no_target' (die "
+            "Temperaturquelle liefert nichts). Fuer den Nutzer der "
+            "Unterschied zwischen 'reparier die Rechte' und 'reparier den "
+            "Sensor' (#534)."
+        ),
+    )
     ownership: str = Field(
         default="owned",
         description=(

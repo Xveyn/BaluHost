@@ -17,7 +17,11 @@ from app.models.fans import FanConfig
 from app.schemas.fans import FanMode, PwmControl
 from app.services.power import fan_control as fan_control_module
 from app.services.power.fan_control import FanControlService, FanData
-from app.services.power.fan_ownership import FanOwnership
+from app.services.power.fan_ownership import (
+    KEIN_ZIELWERT_SEKUNDEN,
+    FanOwnership,
+    ReleaseReason,
+)
 from app.services.power.fan_runtime_store import read_released_fans
 
 
@@ -89,7 +93,9 @@ async def test_ein_kanal_am_deckel_wird_zurueckgegeben(session_factory, monkeypa
 
     backend.release_to_board.assert_awaited_once_with("nct6798:pwm1", 5)
     with session_factory() as db:
-        assert read_released_fans(db) == {"nct6798:pwm1": FanOwnership.RELEASED.value}
+        assert read_released_fans(db) == {
+            "nct6798:pwm1": {"state": FanOwnership.RELEASED.value,
+                             "reason": ReleaseReason.NOT_CONTROLLABLE.value}}
 
 
 @pytest.mark.asyncio
@@ -130,7 +136,9 @@ async def test_eine_gescheiterte_rueckgabe_heisst_niemand_regelt(
     await service._monitor_and_control_fans()
 
     with session_factory() as db:
-        assert read_released_fans(db) == {"nct6798:pwm1": FanOwnership.ABANDONED.value}
+        assert read_released_fans(db) == {
+            "nct6798:pwm1": {"state": FanOwnership.ABANDONED.value,
+                             "reason": ReleaseReason.NOT_CONTROLLABLE.value}}
 
 
 @pytest.mark.asyncio
@@ -291,3 +299,315 @@ async def test_ein_firmware_kanal_wird_nicht_freigegeben(session_factory, monkey
     await service._monitor_and_control_fans()
 
     backend.release_to_board.assert_not_awaited()
+
+
+# --- Punkt 2: kein Zielwert -> Board uebernimmt -----------------------------
+
+def _ohne_temperatur(service):
+    """Die Temperaturquelle liefert nichts mehr."""
+    service._registry.get_temp = AsyncMock(return_value=None)
+
+
+async def _zyklen_ueber_die_frist(service, monkeypatch):
+    """Zwei Zyklen mit einem Zeitsprung dazwischen -- die Bedingung haengt an
+    der Wanduhr, nicht an der Zahl der Durchlaeufe."""
+    await service._monitor_and_control_fans()
+    echt = fan_control_module.time.monotonic
+    monkeypatch.setattr(
+        fan_control_module.time, "monotonic",
+        lambda: echt() + KEIN_ZIELWERT_SEKUNDEN + 1)
+    await service._monitor_and_control_fans()
+
+
+@pytest.mark.asyncio
+async def test_lange_ohne_temperatur_wird_abgegeben(session_factory, monkeypatch):
+    service, backend = _service(session_factory, monkeypatch,
+                                fans=[_fan()], am_deckel=False)
+    _ohne_temperatur(service)
+
+    await _zyklen_ueber_die_frist(service, monkeypatch)
+
+    backend.release_to_board.assert_awaited_once()
+    with session_factory() as db:
+        eintrag = read_released_fans(db)["nct6798:pwm1"]
+    assert eintrag["reason"] == ReleaseReason.NO_TARGET.value
+
+
+@pytest.mark.asyncio
+async def test_ein_kurzer_aussetzer_gibt_nichts_ab(session_factory, monkeypatch):
+    """Sonst gaebe ein Neustart des Monitoring-Workers den Luefter ab."""
+    service, backend = _service(session_factory, monkeypatch,
+                                fans=[_fan()], am_deckel=False)
+    _ohne_temperatur(service)
+
+    await service._monitor_and_control_fans()
+    await service._monitor_and_control_fans()
+
+    backend.release_to_board.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_ein_sensorwechsel_setzt_die_frist_zurueck(session_factory, monkeypatch):
+    """Ein neu eingestellter Sensor faengt von vorn an -- sonst erbte er die
+    Ausfallzeit des alten und der Kanal fiele sofort heraus."""
+    service, backend = _service(session_factory, monkeypatch,
+                                fans=[_fan()], am_deckel=False)
+    _ohne_temperatur(service)
+    await service._monitor_and_control_fans()
+
+    with session_factory() as db:
+        config = db.execute(
+            select(FanConfig).where(FanConfig.fan_id == "nct6798:pwm1")).scalar_one()
+        config.temp_sensor_id = "hwmon:neu"
+        db.commit()
+
+    echt = fan_control_module.time.monotonic
+    monkeypatch.setattr(fan_control_module.time, "monotonic",
+                        lambda: echt() + KEIN_ZIELWERT_SEKUNDEN + 1)
+    await service._monitor_and_control_fans()
+
+    backend.release_to_board.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_eine_wiederkehrende_temperatur_setzt_die_frist_zurueck(
+    session_factory, monkeypatch
+):
+    service, backend = _service(session_factory, monkeypatch,
+                                fans=[_fan()], am_deckel=False)
+    _ohne_temperatur(service)
+    await service._monitor_and_control_fans()
+
+    service._registry.get_temp = AsyncMock(return_value=45.0)
+    await service._monitor_and_control_fans()
+    _ohne_temperatur(service)
+
+    echt = fan_control_module.time.monotonic
+    monkeypatch.setattr(fan_control_module.time, "monotonic",
+                        lambda: echt() + KEIN_ZIELWERT_SEKUNDEN + 1)
+    await service._monitor_and_control_fans()
+
+    backend.release_to_board.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_ohne_konfigurierten_sensor_wird_nichts_abgegeben(
+    session_factory, monkeypatch
+):
+    """"Kein Sensor eingestellt" ist eine Konfiguration, kein Ausfall -- der
+    Befund, an dem die naheliegende Bedingung des ersten Anlaufs scheiterte.
+
+    Gemessen: dieser Test bleibt auch dann gruen, wenn man die Sensor-Wache
+    aus should_release_for_missing_target entfernt -- der Regelkreis startet
+    die Frist ohne Sensor naemlich gar nicht erst. Zwei unabhaengige Wachen
+    also; die REGEL selbst nagelt
+    test_ohne_konfigurierten_sensor_passiert_nichts in
+    test_fan_ownership_rules.py fest."""
+    service, backend = _service(session_factory, monkeypatch,
+                                fans=[_fan()], am_deckel=False)
+    _ohne_temperatur(service)
+    with session_factory() as db:
+        config = db.execute(
+            select(FanConfig).where(FanConfig.fan_id == "nct6798:pwm1")).scalar_one()
+        config.temp_sensor_id = None
+        db.commit()
+
+    await _zyklen_ueber_die_frist(service, monkeypatch)
+
+    backend.release_to_board.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_ein_handbetriebener_luefter_wird_nicht_abgegeben(
+    session_factory, monkeypatch
+):
+    """In MANUAL laeuft der Kurvenzweig gar nicht -- der Nutzer verloere seine
+    Handeinstellung, ohne dass etwas ausgefallen waere."""
+    service, backend = _service(session_factory, monkeypatch,
+                                fans=[_fan()], am_deckel=False)
+    _ohne_temperatur(service)
+    with session_factory() as db:
+        config = db.execute(
+            select(FanConfig).where(FanConfig.fan_id == "nct6798:pwm1")).scalar_one()
+        config.mode = FanMode.MANUAL.value
+        db.commit()
+
+    await _zyklen_ueber_die_frist(service, monkeypatch)
+
+    backend.release_to_board.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_eine_flache_kurve_braucht_keine_temperatur(
+    session_factory, monkeypatch
+):
+    """`flat` liefert eine Konstante -- ein fehlender Messwert ist folgenlos."""
+    service, backend = _service(session_factory, monkeypatch,
+                                fans=[_fan()], am_deckel=False)
+    _ohne_temperatur(service)
+    with session_factory() as db:
+        config = db.execute(
+            select(FanConfig).where(FanConfig.fan_id == "nct6798:pwm1")).scalar_one()
+        config.curve_type = "flat"
+        config.flat_pwm_percent = 40
+        db.commit()
+
+    await _zyklen_ueber_die_frist(service, monkeypatch)
+
+    backend.release_to_board.assert_not_awaited()
+
+
+# --- Die Befunde der Review (#534) ------------------------------------------
+
+@pytest.mark.asyncio
+async def test_der_rueckweg_wirkt_auch_bei_fehlendem_zielwert(
+    session_factory, monkeypatch
+):
+    """Gemessen als Fehler: die Frist lief waehrend der Freigabe weiter, der
+    erste Zyklus nach dem Klick sah also eine laengst abgelaufene Frist und gab
+    den Kanal im SELBEN Durchlauf wieder ab -- zwei Logzeilen, ein Zyklus. Der
+    Knopf war fuer diesen Ausloeser wirkungslos.
+
+    Zwei Vorkehrungen decken das ab, und sie ueberlappen sich absichtlich: die
+    Uhr steht waehrend einer Freigabe, UND die Wiederuebernahme raeumt den
+    Eintrag. Mit einer Mutationsprobe gemessen: jede allein genuegt, dieser
+    Test faellt erst, wenn BEIDE fehlen. Das ist keine Nachlaessigkeit -- die
+    eine ist die richtige Semantik ("BaluHost bildet keinen Zielwert" ist
+    bedeutungslos, wenn es nicht regelt), die andere die Zusicherung des
+    Knopfes."""
+    service, backend = _service(session_factory, monkeypatch,
+                                fans=[_fan()], am_deckel=False)
+    _ohne_temperatur(service)
+    await _zyklen_ueber_die_frist(service, monkeypatch)
+    assert backend.release_to_board.await_count == 1
+
+    # Zeit vergeht, WAEHREND der Kanal freigegeben ist -- ohne diesen Sprung
+    # erreicht der Test den Fehler gar nicht: die erste Fassung war deshalb
+    # gruen, obwohl der Fix fehlte (mit einer Gegenprobe gemessen).
+    await service._monitor_and_control_fans()
+    echt = fan_control_module.time.monotonic
+    monkeypatch.setattr(fan_control_module.time, "monotonic",
+                        lambda: echt() + 2 * KEIN_ZIELWERT_SEKUNDEN)
+    await service._monitor_and_control_fans()
+
+    assert await service.reacquire_fan("nct6798:pwm1") is True
+    await service._monitor_and_control_fans()
+
+    assert backend.release_to_board.await_count == 1, (
+        "der Kanal darf nicht im selben Zyklus wieder abgegeben werden")
+    with session_factory() as db:
+        assert read_released_fans(db) == {}
+
+
+@pytest.mark.asyncio
+async def test_ein_moduswechsel_bringt_eine_eigene_karenz(
+    session_factory, monkeypatch
+):
+    """Die Regel war eng, die Buchfuehrung nicht: ein Luefter in MANUAL sammelte
+    Ausfallzeit an, und der Wechsel auf AUTO gab ihn im naechsten Zyklus ohne
+    eigene Karenz ab -- auf einen Knopf hin, der (siehe oben) nicht
+    zurueckfuehrte."""
+    service, backend = _service(session_factory, monkeypatch,
+                                fans=[_fan()], am_deckel=False)
+    _ohne_temperatur(service)
+    with session_factory() as db:
+        config = db.execute(
+            select(FanConfig).where(FanConfig.fan_id == "nct6798:pwm1")).scalar_one()
+        config.mode = FanMode.MANUAL.value
+        db.commit()
+
+    await _zyklen_ueber_die_frist(service, monkeypatch)
+    backend.release_to_board.assert_not_awaited()
+
+    with session_factory() as db:
+        config = db.execute(
+            select(FanConfig).where(FanConfig.fan_id == "nct6798:pwm1")).scalar_one()
+        config.mode = FanMode.AUTO.value
+        db.commit()
+    await service._monitor_and_control_fans()
+
+    backend.release_to_board.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_ein_kurventypwechsel_bringt_eine_eigene_karenz(
+    session_factory, monkeypatch
+):
+    service, backend = _service(session_factory, monkeypatch,
+                                fans=[_fan()], am_deckel=False)
+    _ohne_temperatur(service)
+    with session_factory() as db:
+        config = db.execute(
+            select(FanConfig).where(FanConfig.fan_id == "nct6798:pwm1")).scalar_one()
+        config.curve_type = "flat"
+        config.flat_pwm_percent = 40
+        db.commit()
+
+    await _zyklen_ueber_die_frist(service, monkeypatch)
+
+    with session_factory() as db:
+        config = db.execute(
+            select(FanConfig).where(FanConfig.fan_id == "nct6798:pwm1")).scalar_one()
+        config.curve_type = "graph"
+        db.commit()
+    await service._monitor_and_control_fans()
+
+    backend.release_to_board.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_im_notfall_wird_ein_aufgegebener_kanal_doch_geschrieben(
+    session_factory, monkeypatch
+):
+    """Bei ABANDONED regelt NIEMAND -- die Rueckgabe ist gescheitert. Und bei
+    Grund `no_target` ist der Kanal nachweislich schreibbar, abgegeben wurde
+    er wegen des Sensors. Einen Ueberhitzungsfall auszusitzen waere die
+    falsche Vorsicht."""
+    service, backend = _service(session_factory, monkeypatch, fans=[_fan()],
+                                am_deckel=False, rueckgabe_glueckt=False)
+    _ohne_temperatur(service)
+    await _zyklen_ueber_die_frist(service, monkeypatch)
+    backend.set_pwm.reset_mock()
+
+    service._registry.get_temp = AsyncMock(return_value=95.0)
+    await service._monitor_and_control_fans()
+
+    backend.set_pwm.assert_awaited()
+    assert backend.set_pwm.await_args.args[1] == 100
+
+
+@pytest.mark.asyncio
+async def test_im_notfall_bleibt_ein_zurueckgegebener_kanal_beim_board(
+    session_factory, monkeypatch
+):
+    """Die Gegenrichtung: bei RELEASED regelt der Chip. Ihn zu ueberschreiben
+    waere das Pendeln zwischen zwei Reglern, das #534 vermeiden will -- die
+    Meldung laeuft trotzdem."""
+    service, backend = _service(session_factory, monkeypatch,
+                                fans=[_fan()], am_deckel=False)
+    _ohne_temperatur(service)
+    await _zyklen_ueber_die_frist(service, monkeypatch)
+    backend.set_pwm.reset_mock()
+
+    service._registry.get_temp = AsyncMock(return_value=95.0)
+    await service._monitor_and_control_fans()
+
+    backend.set_pwm.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_ein_verschwundener_luefter_wird_aus_der_buchfuehrung_entfernt(
+    session_factory, monkeypatch
+):
+    """Sonst erbte derselbe Luefter bei seiner Rueckkehr die alte
+    Ausfallzeit."""
+    service, backend = _service(session_factory, monkeypatch,
+                                fans=[_fan()], am_deckel=False)
+    _ohne_temperatur(service)
+    await service._monitor_and_control_fans()
+    assert "nct6798:pwm1" in service._kein_zielwert_seit
+
+    backend.get_fans = AsyncMock(return_value=[])
+    await service._monitor_and_control_fans()
+
+    assert service._kein_zielwert_seit == {}

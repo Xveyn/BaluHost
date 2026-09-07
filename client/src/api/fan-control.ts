@@ -79,6 +79,9 @@ export interface FanInfo {
   // weil die Rueckgabe scheiterte. Eigenes Feld statt eines Werts in `mode` --
   // das ist serverseitig ein validiertes Enum.
   ownership?: 'owned' | 'released' | 'abandoned';
+  // Warum abgegeben wurde (#534). Fuer den Nutzer der Unterschied zwischen
+  // "reparier die Rechte" und "reparier den Sensor".
+  release_reason?: 'not_controllable' | 'no_target' | null;
   // Curve type and tuning fields (Task 15)
   curve_type?: 'graph' | 'flat' | 'target' | 'mix' | 'sync';
   flat_pwm_percent?: number | null;

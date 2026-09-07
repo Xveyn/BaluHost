@@ -26,9 +26,12 @@ from app.schemas.fans import FanMode, FanCurvePoint, PwmControl
 from app.services.power.fan_restore import is_observation, needs_release, resolve_restore_value
 from app.services.power.fan_ownership import (
     FanOwnership,
+    braucht_temperatur,
+    ReleaseReason,
     is_released,
     ownership_after_release,
     should_release,
+    should_release_for_missing_target,
 )
 from app.services.power.fan_runtime_store import (
     publish_released_fans,
@@ -238,6 +241,10 @@ class FanControlService:
         # eine Wiederuebernahme zu ERKENNEN -- sie geschieht ueber einen
         # anderen Worker (#534).
         self._zuletzt_freigegeben: set = set()
+        # fan_id -> ((fan_id, sensor_id), Zeitstempel): seit wann kein
+        # Zielwert zustande kommt. Der Sensor ist Teil des Schluessels,
+        # damit ein Wechsel die Frist neu beginnen laesst (#534).
+        self._kein_zielwert_seit: Dict[str, tuple] = {}
 
         FanControlService._instance = self
 
@@ -1089,6 +1096,11 @@ class FanControlService:
 
         fans = await self._backend.get_fans()
         now_ts = _time.time()
+        # Fuer FRISTEN die monotone Uhr, nicht die Wanduhr: now_ts kommt aus
+        # _time.time() und kann durch eine NTP-Korrektur springen -- eine
+        # Abgabe an die Board-Automatik darf nicht an einer Zeitumstellung
+        # haengen (#534 Punkt 2).
+        jetzt_mono = time.monotonic()
         dt = (now_ts - self._last_tick_ts) if self._last_tick_ts else self.config.fan_sample_interval_seconds
         self._last_tick_ts = now_ts
 
@@ -1100,6 +1112,15 @@ class FanControlService:
         with self.db_session_factory() as db:
             freigegeben = read_released_fans(db)
         freigaben_vorher = dict(freigegeben)
+
+        # Eintraege von Kanaelen, die es nicht mehr gibt: sonst erbte derselbe
+        # Luefter bei seiner Rueckkehr die alte Ausfallzeit (#534). Ein
+        # voruebergehend leeres get_fans() raeumt damit alle Fristen -- das
+        # irrt in die sichere Richtung, es wird dann eher zu spaet abgegeben
+        # als zu frueh.
+        bekannt = {f.fan_id for f in fans}
+        for verschwunden in set(self._kein_zielwert_seit) - bekannt:
+            del self._kein_zielwert_seit[verschwunden]
 
         # Eine Wiederuebernahme kommt ueber einen BELIEBIGEN Worker (die Route
         # laeuft dort, wo die Anfrage landet), der Fehlerzaehler lebt aber im
@@ -1115,6 +1136,12 @@ class FanControlService:
         for fan_id in zurueckgeholt:
             self._backend.clear_write_failures(fan_id)
             self._hysteresis_state.pop(fan_id, None)
+            # Auch die Zielwert-Frist (#534 Punkt 2): sie lief waehrend der
+            # Freigabe weiter, der erste Zyklus nach dem Klick saehe also eine
+            # laengst abgelaufene Frist und gaebe den Kanal im SELBEN Zyklus
+            # wieder ab. Der Knopf waere fuer diesen Ausloeser wirkungslos --
+            # gemessen, zwei Logzeilen in einem Durchlauf.
+            self._kein_zielwert_seit.pop(fan_id, None)
             aktuell = next((f for f in fans if f.fan_id == fan_id), None)
             if aktuell is not None:
                 # Genau EIN erzwungener Write, sonst bliebe pwm_enable auf dem
@@ -1137,6 +1164,46 @@ class FanControlService:
                 temperature = await self._registry.get_temp(config.temp_sensor_id) if config.temp_sensor_id else None
 
                 target_pwm = fan.pwm_percent
+
+                # Der Besitzzustand wird vor der Buchfuehrung gebraucht: die
+                # Zielwert-Uhr darf waehrend einer Freigabe nicht laufen.
+                eintrag_freigabe = freigegeben.get(fan.fan_id)
+                zustand = FanOwnership(
+                    eintrag_freigabe["state"] if eintrag_freigabe
+                    else FanOwnership.OWNED)
+
+                # Seit wann kein Zielwert zustande kommt (#534 Punkt 2). Gegen
+                # die Wanduhr, nicht gegen Zyklen: das Sample-Intervall ist
+                # konfigurierbar und im Dev-Modus dreimal so lang.
+                #
+                # Zurueckgesetzt wird bei einem Messwert UND bei einem Wechsel
+                # der Quelle: ein neu eingestellter Sensor faengt seine Frist
+                # von vorn an, sonst erbte er die Ausfallzeit des alten.
+                #
+                # Die Uhr laeuft NUR dort, wo die Regel auch greifen kann.
+                # Sonst sammelte ein Kanal in MANUAL oder mit einer flachen
+                # Kurve Ausfallzeit an, und ein Wechsel auf AUTO bzw. `graph`
+                # gaebe ihn im naechsten Zyklus ohne eigene Karenz ab -- die
+                # Regel waere eng, die Buchfuehrung nicht.
+                kurve = getattr(config, "curve_type", "graph") or "graph"
+                zielwert_faellig = (
+                    config.mode in (FanMode.AUTO.value, FanMode.SCHEDULED.value)
+                    and braucht_temperatur(kurve)
+                    and bool(config.temp_sensor_id)
+                    # Nicht, solange der Kanal freigegeben ist: "BaluHost kann
+                    # keinen Zielwert bilden" ist bedeutungslos, wenn BaluHost
+                    # nicht regelt. Liefe die Uhr weiter, saehe der erste
+                    # Zyklus nach einer Wiederuebernahme eine laengst
+                    # abgelaufene Frist -- der Knopf waere wirkungslos.
+                    and not is_released(zustand)
+                )
+                schluessel = (fan.fan_id, config.temp_sensor_id)
+                if temperature is not None or not zielwert_faellig:
+                    self._kein_zielwert_seit.pop(fan.fan_id, None)
+                else:
+                    vorher = self._kein_zielwert_seit.get(fan.fan_id)
+                    if vorher is None or vorher[0] != schluessel:
+                        self._kein_zielwert_seit[fan.fan_id] = (schluessel, jetzt_mono)
 
                 if mode in (FanMode.AUTO, FanMode.SCHEDULED):
                     if temperature is not None and temperature >= config.emergency_temp_celsius:
@@ -1221,7 +1288,6 @@ class FanControlService:
                 # nebenbei _last_pwm_by_fan auf den echten Wert fort -- sonst
                 # ginge nach einer Wiederuebernahme ein minutenalter Wert in die
                 # Glaettung ein.
-                zustand = FanOwnership(freigegeben.get(fan.fan_id, FanOwnership.OWNED))
 
                 # Die Rueckgabe ist ein Hardware-Write und gehoert dem
                 # Primary -- so wie _release_all_to_board() beim Dienst-Ende
@@ -1232,6 +1298,9 @@ class FanControlService:
                 if zustand is FanOwnership.OWNED and ist_primary:
                     fehlschlaege, am_deckel = self._backend.write_failure_state(
                         fan.fan_id)
+                    seit = self._kein_zielwert_seit.get(fan.fan_id)
+                    ohne_zielwert = (jetzt_mono - seit[1]) if seit else 0.0
+                    grund = None
                     if should_release(
                         at_write_cap=am_deckel,
                         ownership=zustand,
@@ -1243,25 +1312,81 @@ class FanControlService:
                         ),
                         is_active=bool(config.is_active),
                     ):
+                        grund = ReleaseReason.NOT_CONTROLLABLE
+                    elif should_release_for_missing_target(
+                        mode_value=config.mode,
+                        curve_type=getattr(config, "curve_type", "graph") or "graph",
+                        has_sensor_configured=bool(config.temp_sensor_id),
+                        missing_seconds=ohne_zielwert,
+                        ownership=zustand,
+                        has_observed_restore_value=(
+                            self._restore_values.get(fan.fan_id) is not None
+                        ),
+                        is_firmware_managed=(
+                            fan.pwm_control is PwmControl.FIRMWARE_MANAGED
+                        ),
+                        is_active=bool(config.is_active),
+                    ):
+                        grund = ReleaseReason.NO_TARGET
+
+                    if grund is not None:
                         geglueckt = await self._backend.release_to_board(
                             fan.fan_id, self._restore_values[fan.fan_id]
                         )
                         zustand = ownership_after_release(geglueckt)
-                        freigegeben[fan.fan_id] = zustand.value
+                        freigegeben[fan.fan_id] = {
+                            "state": zustand.value,
+                            "reason": grund.value,
+                        }
                         # Die Hysterese eingefroren stehen zu lassen, hiesse
                         # nach der Wiederuebernahme gegen einen alten
                         # Referenzwert zu daempfen.
                         self._hysteresis_state.pop(fan.fan_id, None)
+                        self._kein_zielwert_seit.pop(fan.fan_id, None)
                         logger.warning(
-                            "%s: nicht steuerbar (%d Fehlschlaege in Folge) -- "
-                            "%s", fan.fan_id, fehlschlaege,
+                            "%s: %s -- %s", fan.fan_id,
+                            f"nicht steuerbar ({fehlschlaege} Fehlschlaege in Folge)"
+                            if grund is ReleaseReason.NOT_CONTROLLABLE else
+                            f"seit {ohne_zielwert:.0f}s kein Zielwert "
+                            f"(Sensor {config.temp_sensor_id})",
                             "an die Board-Automatik zurueckgegeben"
                             if geglueckt else
                             "Rueckgabe gescheitert, es regelt niemand",
                         )
 
                 if is_released(zustand):
-                    target_pwm = fan.pwm_percent
+                    # Im Normalfall kein Write: bei RELEASED regelt der Chip,
+                    # und ihn zu ueberschreiben waere genau das Pendeln
+                    # zwischen zwei Reglern, das #534 vermeiden will.
+                    #
+                    # Die Ausnahme ist ABANDONED im Notfall. Dort regelt
+                    # NIEMAND -- die Rueckgabe ist gescheitert --, und einen
+                    # Ueberhitzungsfall auszusitzen waere die falsche Vorsicht.
+                    #
+                    # Die Ausnahme gilt fuer BEIDE Gruende, nicht nur fuer
+                    # `no_target` (wo der Kanal nachweislich schreibbar ist,
+                    # weil er wegen des Sensors abgegeben wurde). Auch bei
+                    # `not_controllable` wird es versucht: der Kanal wurde
+                    # nach acht Fehlschlaegen abgegeben, aber die Ursache kann
+                    # seither behoben sein, und im Ueberhitzungsfall ist ein
+                    # aussichtsarmer Versuch besser als keiner.
+                    #
+                    # Der Preis dafuer, damit er niemanden ueberrascht: bei
+                    # einem dauerhaft nicht schreibbaren Kanal eine
+                    # ERROR-Zeile je Regelzyklus, solange die Ueberhitzung
+                    # anhaelt. Der Write ist erzwungen, umgeht also das
+                    # Backoff und laesst dessen Zaehler unberuehrt --
+                    # dieselbe Abwaegung wie in #533: thermische Sicherheit
+                    # schlaegt Log-Hygiene, und ein Notfall ist per
+                    # Definition kein Dauerzustand.
+                    #
+                    # Nebenwirkung, die sich selbst heilt: _last_pwm_by_fan
+                    # und der Sample tragen dann 100, auch wenn der Write
+                    # scheiterte. Der erste Zyklus nach dem Notfall raeumt
+                    # das auf.
+                    if not (mode == FanMode.EMERGENCY
+                            and zustand is FanOwnership.ABANDONED):
+                        target_pwm = fan.pwm_percent
 
                 if target_pwm != fan.pwm_percent:
                     # Im Notfall das Backoff-Fenster umgehen (#533): ein
@@ -1523,8 +1648,10 @@ class FanControlService:
             # Zeile (#534): er entsteht im Primary, und ein prozesslokaler
             # Wert lieferte bei drei von vier Workern None.
             for eintrag in fan_data_list:
-                eintrag["ownership"] = freigegeben.get(
-                    eintrag["fan_id"], FanOwnership.OWNED.value)
+                freigabe = freigegeben.get(eintrag["fan_id"])
+                eintrag["ownership"] = (
+                    freigabe["state"] if freigabe else FanOwnership.OWNED.value)
+                eintrag["release_reason"] = freigabe["reason"] if freigabe else None
             if gesperrt is not None:
                 for eintrag in fan_data_list:
                     if eintrag.get("pwm_control") is PwmControl.FIRMWARE_MANAGED:
