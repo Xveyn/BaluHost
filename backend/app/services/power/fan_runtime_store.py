@@ -20,6 +20,7 @@ import os
 from typing import Optional
 
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from app.models.fans import FanRuntimeState
 
@@ -28,7 +29,7 @@ logger = logging.getLogger(__name__)
 _SINGLETON_ID = 1
 
 
-def read_write_permission(db) -> Optional[bool]:
+def read_write_permission(db: Session) -> Optional[bool]:
     """Der veroeffentlichte Stand.
 
     Returns:
@@ -49,7 +50,7 @@ def read_write_permission(db) -> Optional[bool]:
     return None if row is None else bool(row.has_write_permission)
 
 
-def publish_write_permission(db, may_write: bool) -> bool:
+def publish_write_permission(db: Session, may_write: bool) -> bool:
     """Den eigenen Stand hinterlegen. Legt die Zeile an, falls noetig.
 
     Returns:
