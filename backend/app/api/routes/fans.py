@@ -2,6 +2,7 @@
 Fan control API endpoints.
 """
 import logging
+import re
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -1089,7 +1090,9 @@ def _competing_manager() -> Optional[str]:
         if not LACT_CONFIG_PATH.exists():
             return None
         for line in LACT_CONFIG_PATH.read_text().splitlines():
-            if line.lstrip().startswith("pmfw_options"):
+            # \s*: statt startswith, damit ein aehnlich benannter Schluessel
+            # wie pmfw_options_extra keine Wortgrenze verletzt (#570).
+            if re.match(r"pmfw_options\s*:", line.lstrip()):
                 return "lact"
     except (OSError, ValueError):
         # ValueError deckt UnicodeDecodeError mit ab: eine von Hand

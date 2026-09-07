@@ -34,13 +34,22 @@ def test_ein_nachgestellter_kommentar_hebt_den_schluessel_nicht_auf(tmp_path, mo
     assert fans_module._competing_manager() == "lact"
 
 
+def test_ein_aehnlich_benannter_schluessel_ist_kein_treffer(tmp_path, monkeypatch):
+    _lact_config(tmp_path, "    pmfw_options_extra: true\n", monkeypatch)
+    assert fans_module._competing_manager() is None
+
+
 def test_eine_fehlende_datei_meldet_nichts(tmp_path, monkeypatch):
     monkeypatch.setattr(fans_module, "LACT_CONFIG_PATH", tmp_path / "gibt-es-nicht.yaml")
     assert fans_module._competing_manager() is None
 
 
-def test_eine_datei_in_latin1_macht_den_get_nicht_kaputt(tmp_path, monkeypatch):
+def test_eine_unlesbare_datei_meldet_nichts_statt_zu_werfen(tmp_path, monkeypatch):
+    """0x81 ist weder in UTF-8 noch in cp1252 gueltig -- der Dekodierfehler
+    faellt also auf jeder Plattform an und die Zusicherung bleibt scharf.
+    Eine von Hand geschriebene Datei darf den GET nicht zur 500 machen.
+    """
     cfg = tmp_path / "config.yaml"
-    cfg.write_bytes(b"pmfw_options:\n# Kommentar mit \xfc\n")
+    cfg.write_bytes(b"pmfw_options:\n# Kommentar mit \x81\n")
     monkeypatch.setattr(fans_module, "LACT_CONFIG_PATH", cfg)
-    assert fans_module._competing_manager() in ("lact", None)
+    assert fans_module._competing_manager() is None
