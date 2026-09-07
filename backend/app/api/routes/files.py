@@ -236,6 +236,37 @@ def _jail_path(path: str, user: UserPublic, db: Session | None = None) -> str:
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
 
+
+# Gesund heisst: kein Handlungsbedarf. "checking" gehoert dazu -- ein
+# monatlicher Scrub (Debians checkarray) ist Wartung, kein Fehler, und wuerde
+# sonst ein Warndreieck in der Oberflaeche erzeugen. "clean" und "active"
+# stehen bewusst NICHT hier: _derive_array_status liefert sie nie (clean faellt
+# auf "optimal", active ist ein Geraete-Zustand), und eine Aufzaehlung, die
+# unerreichbare Werte fuehrt, taeuscht Sorgfalt vor.
+_GESUNDE_ARRAY_ZUSTAENDE = frozenset({"optimal", "checking"})
+
+
+def worst_array_status(arrays: list) -> str:
+    """Der schlechteste Zustand ueber alle RAID-Arrays.
+
+    Umgedreht formuliert (#570): frueher hob nur "degraded" oder "rebuilding"
+    den Zustand von "optimal" weg -- jeder unbekannte Wert galt damit als in
+    Ordnung. Seit get_status() ein nicht lesbares Array als "unknown" meldet,
+    statt die ganze Antwort abzubrechen, waere das ein gruenes Signal fuer
+    einen Fehlerfall gewesen.
+
+    Eigene Funktion statt eines Blocks im Handler, damit die Bewertung ohne
+    Datenbank und Dateisystem pruefbar ist.
+    """
+    schlechtester = "optimal"
+    for array in arrays:
+        if array.status == "degraded":
+            return "degraded"
+        if array.status not in _GESUNDE_ARRAY_ZUSTAENDE and schlechtester == "optimal":
+            schlechtester = array.status
+    return schlechtester
+
+
 router = APIRouter()
 
 
@@ -481,19 +512,7 @@ async def get_mountpoints(
                     used_bytes = 0
                     available_bytes = 0
 
-            # Umgedreht formuliert (#570): frueher hob nur "degraded" oder
-            # "rebuilding" den Zustand von "optimal" weg -- jeder unbekannte
-            # Wert galt damit als in Ordnung. Seit get_status() ein nicht
-            # lesbares Array als "unknown" meldet statt die ganze Antwort
-            # abzubrechen, waere das ein gruenes Signal fuer einen Fehlerfall.
-            _GESUND = {"optimal", "clean", "active"}
-            worst_status = "optimal"
-            for a in raid_arrays:
-                if a.status == "degraded":
-                    worst_status = "degraded"
-                    break
-                if a.status not in _GESUND and worst_status == "optimal":
-                    worst_status = a.status
+            worst_status = worst_array_status(raid_arrays)
 
             breakdown = compute_storage_breakdown(
                 raid_mountpoint or str(ROOT_DIR), used_bytes, db,

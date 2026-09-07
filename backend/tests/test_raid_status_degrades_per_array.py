@@ -10,9 +10,6 @@ auf md0..md999 begrenzt, und die Frage "was passiert mit einem bestehenden
 Array ausserhalb dieser Form" hatte bis dahin keine gute Antwort.
 """
 import subprocess
-from unittest.mock import MagicMock
-
-import pytest
 
 from app.schemas.system import RaidSpeedLimits
 from app.services.hardware.raid.mdadm_backend import MdadmRaidBackend
