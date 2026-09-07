@@ -80,10 +80,14 @@ def read_released_fans(db: Session) -> dict:
     """Die freigegebenen Kanaele mit ihrem Zustand (#534).
 
     Returns:
-        `{fan_id: "released" | "abandoned"}`. Eine leere Abbildung heisst
-        "kein Kanal freigegeben" -- anders als bei read_denied_fans gibt es
-        hier kein None, weil der Besitzzustand ausschliesslich hier lebt und
-        nicht mit einer prozesslokalen Sicht zusammengefuehrt wird.
+        `{fan_id: {"state": "released" | "abandoned", "reason": str | None}}`.
+        Eine leere Abbildung heisst "kein Kanal freigegeben" -- anders als bei
+        read_denied_fans gibt es hier kein None, weil der Besitzzustand
+        ausschliesslich hier lebt und nicht mit einer prozesslokalen Sicht
+        zusammengefuehrt wird.
+
+        Der Grund kam mit #534 Punkt 2 dazu; die aeltere Form ohne ihn wird
+        beim Lesen normalisiert (siehe unten).
     """
     try:
         row = db.execute(

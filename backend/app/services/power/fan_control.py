@@ -26,6 +26,7 @@ from app.schemas.fans import FanMode, FanCurvePoint, PwmControl
 from app.services.power.fan_restore import is_observation, needs_release, resolve_restore_value
 from app.services.power.fan_ownership import (
     FanOwnership,
+    braucht_temperatur,
     ReleaseReason,
     is_released,
     ownership_after_release,
@@ -1119,6 +1120,12 @@ class FanControlService:
         # Deckel stehenden -- Zaehler und gaebe ihn im selben Zyklus erneut ab.
         # Der Nutzer bekaeme einen Erfolg gemeldet und fuenf Sekunden spaeter
         # wieder "Board regelt" (#534).
+        # Eintraege von Kanaelen, die es nicht mehr gibt: sonst erbte derselbe
+        # Luefter bei seiner Rueckkehr die alte Ausfallzeit (#534).
+        bekannt = {f.fan_id for f in fans}
+        for verschwunden in set(self._kein_zielwert_seit) - bekannt:
+            del self._kein_zielwert_seit[verschwunden]
+
         zurueckgeholt = (
             self._zuletzt_freigegeben - set(freigegeben)
             if getattr(lifespan, "IS_PRIMARY_WORKER", False) else set()
@@ -1126,6 +1133,12 @@ class FanControlService:
         for fan_id in zurueckgeholt:
             self._backend.clear_write_failures(fan_id)
             self._hysteresis_state.pop(fan_id, None)
+            # Auch die Zielwert-Frist (#534 Punkt 2): sie lief waehrend der
+            # Freigabe weiter, der erste Zyklus nach dem Klick saehe also eine
+            # laengst abgelaufene Frist und gaebe den Kanal im SELBEN Zyklus
+            # wieder ab. Der Knopf waere fuer diesen Ausloeser wirkungslos --
+            # gemessen, zwei Logzeilen in einem Durchlauf.
+            self._kein_zielwert_seit.pop(fan_id, None)
             aktuell = next((f for f in fans if f.fan_id == fan_id), None)
             if aktuell is not None:
                 # Genau EIN erzwungener Write, sonst bliebe pwm_enable auf dem
@@ -1149,6 +1162,13 @@ class FanControlService:
 
                 target_pwm = fan.pwm_percent
 
+                # Der Besitzzustand wird vor der Buchfuehrung gebraucht: die
+                # Zielwert-Uhr darf waehrend einer Freigabe nicht laufen.
+                eintrag_freigabe = freigegeben.get(fan.fan_id)
+                zustand = FanOwnership(
+                    eintrag_freigabe["state"] if eintrag_freigabe
+                    else FanOwnership.OWNED)
+
                 # Seit wann kein Zielwert zustande kommt (#534 Punkt 2). Gegen
                 # die Wanduhr, nicht gegen Zyklen: das Sample-Intervall ist
                 # konfigurierbar und im Dev-Modus dreimal so lang.
@@ -1156,10 +1176,28 @@ class FanControlService:
                 # Zurueckgesetzt wird bei einem Messwert UND bei einem Wechsel
                 # der Quelle: ein neu eingestellter Sensor faengt seine Frist
                 # von vorn an, sonst erbte er die Ausfallzeit des alten.
+                #
+                # Die Uhr laeuft NUR dort, wo die Regel auch greifen kann.
+                # Sonst sammelte ein Kanal in MANUAL oder mit einer flachen
+                # Kurve Ausfallzeit an, und ein Wechsel auf AUTO bzw. `graph`
+                # gaebe ihn im naechsten Zyklus ohne eigene Karenz ab -- die
+                # Regel waere eng, die Buchfuehrung nicht.
+                kurve = getattr(config, "curve_type", "graph") or "graph"
+                zielwert_faellig = (
+                    config.mode in (FanMode.AUTO.value, FanMode.SCHEDULED.value)
+                    and braucht_temperatur(kurve)
+                    and bool(config.temp_sensor_id)
+                    # Nicht, solange der Kanal freigegeben ist: "BaluHost kann
+                    # keinen Zielwert bilden" ist bedeutungslos, wenn BaluHost
+                    # nicht regelt. Liefe die Uhr weiter, saehe der erste
+                    # Zyklus nach einer Wiederuebernahme eine laengst
+                    # abgelaufene Frist -- der Knopf waere wirkungslos.
+                    and not is_released(zustand)
+                )
                 schluessel = (fan.fan_id, config.temp_sensor_id)
-                if temperature is not None:
+                if temperature is not None or not zielwert_faellig:
                     self._kein_zielwert_seit.pop(fan.fan_id, None)
-                elif config.temp_sensor_id:
+                else:
                     vorher = self._kein_zielwert_seit.get(fan.fan_id)
                     if vorher is None or vorher[0] != schluessel:
                         self._kein_zielwert_seit[fan.fan_id] = (schluessel, jetzt_mono)
@@ -1247,10 +1285,6 @@ class FanControlService:
                 # nebenbei _last_pwm_by_fan auf den echten Wert fort -- sonst
                 # ginge nach einer Wiederuebernahme ein minutenalter Wert in die
                 # Glaettung ein.
-                eintrag_freigabe = freigegeben.get(fan.fan_id)
-                zustand = FanOwnership(
-                    eintrag_freigabe["state"] if eintrag_freigabe
-                    else FanOwnership.OWNED)
 
                 # Die Rueckgabe ist ein Hardware-Write und gehoert dem
                 # Primary -- so wie _release_all_to_board() beim Dienst-Ende
@@ -1318,7 +1352,21 @@ class FanControlService:
                         )
 
                 if is_released(zustand):
-                    target_pwm = fan.pwm_percent
+                    # Im Normalfall kein Write: bei RELEASED regelt der Chip,
+                    # und ihn zu ueberschreiben waere genau das Pendeln
+                    # zwischen zwei Reglern, das #534 vermeiden will.
+                    #
+                    # Die Ausnahme ist ABANDONED im Notfall. Dort regelt
+                    # NIEMAND -- die Rueckgabe ist gescheitert --, und bei
+                    # Grund `no_target` ist der Kanal sogar nachweislich
+                    # schreibbar (abgegeben wurde er wegen des Sensors, nicht
+                    # wegen der Rechte). Einen Ueberhitzungsfall dann
+                    # auszusitzen, waere die falsche Vorsicht: der Write ist
+                    # erzwungen, umgeht also das Backoff, und schlaegt er fehl,
+                    # ist der Zustand derselbe wie ohne den Versuch.
+                    if not (mode == FanMode.EMERGENCY
+                            and zustand is FanOwnership.ABANDONED):
+                        target_pwm = fan.pwm_percent
 
                 if target_pwm != fan.pwm_percent:
                     # Im Notfall das Backoff-Fenster umgehen (#533): ein
