@@ -180,6 +180,16 @@ class GpuPowerManagerService:
             self._state = GpuPowerState.ACTIVE
         self._last_transition = state.get("last_transition")
         self._last_reason = state.get("last_reason")
+        # _standby_since mitfuehren, damit die Deep-Idle-Frist einen Neustart
+        # ueberlebt statt neu zu beginnen: der letzte Uebergang IST der Beginn
+        # des STANDBY. Naive Zeitstempel aus der Datenbank werden als UTC
+        # gelesen -- ein Vergleich mit einem aware datetime wuerde sonst
+        # TypeError werfen.
+        if self._state == GpuPowerState.STANDBY and self._last_transition is not None:
+            seit = self._last_transition
+            if seit.tzinfo is None:
+                seit = seit.replace(tzinfo=timezone.utc)
+            self._standby_since = seit
 
     async def stop(self) -> None:
         if not self._is_running:
@@ -220,8 +230,12 @@ class GpuPowerManagerService:
                 self._refresh_demand_cache()
                 await self._tick()
                 self._write_status_shm()
-            except Exception as exc:
-                logger.error("GPU power monitor tick failed: %s", exc)
+            except Exception:
+                # exception() statt error("%s", exc): eine Ausnahme ohne
+                # Argumente -- etwa ein AssertionError -- stringifiziert zu ''
+                # und hinterliess hier 778 Logzeilen, die nur aus dem Praefix
+                # bestanden. Typ und Traceback beantworten die Frage sofort.
+                logger.exception("GPU power monitor tick failed")
             await asyncio.sleep(self._config.monitor_interval_seconds)
 
     def _refresh_demand_cache(self) -> None:
@@ -272,7 +286,19 @@ class GpuPowerManagerService:
                 await self._transition(GpuPowerState.STANDBY, "idle_window_elapsed")
                 self._standby_since = now
         elif self._state == GpuPowerState.STANDBY:
-            assert self._standby_since is not None
+            if self._standby_since is None:
+                # Kein Programmierfehler, sondern der normale Zustand nach
+                # einem Neustart: _hydrate_from_runtime_state holt _state aus
+                # der Datenbank, _standby_since lebt aber nur im Prozess. Hier
+                # stand ein `assert`, dessen AssertionError ohne Meldung als
+                # leere Zeile im Log landete -- und der den Tick VOR dem
+                # Uebergang nach DEEP_IDLE abbrach. Die GPU blieb damit nach
+                # jedem Neustart im STANDBY haengen (#570-Nachlese).
+                self._standby_since = now
+                logger.info(
+                    "STANDBY ohne bekannten Startzeitpunkt -- Deep-Idle-Frist "
+                    "beginnt jetzt neu"
+                )
             if now - self._standby_since >= timedelta(seconds=self._config.deep_idle_extra_seconds):
                 await emit_deep_idle_entering()
                 if self._config.deep_idle_grace_seconds > 0:

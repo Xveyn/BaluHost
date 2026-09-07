@@ -427,62 +427,65 @@ log_info "Backend dependencies updated."
 #   - GitHub: workflow_dispatch input "sync_permissions" = true
 #   - Manual: SYNC_PERMISSIONS=1 ./ci-deploy.sh
 
+# Fuehrt eines der Permission-Skripte als root aus -- mit Vorabpruefung, ob der
+# Aufruf ueberhaupt erlaubt ist (#570).
+#
+# Der Grund fuer die Pruefung: /etc/sudoers.d/baluhost-deploy ist die einzige
+# der vier sudoers-Dateien, die dieser Deploy nicht neu rendern kann -- sie
+# enthaelt genau die Erlaubnis, mit der die anderen drei installiert werden.
+# Neue Zeilen der Vorlage erreichen eine bereits installierte Box deshalb nie,
+# und der Aufruf scheiterte dann mit "sudo: a password is required" hinter
+# einer nichtssagenden WARN-Zeile.
+#
+# `sudo -n -l <cmd>` endet mit 0 genau dann, wenn der Aufruf erlaubt waere --
+# ohne ihn auszufuehren. Es laeuft passwortlos, solange listpw auf Debians
+# Standard "any" steht und der Benutzer mindestens einen NOPASSWD-Eintrag hat
+# (beides gilt hier). Bei listpw=all waere die Pruefung falsch negativ und der
+# Sync uebersprungen.
+run_permission_script() {
+    local label="$1" script="$2"
+    if [[ ! -f "$script" ]]; then
+        log_warn "$label script not found at $script (skipping)."
+        return 0
+    fi
+    log_info "Re-applying $label..."
+    if ! sudo -n -l bash "$script" >/dev/null 2>&1; then
+        log_warn "$label sync NOT PERMITTED: /etc/sudoers.d/baluhost-deploy on this box"
+        log_warn "  predates the entry for $(basename "$script"). One-time fix:"
+        # Der Benutzername wird HIER eingesetzt, nicht als $USER ausgegeben:
+        # die Anweisung wird typischerweise in einer root-Shell ausgefuehrt, wo
+        # $USER zu "root" wuerde. Die Datei wuerde dann fuer root gerendert, und
+        # der Deploy-Benutzer verloere still alle NOPASSWD-Rechte -- der
+        # naechste Deploy braeche beim Neustart der Dienste ab. `env` davor,
+        # weil sudo Zuweisungen in der Kommandozeile ohne SETENV ablehnt.
+        log_warn "    sudo env BALUHOST_USER=$(id -un) bash $INSTALL_DIR/deploy/scripts/install-deploy-sudoers.sh"
+        log_warn "  Until then $label stays at its installed state."
+        return 0
+    fi
+    if sudo bash "$script"; then
+        log_info "$label sync OK."
+    else
+        log_warn "$label sync failed (non-fatal - deploy continues)."
+    fi
+}
+
 if [[ "${SYNC_PERMISSIONS:-0}" == "1" || "${SYNC_PERMISSIONS,,}" == "true" ]]; then
     log_step "OS Permission Grants (sync requested)"
 
     # AMD GPU sysfs power nodes: chgrp video + g+w via udev rule.
     # The script defaults BALUHOST_USER=sven internally; sudoers rule
     # whitelists this exact bash invocation, so no env vars are passed.
-    AMD_GPU_SCRIPT="$INSTALL_DIR/deploy/scripts/install-amd-gpu-permissions.sh"
-    if [[ -f "$AMD_GPU_SCRIPT" ]]; then
-        log_info "Re-applying AMD GPU sysfs permissions..."
-        if sudo bash "$AMD_GPU_SCRIPT"; then
-            log_info "AMD GPU permission sync OK."
-        else
-            log_warn "AMD GPU permission sync failed (non-fatal — deploy continues)."
-        fi
-    else
-        log_warn "AMD GPU permission script not found at $AMD_GPU_SCRIPT (skipping)."
-    fi
+    run_permission_script "AMD GPU permission"         "$INSTALL_DIR/deploy/scripts/install-amd-gpu-permissions.sh"
 
     # Hardware sudoers: RAID/SMART/fan/CPU-freq/suspend/rtcwake/ethtool grants.
-    # The installer renders @@BALUHOST_USER@@ from the running service user and
-    # validates with visudo before replacing the live file. This is the path by
-    # which baluhost-hardware-sudoers template changes reach an installed box.
-    # Invoked with no env vars (like the AMD-GPU script): the deploy sudoers rule
-    # whitelists this exact `bash <abs-path>` invocation, and the script's
-    # internal TEMPLATE default (/opt/baluhost/...) matches the prod INSTALL_DIR.
-    HARDWARE_SUDOERS_SCRIPT="$INSTALL_DIR/deploy/scripts/install-hardware-sudoers.sh"
-    if [[ -f "$HARDWARE_SUDOERS_SCRIPT" ]]; then
-        log_info "Re-applying hardware sudoers..."
-        if sudo bash "$HARDWARE_SUDOERS_SCRIPT"; then
-            log_info "Hardware sudoers sync OK."
-        else
-            log_warn "Hardware sudoers sync failed (non-fatal — deploy continues)."
-        fi
-    else
-        log_warn "Hardware sudoers script not found at $HARDWARE_SUDOERS_SCRIPT (skipping)."
-    fi
+    # Der Installer rendert @@BALUHOST_USER@@ aus dem laufenden Dienstbenutzer
+    # und prueft mit visudo, bevor er die Live-Datei ersetzt.
+    run_permission_script "Hardware sudoers"         "$INSTALL_DIR/deploy/scripts/install-hardware-sudoers.sh"
 
-    # Power sudoers: power-profiles-daemon stop/start/mask/unmask + logind idle
-    # helper + sddm desktop-toggle grants. The installer renders @@BALUHOST_USER@@
-    # from the running service user and validates with visudo before replacing the
-    # live file. This is the path by which sudoers-baluhost-power template changes
-    # reach an installed box; it also clears the obsolete /etc/sudoers.d/baluhost-ppd
-    # workaround once superseded. Invoked with no env vars (like the others): the
-    # deploy sudoers rule whitelists this exact `bash <abs-path>` invocation, and the
-    # script's internal TEMPLATE default (/opt/baluhost/...) matches the prod INSTALL_DIR.
-    POWER_SUDOERS_SCRIPT="$INSTALL_DIR/deploy/scripts/install-power-sudoers.sh"
-    if [[ -f "$POWER_SUDOERS_SCRIPT" ]]; then
-        log_info "Re-applying power sudoers..."
-        if sudo bash "$POWER_SUDOERS_SCRIPT"; then
-            log_info "Power sudoers sync OK."
-        else
-            log_warn "Power sudoers sync failed (non-fatal — deploy continues)."
-        fi
-    else
-        log_warn "Power sudoers script not found at $POWER_SUDOERS_SCRIPT (skipping)."
-    fi
+    # Power sudoers: power-profiles-daemon stop/start/mask/unmask + logind-idle
+    # + sddm-Desktop-Toggle. Raeumt zusaetzlich die ueberholte
+    # /etc/sudoers.d/baluhost-ppd-Zwischenloesung ab.
+    run_permission_script "Power sudoers"         "$INSTALL_DIR/deploy/scripts/install-power-sudoers.sh"
 
     # Future permission scripts go here following the same pattern:
     # if [[ -f "$INSTALL_DIR/deploy/scripts/install-<thing>-permissions.sh" ]]; then ...
