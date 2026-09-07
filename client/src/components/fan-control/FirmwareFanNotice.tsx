@@ -208,7 +208,7 @@ export default function FirmwareFanNotice({ fanId }: Props) {
                     min={node.minimum}
                     max={node.maximum}
                     value={draft[name]}
-                    disabled={!managed[name]}
+                    disabled={!managed[name] || acousticsBusy}
                     onChange={(e) =>
                       setDraft({ ...draft, [name]: parseInt(e.target.value, 10) })}
                     className="w-full disabled:opacity-40"
