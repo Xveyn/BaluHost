@@ -15,6 +15,7 @@ denselben Zweck.
 """
 from __future__ import annotations
 
+import json
 import logging
 import os
 from typing import Optional
@@ -50,8 +51,39 @@ def read_write_permission(db: Session) -> Optional[bool]:
     return None if row is None else bool(row.has_write_permission)
 
 
-def publish_write_permission(db: Session, may_write: bool) -> bool:
+def read_denied_fans(db: Session) -> Optional[set]:
+    """Die vom Primary gemeldeten Kanaele ohne Schreibrecht (#568 Punkt 2).
+
+    Returns:
+        None, wenn nichts veroeffentlicht wurde -- das ist ausdruecklich NICHT
+        dasselbe wie "kein Kanal betroffen". Der Aufrufer soll dann seine
+        eigene Sicht behalten statt eine leere Menge als Tatsache zu nehmen.
+    """
+    try:
+        row = db.execute(
+            select(FanRuntimeState).where(FanRuntimeState.id == _SINGLETON_ID)
+        ).scalar_one_or_none()
+    except Exception as exc:
+        logger.debug("fan_runtime_state nicht lesbar: %s", exc)
+        return None
+    if row is None or not row.denied_fan_ids:
+        return None
+    try:
+        werte = json.loads(row.denied_fan_ids)
+    except (ValueError, TypeError) as exc:
+        logger.debug("denied_fan_ids nicht lesbar: %s", exc)
+        return None
+    return set(werte) if isinstance(werte, list) else None
+
+
+def publish_write_permission(db: Session, may_write: bool,
+                             denied_fan_ids: Optional[set] = None) -> bool:
     """Den eigenen Stand hinterlegen. Legt die Zeile an, falls noetig.
+
+    Args:
+        denied_fan_ids: die Kanaele, auf denen ein EACCES beobachtet wurde.
+            None laesst die gespeicherte Liste unberuehrt -- so bleibt der
+            Aufrufer, der nur das Flag kennt, rueckwaertskompatibel.
 
     Returns:
         False bei einem Datenbankfehler -- der Aufrufer soll dann seinen
@@ -66,6 +98,8 @@ def publish_write_permission(db: Session, may_write: bool) -> bool:
             row = FanRuntimeState(id=_SINGLETON_ID)
             db.add(row)
         row.has_write_permission = bool(may_write)
+        if denied_fan_ids is not None:
+            row.denied_fan_ids = json.dumps(sorted(denied_fan_ids))
         row.updated_by_pid = os.getpid()
         db.commit()
         return True

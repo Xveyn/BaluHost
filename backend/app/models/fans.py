@@ -212,6 +212,15 @@ class FanRuntimeState(Base):
     has_write_permission: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False
     )
+    # Die Kanaele, auf denen der Primary ein EACCES gesehen hat, als
+    # JSON-Liste (#568 Punkt 2). Dieselbe Begruendung wie fuer die Spalte
+    # darueber, nur eine Ebene feiner: pwm_control lebt im _fan_cache des
+    # jeweiligen Workers, gesetzt wird es aber nur von dem, der schreibt --
+    # also vom Primary. Ohne diese Zeile meldeten die drei Follower fuer
+    # denselben Kanal weiter `supported`, und das Badge in der Karte
+    # erschiene und verschwaende im 5-Sekunden-Poll, je nachdem welcher
+    # Worker gerade antwortet.
+    denied_fan_ids: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

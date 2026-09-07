@@ -25,6 +25,7 @@ from app.models.fans import FanConfig, FanSample
 from app.schemas.fans import FanMode, FanCurvePoint, PwmControl
 from app.services.power.fan_restore import is_observation, needs_release, resolve_restore_value
 from app.services.power.fan_runtime_store import (
+    read_denied_fans,
     publish_write_permission,
     read_write_permission,
 )
@@ -199,6 +200,9 @@ class FanControlService:
         # Zuletzt veroeffentlichter Rechtezustand. None heisst: noch nie
         # geschrieben -- dann wird beim ersten Abgleich veroeffentlicht (#552).
         self._published_write_permission: Optional[bool] = None
+        # Zuletzt veroeffentlichte Menge gesperrter Kanaele. None heisst wie
+        # oben: noch nie geschrieben (#568).
+        self._published_denied_fans: Optional[set] = None
 
         FanControlService._instance = self
 
@@ -288,11 +292,32 @@ class FanControlService:
         holen = getattr(self._backend, "has_write_permission", None)
         current = holen() if callable(holen) else getattr(
             self._backend, "_has_write_permission", None)
-        if current is None or current == self._published_write_permission:
+        if current is None:
+            return
+
+        # Die betroffenen Kanaele mitveroeffentlichen (#568 Punkt 2): sie
+        # leben im _fan_cache dessen, der schreibt -- also nur hier. Ohne das
+        # meldeten die drei Follower fuer denselben Kanal weiter `supported`
+        # und das Badge flackerte im 5-Sekunden-Poll.
+        denied = self._denied_fan_ids()
+        if (current == self._published_write_permission
+                and denied == self._published_denied_fans):
             return
         with self.db_session_factory() as db:
-            if publish_write_permission(db, current):
+            if publish_write_permission(db, current, denied):
                 self._published_write_permission = current
+                self._published_denied_fans = denied
+
+    def _denied_fan_ids(self) -> set:
+        """Die Kanaele, auf denen der Backend-Cache ein EACCES vermerkt hat."""
+        cache = getattr(self._backend, "_fan_cache", None)
+        if not isinstance(cache, dict):
+            return set()
+        return {
+            fan_id for fan_id, info in cache.items()
+            if isinstance(info, dict)
+            and info.get("pwm_control") is PwmControl.NO_PERMISSION
+        }
 
     async def _cancel_monitoring_task(self) -> None:
         """Bricht eine laufende Regelschleife ab und gibt die Referenz frei.
@@ -965,6 +990,16 @@ class FanControlService:
         while self._is_running:
             try:
                 await self._monitor_and_control_fans()
+                # Sagt die Ableitung gerade `readonly`, noch einmal probieren
+                # (#568): der Regelkreis schreibt einen Luefter im
+                # MANUAL-Modus nie, und die Anzeige sperrt die
+                # Bedienelemente -- ohne diese Probe gaebe es keinen Weg
+                # zurueck ausser einem Dienst-Neustart. Die Methode taktet
+                # sich selbst und ist ein No-op, solange geschrieben werden
+                # darf.
+                erneut = getattr(self._backend, "recheck_write_permission", None)
+                if erneut is not None:
+                    await erneut()
                 # Nach dem Regelzyklus: ein erfolgreicher Write kann den
                 # Rechtezustand geheilt haben, den die Follower nur ueber
                 # die veroeffentlichte Zeile erfahren (#552).
@@ -1286,6 +1321,27 @@ class FanControlService:
                         "response_time_seconds": 0.0,
                         "pwm_steps": 1,
                     })
+
+        # Den vom Primary gemeldeten Kanalzustand ueberlagern (#568 Punkt 2).
+        # pwm_control lebt im _fan_cache des jeweiligen Workers, gesetzt wird
+        # es aber nur von dem, der schreibt. Ohne diese Ueberlagerung meldeten
+        # die drei Follower fuer denselben Kanal weiter `supported`, und das
+        # Badge in der Karte erschiene und verschwaende im 5-Sekunden-Poll.
+        if self._use_linux_backend:
+            with self.db_session_factory() as db:
+                gesperrt = read_denied_fans(db)
+            if gesperrt is not None:
+                for eintrag in fan_data_list:
+                    if eintrag.get("pwm_control") is PwmControl.FIRMWARE_MANAGED:
+                        # Eine dauerhafte Hardware-Eigenschaft. Sie darf von
+                        # einem Laufzeit-Befund nicht ueberschrieben werden.
+                        continue
+                    if eintrag["fan_id"] in gesperrt:
+                        eintrag["pwm_control"] = PwmControl.NO_PERMISSION
+                    elif eintrag.get("pwm_control") is PwmControl.NO_PERMISSION:
+                        # Der Primary meldet den Kanal nicht mehr als gesperrt:
+                        # ein eigener, veralteter Befund wird zurueckgenommen.
+                        eintrag["pwm_control"] = PwmControl.SUPPORTED
 
         # Determine permission status
         permission_status = "ok"

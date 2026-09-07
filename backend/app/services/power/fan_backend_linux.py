@@ -55,6 +55,12 @@ PWM_BACKOFF_MAX_SECONDS = 900.0  # 15 Minuten
 class LinuxFanControlBackend(FanControlBackend):
     """Linux hardware backend using hwmon sysfs."""
 
+    # Abstand zwischen zwei Rechte-Proben, wenn die Ableitung `readonly`
+    # sagt. Lang genug, dass ein dauerhaft rechteloser Zustand keine Last
+    # erzeugt, kurz genug, dass eine reparierte Rechtelage von selbst
+    # zurueckfindet (#568).
+    _PERMISSION_RECHECK_SECONDS = 60.0
+
     def __init__(self, config: Settings):
         self.config = config
         self._hwmon_base = Path("/sys/class/hwmon")
@@ -64,6 +70,8 @@ class LinuxFanControlBackend(FanControlBackend):
         # Bewusst NICHT in _fan_cache: der wird bei jedem Rescan neu gebaut,
         # der Backoff muss das ueberleben.
         self._write_backoff: Dict[str, Tuple[int, float]] = {}
+        # Fruehestens erlaubter Zeitpunkt der naechsten Rechte-Probe (#568).
+        self._next_permission_recheck: float = 0.0
         # Rueckabbildung stabile Sensor-Kennung -> tempN_input-Pfad. Ohne sie
         # kann get_temperature() die ID nicht mehr aufloesen, weil sie nicht
         # mehr aus dem hwmon-Verzeichnisnamen besteht (#532).
@@ -122,10 +130,43 @@ class LinuxFanControlBackend(FanControlBackend):
             ok, _ = await self._write_hwmon_file(probe_path, str(current))
             if ok:
                 self._has_write_permission = True
+                # Auch den Kanalzustand zuruecknehmen (#568): sonst bliebe die
+                # Ableitung in has_write_permission() auf NO_PERMISSION stehen,
+                # obwohl die Probe gerade bewiesen hat, dass geschrieben werden
+                # darf.
+                if fan_info.get("pwm_control") is PwmControl.NO_PERMISSION:
+                    fan_info["pwm_control"] = PwmControl.SUPPORTED
+                    fan_info["last_write_error"] = None
                 logger.info(f"Fan control: write permission available ({fan_id})")
                 return
 
         logger.info("Fan control: no write permission (readonly mode)")
+
+    async def recheck_write_permission(self) -> None:
+        """Die Probe erneut fahren, wenn die Ableitung gerade `readonly` sagt.
+
+        Ohne das kann sich der abgeleitete Zustand FESTSETZEN. Geheilt wird er
+        nur ueber einen erfolgreichen Write, und den loest im Regelbetrieb
+        allein der Regelkreis aus -- der einen Luefter im MANUAL-Modus nie
+        schreibt (Ziel == Ist, siehe fan_control._apply_fan_curve). Sind die
+        Rechte weg, meldet die Anzeige `readonly` und SPERRT die
+        Bedienelemente; damit faellt auch der einzige verbliebene Schreibweg
+        weg, die HTTP-Route. Der Nutzer kaeme ohne Dienst-Neustart nicht mehr
+        heraus -- ein lauter Fehler statt des behobenen stillen, und ein
+        schlechterer Tausch.
+
+        Die Probe schreibt pwm_enable mit dem Wert, der dort bereits steht, ist
+        also kein Eingriff. Sie laeuft hoechstens alle
+        `_PERMISSION_RECHECK_SECONDS`, damit ein dauerhaft rechteloser Zustand
+        nicht jeden Regelzyklus einen Schreibversuch je Kanal ausloest.
+        """
+        if self.has_write_permission():
+            return
+        jetzt = self._monotonic()
+        if jetzt < self._next_permission_recheck:
+            return
+        self._next_permission_recheck = jetzt + self._PERMISSION_RECHECK_SECONDS
+        await self._check_write_permission()
 
     def has_write_permission(self) -> bool:
         """Ob BaluHost derzeit ueberhaupt einen Luefter schreiben kann.

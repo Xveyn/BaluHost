@@ -114,3 +114,114 @@ async def test_ein_erfolgreicher_write_holt_die_anzeige_zurueck(monkeypatch, tmp
     await backend.set_pwm("nct6798:pwm1", 50)
 
     assert backend.has_write_permission() is True
+
+
+# --- Die Sackgasse, die die Ableitung sonst erzeugt (#568) -------------------
+
+def _backend_mit_probe(*, kanaele: dict, schreibbar: bool, uhr: list):
+    backend = _backend(geprueft=True, kanaele=kanaele)
+    backend._write_backoff = {}
+    backend._next_permission_recheck = 0.0
+    backend._monotonic = lambda: uhr[0]
+
+    async def _read(path):
+        return "1"
+
+    async def _write(path, value):
+        if schreibbar:
+            backend._has_write_permission = True
+            return True, None
+        return False, 13  # EACCES
+
+    backend._read_hwmon_file = _read
+    backend._write_hwmon_file = _write
+    return backend
+
+
+@pytest.mark.asyncio
+async def test_die_anzeige_findet_ohne_zutun_zurueck(monkeypatch, tmp_path):
+    """Der Kern des Befunds: geheilt wurde bisher nur ueber einen
+    erfolgreichen Write, und den loest der Regelkreis fuer einen Luefter im
+    MANUAL-Modus nie aus (Ziel == Ist). Da die Anzeige zugleich die
+    Bedienelemente sperrt, faellt auch der letzte Schreibweg weg -- ohne die
+    erneute Probe kaeme der Nutzer nur ueber einen Dienst-Neustart heraus.
+    """
+    uhr = [0.0]
+    kanaele = {
+        "nct6798:pwm1": {"pwm_control": PwmControl.NO_PERMISSION,
+                         "pwm_enable_path": tmp_path / "pwm1_enable",
+                         "last_write_error": "kein Schreibrecht"},
+    }
+    backend = _backend_mit_probe(kanaele=kanaele, schreibbar=True, uhr=uhr)
+    assert backend.has_write_permission() is False
+
+    await backend.recheck_write_permission()
+
+    assert backend.has_write_permission() is True
+    assert kanaele["nct6798:pwm1"]["pwm_control"] is PwmControl.SUPPORTED
+    assert kanaele["nct6798:pwm1"]["last_write_error"] is None
+
+
+@pytest.mark.asyncio
+async def test_ohne_rechte_bleibt_es_bei_readonly(tmp_path):
+    """Die Gegenrichtung: scheitert die Probe, bleibt die Aussage bestehen."""
+    uhr = [0.0]
+    kanaele = {
+        "nct6798:pwm1": {"pwm_control": PwmControl.NO_PERMISSION,
+                         "pwm_enable_path": tmp_path / "pwm1_enable"},
+    }
+    backend = _backend_mit_probe(kanaele=kanaele, schreibbar=False, uhr=uhr)
+
+    await backend.recheck_write_permission()
+
+    assert backend.has_write_permission() is False
+
+
+@pytest.mark.asyncio
+async def test_die_probe_taktet_sich(tmp_path):
+    """Sonst liefe bei dauerhaft fehlenden Rechten jeden Regelzyklus ein
+    Schreibversuch je Kanal -- genau die Last, die #533 beseitigt hat."""
+    uhr = [0.0]
+    versuche = []
+    kanaele = {
+        "nct6798:pwm1": {"pwm_control": PwmControl.NO_PERMISSION,
+                         "pwm_enable_path": tmp_path / "pwm1_enable"},
+    }
+    backend = _backend_mit_probe(kanaele=kanaele, schreibbar=False, uhr=uhr)
+    urspruenglich = backend._write_hwmon_file
+
+    async def _zaehlend(path, value):
+        versuche.append(path)
+        return await urspruenglich(path, value)
+
+    backend._write_hwmon_file = _zaehlend
+
+    await backend.recheck_write_permission()
+    await backend.recheck_write_permission()   # sofort danach: unterdrueckt
+    assert len(versuche) == 1
+
+    uhr[0] += backend._PERMISSION_RECHECK_SECONDS + 1
+    await backend.recheck_write_permission()
+    assert len(versuche) == 2
+
+
+@pytest.mark.asyncio
+async def test_bei_vorhandenem_schreibrecht_passiert_nichts(tmp_path):
+    """Ein No-op im Normalbetrieb -- die Probe darf nicht jeden Zyklus
+    schreiben, nur weil sie aufgerufen wird."""
+    uhr = [0.0]
+    versuche = []
+    kanaele = {"nct6798:pwm1": {"pwm_control": PwmControl.SUPPORTED,
+                                "pwm_enable_path": tmp_path / "pwm1_enable"}}
+    backend = _backend_mit_probe(kanaele=kanaele, schreibbar=True, uhr=uhr)
+    urspruenglich = backend._write_hwmon_file
+
+    async def _zaehlend(path, value):
+        versuche.append(path)
+        return await urspruenglich(path, value)
+
+    backend._write_hwmon_file = _zaehlend
+
+    await backend.recheck_write_permission()
+
+    assert versuche == []
