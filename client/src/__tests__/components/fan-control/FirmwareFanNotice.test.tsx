@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import FirmwareFanNotice from '../../../components/fan-control/FirmwareFanNotice';
 
@@ -31,6 +31,15 @@ vi.mock('../../../api/fan-control', () => ({
 
 import toast from 'react-hot-toast';
 import { getGpuAcoustics, setGpuAcoustics } from '../../../api/fan-control';
+
+// Ohne dieses beforeEach liefen Aufrufzaehler ueber Tests hinweg zusammen:
+// `clearAllMocks` loescht nur Aufrufe/Ergebnisse, nicht die per
+// mockResolvedValue gesetzten Rueckgabewerte -- die auf Modulebene im
+// vi.mock-Block gesetzte Standardantwort von getGpuAcoustics bleibt also
+// erhalten (Befund A, #570).
+beforeEach(() => {
+  vi.clearAllMocks();
+});
 
 describe('FirmwareFanNotice: Ausstieg aus dem manuellen Modus bleibt erreichbar', () => {
   it('bietet einen Reset-Button, der setGpuManualMode(fanId, false) aufruft', async () => {
@@ -175,10 +184,6 @@ it('zeigt den aktuellen Wert der Karte je Knoten an, nicht nur den Entwurf', asy
 });
 
 it('meldet einen von der Karte abgelehnten Write, statt Erfolg zu behaupten', async () => {
-  // Die Toast-Mocks werden zwischen den Tests dieser Datei nicht
-  // zurueckgesetzt; ohne mockClear zaehlte hier der Erfolg eines
-  // frueheren Tests mit.
-  vi.mocked(toast.success).mockClear();
   vi.mocked(getGpuAcoustics).mockResolvedValue(FULL_STATUS);
   vi.mocked(setGpuAcoustics).mockResolvedValue({
     ...FULL_STATUS,
@@ -208,6 +213,27 @@ it('meldet eine 503 als Konfigurationsproblem, nicht als Hardware-Fehler', async
 
   const error = await screen.findByTestId('gpu-acoustics-error');
   expect(error.textContent).toContain('configUnavailable');
+});
+
+it('meldet eine 503 vom Reverse-Proxy nicht als Konfigurationsproblem', async () => {
+  // Ein Proxy-503 traegt kein `detail`, das mit "GPU acoustics configuration"
+  // beginnt -- anders als der Test "meldet eine 503 als Konfigurationsproblem"
+  // weiter oben, der genau das mitschickt. Dieser Fehlerpfad setzt applyError
+  // NICHT (er laeuft ueber handleApiError/Toast statt ueber das
+  // gpu-acoustics-error-Testid), deshalb wird hier ueber den Toast-Aufruf
+  // und das Fehlen des Testids geprueft, nicht ueber dessen Inhalt.
+  vi.mocked(getGpuAcoustics).mockResolvedValue(FULL_STATUS);
+  vi.mocked(setGpuAcoustics).mockRejectedValue({
+    response: { status: 503, data: '<html>503 Service Temporarily Unavailable</html>' },
+  });
+  render(<FirmwareFanNotice fanId="amdgpu-pci-0300:pwm1" />);
+
+  fireEvent.click(await screen.findByText('system:fanControl.gpu.acoustics.save'));
+
+  await waitFor(() => expect(toast.error).toHaveBeenCalled());
+  const lastToastMessage = vi.mocked(toast.error).mock.calls.at(-1)?.[0];
+  expect(lastToastMessage).not.toContain('configUnavailable');
+  expect(screen.queryByTestId('gpu-acoustics-error')).toBeNull();
 });
 
 it('haelt einen Knoten ohne desired als nicht verwaltet: Regler gesperrt, Markierung leer', async () => {
@@ -260,6 +286,36 @@ it('sendet fuer nicht markierte Knoten null: nur die Zieltemperatur wird verwalt
       fan_minimum_pwm: null,
     });
   });
+});
+
+it('sperrt auch die Regler, solange eine Anfrage laeuft', async () => {
+  // Ein VERWALTETER Knoten, sonst waere der Regler schon durch
+  // !managed[name] gesperrt und der Test bewiese nichts -- dieselbe
+  // Konstruktion wie in "zeigt einen bereits verwalteten Knoten als
+  // markiert und bedienbar".
+  const managedStatus = {
+    ...FULL_STATUS,
+    nodes: {
+      ...FOUR_NODES,
+      fan_target_temperature: { current: 95, minimum: 25, maximum: 105, desired: 78 },
+    },
+  };
+  vi.mocked(getGpuAcoustics).mockResolvedValue(managedStatus);
+  let resolvePut: (v: unknown) => void = () => {};
+  vi.mocked(setGpuAcoustics).mockReturnValue(
+    new Promise((res) => { resolvePut = res; }) as ReturnType<typeof setGpuAcoustics>,
+  );
+  render(<FirmwareFanNotice fanId="amdgpu-pci-0300:pwm1" />);
+
+  const slider = await screen.findByRole('slider', { name: /fan_target_temperature/ });
+  expect(slider).not.toBeDisabled();
+
+  fireEvent.click(screen.getByText('system:fanControl.gpu.acoustics.save'));
+
+  await waitFor(() => expect(slider).toBeDisabled());
+
+  resolvePut(managedStatus);
+  await waitFor(() => expect(slider).not.toBeDisabled());
 });
 
 it('laesst einen Knoten aus, den der PUT gar nicht setzen kann (Kernel 6.13)', async () => {

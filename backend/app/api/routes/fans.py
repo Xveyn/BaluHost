@@ -2,6 +2,7 @@
 Fan control API endpoints.
 """
 import logging
+import re
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -1083,9 +1084,16 @@ LACT_CONFIG_PATH = Path("/etc/lact/config.yaml")
 
 
 def _competing_manager() -> Optional[str]:
+    # Zeilenweise statt als Teilstring: ein auskommentierter Block enthaelt
+    # das Wort ebenfalls, und LACT liest ihn nicht (#570).
     try:
-        if LACT_CONFIG_PATH.exists() and "pmfw_options" in LACT_CONFIG_PATH.read_text():
-            return "lact"
+        if not LACT_CONFIG_PATH.exists():
+            return None
+        for line in LACT_CONFIG_PATH.read_text().splitlines():
+            # \s*: statt startswith, damit ein aehnlich benannter Schluessel
+            # wie pmfw_options_extra keine Wortgrenze verletzt (#570).
+            if re.match(r"pmfw_options\s*:", line.lstrip()):
+                return "lact"
     except (OSError, ValueError):
         # ValueError deckt UnicodeDecodeError mit ab: eine von Hand
         # geschriebene Datei in Latin-1 darf den GET nicht zur 500 machen.

@@ -163,3 +163,34 @@ async def test_start_applies_the_configuration(session_factory, monkeypatch):
     await service.start(monitoring=False)
 
     assert written == [("fan_minimum_pwm", 40)]
+
+
+@pytest.mark.asyncio
+async def test_apply_acoustics_nutzt_den_weichen_loader(
+    session_factory, monkeypatch
+):
+    """apply_acoustics() muss den WEICHEN Loader nehmen (#570).
+
+    Geprueft wird hier direkt apply_acoustics(), nicht der Startpfad --
+    der ruft apply_acoustics() seinerseits auf (siehe
+    test_start_applies_the_configuration), das Primary-Gate von start()
+    ist fuer diese Frage ohne Bedeutung. Naehme apply_acoustics stattdessen
+    die harte Ladevariante, wuerde eine unlesbare Zeile
+    AcousticsConfigUnreadable werfen. Dass ein Aufrufer wie start() das in
+    try/except faengt, macht die Wahl des Loaders nicht ueberfluessig -- es
+    verbirgt nur ihren Verlust.
+    """
+    from app.models.fans import GpuFanAcousticsConfigDb
+
+    with session_factory() as db:
+        db.add(GpuFanAcousticsConfigDb(id=1, config_json="{kein gueltiges json"))
+        db.commit()
+
+    service = _service(session_factory, monkeypatch)
+    written: list = []
+    _patch_module(monkeypatch, current={}, written=written)
+
+    result = await service.apply_acoustics()
+
+    assert result == {}
+    assert written == []

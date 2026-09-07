@@ -62,9 +62,14 @@ function managedFromNodes(nodes: Record<string, GpuAcousticsNode>): Record<strin
 
 // A 503 from the PUT means the stored configuration is unreadable or could
 // not be saved — the card is not at fault, and the message must not read as
-// if it were.
+// if it were. Der Statuscode allein reicht dafuer nicht: 503 kommt auch vom
+// Reverse-Proxy waehrend eines Deploy-Neustarts, und dann waere die
+// Diagnose ueber die Konfiguration schlicht falsch (#570).
 function isConfigUnavailable(err: unknown): boolean {
-  return (err as { response?: { status?: number } })?.response?.status === 503;
+  const response = (err as { response?: { status?: number; data?: unknown } })?.response;
+  if (response?.status !== 503) return false;
+  const detail = (response.data as { detail?: unknown } | undefined)?.detail;
+  return typeof detail === 'string' && detail.startsWith('GPU acoustics configuration');
 }
 
 export default function FirmwareFanNotice({ fanId }: Props) {
@@ -208,7 +213,7 @@ export default function FirmwareFanNotice({ fanId }: Props) {
                     min={node.minimum}
                     max={node.maximum}
                     value={draft[name]}
-                    disabled={!managed[name]}
+                    disabled={!managed[name] || acousticsBusy}
                     onChange={(e) =>
                       setDraft({ ...draft, [name]: parseInt(e.target.value, 10) })}
                     className="w-full disabled:opacity-40"
