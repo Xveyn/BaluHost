@@ -9,6 +9,7 @@ Aufgefallen ist das beim Verengen der sudoers-Regeln: dort ist die Namensform
 auf md0..md999 begrenzt, und die Frage "was passiert mit einem bestehenden
 Array ausserhalb dieser Form" hatte bis dahin keine gute Antwort.
 """
+import subprocess
 from unittest.mock import MagicMock
 
 import pytest
@@ -28,18 +29,24 @@ def _backend(monkeypatch, *, arrays: dict, kaputt: set[str]) -> MdadmRaidBackend
     monkeypatch.setattr(MdadmRaidBackend, "_read_speed_limits",
                         lambda self: RaidSpeedLimits(minimum=1000, maximum=200000))
 
-    echtes_build = MdadmRaidBackend._build_array
+    # Der Fehler wird NICHT in _build_array injiziert, sondern dort, wo er real
+    # entsteht: subprocess.run wirft CalledProcessError, das echte _run wandelt
+    # ihn in RuntimeError um. Damit laeuft der Pfad, den die Produktion nimmt --
+    # eine Attrappe um _build_array herum haette die Umwandlung uebersprungen.
+    def _subprocess_run(cmd, **kw):
+        ziel = cmd[-1] if isinstance(cmd, (list, tuple)) else str(cmd)
+        if any(f"/dev/{name}" == ziel for name in kaputt):
+            raise subprocess.CalledProcessError(
+                returncode=1, cmd=cmd,
+                stderr=f"mdadm: cannot open {ziel}: No such file or directory",
+            )
+        return subprocess.CompletedProcess(
+            args=cmd, returncode=0,
+            stdout="Raid Level : raid1\nState : clean\n", stderr="",
+        )
 
-    def _build(self, name, info, disk_type_map=None):
-        if name in kaputt:
-            raise RuntimeError(f"mdadm: cannot open /dev/{name}: No such file or directory")
-        return echtes_build(self, name, info, disk_type_map)
-
-    monkeypatch.setattr(MdadmRaidBackend, "_build_array", _build)
-    monkeypatch.setattr(
-        MdadmRaidBackend, "_run",
-        lambda self, cmd, **kw: MagicMock(stdout="Raid Level : raid1\nState : clean\n"),
-    )
+    monkeypatch.setattr("app.services.hardware.raid.mdadm_backend.subprocess.run",
+                        _subprocess_run)
     monkeypatch.setattr(MdadmRaidBackend, "_resolve_array_size", lambda *a, **k: 1024)
     monkeypatch.setattr(MdadmRaidBackend, "_resolve_progress", lambda *a, **k: None)
     monkeypatch.setattr(MdadmRaidBackend, "_parse_devices", lambda *a, **k: [])

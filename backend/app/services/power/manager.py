@@ -515,8 +515,8 @@ class PowerManagerService:
                 await self._check_expired_demands()
                 await self._check_auto_scaling()
                 await self._write_status_shm()
-            except Exception as e:
-                logger.error(f"Error in power monitor loop: {e}")
+            except Exception:
+                logger.exception("Error in power monitor loop")
 
             await asyncio.sleep(5)  # Check every 5 seconds
 
@@ -868,8 +868,8 @@ class PowerManagerService:
                 if self._primary and self._authority_active():
                     await self._watch_tick()
                     await self._enforce_current_profile()
-            except Exception as e:
-                logger.error(f"Error in enforcement loop: {e}")
+            except Exception:
+                logger.exception("Error in enforcement loop")
             await asyncio.sleep(2)
 
     async def _get_profile_config_from_preset(

@@ -72,7 +72,13 @@ class MdadmRaidBackend:
                 # ungewoehnlichen Namen, ein gerade verschwundenes Geraet --,
                 # brach bisher die gesamte RAID-Statusabfrage ab. Der Nutzer
                 # sah dann gar keine Arrays statt eines fehlerhaften.
-                logger.warning("RAID-Details fuer %s nicht lesbar: %s", name, exc)
+                # exc_info, weil eine Ausnahme ohne Argumente sonst eine
+                # leere Meldung hinterliesse -- genau der Fall, den dieser
+                # Commit im GPU-Manager behebt. _run loggt denselben
+                # Fehlschlag bereits auf ERROR; hier steht der Kontext,
+                # WELCHES Array betroffen ist.
+                logger.warning("RAID-Details fuer %s nicht lesbar: %s", name, exc,
+                               exc_info=True)
                 # Was /proc/mdstat hergibt, bleibt sichtbar: die Mitglieder
                 # stehen dort auch dann, wenn `mdadm --detail` scheitert.
                 # MdstatInfo fuehrt kein Level -- deshalb "unknown".

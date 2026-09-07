@@ -481,13 +481,19 @@ async def get_mountpoints(
                     used_bytes = 0
                     available_bytes = 0
 
+            # Umgedreht formuliert (#570): frueher hob nur "degraded" oder
+            # "rebuilding" den Zustand von "optimal" weg -- jeder unbekannte
+            # Wert galt damit als in Ordnung. Seit get_status() ein nicht
+            # lesbares Array als "unknown" meldet statt die ganze Antwort
+            # abzubrechen, waere das ein gruenes Signal fuer einen Fehlerfall.
+            _GESUND = {"optimal", "clean", "active"}
             worst_status = "optimal"
             for a in raid_arrays:
                 if a.status == "degraded":
                     worst_status = "degraded"
                     break
-                if a.status == "rebuilding" and worst_status != "degraded":
-                    worst_status = "rebuilding"
+                if a.status not in _GESUND and worst_status == "optimal":
+                    worst_status = a.status
 
             breakdown = compute_storage_breakdown(
                 raid_mountpoint or str(ROOT_DIR), used_bytes, db,
