@@ -883,7 +883,7 @@
       "released": "Board in control",
       "releasedHint": "BaluHost handed control of this channel back to the mainboard's automation. Temperature monitoring continues.",
       "abandoned": "Nobody in control",
-      "abandonedHint": "BaluHost no longer controls this channel, and handing control back to the board automation failed -- the fan keeps running at its last value. Temperature monitoring continues.",
+      "abandonedHint": "BaluHost no longer controls this channel, and handing control back to the board automation failed — the fan keeps running at its last value. Temperature monitoring continues.",
       "reacquire": "Take back control",
       "reacquireSuccess": "Fan control taken back",
       "causeNotControllable": "Cause: BaluHost repeatedly failed to write this channel.",

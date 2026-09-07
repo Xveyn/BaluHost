@@ -1113,6 +1113,15 @@ class FanControlService:
             freigegeben = read_released_fans(db)
         freigaben_vorher = dict(freigegeben)
 
+        # Eintraege von Kanaelen, die es nicht mehr gibt: sonst erbte derselbe
+        # Luefter bei seiner Rueckkehr die alte Ausfallzeit (#534). Ein
+        # voruebergehend leeres get_fans() raeumt damit alle Fristen -- das
+        # irrt in die sichere Richtung, es wird dann eher zu spaet abgegeben
+        # als zu frueh.
+        bekannt = {f.fan_id for f in fans}
+        for verschwunden in set(self._kein_zielwert_seit) - bekannt:
+            del self._kein_zielwert_seit[verschwunden]
+
         # Eine Wiederuebernahme kommt ueber einen BELIEBIGEN Worker (die Route
         # laeuft dort, wo die Anfrage landet), der Fehlerzaehler lebt aber im
         # Prozess des Primary. Ohne diesen Abgleich saehe er den Kanal zwar
@@ -1120,12 +1129,6 @@ class FanControlService:
         # Deckel stehenden -- Zaehler und gaebe ihn im selben Zyklus erneut ab.
         # Der Nutzer bekaeme einen Erfolg gemeldet und fuenf Sekunden spaeter
         # wieder "Board regelt" (#534).
-        # Eintraege von Kanaelen, die es nicht mehr gibt: sonst erbte derselbe
-        # Luefter bei seiner Rueckkehr die alte Ausfallzeit (#534).
-        bekannt = {f.fan_id for f in fans}
-        for verschwunden in set(self._kein_zielwert_seit) - bekannt:
-            del self._kein_zielwert_seit[verschwunden]
-
         zurueckgeholt = (
             self._zuletzt_freigegeben - set(freigegeben)
             if getattr(lifespan, "IS_PRIMARY_WORKER", False) else set()
@@ -1357,13 +1360,30 @@ class FanControlService:
                     # zwischen zwei Reglern, das #534 vermeiden will.
                     #
                     # Die Ausnahme ist ABANDONED im Notfall. Dort regelt
-                    # NIEMAND -- die Rueckgabe ist gescheitert --, und bei
-                    # Grund `no_target` ist der Kanal sogar nachweislich
-                    # schreibbar (abgegeben wurde er wegen des Sensors, nicht
-                    # wegen der Rechte). Einen Ueberhitzungsfall dann
-                    # auszusitzen, waere die falsche Vorsicht: der Write ist
-                    # erzwungen, umgeht also das Backoff, und schlaegt er fehl,
-                    # ist der Zustand derselbe wie ohne den Versuch.
+                    # NIEMAND -- die Rueckgabe ist gescheitert --, und einen
+                    # Ueberhitzungsfall auszusitzen waere die falsche Vorsicht.
+                    #
+                    # Die Ausnahme gilt fuer BEIDE Gruende, nicht nur fuer
+                    # `no_target` (wo der Kanal nachweislich schreibbar ist,
+                    # weil er wegen des Sensors abgegeben wurde). Auch bei
+                    # `not_controllable` wird es versucht: der Kanal wurde
+                    # nach acht Fehlschlaegen abgegeben, aber die Ursache kann
+                    # seither behoben sein, und im Ueberhitzungsfall ist ein
+                    # aussichtsarmer Versuch besser als keiner.
+                    #
+                    # Der Preis dafuer, damit er niemanden ueberrascht: bei
+                    # einem dauerhaft nicht schreibbaren Kanal eine
+                    # ERROR-Zeile je Regelzyklus, solange die Ueberhitzung
+                    # anhaelt. Der Write ist erzwungen, umgeht also das
+                    # Backoff und laesst dessen Zaehler unberuehrt --
+                    # dieselbe Abwaegung wie in #533: thermische Sicherheit
+                    # schlaegt Log-Hygiene, und ein Notfall ist per
+                    # Definition kein Dauerzustand.
+                    #
+                    # Nebenwirkung, die sich selbst heilt: _last_pwm_by_fan
+                    # und der Sample tragen dann 100, auch wenn der Write
+                    # scheiterte. Der erste Zyklus nach dem Notfall raeumt
+                    # das auf.
                     if not (mode == FanMode.EMERGENCY
                             and zustand is FanOwnership.ABANDONED):
                         target_pwm = fan.pwm_percent

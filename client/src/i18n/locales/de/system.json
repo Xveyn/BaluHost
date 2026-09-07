@@ -876,13 +876,13 @@
       "noPermission": "Kein Schreibrecht",
       "noPermissionHint": "BaluHost darf diesen Kanal gerade nicht schreiben. Die Regelung greift hier nicht, bis die Rechte wieder passen; die Einstellungen bleiben bedienbar und wirken, sobald ein Schreibvorgang wieder gelingt.",
       "released": "Board regelt",
-      "releasedHint": "BaluHost hat die Regelung dieses Kanals an die Automatik des Mainboards zurueckgegeben. Die Temperaturueberwachung laeuft weiter.",
+      "releasedHint": "BaluHost hat die Regelung dieses Kanals an die Automatik des Mainboards zurückgegeben. Die Temperaturüberwachung läuft weiter.",
       "abandoned": "Niemand regelt",
-      "abandonedHint": "BaluHost regelt diesen Kanal nicht mehr, und die Rueckgabe an die Board-Automatik ist fehlgeschlagen -- der Luefter laeuft auf seinem letzten Wert weiter. Die Temperaturueberwachung laeuft weiter.",
-      "reacquire": "Wieder uebernehmen",
-      "reacquireSuccess": "Luefter wieder uebernommen",
+      "abandonedHint": "BaluHost regelt diesen Kanal nicht mehr, und die Rückgabe an die Board-Automatik ist fehlgeschlagen — der Lüfter läuft auf seinem letzten Wert weiter. Die Temperaturüberwachung läuft weiter.",
+      "reacquire": "Wieder übernehmen",
+      "reacquireSuccess": "Lüfter wieder übernommen",
       "causeNotControllable": "Grund: BaluHost konnte diesen Kanal wiederholt nicht schreiben.",
-      "causeNoTarget": "Grund: die Temperaturquelle dieses Luefters liefert seit laengerem keinen Messwert."
+      "causeNoTarget": "Grund: die Temperaturquelle dieses Lüfters liefert seit längerem keinen Messwert."
     },
     "details": {
       "temperatureCol": "Temperatur (°C)",
