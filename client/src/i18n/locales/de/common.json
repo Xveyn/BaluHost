@@ -269,6 +269,10 @@
     "unlockSessionDesc": "KDE-Sperrbildschirm schließen",
     "sessionUnlocked": "Sitzung entsperrt",
     "sessionUnlockFailed": "Sitzung konnte nicht entsperrt werden",
+    "lockSession": "Sitzung sperren",
+    "lockSessionDesc": "KDE-Sperrbildschirm anzeigen",
+    "sessionLocked": "Sitzung gesperrt",
+    "sessionLockFailed": "Sitzung konnte nicht gesperrt werden",
     "pluginActionFailed": "Aktion fehlgeschlagen"
   },
   "adminOnly": "Nur für Admins",
