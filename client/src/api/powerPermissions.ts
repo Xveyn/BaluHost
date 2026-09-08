@@ -13,6 +13,7 @@ export interface UserPowerPermissions {
   can_toggle_desktop: boolean;
   can_unlock_session: boolean;
   can_control_audio: boolean;
+  can_manage_displays: boolean;
   granted_by: number | null;
   granted_by_username: string | null;
   granted_at: string | null;
@@ -26,6 +27,7 @@ export interface UserPowerPermissionsUpdate {
   can_toggle_desktop?: boolean;
   can_unlock_session?: boolean;
   can_control_audio?: boolean;
+  can_manage_displays?: boolean;
 }
 
 export interface MyPowerPermissions {
@@ -36,6 +38,7 @@ export interface MyPowerPermissions {
   can_toggle_desktop: boolean;
   can_unlock_session: boolean;
   can_control_audio: boolean;
+  can_manage_displays: boolean;
 }
 
 /**

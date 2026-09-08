@@ -103,6 +103,7 @@ All API routes are prefixed with `/api`:
 - `/api/notifications/*` - Firebase push notifications
 - `/api/plugins/*` - Plugin system
 - `/api/plugins/audio_control/*` - Audiosteuerung (Pegel, Ausgabegerät, Per-App-Mixer)
+- `/api/plugins/display_output/*` - Displaysteuerung (Ausgangswahl, Video-Modus)
 - `/api/pihole/*` - Pi-hole DNS management
 - `/api/updates/*` - Self-hosted update mechanism
 - `/api/sleep/*` - Sleep mode management

@@ -1,0 +1,18 @@
+{
+  "title": "Displays",
+  "outputs": "Outputs",
+  "mode": "Resolution — {{output}}",
+  "selected": "selected",
+  "notSelected": "not selected",
+  "lit": "lit",
+  "dark": "dark",
+  "litUnknown": "state unknown",
+  "allDark": "All screens are dark. Turn them on from the system menu.",
+  "apply": "Apply",
+  "applying": "Applying …",
+  "unavailable": "Display control is unreachable. Is the desktop session running?",
+  "loadError": "Could not load display state",
+  "saveError": "Could not apply the change",
+  "conflictError": "The mode list changed. Please try again.",
+  "keepOneSelected": "At least one output must stay selected."
+}

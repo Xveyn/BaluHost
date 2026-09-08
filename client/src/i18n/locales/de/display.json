@@ -1,0 +1,18 @@
+{
+  "title": "Displays",
+  "outputs": "Ausgänge",
+  "mode": "Auflösung — {{output}}",
+  "selected": "gewählt",
+  "notSelected": "nicht gewählt",
+  "lit": "leuchtet",
+  "dark": "dunkel",
+  "litUnknown": "Zustand unbekannt",
+  "allDark": "Alle Bildschirme sind dunkel. Im Systemmenü lassen sie sich einschalten.",
+  "apply": "Anwenden",
+  "applying": "Wird angewendet …",
+  "unavailable": "Die Displaysteuerung ist nicht erreichbar. Läuft die Desktop-Sitzung?",
+  "loadError": "Displayzustand konnte nicht geladen werden",
+  "saveError": "Änderung konnte nicht übernommen werden",
+  "conflictError": "Die Modusliste hat sich geändert. Bitte erneut versuchen.",
+  "keepOneSelected": "Mindestens ein Ausgang muss gewählt bleiben."
+}
