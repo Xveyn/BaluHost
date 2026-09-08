@@ -21,6 +21,7 @@ vi.mock('../../api/desktop', () => ({
   disableDesktop: vi.fn(),
   enableDesktop: vi.fn(),
   unlockSession: vi.fn(),
+  lockSession: vi.fn(),
 }));
 
 vi.mock('../../contexts/PluginContext', () => ({
@@ -29,7 +30,7 @@ vi.mock('../../contexts/PluginContext', () => ({
 
 import PowerMenu from '../../components/PowerMenu';
 import { getSleepStatus } from '../../api/sleep';
-import { getDesktopStatus, disableDesktop, enableDesktop, unlockSession } from '../../api/desktop';
+import { getDesktopStatus, disableDesktop, enableDesktop, unlockSession, lockSession } from '../../api/desktop';
 import toast from 'react-hot-toast';
 
 const baseProps = {
@@ -331,6 +332,100 @@ describe('PowerMenu — unlock session quick action', () => {
     render(<PowerMenu {...baseProps} />);
     openMenu();
     fireEvent.click(await screen.findByText('Unlock session'));
+    await waitFor(() => expect(toast.error).toHaveBeenCalled());
+  });
+});
+
+
+describe('PowerMenu — lock session quick action', () => {
+  const mockStatus = (state: string, sessionLocked: boolean | null) => {
+    (getDesktopStatus as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      state, display_manager: 'sddm', detail: null, session_locked: sessionLocked,
+    });
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (getSleepStatus as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({});
+  });
+
+  it('shows "Lock session" when displays are on and the session is unlocked', async () => {
+    mockStatus('running', false);
+    render(<PowerMenu {...baseProps} />);
+    openMenu();
+    expect(await screen.findByText('Lock session')).toBeInTheDocument();
+  });
+
+  it('hides it when the session is already locked', async () => {
+    mockStatus('running', true);
+    render(<PowerMenu {...baseProps} />);
+    openMenu();
+    await waitFor(() => {
+      expect(getDesktopStatus).toHaveBeenCalled();
+      expect(screen.queryByText('Lock session')).not.toBeInTheDocument();
+    });
+  });
+
+  it('hides it when the lock state is unknown', async () => {
+    // null must not be treated as "unlocked" - showing the button on a host
+    // logind cannot answer for would be a dead end.
+    mockStatus('running', null);
+    render(<PowerMenu {...baseProps} />);
+    openMenu();
+    await waitFor(() => {
+      expect(getDesktopStatus).toHaveBeenCalled();
+      expect(screen.queryByText('Lock session')).not.toBeInTheDocument();
+    });
+  });
+
+  it('hides it while the displays are off', async () => {
+    mockStatus('stopped', false);
+    render(<PowerMenu {...baseProps} />);
+    openMenu();
+    await waitFor(() => {
+      expect(screen.findByText('Enable desktop')).toBeTruthy();
+      expect(screen.queryByText('Lock session')).not.toBeInTheDocument();
+    });
+  });
+
+  it('does not show it for non-admins', async () => {
+    mockStatus('running', false);
+    render(<PowerMenu {...baseProps} isAdmin={false} />);
+    openMenu();
+    await act(async () => {});
+    expect(screen.queryByText('Lock session')).not.toBeInTheDocument();
+    expect(getDesktopStatus).not.toHaveBeenCalled();
+  });
+
+  it('clicking it calls lockSession and shows a success toast', async () => {
+    mockStatus('running', false);
+    (lockSession as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: true, message: 'session 2 locked',
+    });
+    render(<PowerMenu {...baseProps} />);
+    openMenu();
+    fireEvent.click(await screen.findByText('Lock session'));
+    await waitFor(() => expect(lockSession).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(toast.success).toHaveBeenCalled());
+  });
+
+  it('shows a translated error when the lock is refused', async () => {
+    mockStatus('running', false);
+    (lockSession as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      success: false, message: 'permission required: power:unlock_session',
+    });
+    render(<PowerMenu {...baseProps} />);
+    openMenu();
+    fireEvent.click(await screen.findByText('Lock session'));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Failed to lock the session'));
+  });
+
+  it('shows an error toast when the request itself fails', async () => {
+    mockStatus('running', false);
+    (lockSession as unknown as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('offline'));
+    render(<PowerMenu {...baseProps} />);
+    openMenu();
+    fireEvent.click(await screen.findByText('Lock session'));
     await waitFor(() => expect(toast.error).toHaveBeenCalled());
   });
 });

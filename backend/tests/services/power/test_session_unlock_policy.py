@@ -38,6 +38,15 @@ def unlock_called():
         yield backend
 
 
+@pytest.fixture
+def lock_called():
+    """Replaces the backend so no loginctl is ever invoked."""
+    backend = MagicMock()
+    backend.lock.return_value = (True, "session 2 locked")
+    with patch.object(session_lock, "get_session_lock_backend", return_value=backend):
+        yield backend
+
+
 @pytest.fixture(autouse=True)
 def _silent_audit():
     with patch.object(session_lock, "get_audit_logger_db") as factory:
@@ -208,3 +217,153 @@ class TestNeverRaises:
         assert "permission check failed" in detail
         _silent_audit.log_event.assert_not_called()
         unlock_called.unlock.assert_not_called()
+
+
+class TestLockUnlockAsymmetry:
+    """Pins the deliberate asymmetry as behaviour, not just as a comment:
+    locking has no network gate, unlocking does. The reasoning: the LAN gate
+    on unlock exists so a stolen web account cannot OPEN a physical desktop
+    from the internet. Locking is the safe direction - it only CLOSES the
+    desktop, and the situation that calls for a remote lock is exactly not
+    being in front of the machine."""
+
+    async def test_locking_succeeds_from_a_public_ip_while_unlocking_is_refused(
+        self, db_session, lock_called
+    ):
+        lock_ok, _lock_detail = await session_lock.lock_if_permitted(
+            user=_admin(), client_host=PUBLIC, db=db_session
+        )
+        unlock_ok, unlock_detail = await session_lock.unlock_if_permitted(
+            user=_admin(), client_host=PUBLIC, db=db_session
+        )
+
+        assert lock_ok is True
+        assert unlock_ok is False
+        assert "network" in unlock_detail
+
+
+class TestLockPermissionGate:
+    async def test_admin_from_a_public_ip_locks(self, db_session, lock_called):
+        ok, _detail = await session_lock.lock_if_permitted(
+            user=_admin(), client_host=PUBLIC, db=db_session
+        )
+
+        assert ok is True
+        lock_called.lock.assert_called_once()
+
+    async def test_delegated_user_with_the_permission_locks(
+        self, db_session, regular_user, lock_called
+    ):
+        db_session.add(
+            UserPowerPermission(user_id=regular_user.id, can_unlock_session=True)
+        )
+        db_session.commit()
+
+        ok, _detail = await session_lock.lock_if_permitted(
+            user=_user(regular_user.id), client_host=PUBLIC, db=db_session
+        )
+
+        assert ok is True
+        lock_called.lock.assert_called_once()
+
+    async def test_user_without_the_permission_is_refused(
+        self, db_session, regular_user, lock_called
+    ):
+        ok, detail = await session_lock.lock_if_permitted(
+            user=_user(regular_user.id), client_host=PUBLIC, db=db_session
+        )
+
+        assert ok is False
+        assert "permission" in detail
+        lock_called.lock.assert_not_called()
+
+
+class TestLockAuditTrail:
+    async def test_successful_lock_is_audited(
+        self, db_session, lock_called, _silent_audit
+    ):
+        await session_lock.lock_if_permitted(
+            user=_admin(), client_host=PUBLIC, db=db_session
+        )
+
+        _silent_audit.log_event.assert_called_once()
+        kwargs = _silent_audit.log_event.call_args.kwargs
+        assert kwargs["action"] == "desktop_lock_session"
+        assert kwargs["event_type"] == "POWER"
+
+    async def test_a_failed_lock_is_audited_as_a_failure(
+        self, db_session, lock_called, _silent_audit
+    ):
+        """Gates passed, loginctl did not deliver. Without this the function
+        would report success=True over a still-unlocked screen."""
+        lock_called.lock.return_value = (False, "session 2 still reports LockedHint=no")
+
+        ok, _detail = await session_lock.lock_if_permitted(
+            user=_admin(), client_host=PUBLIC, db=db_session
+        )
+
+        assert ok is False
+        kwargs = _silent_audit.log_event.call_args.kwargs
+        assert kwargs["success"] is False
+
+    async def test_a_refused_lock_writes_no_audit_noise(
+        self, db_session, regular_user, lock_called, _silent_audit
+    ):
+        await session_lock.lock_if_permitted(
+            user=_user(regular_user.id), client_host=PUBLIC, db=db_session
+        )
+
+        _silent_audit.log_event.assert_not_called()
+
+    async def test_delegated_user_also_gets_a_security_event(
+        self, db_session, regular_user, lock_called, _silent_audit
+    ):
+        db_session.add(
+            UserPowerPermission(user_id=regular_user.id, can_unlock_session=True)
+        )
+        db_session.commit()
+
+        await session_lock.lock_if_permitted(
+            user=_user(regular_user.id), client_host=PUBLIC, db=db_session
+        )
+
+        _silent_audit.log_security_event.assert_called_once()
+
+    async def test_an_admin_gets_no_delegated_security_event(
+        self, db_session, lock_called, _silent_audit
+    ):
+        await session_lock.lock_if_permitted(
+            user=_admin(), client_host=PUBLIC, db=db_session
+        )
+
+        _silent_audit.log_security_event.assert_not_called()
+
+
+class TestLockNeverRaises:
+    async def test_a_raising_backend_is_swallowed_and_audited(
+        self, db_session, lock_called, _silent_audit
+    ):
+        lock_called.lock.side_effect = OSError("fork failed under memory pressure")
+
+        ok, detail = await session_lock.lock_if_permitted(
+            user=_admin(), client_host=PUBLIC, db=db_session
+        )
+
+        assert ok is False
+        assert "unexpectedly" in detail
+        assert _silent_audit.log_event.call_args.kwargs["success"] is False
+
+    async def test_a_failing_permission_check_is_swallowed_without_audit(
+        self, db_session, lock_called, _silent_audit
+    ):
+        with patch.object(
+            session_lock, "check_permission", side_effect=RuntimeError("db gone")
+        ):
+            ok, detail = await session_lock.lock_if_permitted(
+                user=_user(1234), client_host=PUBLIC, db=db_session
+            )
+
+        assert ok is False
+        assert "permission check failed" in detail
+        _silent_audit.log_event.assert_not_called()
+        lock_called.lock.assert_not_called()

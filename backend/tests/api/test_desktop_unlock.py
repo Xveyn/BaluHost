@@ -208,3 +208,72 @@ class TestUnlockRoute:
         assert response.status_code == 200, response.text
         assert response.json()["success"] is False
         gate.assert_awaited_once()
+
+
+class TestLockRoute:
+    def test_admin_can_lock(self, client, admin_headers):
+        with patch(
+            "app.api.routes.desktop.lock_if_permitted",
+            AsyncMock(return_value=(True, "session 2 locked")),
+        ):
+            response = client.post(
+                "/api/system/sleep/desktop/lock", headers=admin_headers
+            )
+
+        assert response.status_code == 200, response.text
+        assert response.json()["success"] is True
+
+    def test_a_refused_lock_is_a_200_with_success_false(self, client, admin_headers):
+        """The gate lives in the policy; a refusal is an outcome, not an error."""
+        with patch(
+            "app.api.routes.desktop.lock_if_permitted",
+            AsyncMock(return_value=(False, "permission required: power:unlock_session")),
+        ):
+            response = client.post(
+                "/api/system/sleep/desktop/lock", headers=admin_headers
+            )
+
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["success"] is False
+        assert body["message"] == "permission required: power:unlock_session"
+
+    def test_a_raising_policy_does_not_500(self, client, admin_headers):
+        with patch(
+            "app.api.routes.desktop.lock_if_permitted",
+            AsyncMock(side_effect=OSError("boom")),
+        ):
+            response = client.post(
+                "/api/system/sleep/desktop/lock", headers=admin_headers
+            )
+
+        assert response.status_code == 200, response.text
+        assert response.json()["success"] is False
+
+    def test_the_client_ip_reaches_the_gate(self, client, admin_headers):
+        gate = AsyncMock(return_value=(True, "locked"))
+        with patch("app.api.routes.desktop.lock_if_permitted", gate):
+            client.post("/api/system/sleep/desktop/lock", headers=admin_headers)
+
+        assert gate.await_args.kwargs["client_host"] is not None
+
+    def test_anonymous_callers_are_rejected(self, client):
+        response = client.post("/api/system/sleep/desktop/lock")
+
+        assert response.status_code in (401, 403)
+
+    def test_a_plain_user_reaches_the_policy_rather_than_a_role_gate(
+        self, client, user_headers
+    ):
+        """Deliberately NOT gated on admin at the route, same reasoning as
+        /unlock: lock_if_permitted is the single place the permission is
+        evaluated and audited."""
+        gate = AsyncMock(return_value=(False, "permission required: power:unlock_session"))
+        with patch("app.api.routes.desktop.lock_if_permitted", gate):
+            response = client.post(
+                "/api/system/sleep/desktop/lock", headers=user_headers
+            )
+
+        assert response.status_code == 200, response.text
+        assert response.json()["success"] is False
+        gate.assert_awaited_once()

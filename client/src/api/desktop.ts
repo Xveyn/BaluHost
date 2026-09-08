@@ -62,3 +62,16 @@ export async function unlockSession(): Promise<DesktopActionResult> {
   const { data } = await apiClient.post<DesktopActionResult>('/api/system/sleep/desktop/unlock');
   return data;
 }
+
+/**
+ * Lock the KDE session, leaving the displays alone.
+ *
+ * The mirror of `unlockSession()`. Unlike unlock, the server side carries no
+ * network gate on this action - locking only closes the desktop, so it needs
+ * no LAN/VPN restriction. A refusal (missing permission) comes back as
+ * `success: false`, not as an HTTP error.
+ */
+export async function lockSession(): Promise<DesktopActionResult> {
+  const { data } = await apiClient.post<DesktopActionResult>('/api/system/sleep/desktop/lock');
+  return data;
+}

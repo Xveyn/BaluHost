@@ -269,6 +269,10 @@
     "unlockSessionDesc": "Dismiss the KDE lock screen",
     "sessionUnlocked": "Session unlocked",
     "sessionUnlockFailed": "Failed to unlock the session",
+    "lockSession": "Lock session",
+    "lockSessionDesc": "Show the KDE lock screen",
+    "sessionLocked": "Session locked",
+    "sessionLockFailed": "Failed to lock the session",
     "pluginActionFailed": "Action failed"
   },
   "adminOnly": "Admin only",

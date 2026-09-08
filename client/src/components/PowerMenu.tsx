@@ -1,9 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Power, PowerOff, RotateCcw, LogOut, Moon, Pause, MonitorOff, Monitor, Plug, Unlock } from 'lucide-react';
+import { Power, PowerOff, RotateCcw, LogOut, Moon, Pause, MonitorOff, Monitor, Plug, Unlock, Lock } from 'lucide-react';
 import { ConfirmDialog } from './ui/ConfirmDialog';
 import { getSleepStatus, enterSoftSleep, enterSuspend } from '../api/sleep';
-import { getDesktopStatus, disableDesktop, enableDesktop, unlockSession, type DesktopState } from '../api/desktop';
+import { getDesktopStatus, disableDesktop, enableDesktop, unlockSession, lockSession, type DesktopState } from '../api/desktop';
 import { usePlugins } from '../contexts/PluginContext';
 import { runPluginMenuAction } from '../api/plugins';
 import { resolvePluginString } from '../lib/pluginI18n';
@@ -159,6 +159,21 @@ export default function PowerMenu({ isAdmin, onShutdown, onRestart, onLogout }: 
     }
   };
 
+  const handleLockSession = async () => {
+    setIsOpen(false);
+    try {
+      const result = await lockSession();
+      if (result.success) {
+        toast.success(t('powerMenu.sessionLocked', 'Session locked'));
+      } else {
+        // result.message is an English debug string and stays out of the UI (#406).
+        toast.error(t('powerMenu.sessionLockFailed', 'Failed to lock the session'));
+      }
+    } catch {
+      toast.error(t('powerMenu.sessionLockFailed', 'Failed to lock the session'));
+    }
+  };
+
   const handlePluginAction = async (item: (typeof pluginMenuItems)[number]) => {
     const key = `${item._pluginName}:${item.id}`;
     setRunningAction(key);
@@ -270,6 +285,24 @@ export default function PowerMenu({ isAdmin, onShutdown, onRestart, onLogout }: 
                       <div>
                         <p className="text-sm font-medium text-slate-100">{t('powerMenu.unlockSession', 'Unlock session')}</p>
                         <p className="text-xs text-slate-400">{t('powerMenu.unlockSessionDesc', 'Dismiss the KDE lock screen')}</p>
+                      </div>
+                    </button>
+                  )}
+
+                  {/* Mirror of the entry above - only one of the two can ever
+                      show. sessionLocked === null (server couldn't tell) shows
+                      neither, same as the unlock entry. */}
+                  {desktopState === 'running' && sessionLocked === false && (
+                    <button
+                      onClick={handleLockSession}
+                      className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition hover:bg-indigo-500/10"
+                    >
+                      <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-indigo-500/30 bg-indigo-500/10">
+                        <Lock className="h-4 w-4 text-indigo-400" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-slate-100">{t('powerMenu.lockSession', 'Lock session')}</p>
+                        <p className="text-xs text-slate-400">{t('powerMenu.lockSessionDesc', 'Show the KDE lock screen')}</p>
                       </div>
                     </button>
                   )}
