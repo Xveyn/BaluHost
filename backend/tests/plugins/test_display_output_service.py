@@ -4,6 +4,7 @@ import pytest
 from app.plugins.installed.display_output.backend import DevDisplayBackend
 from app.plugins.installed.display_output.models import DisplayApplyRequest
 from app.plugins.installed.display_output.service import (
+    ApplyResult,
     DisplayService,
     DisplayUnavailable,
     InvalidRequest,
@@ -23,20 +24,54 @@ def service() -> DisplayService:
 class TestHappyPath:
     @pytest.mark.asyncio
     async def test_a_valid_change_is_applied(self, service):
-        ok, _ = await service.apply(_req([
+        result = await service.apply(_req([
             {"name": "HDMI-A-1", "selected": True, "mode_id": "1", "mode_name": "2560x1440@144"},
             {"name": "DP-3", "selected": False},
         ]))
-        assert ok is True
+        assert isinstance(result, ApplyResult)
+        assert result.success is True
         layout = await service.get_layout()
         assert {o.name: o.selected for o in layout.outputs} == {"HDMI-A-1": True, "DP-3": False}
 
     @pytest.mark.asyncio
     async def test_selecting_without_a_mode_keeps_the_current_one(self, service):
-        ok, _ = await service.apply(_req([{"name": "DP-3", "selected": True}]))
-        assert ok is True
+        result = await service.apply(_req([{"name": "DP-3", "selected": True}]))
+        assert result.success is True
         dp3 = next(o for o in (await service.get_layout()).outputs if o.name == "DP-3")
         assert dp3.current_mode_id == "57"
+
+
+class TestApplyResultArgv:
+    """Der argv-Vektor in ApplyResult ist der Gegenstand von Task 1.
+
+    Er muss das abbilden, was der Service tatsaechlich geprueft (und bei
+    KWinDisplayBackend an kscreen-doctor geschickt) hat — nicht die rohe
+    Anfrage.
+    """
+
+    @pytest.mark.asyncio
+    async def test_argv_carries_the_validated_change(self, service):
+        result = await service.apply(_req([{
+            "name": "HDMI-A-1", "selected": True,
+            "mode_id": "1", "mode_name": "2560x1440@144",
+        }]))
+        assert result.argv == [
+            "kscreen-doctor",
+            "output.HDMI-A-1.enable",
+            "output.HDMI-A-1.mode.1",
+        ]
+
+    @pytest.mark.asyncio
+    async def test_a_mode_on_a_deselected_output_never_reaches_argv(self, service):
+        # Der zentrale Fall aus Task 1: eine mode_id auf einem selected=false
+        # -Ausgang wird vom Service verworfen (siehe Zeile "Bei selected=False
+        # bleibt mode_id None") - sie darf deshalb auch nicht so aussehen, als
+        # waere sie Teil des Vorgangs gewesen.
+        result = await service.apply(_req([{
+            "name": "HDMI-A-1", "selected": False,
+            "mode_id": "1", "mode_name": "2560x1440@144",
+        }]))
+        assert result.argv == ["kscreen-doctor", "output.HDMI-A-1.disable"]
 
 
 class TestWhitelist:
@@ -98,11 +133,11 @@ class TestModeCrossCheck:
         # Beide heissen "3840x2160@120". Ueber die ID sind sie trotzdem
         # unterscheidbar - der ganze Punkt des Entwurfs.
         for mode_id in ("57", "58"):
-            ok, _ = await service.apply(_req([{
+            result = await service.apply(_req([{
                 "name": "DP-3", "selected": True,
                 "mode_id": mode_id, "mode_name": "3840x2160@120",
             }]))
-            assert ok is True
+            assert result.success is True
             dp3 = next(o for o in (await service.get_layout()).outputs if o.name == "DP-3")
             assert dp3.current_mode_id == mode_id
 
@@ -120,16 +155,21 @@ class TestInvariant:
     async def test_an_omitted_output_still_counts_as_selected(self, service):
         # DP-3 steht nicht im Request und bleibt gewaehlt - also ist das
         # Abwaehlen von HDMI-A-1 erlaubt.
-        ok, _ = await service.apply(_req([{"name": "HDMI-A-1", "selected": False}]))
-        assert ok is True
+        result = await service.apply(_req([{"name": "HDMI-A-1", "selected": False}]))
+        assert result.success is True
 
     @pytest.mark.asyncio
     async def test_a_mode_on_a_deselected_output_is_ignored_not_rejected(self, service):
-        ok, _ = await service.apply(_req([{
+        result = await service.apply(_req([{
             "name": "HDMI-A-1", "selected": False,
             "mode_id": "1", "mode_name": "2560x1440@144",
         }]))
-        assert ok is True
+        assert result.success is True
+        # Task 1: der geprueften argv-Vektor enthaelt keinen Modus fuer einen
+        # abgewaehlten Ausgang - der Service verwirft diese Kombination beim
+        # Aufbau von `wanted`, und der Audit-Eintrag darf nur berichten, was
+        # tatsaechlich geprueft wurde.
+        assert not any("mode" in arg for arg in result.argv if "HDMI-A-1" in arg)
 
 
 class TestUnavailable:

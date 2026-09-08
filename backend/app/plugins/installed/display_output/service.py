@@ -12,7 +12,8 @@ from __future__ import annotations
 
 import logging
 import platform
-from typing import Dict, Optional, Tuple
+from dataclasses import dataclass
+from typing import Dict, List, Optional, Tuple
 
 from app.core.config import settings
 from app.plugins.installed.display_output.backend import (
@@ -20,11 +21,30 @@ from app.plugins.installed.display_output.backend import (
     DisplayBackend,
     KWinDisplayBackend,
 )
+from app.plugins.installed.display_output.kscreen import build_apply_args
 from app.plugins.installed.display_output.models import DisplayApplyRequest, DisplayLayout
 
 logger = logging.getLogger(__name__)
 
 _service: Optional["DisplayService"] = None
+
+
+@dataclass(frozen=True)
+class ApplyResult:
+    """Ergebnis eines apply-Aufrufs, samt des tatsaechlich geprueften argv.
+
+    Der Audit-Eintrag muss festhalten, was ``kscreen-doctor`` wirklich
+    bekommen hat — nicht den rohen, ungeprueften Request. ``argv`` ist genau
+    der Vektor aus ``kscreen.build_apply_args(wanted, layout.outputs)``, also
+    bereits gegen die Live-Enumeration gepruefte Namen und IDs; ein
+    Ausgang mit ``selected: false`` und mitgeschickter ``mode_id`` taucht
+    darin nicht auf, weil der Service diese Kombination beim Aufbau von
+    ``wanted`` ohnehin verwirft.
+    """
+
+    success: bool
+    message: str
+    argv: List[str]
 
 
 class DisplayError(Exception):
@@ -60,8 +80,17 @@ class DisplayService:
         """Liest Ausgaenge, Modi und den globalen DPMS-Zustand."""
         return await self._backend.get_layout()
 
-    async def apply(self, request: DisplayApplyRequest) -> Tuple[bool, str]:
+    async def apply(self, request: DisplayApplyRequest) -> ApplyResult:
         """Prueft den Wunsch gegen die Live-Enumeration und wendet ihn an.
+
+        Returns:
+            ApplyResult mit dem Ergebnis des Backend-Aufrufs UND dem
+            argv-Vektor, den ``kscreen.build_apply_args`` daraus gebaut hat —
+            derselbe Vektor, den (bei ``KWinDisplayBackend``) auch
+            tatsaechlich an ``kscreen-doctor`` ging. Der Aufbau ist eine reine
+            Funktion von ``wanted`` und der Live-Enumeration, also unabhaengig
+            vom gewaehlten Backend berechenbar; das Protocol selbst bleibt
+            unveraendert.
 
         Raises:
             DisplayUnavailable: KWin antwortet nicht.
@@ -108,8 +137,10 @@ class DisplayService:
 
         self._assert_something_stays_selected(by_name, wanted)
 
+        argv = build_apply_args(wanted, layout.outputs)
         logger.info("Display-Wunsch: %s", wanted)
-        return await self._backend.apply(wanted, layout.outputs)
+        ok, message = await self._backend.apply(wanted, layout.outputs)
+        return ApplyResult(success=ok, message=message, argv=argv)
 
     @staticmethod
     def _assert_something_stays_selected(by_name: dict, wanted: dict) -> None:

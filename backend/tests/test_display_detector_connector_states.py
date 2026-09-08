@@ -1,4 +1,6 @@
 """Pro-Connector-Zustaende aus sysfs, mit KWin-kompatiblen Namen."""
+import logging
+
 import pytest
 
 from app.services.power.gpu.display_detector import (
@@ -56,11 +58,60 @@ class TestConnectorStates:
         _connector(tmp_path, "card1-DP-1", "connected", "enabled")
         assert get_active_display_count_sync(tmp_path) == 2
 
-    def test_same_name_on_two_cards_one_dark_counts_as_one_and_map_has_one_key(
+    def test_same_name_on_two_cards_one_dark_still_counts_as_one(
         self, tmp_path
     ):
+        # Zaehlung unveraendert (siehe Task 2 im Fix-Wave-Auftrag): entries,
+        # nicht distinct names.
         _connector(tmp_path, "card0-DP-1", "connected", "enabled")
         _connector(tmp_path, "card1-DP-1", "disconnected", "disabled")
         assert get_active_display_count_sync(tmp_path) == 1
+
+    def test_same_name_on_two_cards_is_ambiguous_and_absent_from_the_map(
+        self, tmp_path
+    ):
+        # Verhaltensaenderung ggue. vorher (Fix-Wave, Task 2): eine
+        # mehrdeutige Zuordnung darf nicht per "last wins" in ein definitives
+        # True/False aufgeloest werden - das waere eine Falschaussage ueber
+        # einen Namen, den die Abbildung gar nicht sicher zuordnen kann.
+        # states.get("DP-1") liefert jetzt None (unbekannt), nicht den Wert
+        # des zuletzt gesehenen Connectors.
+        _connector(tmp_path, "card0-DP-1", "connected", "enabled")
+        _connector(tmp_path, "card1-DP-1", "disconnected", "disabled")
         states = get_connector_states_sync(tmp_path)
-        assert list(states) == ["DP-1"]
+        assert "DP-1" not in states
+        assert states.get("DP-1") is None
+
+    def test_the_ambiguity_warning_fires_once_for_a_duplicate_name(self, tmp_path, caplog):
+        _connector(tmp_path, "card0-DP-1", "connected", "enabled")
+        _connector(tmp_path, "card1-DP-1", "connected", "enabled")
+        with caplog.at_level(
+            logging.WARNING, logger="app.services.power.gpu.display_detector"
+        ):
+            get_connector_states_sync(tmp_path)
+        warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+        assert len(warnings) == 1
+        assert "DP-1" in warnings[0].message
+
+    def test_no_warning_for_an_ordinary_single_card_layout(self, tmp_path, caplog):
+        _connector(tmp_path, "card0-DP-3", "connected", "enabled")
+        _connector(tmp_path, "card0-HDMI-A-1", "connected", "disabled")
+        with caplog.at_level(
+            logging.WARNING, logger="app.services.power.gpu.display_detector"
+        ):
+            get_connector_states_sync(tmp_path)
+        assert [r for r in caplog.records if r.levelno == logging.WARNING] == []
+
+    def test_the_counting_path_never_warns_even_with_a_duplicate_name(self, tmp_path, caplog):
+        # Der eigentliche Fehler: get_active_display_count() laeuft aus dem
+        # Monitor-Loop und aus desktop_backend.get_status() heraus, einmal pro
+        # Intervall - ein Pfad, der Eintraege zaehlt und sich fuer die
+        # Namensmehrdeutigkeit gar nicht interessiert, darf das Log nicht
+        # fluten.
+        _connector(tmp_path, "card0-DP-1", "connected", "enabled")
+        _connector(tmp_path, "card1-DP-1", "connected", "enabled")
+        with caplog.at_level(
+            logging.WARNING, logger="app.services.power.gpu.display_detector"
+        ):
+            get_active_display_count_sync(tmp_path)
+        assert caplog.records == []

@@ -26,8 +26,14 @@ logger = logging.getLogger(__name__)
 _RATE_PRECISION = 3
 
 
-def parse_modes(raw_modes: object) -> List[DisplayMode]:
-    """Wandelt die Modenliste eines Ausgangs in eine anzeigbare Liste.
+def _collapse_modes(raw_modes: object) -> tuple[List[DisplayMode], dict[str, str]]:
+    """Baut die entdoppelte Modenliste UND eine ID-Abbildung fuer den Aufrufer.
+
+    Tut, was frueher in ``parse_modes`` allein stand, gibt aber zusaetzlich
+    zurueck, auf welche ueberlebende ID jede rohe ID zeigt (auch die des
+    Siegers selbst — die zeigt auf sich). ``parse_outputs`` braucht diese
+    Abbildung, um ``currentModeId``/``preferredModes[0]`` umzuhaengen, falls
+    KWin ausgerechnet die kollabierte (verworfene) ID meldet.
 
     Drei Schritte, alle drei aus gemessenen Daten begruendet:
 
@@ -46,14 +52,15 @@ def parse_modes(raw_modes: object) -> List[DisplayMode]:
         raw_modes: Die ``modes``-Liste eines Ausgangs aus ``kscreen-doctor -j``.
 
     Returns:
-        Sortierte, entdoppelte Modi. Unbrauchbare Eintraege werden
-        uebersprungen, nicht als Fehler gemeldet — ein defekter Modus darf
-        die Enumeration nicht scheitern lassen.
+        (sortierte, entdoppelte Modi; rohe ID -> ueberlebende ID). Unbrauchbare
+        Eintraege werden uebersprungen, nicht als Fehler gemeldet — ein
+        defekter Modus darf die Enumeration nicht scheitern lassen.
     """
     if not isinstance(raw_modes, list):
-        return []
+        return [], {}
 
     seen: dict[tuple, DisplayMode] = {}
+    raw_ids_by_key: dict[tuple, List[str]] = {}
     for raw in raw_modes:
         if not isinstance(raw, dict):
             continue
@@ -84,8 +91,31 @@ def parse_modes(raw_modes: object) -> List[DisplayMode]:
         # vergleichen, wo moeglich - sonst waere "10" kleiner als "9".
         if existing is None or _id_sort_key(mode.id) < _id_sort_key(existing.id):
             seen[key] = mode
+        raw_ids_by_key.setdefault(key, []).append(mode.id)
 
-    return sorted(seen.values(), key=lambda m: (-(m.width * m.height), -m.refresh_rate, m.id))
+    remap = {
+        raw_id: seen[key].id
+        for key, raw_ids in raw_ids_by_key.items()
+        for raw_id in raw_ids
+    }
+    modes = sorted(seen.values(), key=lambda m: (-(m.width * m.height), -m.refresh_rate, m.id))
+    return modes, remap
+
+
+def parse_modes(raw_modes: object) -> List[DisplayMode]:
+    """Wandelt die Modenliste eines Ausgangs in eine anzeigbare Liste.
+
+    Duennwrapper um ``_collapse_modes`` fuer Aufrufer, die nur die Liste
+    brauchen (das oeffentliche Format dieser Funktion bleibt unveraendert).
+
+    Args:
+        raw_modes: Die ``modes``-Liste eines Ausgangs aus ``kscreen-doctor -j``.
+
+    Returns:
+        Sortierte, entdoppelte Modi.
+    """
+    modes, _ = _collapse_modes(raw_modes)
+    return modes
 
 
 def _id_sort_key(mode_id: str) -> tuple:
@@ -102,6 +132,13 @@ def parse_outputs(payload: object) -> List[DisplayOutput]:
     Jeder Feldzugriff laeuft ueber ``.get()``. Die Felder sind nicht bei jedem
     Ausgang vorhanden — auf BaluNode traegt HDMI-A-1 ein ``vrrPolicy``, DP-3
     nicht.
+
+    ``currentModeId`` und ``preferredModes[0]`` werden ueber die
+    Kollaps-Abbildung aus ``_collapse_modes`` gejagt: zeigt KWin auf die
+    groessere (verworfene) ID eines exakt-gleichen Modus-Paares, existiert
+    diese ID in der zurueckgegebenen Modenliste nicht mehr, und das
+    Frontend-Auswahlfeld faende kein passendes ``<option>`` — die Anzeige
+    zeigte dann gar keine aktuelle Aufloesung.
     """
     if not isinstance(payload, dict):
         return []
@@ -116,11 +153,17 @@ def parse_outputs(payload: object) -> List[DisplayOutput]:
         name = raw.get("name")
         if not isinstance(name, str) or not name:
             continue
+
+        modes, id_remap = _collapse_modes(raw.get("modes"))
+
         preferred = raw.get("preferredModes")
         preferred_id: Optional[str] = None
         if isinstance(preferred, list) and preferred:
-            preferred_id = str(preferred[0])
+            preferred_id = id_remap.get(str(preferred[0]), str(preferred[0]))
         current = raw.get("currentModeId")
+        current_id: Optional[str] = None
+        if current is not None:
+            current_id = id_remap.get(str(current), str(current))
 
         outputs.append(
             DisplayOutput(
@@ -128,11 +171,11 @@ def parse_outputs(payload: object) -> List[DisplayOutput]:
                 connected=bool(raw.get("connected", False)),
                 selected=bool(raw.get("enabled", False)),
                 lit=None,
-                current_mode_id=str(current) if current is not None else None,
+                current_mode_id=current_id,
                 preferred_mode_id=preferred_id,
                 scale=float(raw.get("scale", 1.0) or 1.0),
                 priority=int(raw.get("priority", 0) or 0),
-                modes=parse_modes(raw.get("modes")),
+                modes=modes,
             )
         )
     return outputs

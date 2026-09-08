@@ -68,4 +68,8 @@ class DisplayOutputRequest(BaseModel):
 class DisplayApplyRequest(BaseModel):
     """Rumpf von POST /apply."""
 
-    outputs: List[DisplayOutputRequest] = Field(..., min_length=1)
+    # max_length=16: kein Host meldet gleichzeitig mehr als 16 Ausgaenge
+    # (gemessen: BaluNode hat zwei). Ohne obere Grenze koennte ein
+    # berechtigter Aufrufer einen beliebig grossen Rumpf schicken, den ein
+    # Worker parsen muss, bevor die erste inhaltliche Pruefung greift.
+    outputs: List[DisplayOutputRequest] = Field(..., min_length=1, max_length=16)

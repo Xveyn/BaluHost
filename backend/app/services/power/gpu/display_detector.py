@@ -26,11 +26,18 @@ def _iter_connector_states(sysfs_root: Path) -> Iterator[tuple[str, bool]]:
     connector name (card0-DP-1 and card1-DP-1 both strip to "DP-1"). Callers
     that need a count must count entries, not distinct names - collapsing
     them would undercount real displays.
+
+    This generator does not warn about ambiguous names and does not resolve
+    them - it just yields every entry as measured. `_count_sync` runs
+    through here once per monitoring tick and does not care about the
+    name-to-connector mapping at all; a warning placed here would fire every
+    tick, forever, from a path that has no use for it. The one caller that
+    *does* need unambiguous names (`_states_sync`) does that resolution and
+    the warning itself.
     """
     drm = sysfs_root / "sys" / "class" / "drm"
     if not drm.exists():
         return
-    seen: set[str] = set()
     for entry in sorted(drm.iterdir()):
         if not _CONNECTOR_RE.match(entry.name):
             continue
@@ -46,22 +53,37 @@ def _iter_connector_states(sysfs_root: Path) -> Iterator[tuple[str, bool]]:
             continue
         # KWin knows the connector without the "card<N>-" prefix.
         name = _CONNECTOR_RE.sub("", entry.name)
-        if name in seen:
-            logger.warning(
-                "Multiple DRM connectors strip to the same KWin name %r; "
-                "the KWin-name-to-connector mapping is ambiguous.",
-                name,
-            )
-        seen.add(name)
         yield name, (status == "connected" and enabled == "enabled")
 
 
 def _states_sync(sysfs_root: Path) -> dict[str, bool]:
     """Per-connector 'is this lit?', keyed by the KWin name.
 
-    When a name is ambiguous (see `_iter_connector_states`), last-wins.
+    When a name is ambiguous - two DRM connectors strip to the same KWin
+    name - the mapping cannot say which connector "DP-1" in KWin's world
+    actually refers to. Reporting the last one seen (last-wins) would turn
+    an unresolvable question into a confident True/False, which is exactly
+    the false-statement pattern this feature exists to avoid (spec 5): the
+    name is removed from the map entirely instead, so a caller's
+    `states.get(name)` answers `None` - "not resolvable", the honest
+    answer.
     """
-    return dict(_iter_connector_states(sysfs_root))
+    states: dict[str, bool] = {}
+    ambiguous: set[str] = set()
+    for name, lit in _iter_connector_states(sysfs_root):
+        if name in ambiguous:
+            continue
+        if name in states:
+            logger.warning(
+                "Multiple DRM connectors strip to the same KWin name %r; "
+                "the KWin-name-to-connector mapping is ambiguous.",
+                name,
+            )
+            ambiguous.add(name)
+            del states[name]
+            continue
+        states[name] = lit
+    return states
 
 
 def _count_sync(sysfs_root: Path) -> int:

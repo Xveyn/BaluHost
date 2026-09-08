@@ -3,6 +3,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+import app.plugins.installed.display_output as plugin_module
 from app.api.deps import require_power_manage_displays
 from app.core.exception_handlers import register_exception_handlers
 from app.plugins.installed.display_output import DisplayOutputPlugin
@@ -18,6 +19,12 @@ class _User:
     username = "admin"
     role = "admin"
     id = 1
+
+
+class _NonAdminUser:
+    username = "someone"
+    role = "user"
+    id = 2
 
 
 def _app(service: DisplayService) -> TestClient:
@@ -96,6 +103,15 @@ class TestApplyRoute:
 
     def test_an_empty_body_is_422(self, client):
         assert client.post(f"{BASE}/apply", json={"outputs": []}).status_code == 422
+
+    def test_an_oversized_body_is_422(self, client):
+        # Task 3: kein Host meldet gleichzeitig mehr als 16 Ausgaenge. Ohne
+        # obere Grenze koennte ein berechtigter Aufrufer einen beliebig
+        # grossen Rumpf schicken, den ein Worker parsen muss, bevor die
+        # erste inhaltliche Pruefung ueberhaupt greift.
+        outputs = [{"name": f"OUT-{i}", "selected": True} for i in range(17)]
+        resp = client.post(f"{BASE}/apply", json={"outputs": outputs})
+        assert resp.status_code == 422
 
     def test_a_raw_dict_body_is_rejected(self, client):
         assert client.post(f"{BASE}/apply", json={"nonsense": 1}).status_code == 422
@@ -195,3 +211,155 @@ class TestPermission:
             {"name": "DP-3", "selected": True},
         ]})
         assert resp.status_code in (401, 403)
+
+
+class TestAuditLogging:
+    """Task 1: JEDER apply-Versuch schreibt einen display_apply-Eintrag.
+
+    Ersetzt ``get_audit_logger_db`` im Namensraum des Plugin-Moduls durch
+    einen mitschreibenden Stub statt nur auf den HTTP-Statuscode zu schauen —
+    sonst blieben zwei Fehler unentdeckt: dass ``details.argv`` den rohen,
+    ungeprueften Request trug (statt des validierten Vektors), und dass eine
+    Ablehnung (400/409/502) ueberhaupt keinen Eintrag hinterliess.
+    """
+
+    @pytest.fixture
+    def audit_client(self, monkeypatch):
+        events: list[dict] = []
+        security_events: list[dict] = []
+
+        class _RecordingAuditLogger:
+            def log_event(self, **kwargs):
+                events.append(kwargs)
+
+            def log_security_event(self, **kwargs):
+                security_events.append(kwargs)
+
+        monkeypatch.setattr(plugin_module, "get_audit_logger_db", lambda: _RecordingAuditLogger())
+        service = DisplayService(backend=DevDisplayBackend())
+        monkeypatch.setattr(service_module, "get_display_service", lambda: service)
+        app = FastAPI()
+        register_exception_handlers(app)
+        app.include_router(DisplayOutputPlugin().get_router(), prefix=BASE)
+        app.dependency_overrides[require_power_manage_displays] = lambda: _User()
+        return TestClient(app), events, security_events
+
+    def test_a_successful_apply_writes_one_entry_with_the_validated_argv(self, audit_client):
+        client, events, _ = audit_client
+        resp = client.post(f"{BASE}/apply", json={"outputs": [
+            {"name": "HDMI-A-1", "selected": True,
+             "mode_id": "1", "mode_name": "2560x1440@144"},
+        ]})
+        assert resp.status_code == 200
+        assert len(events) == 1
+        entry = events[0]
+        assert entry["action"] == "display_apply"
+        assert entry["success"] is True
+        assert entry["details"]["argv"] == [
+            "kscreen-doctor", "output.HDMI-A-1.enable", "output.HDMI-A-1.mode.1",
+        ]
+
+    def test_a_mode_on_a_deselected_output_is_not_audited_as_applied(self, audit_client):
+        # Der zentrale Befund aus dem Auftrag: der Service verwirft eine
+        # mode_id auf einem selected=false-Ausgang. Der Audit-Eintrag darf
+        # diese verworfene Halbwahrheit nicht so aufschreiben, als waere sie
+        # Teil des tatsaechlichen Vorgangs gewesen.
+        client, events, _ = audit_client
+        resp = client.post(f"{BASE}/apply", json={"outputs": [
+            {"name": "HDMI-A-1", "selected": False,
+             "mode_id": "1", "mode_name": "2560x1440@144"},
+        ]})
+        assert resp.status_code == 200
+        assert len(events) == 1
+        argv = events[0]["details"]["argv"]
+        assert not any("mode" in arg for arg in argv)
+
+    def test_a_400_rejection_still_writes_an_entry(self, audit_client):
+        client, events, _ = audit_client
+        resp = client.post(f"{BASE}/apply", json={"outputs": [
+            {"name": "DP-99", "selected": True},
+        ]})
+        assert resp.status_code == 400
+        assert len(events) == 1
+        assert events[0]["action"] == "display_apply"
+        assert events[0]["success"] is False
+        assert events[0]["details"]["status_code"] == 400
+
+    def test_a_409_rejection_still_writes_an_entry(self, audit_client):
+        client, events, _ = audit_client
+        resp = client.post(f"{BASE}/apply", json={"outputs": [
+            {"name": "DP-3", "selected": True,
+             "mode_id": "58", "mode_name": "1920x1080@60"},
+        ]})
+        assert resp.status_code == 409
+        assert len(events) == 1
+        assert events[0]["success"] is False
+        assert events[0]["details"]["status_code"] == 409
+
+    def test_a_502_unavailable_rejection_still_writes_an_entry(self, monkeypatch):
+        events: list[dict] = []
+
+        class _RecordingAuditLogger:
+            def log_event(self, **kwargs):
+                events.append(kwargs)
+
+            def log_security_event(self, **kwargs):
+                pass
+
+        monkeypatch.setattr(plugin_module, "get_audit_logger_db", lambda: _RecordingAuditLogger())
+
+        class _Dead:
+            async def get_layout(self):
+                return DisplayLayout(available=False, detail="KWin nicht erreichbar")
+
+            async def apply(self, wanted, live_outputs):
+                raise AssertionError("darf nicht laufen")
+
+        service = DisplayService(backend=_Dead())
+        monkeypatch.setattr(service_module, "get_display_service", lambda: service)
+        resp = _app(service).post(f"{BASE}/apply", json={"outputs": [
+            {"name": "DP-3", "selected": True},
+        ]})
+        assert resp.status_code == 502
+        assert len(events) == 1
+        assert events[0]["success"] is False
+        assert events[0]["details"]["status_code"] == 502
+        assert events[0]["details"]["argv"] is None
+
+    def test_a_non_admin_also_gets_the_delegated_power_action_entry(self, monkeypatch):
+        events: list[dict] = []
+        security_events: list[dict] = []
+
+        class _RecordingAuditLogger:
+            def log_event(self, **kwargs):
+                events.append(kwargs)
+
+            def log_security_event(self, **kwargs):
+                security_events.append(kwargs)
+
+        monkeypatch.setattr(plugin_module, "get_audit_logger_db", lambda: _RecordingAuditLogger())
+        service = DisplayService(backend=DevDisplayBackend())
+        monkeypatch.setattr(service_module, "get_display_service", lambda: service)
+        app = FastAPI()
+        register_exception_handlers(app)
+        app.include_router(DisplayOutputPlugin().get_router(), prefix=BASE)
+        app.dependency_overrides[require_power_manage_displays] = lambda: _NonAdminUser()
+        client = TestClient(app)
+
+        resp = client.post(f"{BASE}/apply", json={"outputs": [
+            {"name": "HDMI-A-1", "selected": True,
+             "mode_id": "1", "mode_name": "2560x1440@144"},
+        ]})
+        assert resp.status_code == 200
+        assert len(security_events) == 1
+        assert security_events[0]["action"] == "delegated_power_action"
+        assert security_events[0]["resource"] == "manage_displays"
+
+    def test_an_admin_gets_no_delegated_power_action_entry(self, audit_client):
+        client, _, security_events = audit_client
+        resp = client.post(f"{BASE}/apply", json={"outputs": [
+            {"name": "HDMI-A-1", "selected": True,
+             "mode_id": "1", "mode_name": "2560x1440@144"},
+        ]})
+        assert resp.status_code == 200
+        assert security_events == []

@@ -96,3 +96,47 @@ class TestParseModesInIsolation:
 
     def test_an_empty_list_yields_no_modes(self):
         assert parse_modes([]) == []
+
+
+class TestCollapsedCurrentModeRemap:
+    """currentModeId/preferredModes[0] duerfen nie auf eine kollabierte ID zeigen.
+
+    parse_modes fasst exakte Dubletten zusammen und behaelt die kleinere ID.
+    Zeigt KWins currentModeId (oder preferredModes[0]) auf die groessere,
+    verworfene ID des Paars, existiert diese ID in der zurueckgegebenen
+    Modenliste nicht mehr - das Frontend-Auswahlfeld (`value={entry.modeId
+    ?? ''}`) trifft dann kein <option> und zeigt keine aktuelle Aufloesung.
+    """
+
+    @staticmethod
+    def _payload(current_mode_id=None, preferred_modes=None) -> dict:
+        output = {
+            "name": "HDMI-A-1", "connected": True, "enabled": True,
+            "modes": [
+                {"id": "9", "name": "1920x1080@60", "refreshRate": 60,
+                 "size": {"width": 1920, "height": 1080}},
+                {"id": "10", "name": "1920x1080@60", "refreshRate": 60,
+                 "size": {"width": 1920, "height": 1080}},
+            ],
+        }
+        if current_mode_id is not None:
+            output["currentModeId"] = current_mode_id
+        if preferred_modes is not None:
+            output["preferredModes"] = preferred_modes
+        return {"outputs": [output]}
+
+    def test_current_mode_id_remaps_to_the_surviving_duplicate(self):
+        outputs = parse_outputs(self._payload(current_mode_id="10"))
+        surviving_ids = [m.id for m in outputs[0].modes]
+        assert outputs[0].current_mode_id == "9"
+        assert outputs[0].current_mode_id in surviving_ids
+
+    def test_preferred_mode_id_remaps_to_the_surviving_duplicate(self):
+        outputs = parse_outputs(self._payload(preferred_modes=["10"]))
+        surviving_ids = [m.id for m in outputs[0].modes]
+        assert outputs[0].preferred_mode_id == "9"
+        assert outputs[0].preferred_mode_id in surviving_ids
+
+    def test_a_non_collapsed_current_mode_id_is_left_alone(self):
+        outputs = parse_outputs(self._payload(current_mode_id="9"))
+        assert outputs[0].current_mode_id == "9"
