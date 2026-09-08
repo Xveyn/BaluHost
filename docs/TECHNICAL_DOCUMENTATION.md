@@ -2035,7 +2035,6 @@ Baluhost/
 │   └── README.md
 │
 ├── start_dev.py                  # Combined dev start
-├── TODO.md                       # Global TODO list
 ├── TECHNICAL_DOCUMENTATION.md    # This file
 └── README.md                     # Project README
 ```

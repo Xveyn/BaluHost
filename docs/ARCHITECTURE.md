@@ -575,7 +575,7 @@ The Scheduler Service provides unified management for all background jobs with e
 ### First Contribution Ideas
 - Fix a typo in documentation
 - Add a test for existing functionality
-- Implement a small feature from TODO.md
+- Implement a small feature from the [issue tracker](https://github.com/Xveyn/BaluHost/issues)
 - Improve error messages
 - Add code comments
 

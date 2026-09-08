@@ -7,7 +7,7 @@ Willkommen zur technischen Dokumentation des BaluHost NAS Managers.
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** - System-Architektur
 - **[TECHNICAL_DOCUMENTATION.md](TECHNICAL_DOCUMENTATION.md)** - Vollständige technische Dokumentation
 - **[../README.md](../README.md)** - Projekt-Übersicht und Setup-Anleitung
-- **[../TODO.md](../TODO.md)** - Globale TODO-Liste mit Priorisierung
+- **[GitHub Issues](https://github.com/Xveyn/BaluHost/issues)** - Roadmap und offene Arbeit (löst die frühere `TODO.md` ab)
 
 ---
 
