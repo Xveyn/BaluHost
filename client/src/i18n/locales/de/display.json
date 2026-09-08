@@ -1,7 +1,7 @@
 {
   "title": "Displays",
   "outputs": "Ausgänge",
-  "mode": "Auflösung",
+  "mode": "Auflösung — {{output}}",
   "selected": "gewählt",
   "notSelected": "nicht gewählt",
   "lit": "leuchtet",

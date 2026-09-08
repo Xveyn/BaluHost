@@ -29,6 +29,8 @@ vi.mock('../../../api/powerPermissions', () => ({
 import { DisplayMenu } from '../../../components/topbar/DisplayMenu';
 import { getDisplayLayout, applyDisplayLayout } from '../../../api/displayOutput';
 import { getMyPowerPermissions } from '../../../api/powerPermissions';
+import displayDe from '../../../i18n/locales/de/display.json';
+import displayEn from '../../../i18n/locales/en/display.json';
 
 const LAYOUT = {
   available: true,
@@ -126,5 +128,20 @@ describe('DisplayMenu', () => {
     } as never);
     await open();
     expect(await screen.findByText('display:unavailable')).toBeTruthy();
+  });
+});
+
+describe('display i18n locale contract', () => {
+  // Der react-i18next-Mock oben kann diesen Fehler grundsaetzlich nicht
+  // fangen: er baut den Anzeigetext IMMER aus `options` zusammen, egal ob der
+  // echte Uebersetzungsstring ueberhaupt einen {{output}}-Platzhalter hat.
+  // Echtes react-i18next ignoriert eine Interpolation ohne passenden
+  // Platzhalter dagegen lautlos — jedes Auswahlfeld haette denselben
+  // aria-label-Text, zwei Formularelemente waeren fuer einen Screenreader
+  // ununterscheidbar. Nur ein Test gegen die echten JSON-Dateien deckt das
+  // auf.
+  it('mode-Label traegt den {{output}}-Platzhalter in beiden Sprachen', () => {
+    expect(displayDe.mode).toContain('{{output}}');
+    expect(displayEn.mode).toContain('{{output}}');
   });
 });

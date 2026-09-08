@@ -33,6 +33,13 @@ interface Draft {
   modeId: string | null;
 }
 
+/**
+ * i18n-Schlüssel statt übersetztem Text: `error` überlebt so einen
+ * Sprachwechsel, während das Popover offen bleibt — übersetzt wird erst beim
+ * Rendern (`t(error)`), nie beim Setzen.
+ */
+type ErrorKey = 'loadError' | 'saveError' | 'conflictError';
+
 export function DisplayMenu() {
   const { t, i18n } = useTranslation('display');
   const [allowed, setAllowed] = useState<boolean | null>(null);
@@ -40,7 +47,7 @@ export function DisplayMenu() {
   const [layout, setLayout] = useState<DisplayLayout | null>(null);
   const [draft, setDraft] = useState<Record<string, Draft>>({});
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ErrorKey | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const inFlight = useRef(false);
   const dirty = useRef(false);
@@ -74,16 +81,20 @@ export function DisplayMenu() {
       }
       setError(null);
     } catch {
-      setError(t('loadError'));
+      setError('loadError');
     } finally {
       inFlight.current = false;
     }
-    // `t` bewusst NICHT in den Deps: t() wechselt bei jedem Render die
-    // Identität (react-i18next liefert nur pro Sprache eine stabile
-    // Referenz), refresh() hängt aber am Poll-Intervall — eine instabile
-    // Dependency würde das Intervall bei jedem Render neu aufsetzen und
-    // sofort erneut abfragen (Endlosschleife).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Leere Deps sind hier Absicht, nicht Nachlässigkeit: refresh() muss über
+    // Renders hinweg dieselbe Identität behalten, weil der Poll-Effekt weiter
+    // unten (deps [isOpen, refresh]) sonst bei jedem Render das Intervall
+    // abbaut und sofort neu aufsetzt — inklusive eines sofortigen erneuten
+    // refresh()-Aufrufs, der wiederum einen Render auslöst. Genau das hat den
+    // Test-Worker in eine Endlosschleife gehängt, als hier noch `t()`
+    // aufgerufen wurde: react-i18next liefert `t` zwar pro Sprache stabil,
+    // aber unter dem Test-Mock ändert sich die Identität bei jedem Render —
+    // deshalb lebt der Fehlertext jetzt nur als Schlüssel (siehe `ErrorKey`)
+    // und wird erst beim Rendern übersetzt, nie hier drin.
   }, []);
 
   useEffect(() => {
@@ -134,10 +145,15 @@ export function DisplayMenu() {
       await refresh();
     } catch (err: unknown) {
       const statusCode = (err as { response?: { status?: number } })?.response?.status;
-      setError(statusCode === 409 ? t('conflictError') : t('saveError'));
       if (statusCode === 409) {
+        // Der Refetch MUSS vor dem Setzen der Meldung laufen: refresh()
+        // setzt bei Erfolg selbst setError(null) — danach gesetzt, würde die
+        // Konflikt-Meldung sich im selben Atemzug wieder löschen.
         dirty.current = false;
         await refresh();
+        setError('conflictError');
+      } else {
+        setError('saveError');
       }
     } finally {
       setBusy(false);
@@ -153,7 +169,14 @@ export function DisplayMenu() {
       <button
         type="button"
         aria-label={t('title')}
-        onClick={() => setIsOpen((open) => !open)}
+        onClick={() => {
+          // Schließt sich das Popover gerade (isOpen war true), verwirft der
+          // Klick einen angefangenen, ungespeicherten Entwurf — sonst würde
+          // er beim nächsten Öffnen dem Server-Poll im Weg stehen, obwohl der
+          // Nutzer gar nicht mehr mitten in der Bearbeitung ist.
+          if (isOpen) dirty.current = false;
+          setIsOpen((open) => !open);
+        }}
         className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-800 text-slate-400 transition hover:border-sky-500/50 hover:text-sky-400"
       >
         {anyLit ? <Monitor className="h-5 w-5" /> : <MonitorOff className="h-5 w-5" />}
@@ -230,7 +253,7 @@ export function DisplayMenu() {
               {nothingSelected && (
                 <p className="mb-2 text-xs text-amber-400">{t('keepOneSelected')}</p>
               )}
-              {error && <p className="mb-2 text-xs text-rose-400">{error}</p>}
+              {error && <p className="mb-2 text-xs text-rose-400">{t(error)}</p>}
 
               <button
                 type="button"
