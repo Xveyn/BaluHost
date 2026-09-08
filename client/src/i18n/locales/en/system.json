@@ -1018,7 +1018,9 @@
       "selectCurve": "Select profile…",
       "sync": "Sync",
       "syncDescription": "Copy PWM from another fan.",
-      "selectFan": "Select fan…"
+      "selectFan": "Select fan…",
+      "sourceReleased": "currently set by the board",
+      "sourceAbandoned": "frozen, nobody is controlling it"
     },
     "advanced": {
       "title": "Advanced settings",

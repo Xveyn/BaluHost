@@ -1013,7 +1013,9 @@
       "selectCurve": "Profil wählen…",
       "sync": "Sync",
       "syncDescription": "Übernimm PWM von einem anderen Lüfter.",
-      "selectFan": "Lüfter wählen…"
+      "selectFan": "Lüfter wählen…",
+      "sourceReleased": "gibt gerade das Board vor",
+      "sourceAbandoned": "steht still, niemand regelt"
     },
     "advanced": {
       "title": "Erweiterte Einstellungen",
