@@ -10,7 +10,6 @@
   "allDark": "All screens are dark. Turn them on from the system menu.",
   "apply": "Apply",
   "applying": "Applying …",
-  "applied": "Applied",
   "unavailable": "Display control is unreachable. Is the desktop session running?",
   "loadError": "Could not load display state",
   "saveError": "Could not apply the change",

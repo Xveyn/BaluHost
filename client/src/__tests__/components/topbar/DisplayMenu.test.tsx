@@ -129,6 +129,51 @@ describe('DisplayMenu', () => {
     await open();
     expect(await screen.findByText('display:unavailable')).toBeTruthy();
   });
+
+  it('zeigt das neutrale Monitor-Symbol vor dem ersten Laden, nicht "dunkel"', async () => {
+    // Vor dem ersten Oeffnen wurde nie gefragt, ob etwas leuchtet - "dunkel"
+    // zu behaupten waere hier dieselbe Falschaussage wie bei `lit === null`.
+    const { container } = render(<DisplayMenu />);
+    await screen.findByLabelText('display:title');
+    expect(container.querySelector('.lucide-monitor-off')).toBeNull();
+    expect(container.querySelector('.lucide-monitor')).toBeTruthy();
+  });
+
+  it('zeigt MonitorOff erst, nachdem ein geladenes Layout nichts Leuchtendes zeigt', async () => {
+    // LAYOUT hat beide Ausgaenge mit lit: false - jetzt ist "dunkel"
+    // tatsaechlich beantwortet, nicht nur unbekannt.
+    const { container } = render(<DisplayMenu />);
+    const button = await screen.findByLabelText('display:title');
+    fireEvent.click(button);
+    await waitFor(() => expect(getDisplayLayout).toHaveBeenCalled());
+    await waitFor(() => expect(container.querySelector('.lucide-monitor-off')).toBeTruthy());
+  });
+
+  it('behaelt eine apply-Fehlermeldung ueber den naechsten Poll-Takt hinweg', async () => {
+    vi.mocked(applyDisplayLayout).mockRejectedValueOnce({ response: { status: 500 } });
+    render(<DisplayMenu />);
+    const button = await screen.findByLabelText('display:title');
+
+    // Die Fake-Timer MUESSEN vor dem Oeffnen aktiv sein: das Poll-Intervall
+    // wird beim Oeffnen aufgesetzt und lebt sonst auf der echten Uhr weiter,
+    // egal wie weit `advanceTimersByTimeAsync` danach vorspult.
+    vi.useFakeTimers();
+    fireEvent.click(button);
+    await vi.waitFor(() => expect(screen.getByText('DP-3')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText('display:apply'));
+    await vi.waitFor(() => expect(applyDisplayLayout).toHaveBeenCalled());
+    await vi.waitFor(() => expect(screen.getByText('display:saveError')).toBeInTheDocument());
+
+    // Ein weiterer Poll-Takt (POLL_MS = 5000) laeuft erfolgreich durch und
+    // darf die Fehlermeldung nicht loeschen - genau der Fehler, den dieser
+    // Fix behebt (refresh() loeschte frueher jeden Fehler, nicht nur seinen
+    // eigenen).
+    await vi.advanceTimersByTimeAsync(5000);
+
+    expect(screen.getByText('display:saveError')).toBeTruthy();
+    vi.useRealTimers();
+  });
 });
 
 describe('display i18n locale contract', () => {

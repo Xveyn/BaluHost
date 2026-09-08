@@ -79,7 +79,12 @@ export function DisplayMenu() {
           ),
         );
       }
-      setError(null);
+      // Nur den eigenen Fehler löschen: eine apply-Fehlermeldung
+      // (saveError/conflictError) soll bis zur nächsten Nutzeraktion stehen
+      // bleiben, nicht beim nächsten Poll-Takt verschwinden — sonst würde
+      // dieser refresh() genau die Meldung wieder wegwischen, die handleApply
+      // absichtlich erst nach dem Refetch gesetzt hat.
+      setError((prev) => (prev === 'loadError' ? null : prev));
     } catch {
       setError('loadError');
     } finally {
@@ -163,6 +168,11 @@ export function DisplayMenu() {
   if (!allowed) return null;
 
   const anyLit = layout?.outputs.some((o) => o.lit === true) ?? false;
+  // Vor dem ersten geladenen Layout ist "leuchtet keiner" nicht beantwortet,
+  // sondern schlicht noch nicht gefragt — dasselbe Falschaussage-Muster wie
+  // bei `lit`. Erst nach einem geladenen Layout darf das Symbol wirklich
+  // "dunkel" behaupten.
+  const showLitIcon = layout === null || anyLit;
 
   return (
     <div className="relative" ref={dropdownRef}>
@@ -179,7 +189,7 @@ export function DisplayMenu() {
         }}
         className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-800 text-slate-400 transition hover:border-sky-500/50 hover:text-sky-400"
       >
-        {anyLit ? <Monitor className="h-5 w-5" /> : <MonitorOff className="h-5 w-5" />}
+        {showLitIcon ? <Monitor className="h-5 w-5" /> : <MonitorOff className="h-5 w-5" />}
       </button>
 
       {isOpen && (
