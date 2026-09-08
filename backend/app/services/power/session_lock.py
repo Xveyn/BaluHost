@@ -1,9 +1,10 @@
-"""Unlock the graphical KDE session via systemd-logind.
+"""Lock and unlock the graphical KDE session via systemd-logind.
 
-`loginctl unlock-session` emits an Unlock signal that kscreenlocker obeys -
-the same path fingerprint readers and smartcards use. Measured on the box: it
-works as the session owner WITHOUT sudo, and the backend already runs as that
-user, so this needs no sudoers rule and no new root path.
+`loginctl unlock-session` / `loginctl lock-session` emit Unlock/Lock signals
+that kscreenlocker obeys - the same path fingerprint readers and smartcards
+use. Measured on the box (2026-09-08): both work as the session owner WITHOUT
+sudo, and the backend already runs as that user, so this needs no sudoers
+rule and no new root path.
 """
 from __future__ import annotations
 
@@ -38,10 +39,14 @@ _COMMAND_TIMEOUT_SECONDS = 3
 
 
 class SessionLockBackend(Protocol):
-    """Anything that can unlock the user's graphical session."""
+    """Anything that can lock or unlock the user's graphical session."""
 
     def unlock(self) -> Tuple[bool, str]:
         """Unlock the session; returns (ok, detail)."""
+        ...
+
+    def lock(self) -> Tuple[bool, str]:
+        """Lock the session; returns (ok, detail)."""
         ...
 
     def is_locked(self) -> Optional[bool]:
@@ -59,6 +64,11 @@ class DevSessionLockBackend:
         """Pretend to unlock - there is no logind on a dev box."""
         self._locked = False
         return True, "session unlocked (dev)"
+
+    def lock(self) -> Tuple[bool, str]:
+        """Pretend to lock - there is no logind on a dev box."""
+        self._locked = True
+        return True, "session locked (dev)"
 
     def is_locked(self) -> Optional[bool]:
         """Start out locked, so the unlock button is reachable in dev mode."""
@@ -150,18 +160,25 @@ class LinuxSessionLockBackend:
         except subprocess.TimeoutExpired:
             return None
 
-    def unlock(self) -> Tuple[bool, str]:
-        """Unlock the graphical session and VERIFY it actually unlocked.
+    def _transition(self, verb: str, want_locked: bool) -> Tuple[bool, str]:
+        """Run one loginctl verb against the session and VERIFY the outcome.
 
-        Returns (ok, detail). ok=True means LockedHint reads "no" afterwards -
-        loginctl's exit code alone only says the signal was dispatched.
+        Shared by :meth:`lock` and :meth:`unlock` - the two would otherwise be
+        near-identical: find the session, run the verb, then poll LockedHint
+        until it reads the wanted value. Only the verb and the wanted hint
+        differ.
+
+        Returns (ok, detail). ok=True means LockedHint reads the wanted value
+        afterwards - loginctl's exit code alone only says the signal was
+        dispatched, never that kscreenlocker actually acted on it.
         """
+        state_word = "locked" if want_locked else "unlocked"
         try:
             session_id = self._graphical_session_id()
             if not session_id:
                 return False, "no graphical session found"
 
-            result = self._run(["loginctl", "unlock-session", session_id])
+            result = self._run(["loginctl", verb, session_id])
             if result.returncode != 0:
                 detail = (result.stderr or "").strip() or f"exit {result.returncode}"
                 return False, detail
@@ -170,20 +187,38 @@ class LinuxSessionLockBackend:
             last_hint: Optional[bool] = None
             while True:
                 last_hint = self._locked_hint(session_id)
-                if last_hint is False:
-                    return True, f"session {session_id} unlocked"
+                if last_hint is want_locked:
+                    return True, f"session {session_id} {state_word}"
                 if self._monotonic() >= deadline:
-                    reason = (
-                        "still reports LockedHint=yes"
-                        if last_hint is True
-                        else "LockedHint could not be read"
-                    )
+                    # Distinguish "still reports the old state" (hint read
+                    # fine, just not the wanted value) from "hint could not
+                    # be read at all" (the lock state is genuinely unknown).
+                    if last_hint is None:
+                        reason = "LockedHint could not be read"
+                    else:
+                        reason = f"still reports LockedHint={'yes' if last_hint else 'no'}"
                     return False, f"session {session_id} {reason}"
                 self._sleep(_POLL_INTERVAL_SECONDS)
         except FileNotFoundError:
             return False, "loginctl not found"
         except subprocess.TimeoutExpired:
             return False, "loginctl timed out"
+
+    def unlock(self) -> Tuple[bool, str]:
+        """Unlock the graphical session and VERIFY it actually unlocked.
+
+        Returns (ok, detail). ok=True means LockedHint reads "no" afterwards -
+        loginctl's exit code alone only says the signal was dispatched.
+        """
+        return self._transition("unlock-session", want_locked=False)
+
+    def lock(self) -> Tuple[bool, str]:
+        """Lock the graphical session and VERIFY it actually locked.
+
+        Returns (ok, detail). ok=True means LockedHint reads "yes" afterwards -
+        loginctl's exit code alone only says the signal was dispatched.
+        """
+        return self._transition("lock-session", want_locked=True)
 
 
 _backend: Optional[SessionLockBackend] = None
@@ -215,11 +250,51 @@ async def current_lock_state() -> Optional[bool]:
         return None
 
 
-def _may_unlock(user: UserPublic, db: Session) -> bool:
-    """Admins pass by role, like every other power permission."""
+def _may_operate_session_lock(user: UserPublic, db: Session) -> bool:
+    """Admins pass by role, like every other power permission.
+
+    One capability gates both directions - ``can_unlock_session`` covers
+    locking too. Whoever is trusted to dismiss the lock screen is trusted to
+    put it back up.
+    """
     if user.role == "admin":
         return True
     return check_permission(db, user.id, "unlock_session")
+
+
+def _audit_session_lock_action(
+    *, action: str, user: UserPublic, client_host: Optional[str], ok: bool, detail: str
+) -> None:
+    """Shared audit-writing tail for :func:`lock_if_permitted` and
+    :func:`unlock_if_permitted`.
+
+    A REFUSED gate stays unaudited on purpose - the caller decides that
+    *before* reaching here, and auditing every refusal would drown the real
+    entries. An ATTEMPTED action (the gates were passed) always gets an entry,
+    both outcomes, so nothing on the trail requires cross-referencing loginctl
+    logs to know whether it worked. The ``delegated_power_action`` security
+    event fires only for a non-admin AND only on success, mirroring the
+    sibling desktop routes.
+    """
+    audit_logger = get_audit_logger_db()
+    audit_logger.log_event(
+        event_type="POWER",
+        action=action,
+        user=user.username,
+        resource="desktop",
+        success=ok,
+        ip_address=client_host,
+        details={"message": detail},
+    )
+    if ok and user.role != "admin":
+        audit_logger.log_security_event(
+            action="delegated_power_action",
+            user=user.username,
+            resource="unlock_session",
+            details={"action": action, "client_host": client_host},
+            success=True,
+            ip_address=client_host,
+        )
 
 
 async def unlock_if_permitted(
@@ -246,7 +321,7 @@ async def unlock_if_permitted(
         return False, "not permitted from this network"
 
     try:
-        permitted = _may_unlock(user, db)
+        permitted = _may_operate_session_lock(user, db)
     except Exception:
         # A database hiccup must not turn "displays on" into a 500, and it is
         # not an unlock attempt - so it stays out of the audit trail, like any
@@ -266,31 +341,64 @@ async def unlock_if_permitted(
         logger.exception("session unlock raised for %s", user.username)
         ok, detail = False, "unlock failed unexpectedly"
 
-    # A REFUSED gate above stays unaudited on purpose - that is the normal case
-    # for anyone without the permission and would drown the real entries. An
-    # ATTEMPTED unlock is different: the gates were passed, so both outcomes
-    # belong in the trail, same as the sibling desktop routes.
-    audit_logger = get_audit_logger_db()
-    audit_logger.log_event(
-        event_type="POWER",
-        action="desktop_unlock_session",
-        user=user.username,
-        resource="desktop",
-        success=ok,
-        ip_address=client_host,
-        details={"message": detail},
+    _audit_session_lock_action(
+        action="desktop_unlock_session", user=user, client_host=client_host, ok=ok, detail=detail
     )
     if not ok:
         logger.warning("session unlock failed for %s: %s", user.username, detail)
         return False, detail
+    return True, detail
 
-    if user.role != "admin":
-        audit_logger.log_security_event(
-            action="delegated_power_action",
-            user=user.username,
-            resource="unlock_session",
-            details={"action": "desktop_unlock_session", "client_host": client_host},
-            success=True,
-            ip_address=client_host,
-        )
+
+async def lock_if_permitted(
+    *, user: UserPublic, client_host: Optional[str], db: Session
+) -> Tuple[bool, str]:
+    """Lock the desktop session if the permission gate allows it.
+
+    Deliberately asymmetric with :func:`unlock_if_permitted`: there is NO
+    network gate here. The LAN/VPN check on unlock exists so a stolen web
+    account cannot OPEN a physical desktop from the internet - locking is the
+    safe direction, it only CLOSES the desktop, and the situation that calls
+    for a remote lock (forgot to lock before leaving, reacting to a
+    compromised account) is exactly the case of NOT being in front of the
+    machine. Do not "fix" this into symmetry with unlock; the asymmetry is
+    the point. ``client_host`` is still accepted and still recorded in the
+    audit entry - it just never decides anything here.
+
+    Args:
+        user: The authenticated caller.
+        client_host: The request's client IP, or None. Audited only.
+        db: SQLAlchemy session.
+
+    Returns:
+        (locked, detail). ``locked`` describes the state afterwards; on a
+        refused gate loginctl is never called and the real lock state is
+        unknown, so it is False with the reason in ``detail``.
+    """
+    try:
+        permitted = _may_operate_session_lock(user, db)
+    except Exception:
+        # A database hiccup must not become a 500, and it is not a lock
+        # attempt - so it stays out of the audit trail, like any other
+        # refused gate.
+        logger.exception("session lock: permission check failed for %s", user.username)
+        return False, "permission check failed"
+    if not permitted:
+        return False, "permission required: power:unlock_session"
+
+    try:
+        ok, detail = await asyncio.to_thread(get_session_lock_backend().lock)
+    except Exception:
+        # Same defensive posture as unlock: the backend catches
+        # FileNotFoundError/TimeoutExpired itself, but not e.g. an OSError
+        # from a failing fork. The caller must not die of it.
+        logger.exception("session lock raised for %s", user.username)
+        ok, detail = False, "lock failed unexpectedly"
+
+    _audit_session_lock_action(
+        action="desktop_lock_session", user=user, client_host=client_host, ok=ok, detail=detail
+    )
+    if not ok:
+        logger.warning("session lock failed for %s: %s", user.username, detail)
+        return False, detail
     return True, detail

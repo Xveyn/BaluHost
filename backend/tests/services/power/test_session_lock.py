@@ -200,6 +200,124 @@ class TestDevBackend:
         assert "dev" in detail
 
 
+class TestLockVerification:
+    """Mirrors TestUnlockVerification: same _transition, opposite verb/hint."""
+
+    def test_argv_is_exactly_lock_session(self):
+        runner = FakeRunner({
+            tuple(SHOW_USER): _proc(stdout="2\n"),
+            ("loginctl", "lock-session", "2"): _proc(),
+            "locked_hint": _proc(stdout="yes\n"),
+        })
+
+        _backend(runner).lock()
+
+        assert ["loginctl", "lock-session", "2"] in runner.calls
+
+    def test_success_requires_locked_hint_to_flip_to_yes(self):
+        runner = FakeRunner({
+            tuple(SHOW_USER): _proc(stdout="2\n"),
+            ("loginctl", "lock-session", "2"): _proc(),
+            "locked_hint": _proc(stdout="yes\n"),
+        })
+
+        ok, detail = _backend(runner).lock()
+
+        assert ok is True
+        assert "locked" in detail
+
+    def test_a_locker_that_never_reports_locked_is_a_reported_failure(self):
+        """loginctl exits 0 as soon as the signal is SENT. Without reading the
+        hint back the API would claim 'locked' over an open screen."""
+        runner = FakeRunner({
+            tuple(SHOW_USER): _proc(stdout="2\n"),
+            ("loginctl", "lock-session", "2"): _proc(),
+            "locked_hint": _proc(stdout="no\n"),
+        })
+
+        ok, detail = _backend(runner, monotonic_values=[0.0, 0.0, 1.0, 2.0, 9.0]).lock()
+
+        assert ok is False
+        assert "LockedHint" in detail
+
+    def test_polls_until_the_hint_flips_to_yes(self):
+        hints = iter([_proc(stdout="no\n"), _proc(stdout="no\n"), _proc(stdout="yes\n")])
+        runner = FakeRunner({
+            tuple(SHOW_USER): _proc(stdout="2\n"),
+            ("loginctl", "lock-session", "2"): _proc(),
+            "locked_hint": lambda: next(hints),
+        })
+
+        ok, _detail = _backend(runner).lock()
+
+        assert ok is True
+
+    def test_an_unreadable_hint_is_reported_as_such(self):
+        runner = FakeRunner({
+            tuple(SHOW_USER): _proc(stdout="2\n"),
+            ("loginctl", "lock-session", "2"): _proc(),
+            "locked_hint": _proc(returncode=1, stderr="no such session"),
+        })
+
+        ok, detail = _backend(runner, monotonic_values=[0.0, 0.0, 9.0]).lock()
+
+        assert ok is False
+        assert "could not be read" in detail
+
+    def test_nonzero_exit_is_reported(self):
+        runner = FakeRunner({
+            tuple(SHOW_USER): _proc(stdout="2\n"),
+            ("loginctl", "lock-session", "2"): _proc(returncode=1, stderr="Access denied"),
+        })
+
+        ok, detail = _backend(runner).lock()
+
+        assert ok is False
+        assert "Access denied" in detail
+
+    def test_missing_loginctl_is_reported_not_raised(self):
+        def _raise(_cmd):
+            raise FileNotFoundError()
+
+        ok, detail = _backend(_raise).lock()
+
+        assert ok is False
+        assert "loginctl not found" in detail
+
+    def test_timeout_is_reported_not_raised(self):
+        def _raise(_cmd):
+            raise subprocess.TimeoutExpired(cmd="loginctl", timeout=10)
+
+        ok, detail = _backend(_raise).lock()
+
+        assert ok is False
+        assert "timed out" in detail
+
+    def test_no_graphical_session_is_a_clean_failure(self):
+        runner = FakeRunner({
+            tuple(SHOW_USER): _proc(stdout="\n"),
+            tuple(LIST_SESSIONS): _proc(stdout="         1  993 ci-runner - 1975 manager-early - no -\n"),
+        })
+
+        ok, detail = _backend(runner).lock()
+
+        assert ok is False
+        assert "no graphical session" in detail
+
+
+class TestDevBackendLock:
+    def test_lock_then_is_locked(self):
+        backend = DevSessionLockBackend()
+        backend.unlock()
+        assert backend.is_locked() is False
+
+        ok, detail = backend.lock()
+
+        assert ok is True
+        assert "dev" in detail
+        assert backend.is_locked() is True
+
+
 class TestLockStateRead:
     """Reading the lock state - the half of logind the unlock path never used.
 

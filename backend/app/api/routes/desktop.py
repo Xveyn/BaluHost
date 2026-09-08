@@ -11,7 +11,7 @@ from app.api.deps import get_current_user, get_db, require_power_toggle_desktop
 from app.core.rate_limiter import user_limiter, get_limit
 from app.schemas.desktop import DesktopStatus
 from app.services.power.desktop import get_desktop_service
-from app.services.power.session_lock import current_lock_state, unlock_if_permitted
+from app.services.power.session_lock import current_lock_state, lock_if_permitted, unlock_if_permitted
 from app.services.notifications.events import emit_desktop_disabled, emit_desktop_enabled
 from app.services.audit.logger_db import get_audit_logger_db
 
@@ -64,6 +64,41 @@ async def desktop_unlock(
     except Exception:  # a failed unlock is an outcome, never a 5xx
         logger.exception("Session unlock failed unexpectedly")
         ok, message = False, "unlock failed unexpectedly"
+    return {"success": ok, "message": message}
+
+
+@router.post("/lock")
+@user_limiter.limit(get_limit("admin_operations"))
+async def desktop_lock(
+    request: Request,
+    response: Response,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Lock the graphical desktop session, leaving the displays alone.
+
+    The mirror of ``/unlock``, worth having separately from "disable desktop":
+    turning the displays off (DPMS) does NOT lock the session, so someone
+    standing at the dark screen can still move the mouse and see the desktop.
+    This closes that gap - e.g. locking remotely after leaving without
+    locking, or reacting to a compromised account.
+
+    Authorization is deliberately NOT a route dependency, for the same reason
+    as ``/unlock``: ``lock_if_permitted`` is the single place the permission
+    gate is evaluated and audited. Unlike ``/unlock`` it carries no network
+    gate - locking only closes the desktop, so a stolen web account gains
+    nothing from being able to lock it from anywhere. A refusal is therefore
+    a 200 with ``success: false``, not a 403.
+    """
+    try:
+        ok, message = await lock_if_permitted(
+            user=current_user,
+            client_host=request.client.host if request.client else None,
+            db=db,
+        )
+    except Exception:  # a failed lock is an outcome, never a 5xx
+        logger.exception("Session lock failed unexpectedly")
+        ok, message = False, "lock failed unexpectedly"
     return {"success": ok, "message": message}
 
 
