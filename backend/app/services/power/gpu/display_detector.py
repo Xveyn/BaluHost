@@ -52,3 +52,44 @@ def get_active_display_count_sync(sysfs_root: Path = Path("/")) -> int:
     module's public surface a lie.
     """
     return _count_sync(sysfs_root)
+
+
+def _states_sync(sysfs_root: Path) -> dict[str, bool]:
+    """Read, per connector, whether it is actually driving pixels."""
+    drm = sysfs_root / "sys" / "class" / "drm"
+    if not drm.exists():
+        return {}
+    states: dict[str, bool] = {}
+    for entry in sorted(drm.iterdir()):
+        if not _CONNECTOR_RE.match(entry.name):
+            continue
+        status_file = entry / "status"
+        enabled_file = entry / "enabled"
+        if not status_file.exists() or not enabled_file.exists():
+            continue
+        try:
+            status = status_file.read_text().strip()
+            enabled = enabled_file.read_text().strip()
+        except OSError as exc:
+            logger.debug("Cannot read %s: %s", entry.name, exc)
+            continue
+        # KWin knows the connector without the "card<N>-" prefix.
+        states[_CONNECTOR_RE.sub("", entry.name)] = (
+            status == "connected" and enabled == "enabled"
+        )
+    return states
+
+
+def get_connector_states_sync(sysfs_root: Path = Path("/")) -> dict[str, bool]:
+    """Per-connector 'is this driving pixels?', keyed by the KWin name.
+
+    Same sysfs pass as get_active_display_count(), but keeps the names. The
+    display_output plugin needs to say WHICH output is lit, not how many are -
+    and a second sysfs reader for the same question would be the worse answer.
+    """
+    return _states_sync(sysfs_root)
+
+
+async def get_connector_states(sysfs_root: Path = Path("/")) -> dict[str, bool]:
+    """Async variant, for callers already on an event loop."""
+    return await asyncio.to_thread(_states_sync, sysfs_root)
