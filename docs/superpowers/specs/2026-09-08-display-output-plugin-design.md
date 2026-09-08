@@ -212,8 +212,14 @@ Roh sind 55 Einträge in ID-String-Reihenfolge, mit Dubletten. Der Parser:
    Solche Paare unterscheiden sich nur in DRM-Timing-Flags (CEA gegen DMT) —
    ein Unterschied, der sich einem Menschen nicht sinnvoll anzeigen lässt;
 2. sortiert absteigend nach Fläche, dann nach `refreshRate`;
-3. beschriftet mit zwei Nachkommastellen: `3840×2160 @ 120,00 Hz` neben
-   `3840×2160 @ 119,88 Hz`.
+3. liefert `width`, `height` und die **ungerundete** `refresh_rate`; die
+   Beschriftung baut das Frontend daraus mit zwei Nachkommastellen —
+   `3840×2160 @ 120,00 Hz` neben `3840×2160 @ 119,88 Hz`.
+
+Die Beschriftung entsteht bewusst **nicht** im Backend. Sie enthält ein
+Dezimaltrennzeichen, und das ist sprachabhängig (`119,88` gegen `119.88`); ein
+serverseitig gebauter String wäre in einer der beiden Sprachen falsch. Das
+Backend liefert Zahlen, das Frontend formatiert sie mit `Intl.NumberFormat`.
 
 Aus 55 Roheinträgen werden so **50** unterscheidbare (fünf exakte Dubletten
 fallen weg: je eine bei `1920x1080@60`, `1280x720@60` und `720x576@50`, zwei bei
@@ -237,8 +243,7 @@ class DisplayMode(BaseModel):
     name: str               # "3840x2160@120" - NICHT eindeutig, nur zur Gegenpruefung
     width: int
     height: int
-    refresh_rate: float     # exakt, ungerundet: 119.88 vs 120.0
-    label: str              # "3840x2160 @ 119,88 Hz" - fuer das Dropdown
+    refresh_rate: float     # exakt, ungerundet: 119.87999725341797
 
 class DisplayOutput(BaseModel):
     name: str               # "DP-3"
