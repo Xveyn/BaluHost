@@ -186,6 +186,11 @@ RATE_LIMITS = {
     # admin_operations (30/Minute) waere hier falsch: die Abfrage allein
     # verbraucht schon 30 Anfragen pro Minute.
     "audio_control": "240/minute",
+
+    # Displaysteuerung — das Popover fragt nur im geoeffneten Zustand alle 5 s
+    # ab (~12/Minute). admin_operations (30/Minute) waere bei zwei offenen
+    # Tabs bereits knapp.
+    "display_output": "60/minute",
 }
 
 
