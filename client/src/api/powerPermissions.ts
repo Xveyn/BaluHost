@@ -36,6 +36,7 @@ export interface MyPowerPermissions {
   can_toggle_desktop: boolean;
   can_unlock_session: boolean;
   can_control_audio: boolean;
+  can_manage_displays: boolean;
 }
 
 /**

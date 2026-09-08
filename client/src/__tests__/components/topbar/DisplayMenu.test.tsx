@@ -1,0 +1,130 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+
+vi.mock('react-i18next', () => ({
+  useTranslation: (ns: string) => ({
+    t: (key: string, options?: Record<string, unknown>) => {
+      const values = options ? Object.values(options).join('/') : '';
+      return values ? `${ns}:${key}:${values}` : `${ns}:${key}`;
+    },
+    i18n: { language: 'de' },
+  }),
+}));
+
+vi.mock('../../../api/displayOutput', async () => {
+  const actual = await vi.importActual<typeof import('../../../api/displayOutput')>(
+    '../../../api/displayOutput',
+  );
+  return {
+    ...actual,
+    getDisplayLayout: vi.fn(),
+    applyDisplayLayout: vi.fn().mockResolvedValue(undefined),
+  };
+});
+
+vi.mock('../../../api/powerPermissions', () => ({
+  getMyPowerPermissions: vi.fn(),
+}));
+
+import { DisplayMenu } from '../../../components/topbar/DisplayMenu';
+import { getDisplayLayout, applyDisplayLayout } from '../../../api/displayOutput';
+import { getMyPowerPermissions } from '../../../api/powerPermissions';
+
+const LAYOUT = {
+  available: true,
+  detail: null,
+  displays_powered: false,
+  outputs: [
+    {
+      name: 'HDMI-A-1', connected: true, selected: false, lit: false,
+      current_mode_id: '1', preferred_mode_id: '1', scale: 1, priority: 0,
+      modes: [{ id: '1', name: '2560x1440@144', width: 2560, height: 1440, refresh_rate: 143.999 }],
+    },
+    {
+      name: 'DP-3', connected: true, selected: true, lit: false,
+      current_mode_id: '57', preferred_mode_id: '56', scale: 2.5, priority: 1,
+      modes: [
+        { id: '57', name: '3840x2160@120', width: 3840, height: 2160, refresh_rate: 120 },
+        { id: '58', name: '3840x2160@120', width: 3840, height: 2160, refresh_rate: 119.87999725 },
+      ],
+    },
+  ],
+};
+
+beforeEach(() => {
+  vi.mocked(getMyPowerPermissions).mockResolvedValue({ can_manage_displays: true } as never);
+  vi.mocked(getDisplayLayout).mockResolvedValue(structuredClone(LAYOUT) as never);
+});
+
+async function open() {
+  render(<DisplayMenu />);
+  const button = await screen.findByLabelText('display:title');
+  fireEvent.click(button);
+  await waitFor(() => expect(getDisplayLayout).toHaveBeenCalled());
+}
+
+describe('DisplayMenu', () => {
+  it('bleibt unsichtbar ohne das Recht', async () => {
+    vi.mocked(getMyPowerPermissions).mockResolvedValue({ can_manage_displays: false } as never);
+    const { container } = render(<DisplayMenu />);
+    await waitFor(() => expect(getMyPowerPermissions).toHaveBeenCalled());
+    expect(container.firstChild).toBeNull();
+  });
+
+  it('fragt erst ab, wenn das Popover offen ist', async () => {
+    render(<DisplayMenu />);
+    await screen.findByLabelText('display:title');
+    expect(getDisplayLayout).not.toHaveBeenCalled();
+  });
+
+  it('listet beide Ausgaenge', async () => {
+    await open();
+    expect(await screen.findByText('DP-3')).toBeTruthy();
+    expect(screen.getByText('HDMI-A-1')).toBeTruthy();
+  });
+
+  it('zeigt gewaehlt und leuchtet als getrennte Aussagen', async () => {
+    // Der mehrdeutige Zustand von BaluNode: KWin haelt DP-3 fuer gewaehlt,
+    // DRM meldet dunkel. Beides muss sichtbar sein, sonst widerspricht sich
+    // die Oberflaeche.
+    await open();
+    expect(screen.getAllByText('display:selected').length).toBe(1);
+    expect(screen.getAllByText('display:dark').length).toBe(2);
+  });
+
+  it('unterscheidet die beiden namensgleichen 4K-Modi im Auswahlfeld', async () => {
+    await open();
+    const select = screen.getByLabelText('display:mode:DP-3') as HTMLSelectElement;
+    const labels = Array.from(select.options).map((o) => o.textContent);
+    expect(new Set(labels).size).toBe(labels.length);
+    expect(labels.some((l) => l?.includes('119,88'))).toBe(true);
+  });
+
+  it('schickt id und name zusammen', async () => {
+    await open();
+    const select = screen.getByLabelText('display:mode:DP-3') as HTMLSelectElement;
+    fireEvent.change(select, { target: { value: '58' } });
+    fireEvent.click(screen.getByText('display:apply'));
+    await waitFor(() => expect(applyDisplayLayout).toHaveBeenCalled());
+    const wishes = vi.mocked(applyDisplayLayout).mock.calls[0][0];
+    const dp3 = wishes.find((w) => w.name === 'DP-3');
+    expect(dp3).toEqual({
+      name: 'DP-3', selected: true, mode_id: '58', mode_name: '3840x2160@120',
+    });
+  });
+
+  it('sperrt Anwenden, wenn nichts mehr gewaehlt waere', async () => {
+    await open();
+    fireEvent.click(screen.getByLabelText('display:outputs:DP-3'));
+    const apply = screen.getByText('display:apply').closest('button') as HTMLButtonElement;
+    expect(apply.disabled).toBe(true);
+  });
+
+  it('meldet eine unerreichbare Sitzung statt einer leeren Liste', async () => {
+    vi.mocked(getDisplayLayout).mockResolvedValue({
+      ...LAYOUT, available: false, outputs: [],
+    } as never);
+    await open();
+    expect(await screen.findByText('display:unavailable')).toBeTruthy();
+  });
+});
