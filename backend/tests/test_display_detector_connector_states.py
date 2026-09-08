@@ -2,6 +2,7 @@
 import pytest
 
 from app.services.power.gpu.display_detector import (
+    get_active_display_count_sync,
     get_connector_states,
     get_connector_states_sync,
 )
@@ -47,3 +48,19 @@ class TestConnectorStates:
     async def test_the_async_variant_agrees_with_the_sync_one(self, tmp_path):
         _connector(tmp_path, "card0-HDMI-A-1", "connected", "enabled")
         assert await get_connector_states(tmp_path) == get_connector_states_sync(tmp_path)
+
+    def test_same_name_on_two_cards_both_lit_counts_as_two(self, tmp_path):
+        # card0-DP-1 and card1-DP-1 both strip to "DP-1". The count must not
+        # collapse two real, independently lit connectors into one.
+        _connector(tmp_path, "card0-DP-1", "connected", "enabled")
+        _connector(tmp_path, "card1-DP-1", "connected", "enabled")
+        assert get_active_display_count_sync(tmp_path) == 2
+
+    def test_same_name_on_two_cards_one_dark_counts_as_one_and_map_has_one_key(
+        self, tmp_path
+    ):
+        _connector(tmp_path, "card0-DP-1", "connected", "enabled")
+        _connector(tmp_path, "card1-DP-1", "disconnected", "disabled")
+        assert get_active_display_count_sync(tmp_path) == 1
+        states = get_connector_states_sync(tmp_path)
+        assert list(states) == ["DP-1"]

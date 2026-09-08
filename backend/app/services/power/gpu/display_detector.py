@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+from collections.abc import Iterator
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -11,20 +12,25 @@ logger = logging.getLogger(__name__)
 _CONNECTOR_RE = re.compile(r"^card\d+-")
 
 
-def _states_sync(sysfs_root: Path) -> dict[str, bool]:
-    """Read, per connector, whether it is actually driving pixels.
+def _iter_connector_states(sysfs_root: Path) -> Iterator[tuple[str, bool]]:
+    """Yield (KWin name, is-lit) for every DRM connector under sysfs_root.
 
-    This is the single sysfs walk for "is this connector lit?" - a connector
-    is lit when status='connected' AND enabled='enabled' (`enabled` covers
-    DPMS-off / unused: physically connected but no active mode). Keys are
-    KWin-style names (the "card<N>-" prefix stripped). `_count_sync` derives
-    its count from this map instead of re-walking sysfs with its own copy of
-    the predicate, so the count and the per-connector map cannot drift apart.
+    The single place that knows how to walk /sys/class/drm and what "lit"
+    means - a connector is lit when status='connected' AND enabled='enabled'
+    (`enabled` covers DPMS-off / unused: physically connected but no active
+    mode). Both the count and the per-connector map derive from this
+    generator, so they cannot drift apart.
+
+    Names are KWin-style (the "card<N>-" prefix stripped), and this can
+    yield the same name more than once: two cards can expose the same
+    connector name (card0-DP-1 and card1-DP-1 both strip to "DP-1"). Callers
+    that need a count must count entries, not distinct names - collapsing
+    them would undercount real displays.
     """
     drm = sysfs_root / "sys" / "class" / "drm"
     if not drm.exists():
-        return {}
-    states: dict[str, bool] = {}
+        return
+    seen: set[str] = set()
     for entry in sorted(drm.iterdir()):
         if not _CONNECTOR_RE.match(entry.name):
             continue
@@ -39,15 +45,33 @@ def _states_sync(sysfs_root: Path) -> dict[str, bool]:
             logger.debug("Cannot read %s: %s", entry.name, exc)
             continue
         # KWin knows the connector without the "card<N>-" prefix.
-        states[_CONNECTOR_RE.sub("", entry.name)] = (
-            status == "connected" and enabled == "enabled"
-        )
-    return states
+        name = _CONNECTOR_RE.sub("", entry.name)
+        if name in seen:
+            logger.warning(
+                "Multiple DRM connectors strip to the same KWin name %r; "
+                "the KWin-name-to-connector mapping is ambiguous.",
+                name,
+            )
+        seen.add(name)
+        yield name, (status == "connected" and enabled == "enabled")
+
+
+def _states_sync(sysfs_root: Path) -> dict[str, bool]:
+    """Per-connector 'is this lit?', keyed by the KWin name.
+
+    When a name is ambiguous (see `_iter_connector_states`), last-wins.
+    """
+    return dict(_iter_connector_states(sysfs_root))
 
 
 def _count_sync(sysfs_root: Path) -> int:
-    """Count of the connectors `_states_sync` reports as lit."""
-    return sum(_states_sync(sysfs_root).values())
+    """Count of lit connectors.
+
+    Counts entries, not distinct names: two cards can expose the same
+    connector name, and collapsing them via `_states_sync`'s dict would
+    undercount real displays.
+    """
+    return sum(1 for _, lit in _iter_connector_states(sysfs_root) if lit)
 
 
 async def get_active_display_count(sysfs_root: Path = Path("/")) -> int:
