@@ -66,9 +66,10 @@ Der Name entsteht durch **`qRound()`** der Bildwiederholrate. 119,88 und 120,000
 werden damit beide zu `3840x2160@120`. Die Kollision steckt im Namensschema, nicht
 in den Daten dieses Hosts.
 
-Gemessen auf HDMI-A-1: 55 Modi, 43 verschiedene Namen. Sechs Namen sind mehrfach
-belegt (`720x480@60` viermal, `1920x1080@60` und `1280x720@60` je dreimal,
-`3840x2160@60`, `640x480@60`, `720x576@50` je zweimal).
+Gemessen auf HDMI-A-1: 55 Modi, **45** verschiedene Namen. Sechs Namen sind
+mehrfach belegt (`720x480@60` viermal, `1920x1080@60` und `1280x720@60` je
+dreimal, `3840x2160@60`, `640x480@60`, `720x576@50` je zweimal) — zehn Modi
+verstecken sich also hinter einem fremden Namen.
 
 Auf DP-3 trifft es den praktisch wichtigen Fall:
 
@@ -185,6 +186,13 @@ Enumeration.**
    *(das ist #589 als Testfall)*
 3. der Modus hinter `mode_id` trägt noch `mode_name` — sonst **409**
 
+Zwei Randfälle, damit sie nicht offenbleiben: `mode_name` ist **Pflicht, sobald
+`mode_id` gesetzt ist** (nur eines von beiden → 400, sonst wäre die Gegenprobe
+abschaltbar). Und ein Modus an einem Ausgang mit `selected: false` wird
+**ignoriert**, nicht abgelehnt — KWin behält die Modus-Wahl eines abgewählten
+Ausgangs ohnehin, und ein 400 dafür wäre eine Schikane gegenüber einer UI, die
+schlicht den zuletzt angezeigten Zustand zurückschickt.
+
 Schritt 3 schließt das Fenster zwischen `GET` und `POST`: schiebt sich ein
 Hotplug dazwischen und werden IDs neu vergeben, meldet der Server einen Konflikt,
 statt still den falschen Modus zu setzen. Dieselbe Haltung, mit der
@@ -207,8 +215,10 @@ Roh sind 55 Einträge in ID-String-Reihenfolge, mit Dubletten. Der Parser:
 3. beschriftet mit zwei Nachkommastellen: `3840×2160 @ 120,00 Hz` neben
    `3840×2160 @ 119,88 Hz`.
 
-Aus 55 Roheinträgen werden so 49 unterscheidbare, und die Beschriftung ist
-innerhalb eines Ausgangs eindeutig.
+Aus 55 Roheinträgen werden so **50** unterscheidbare (fünf exakte Dubletten
+fallen weg: je eine bei `1920x1080@60`, `1280x720@60` und `720x576@50`, zwei bei
+`720x480@60`), und die Beschriftung ist innerhalb eines Ausgangs eindeutig.
+Die Zahlen sind Testgegenstand, nicht Prosa — die Fixture muss sie hergeben.
 
 ## 8. API
 
