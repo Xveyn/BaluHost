@@ -95,7 +95,8 @@
           "label": "Session entsperren",
           "desc": "Beim Einschalten der Displays die Desktop-Sitzung mit entsperren (nur aus dem Heimnetz oder VPN)"
         },
-        "controlAudio": { "label": "Audio", "desc": "Lautstärke, Ausgabegerät und Anwendungs-Mixer steuern" }
+        "controlAudio": { "label": "Audio", "desc": "Lautstärke, Ausgabegerät und Anwendungs-Mixer steuern" },
+        "manageDisplays": { "label": "Displays", "desc": "Bildschirm-Ausgang und Auflösung wählen" }
       }
     }
   },
