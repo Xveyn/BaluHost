@@ -11,10 +11,13 @@ Listenreihenfolge einen anderen Modus — ohne Fehlermeldung.
 """
 from __future__ import annotations
 
+import json
 import logging
+import subprocess
 from typing import List, Optional
 
 from app.plugins.installed.display_output.models import DisplayMode, DisplayOutput
+from app.services.power.session_env import wayland_session_env
 
 logger = logging.getLogger(__name__)
 
@@ -133,3 +136,98 @@ def parse_outputs(payload: object) -> List[DisplayOutput]:
             )
         )
     return outputs
+
+
+# kscreen-doctor darf niemals haengen bleiben und dabei einen Worker blockieren.
+KSCREEN_TIMEOUT_SECONDS = 10
+KSCREEN_BINARY = "kscreen-doctor"
+
+
+def run_kscreen(args: List[str]) -> tuple[bool, str]:
+    """Fuehrt kscreen-doctor mit Listen-Argumenten aus.
+
+    Args:
+        args: Argumente ohne den Programmnamen, etwa ``["-j"]``.
+
+    Returns:
+        (Erfolg, Ausgabe bzw. Fehlertext). Die Ausgabe ist roh und enthaelt
+        EDID-Namen und Pfade. Sie ist fuer Log und Weiterverarbeitung gedacht —
+        Aufrufer duerfen sie **nicht** in eine Client-Antwort uebernehmen.
+    """
+    try:
+        completed = subprocess.run(
+            [KSCREEN_BINARY, *args],
+            capture_output=True,
+            text=True,
+            timeout=KSCREEN_TIMEOUT_SECONDS,
+            env=wayland_session_env(),
+        )
+    except FileNotFoundError:
+        logger.warning("kscreen-doctor ist nicht installiert")
+        return False, "kscreen-doctor nicht gefunden"
+    except subprocess.TimeoutExpired:
+        logger.warning("kscreen-doctor-Zeitueberschreitung: %s", args)
+        return False, "Zeitueberschreitung"
+    except OSError as exc:
+        logger.warning("kscreen-doctor-Aufruf fehlgeschlagen: %s", exc)
+        return False, "Aufruf fehlgeschlagen"
+
+    if completed.returncode != 0:
+        logger.warning(
+            "kscreen-doctor %s endete mit %s: %s",
+            args, completed.returncode, completed.stderr.strip(),
+        )
+        return False, completed.stderr.strip() or "kscreen-doctor-Fehler"
+    return True, completed.stdout.strip()
+
+
+def run_kscreen_json() -> Optional[object]:
+    """Liest ``kscreen-doctor -j`` und gibt die geparste Struktur zurueck.
+
+    Returns:
+        Die geparste JSON-Struktur, oder None bei Fehler oder ungueltigem JSON.
+    """
+    ok, output = run_kscreen(["-j"])
+    if not ok:
+        return None
+    try:
+        return json.loads(output)
+    except json.JSONDecodeError:
+        logger.warning("kscreen-doctor lieferte ungueltiges JSON")
+        return None
+
+
+def build_apply_args(
+    wanted: dict,
+    live_outputs: List[DisplayOutput],
+) -> List[str]:
+    """Baut den vollstaendigen Argumentvektor fuer **einen** Aufruf.
+
+    kscreen-doctor wendet alle Argumente eines Aufrufs gemeinsam an. Genau ein
+    Unterprozess heisst deshalb: kein Teilzustand, wenn etwas schiefgeht.
+
+    Die Reihenfolge folgt der **Enumeration**, nicht dem Request. Das macht den
+    Vektor deterministisch und damit pruefbar, und es nimmt dem Client jeden
+    Einfluss auf die Abarbeitungsreihenfolge.
+
+    Args:
+        wanted: Abbildung Ausgangsname -> (selected, mode_id oder None). Nur
+            Ausgaenge, die der Aufrufer bereits validiert hat.
+        live_outputs: Die aktuelle Enumeration; bestimmt Reihenfolge und
+            Zugehoerigkeit.
+
+    Returns:
+        Der vollstaendige argv inklusive Programmname.
+    """
+    args: List[str] = [KSCREEN_BINARY]
+    for output in live_outputs:
+        if output.name not in wanted:
+            continue
+        selected, mode_id = wanted[output.name]
+        if not selected:
+            args.append(f"output.{output.name}.disable")
+            continue
+        args.append(f"output.{output.name}.enable")
+        if mode_id:
+            args.append(f"output.{output.name}.mode.{mode_id}")
+    return args
