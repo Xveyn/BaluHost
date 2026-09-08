@@ -2,6 +2,8 @@
 import subprocess
 from unittest.mock import patch
 
+import pytest
+
 from app.plugins.installed.display_output import kscreen
 from app.plugins.installed.display_output.models import DisplayMode, DisplayOutput
 
@@ -59,6 +61,18 @@ class TestBuildApplyArgs:
 
 
 class TestRunKscreen:
+    # wayland_session_env() liest os.getuid(), das es unter Windows nicht
+    # gibt - und wird als Argument ausgewertet, BEVOR das gepatchte
+    # subprocess.run ueberhaupt aufgerufen wird. Ohne diesen Patch bricht
+    # jeder Test hier schon beim Aufbau von env= ab, egal was subprocess.run
+    # zurueckgeben soll. Gegenstand dieser Tests ist die Fehlerbehandlung
+    # des Runners, nicht der Umgebungs-Helfer (eigene Tests in
+    # tests/test_session_env.py) - deshalb wird er hier nur stillgelegt.
+    @pytest.fixture(autouse=True)
+    def _stub_session_env(self):
+        with patch.object(kscreen, "wayland_session_env", return_value={}):
+            yield
+
     def test_a_missing_binary_is_reported_not_raised(self):
         with patch("subprocess.run", side_effect=FileNotFoundError()):
             ok, message = kscreen.run_kscreen(["--dpms", "on"])
