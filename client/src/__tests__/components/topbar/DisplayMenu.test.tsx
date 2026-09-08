@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 
 vi.mock('react-i18next', () => ({
@@ -56,6 +56,14 @@ const LAYOUT = {
 beforeEach(() => {
   vi.mocked(getMyPowerPermissions).mockResolvedValue({ can_manage_displays: true } as never);
   vi.mocked(getDisplayLayout).mockResolvedValue(structuredClone(LAYOUT) as never);
+});
+
+// setup.ts hat keinen aequivalenten globalen Hook. Muss unconditional laufen,
+// nicht erst nach der letzten Assertion eines Fake-Timer-Tests — sonst
+// ueberlebt ein Fehlschlag dort die Umstellung und faelscht jeden Timer in
+// den danach laufenden Tests dieser Datei.
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 async function open() {
@@ -173,6 +181,26 @@ describe('DisplayMenu', () => {
 
     expect(screen.getByText('display:saveError')).toBeTruthy();
     vi.useRealTimers();
+  });
+
+  it('raeumt eine apply-Fehlermeldung beim erneuten Oeffnen aus', async () => {
+    vi.mocked(applyDisplayLayout).mockRejectedValueOnce({ response: { status: 500 } });
+    render(<DisplayMenu />);
+    const button = await screen.findByLabelText('display:title');
+
+    fireEvent.click(button);
+    await waitFor(() => expect(screen.getByText('DP-3')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText('display:apply'));
+    await waitFor(() => expect(applyDisplayLayout).toHaveBeenCalled());
+    await waitFor(() => expect(screen.getByText('display:saveError')).toBeInTheDocument());
+
+    // Schliessen (Klick auf den Trigger-Button toggelt isOpen)...
+    fireEvent.click(button);
+    // ...und wieder oeffnen: eine Interaktion, von der der Nutzer laengst
+    // weg ist, darf im frisch geoeffneten Popover nicht mehr auftauchen.
+    fireEvent.click(button);
+    await waitFor(() => expect(screen.queryByText('display:saveError')).toBeNull());
   });
 });
 

@@ -12,6 +12,7 @@ Wayland-Socket.
 # Request-Body wuerde als Query-Parameter fehlinterpretiert und jedes
 # POST liefert 422.
 import logging
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
@@ -41,7 +42,7 @@ def _audit(
     success: bool,
     *,
     status_code: int,
-    argv=None,
+    argv: Optional[List[str]] = None,
     detail: str = "",
 ) -> None:
     """Schreibt einen Audit-Eintrag fuer JEDEN apply-Versuch — Erfolg wie Ablehnung.

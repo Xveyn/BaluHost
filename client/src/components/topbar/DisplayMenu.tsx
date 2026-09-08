@@ -104,6 +104,12 @@ export function DisplayMenu() {
 
   useEffect(() => {
     if (!isOpen) return;
+    // Eine saveError/conflictError aus einer vorigen Sitzung gehört nicht in
+    // ein frisch geöffnetes Popover — der Nutzer sieht sonst eine Klage über
+    // eine Interaktion, die er längst verlassen hat. Der Poll-Takt selbst
+    // löscht bewusst nur `loadError` (siehe refresh()); das hier ist der
+    // einzige Ort, an dem auch saveError/conflictError geräumt wird.
+    setError(null);
     void refresh();
     const id = setInterval(() => void refresh(), POLL_MS);
     return () => clearInterval(id);
@@ -151,9 +157,10 @@ export function DisplayMenu() {
     } catch (err: unknown) {
       const statusCode = (err as { response?: { status?: number } })?.response?.status;
       if (statusCode === 409) {
-        // Der Refetch MUSS vor dem Setzen der Meldung laufen: refresh()
-        // setzt bei Erfolg selbst setError(null) — danach gesetzt, würde die
-        // Konflikt-Meldung sich im selben Atemzug wieder löschen.
+        // Der Refetch MUSS vor dem Setzen der Meldung laufen: er holt eine
+        // frische Modus-Liste und setzt den Entwurf zurück — die Meldung soll
+        // den Zustand beschreiben, in dem der Nutzer danach landet, nicht den,
+        // den er verlassen hat.
         dirty.current = false;
         await refresh();
         setError('conflictError');
