@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.api.deps import require_power_manage_displays
+from app.core.exception_handlers import register_exception_handlers
 from app.plugins.installed.display_output import DisplayOutputPlugin
 from app.plugins.installed.display_output import service as service_module
 from app.plugins.installed.display_output.backend import DevDisplayBackend
@@ -21,6 +22,12 @@ class _User:
 
 def _app(service: DisplayService) -> TestClient:
     app = FastAPI()
+    # Registriert den echten globalen 5xx-Scrubber (core/exception_handlers.py),
+    # damit die Tests genau das sehen, was ein realer Client sieht: ein
+    # bloss gebautes FastAPI() liesse ein rohes HTTPException(502, detail=...)
+    # unveraendert durch, waehrend die echte App jedes HTTPException-detail ab
+    # Status 500 auf "Internal server error" scrubbt.
+    register_exception_handlers(app)
     app.include_router(DisplayOutputPlugin().get_router(), prefix=BASE)
     app.dependency_overrides[require_power_manage_displays] = lambda: _User()
     return TestClient(app)
@@ -126,6 +133,29 @@ class TestFailureMapping:
         ]})
         assert resp.status_code == 502
 
+    def test_the_curated_message_survives_the_5xx_scrubber(self, monkeypatch):
+        # Regressionstest fuer eine Vorgabe im Auftrag, die selbst falsch war:
+        # ein rohes HTTPException(502, detail=...) wird vom globalen
+        # 5xx-Scrubber (core/exception_handlers.py) auf "Internal server
+        # error" ueberschrieben, sodass "Displays nicht erreichbar" den
+        # Client nie erreicht haette. Nur ein ServiceError (BadGatewayError)
+        # transportiert eine kuratierte Meldung durch diesen Filter.
+        class _Dead:
+            async def get_layout(self):
+                return DisplayLayout(available=False, detail="KWin nicht erreichbar")
+
+            async def apply(self, wanted, live_outputs):
+                raise AssertionError("darf nicht laufen")
+
+        service = DisplayService(backend=_Dead())
+        monkeypatch.setattr(service_module, "get_display_service", lambda: service)
+        resp = _app(service).post(f"{BASE}/apply", json={"outputs": [
+            {"name": "DP-3", "selected": True},
+        ]})
+        assert resp.status_code == 502
+        assert resp.json()["detail"] == "Displays nicht erreichbar"
+        assert resp.json()["detail"] != "Internal server error"
+
     def test_no_kscreen_output_reaches_the_client(self, monkeypatch):
         secret = "/sys/devices/pci0000:00/EDID-Geheimnis"
 
@@ -153,3 +183,15 @@ class TestPermission:
         # Ohne dependency_overrides greift die echte Abhaengigkeit und
         # scheitert mangels Token.
         assert TestClient(app).get(f"{BASE}/state").status_code in (401, 403)
+
+    def test_the_write_route_is_gated_too(self):
+        # Die Schreibroute schaltet physische Bildschirme — mindestens so
+        # schuetzenswert wie die Ausgangsliste der Leseroute oben.
+        app = FastAPI()
+        app.include_router(DisplayOutputPlugin().get_router(), prefix=BASE)
+        # Ohne dependency_overrides greift die echte Abhaengigkeit und
+        # scheitert mangels Token.
+        resp = TestClient(app).post(f"{BASE}/apply", json={"outputs": [
+            {"name": "DP-3", "selected": True},
+        ]})
+        assert resp.status_code in (401, 403)

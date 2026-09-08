@@ -16,6 +16,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
 from app.api.deps import require_power_manage_displays
+from app.core.exceptions import BadGatewayError
 from app.core.rate_limiter import get_limit, user_limiter
 from app.plugins.base import PluginBase, PluginMetadata, PluginUIManifest
 from app.plugins.installed.display_output import service as service_module
@@ -101,10 +102,12 @@ async def apply_display_layout(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     except ModeMismatch as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
-    except DisplayUnavailable:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY, detail="Displays nicht erreichbar"
-        )
+    except DisplayUnavailable as exc:
+        # BadGatewayError statt HTTPException(502): der globale 5xx-Scrubber in
+        # ``core/exception_handlers.py`` ersetzt jedes HTTPException-detail ab
+        # Status 500 durch "Internal server error". Nur ein ServiceError
+        # transportiert eine kuratierte Meldung durch diesen Filter.
+        raise BadGatewayError("Displays nicht erreichbar") from exc
 
     _audit(current_user, ok, wanted)
 
@@ -112,11 +115,10 @@ async def apply_display_layout(
         return {"success": True}
 
     # `message` stammt roh aus kscreen-doctor und kann EDID-Namen und Pfade
-    # enthalten. Es wird geloggt, aber nie ausgeliefert.
+    # enthalten. Es wird geloggt, aber nie ausgeliefert. BadGatewayError statt
+    # HTTPException(502): siehe Kommentar oben beim DisplayUnavailable-Zweig.
     logger.warning("Display-Anwendung fehlgeschlagen: %s", message)
-    raise HTTPException(
-        status_code=status.HTTP_502_BAD_GATEWAY, detail="Aktion fehlgeschlagen"
-    )
+    raise BadGatewayError("Aktion fehlgeschlagen")
 
 
 class DisplayOutputPlugin(PluginBase):
