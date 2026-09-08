@@ -1871,7 +1871,22 @@ class FanControlService:
         return True
 
     async def set_fan_pwm(self, fan_id: str, pwm_percent: int) -> Tuple[bool, Optional[int]]:
-        """Set manual PWM value."""
+        """Set manual PWM value.
+
+        Ein freigegebener Kanal wird dabei zurueckgeholt (#583). Die Freigabe
+        an die Board-Automatik (#534) war bis dahin nur in der Oberflaeche eine
+        Sperre: dieser Aufruf schrieb weiter -- mit `force=True` sogar am
+        Backoff vorbei --, waehrend `released_fans` den Kanal unveraendert dem
+        Board zuschrieb. Die Karte zeigte danach "Board regelt", obwohl
+        BaluHost gerade geschrieben hatte, und der naechste Regelzyklus
+        uebersprang den Kanal wieder; der Wert blieb als Fremdkoerper stehen.
+
+        Abgelehnt wird der Aufruf deshalb NICHT. Wer den Regler bedient, will
+        den Kanal offensichtlich steuern -- die Invariante, die zaehlt, ist
+        "wer schreibt, besitzt auch", nicht "die Freigabe ist unumkehrbar".
+        Den Rueckweg gibt es ohnehin schon als eigenen Endpunkt; hier wird
+        dieselbe Mechanik nur mitbenutzt.
+        """
         if not self._backend:
             return False, None
 
@@ -1890,6 +1905,19 @@ class FanControlService:
 
             # Apply min/max limits
             pwm_percent = max(config.min_pwm_percent, min(config.max_pwm_percent, pwm_percent))
+
+            # In derselben Sitzung wie die Konfiguration: der haeufige Weg --
+            # nichts ist freigegeben -- kostet damit keine zweite Verbindung.
+            freigegeben = fan_id in read_released_fans(db)
+
+        if freigegeben and not await self.reacquire_fan(fan_id):
+            # Die Ruecknahme ist nicht veroeffentlicht. Jetzt trotzdem zu
+            # schreiben erzeugte genau den Widerspruch, den diese Methode
+            # beseitigen soll -- nur sehenden Auges. Ein fehlgeschlagener Klick
+            # mit Fehlermeldung ist das ehrlichere Ergebnis.
+            logger.warning("%s: PWM abgelehnt, Ruecknahme nicht veroeffentlicht",
+                           fan_id)
+            return False, None
 
         # Set PWM. Nutzeraktion: das Backoff-Fenster umgehen (#533), damit der
         # Klick einen echten Versuch und eine echte Fehlermeldung bekommt.
