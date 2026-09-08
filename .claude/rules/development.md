@@ -98,7 +98,6 @@ alembic downgrade -1
 
 Repo root:
 - `README.md` - Project overview, quick start
-- `TODO.md` - Roadmap and planned features
 - `CONTRIBUTING.md` - Contribution guidelines
 - `SECURITY.md` - Security policy
 - `CHANGELOG.md` - Release history (the version number itself lives in `backend/pyproject.toml`)

@@ -515,7 +515,7 @@ Any other relevant information.
 ### Project-Specific
 - [TECHNICAL_DOCUMENTATION.md](docs/TECHNICAL_DOCUMENTATION.md) - Complete feature docs
 - [docs/](docs/) - Feature-specific documentation
-- [TODO.md](TODO.md) - Roadmap and planned features
+- [Issues](https://github.com/Xveyn/BaluHost/issues) - Roadmap and planned features
 
 ### Technologies
 - **FastAPI:** https://fastapi.tiangolo.com/
