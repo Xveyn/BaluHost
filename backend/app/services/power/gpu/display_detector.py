@@ -77,7 +77,7 @@ def _count_sync(sysfs_root: Path) -> int:
 async def get_active_display_count(sysfs_root: Path = Path("/")) -> int:
     """Count DRM connectors that are actually driving pixels.
 
-    See `_states_sync` for what "lit" means.
+    See `_iter_connector_states` for what "lit" means.
     """
     return await asyncio.to_thread(_count_sync, sysfs_root)
 

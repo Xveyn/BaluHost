@@ -74,6 +74,7 @@ client/
 **Tests**: `backend/tests/`
 **Fan control**: `backend/app/services/power/fan_control.py`
 **Audio control**: `backend/app/plugins/installed/audio_control/` (bundled Plugin; `pactl.py` kapselt den gesamten pactl-Kontakt)
+**Display outputs**: `backend/app/plugins/installed/display_output/` (bundled Plugin; `kscreen.py` kapselt den gesamten kscreen-doctor-Kontakt)
 **Power management**: `backend/app/services/power/manager.py`
 **Monitoring orchestrator**: `backend/app/services/monitoring/orchestrator.py`
 **Service status**: `backend/app/services/service_status.py`

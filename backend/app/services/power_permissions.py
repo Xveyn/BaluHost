@@ -211,7 +211,7 @@ def check_permission(db: Session, user_id: int, action: str) -> bool:
         db: Database session
         user_id: User ID to check
         action: One of 'soft_sleep', 'wake', 'suspend', 'wol', 'toggle_desktop',
-            'unlock_session', 'control_audio'
+            'unlock_session', 'control_audio', 'manage_displays'
 
     Returns:
         True if the user has the permission, False otherwise.
