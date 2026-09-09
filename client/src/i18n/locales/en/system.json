@@ -809,6 +809,11 @@
       "gameRunning": "A game is running — automatic suspend is suspended.",
       "bigPictureActive": "Big Picture is up — automatic suspend is suspended.",
       "bigPictureIgnored": "Big Picture is up, but per your setting it does not keep the box awake."
+    },
+    "foreignInhibitor": {
+      "title": "Another program is keeping the box awake",
+      "description": "Automatic suspend is paused while this program holds its lock. Suspending by hand still works.",
+      "detailsLabel": "Lock:"
     }
   },
   "fanControl": {

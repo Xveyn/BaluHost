@@ -8,6 +8,8 @@ import time
 from typing import List, Tuple
 
 import psutil
+
+from app.services.cpu_percent_sampler import measure_cpu_percent
 from cachetools import TTLCache
 
 from app.core.config import settings
@@ -213,7 +215,8 @@ def get_system_info() -> SystemInfo:
         )
 
     try:
-        cpu_usage = psutil.cpu_percent(interval=0.1)
+        # Self-contained blocking measurement (#600) — see metrics.py.
+        cpu_usage = measure_cpu_percent(0.1)
         cpu_count = psutil.cpu_count(logical=True) or 1
         
         # Use sensor service for frequency and temperature

@@ -11,6 +11,7 @@ from typing import List, Optional, Tuple
 import psutil
 
 from app.core.config import settings
+from app.services.cpu_percent_sampler import CpuPercentSampler
 from app.schemas.system import (
     CpuTelemetrySample,
     MemoryTelemetrySample,
@@ -71,9 +72,13 @@ _previous_network_totals: Optional[Tuple[float, int, int]] = None
 _monitor_task: Optional[asyncio.Task] = None
 _lock = Lock()
 
+# Own reference point, not psutil's process-global one (#600): request paths
+# calling psutil.cpu_percent(interval=0.1) used to reset that shared point and
+# leave this loop measuring a millisecond-wide window.
+_cpu_sampler = CpuPercentSampler()
 try:
-    # Prime the internal psutil CPU statistics so the first real sample is meaningful
-    psutil.cpu_percent(interval=None)
+    # Prime it so the first real sample has something to compare against.
+    _cpu_sampler.sample()
 except Exception as exc:  # pragma: no cover - platform quirks
     logger.debug("Unable to prime CPU stats: %s", exc)
 
@@ -105,7 +110,14 @@ def _sample_once() -> None:
     timestamp_ms = int(timestamp_seconds * 1000)
 
     try:
-        cpu_usage = _round(float(psutil.cpu_percent(interval=None)))
+        sampled = _cpu_sampler.sample()
+        if sampled is None:
+            # No reference point yet (priming failed). Carry the last known
+            # value forward rather than reporting a fictitious 0 %, which the
+            # sleep logic would read as "idle".
+            cpu_usage = _latest_cpu_usage if _latest_cpu_usage is not None else 0.0
+        else:
+            cpu_usage = _round(float(sampled))
     except Exception as exc:  # pragma: no cover - psutil edge cases
         logger.debug("CPU percent unavailable: %s", exc)
         cpu_usage = _latest_cpu_usage if _latest_cpu_usage is not None else 0.0

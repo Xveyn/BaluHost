@@ -504,6 +504,29 @@ class SleepManagerService:
             logger.warning("Gaming check failed (failing open toward suspend): %s", e)
             return False
 
+    def _foreign_inhibitor(self, kind: str):
+        """A third-party logind block inhibitor covering *kind*, or None.
+
+        Issue #602: BaluHost suspends via `rtcwake -m mem`, which bypasses
+        logind, so inhibitors other programs hold are never enforced against
+        us by the OS. We consult them ourselves and treat a foreign block as
+        a suppressor — otherwise BaluHost silently overrules every other
+        program's "do not sleep".
+
+        *kind* is a segment of the inhibitor's `what` field: "sleep" for the
+        true-suspend paths, "idle" for soft sleep.
+
+        Fails toward energy saving (returns None), like the other suppressors.
+        """
+        try:
+            from app.services.power import foreign_inhibitors
+            return foreign_inhibitors.first_blocking(kind)
+        except Exception as e:
+            logger.warning(
+                "Foreign inhibitor check failed (failing open toward suspend): %s", e
+            )
+            return None
+
     async def _idle_detection_loop(self) -> None:
         """Background loop that checks system idle status every 30 seconds."""
         check_interval = 30  # seconds
@@ -531,6 +554,18 @@ class SleepManagerService:
                 # Soft sleep locks the CPU to the IDLE profile — the last
                 # thing a running game needs.
                 if self._is_gaming_active(config):
+                    self._consecutive_idle_checks = 0
+                    self._idle_seconds = 0.0
+                    continue
+
+                # A foreign `idle` block inhibitor means another program asked
+                # for the machine to stay responsive (#602).
+                foreign_idle = self._foreign_inhibitor("idle")
+                if foreign_idle is not None:
+                    logger.debug(
+                        "Soft sleep suppressed by %s: %s",
+                        foreign_idle.who, foreign_idle.why,
+                    )
                     self._consecutive_idle_checks = 0
                     self._idle_seconds = 0.0
                     continue
@@ -639,6 +674,7 @@ class SleepManagerService:
                     and not self._is_always_awake(config)
                     and not self._is_user_present(config)
                     and not self._is_gaming_active(config)
+                    and self._foreign_inhibitor("sleep") is None
                     and self._is_system_idle(config, self._get_activity_metrics())
                 ):
                     logger.info(
@@ -735,6 +771,15 @@ class SleepManagerService:
             # Skip escalation while someone is gaming at the box
             if self._is_gaming_active(config):
                 logger.info("Auto-escalation skipped: gaming activity")
+                return
+
+            # Skip escalation while another program blocks sleep (#602)
+            foreign = self._foreign_inhibitor("sleep")
+            if foreign is not None:
+                logger.info(
+                    "Auto-escalation skipped: %s blocks sleep (%s)",
+                    foreign.who, foreign.why,
+                )
                 return
 
             logger.info("Auto-escalation: soft sleep -> true suspend after %d minutes",
@@ -1135,6 +1180,18 @@ class SleepManagerService:
             )
             return False
 
+        # Foreign inhibitor guard (#602). rtcwake would sail straight past
+        # logind, so this is the only place the refusal can happen.
+        if trigger != SleepTrigger.MANUAL:
+            foreign = self._foreign_inhibitor("sleep")
+            if foreign is not None:
+                logger.info(
+                    "enter_true_suspend blocked: %s holds a sleep inhibitor (%s) "
+                    "(trigger=%s, reason=%s)",
+                    foreign.who, foreign.why, trigger.value, reason,
+                )
+                return False
+
         # Enter soft sleep first if awake
         if self._current_state == SleepState.AWAKE:
             ok = await self.enter_soft_sleep(reason, trigger)
@@ -1346,6 +1403,15 @@ class SleepManagerService:
         except Exception as e:
             logger.warning("Gaming status read failed: %s", e)
 
+        # Foreign inhibitor status (#602) — names who is keeping us awake.
+        from app.schemas.sleep import ForeignInhibitorStatus
+        foreign_status = None
+        foreign = self._foreign_inhibitor("sleep") or self._foreign_inhibitor("idle")
+        if foreign is not None:
+            foreign_status = ForeignInhibitorStatus(
+                what=foreign.what, who=foreign.who, why=foreign.why, pid=foreign.pid,
+            )
+
         return SleepStatusResponse(
             current_state=self._current_state,
             state_since=self._state_since,
@@ -1361,6 +1427,7 @@ class SleepManagerService:
             always_awake=always_awake_status,
             presence=presence_status,
             gaming=gaming_status,
+            foreign_inhibitor=foreign_status,
         )
 
     def get_config(self) -> SleepConfigResponse:

@@ -17,6 +17,8 @@ from typing import Any, Optional, Tuple, Type
 
 import psutil
 
+from app.services.cpu_percent_sampler import CpuPercentSampler
+
 from app.models.monitoring import CpuSample
 from app.schemas.monitoring import CpuSampleSchema
 from app.services.monitoring.base import MetricCollector
@@ -145,9 +147,11 @@ class CpuMetricCollector(MetricCollector[CpuSampleSchema]):
             buffer_size=buffer_size,
             persist_interval=persist_interval,
         )
-        # Prime psutil CPU stats for accurate first reading
+        # Own reference point rather than psutil's process-global one (#600),
+        # so no other caller in this process can reset it under us.
+        self._cpu_sampler = CpuPercentSampler()
         try:
-            psutil.cpu_percent(interval=None)
+            self._cpu_sampler.sample()  # prime for an accurate first reading
         except Exception:
             pass
 
@@ -157,7 +161,11 @@ class CpuMetricCollector(MetricCollector[CpuSampleSchema]):
             timestamp = datetime.now(timezone.utc)
 
             # Get CPU usage
-            usage = psutil.cpu_percent(interval=None)
+            usage = self._cpu_sampler.sample()
+            if usage is None:
+                # Priming failed and this is the first reading — no reference
+                # point, so there is no honest number to report yet.
+                return None
 
             # Get per-thread CPU usage
             try:
