@@ -15,6 +15,7 @@ import {
   getSleepCapabilities,
   type SleepCapabilities,
   type PresenceStatus,
+  type GamingStatus,
 } from '../../api/sleep';
 import { getFritzBoxConfig, updateFritzBoxConfig } from '../../api/fritzbox';
 import { useSleepConfigForm } from '../../hooks/useSleepConfigForm';
@@ -24,6 +25,7 @@ import {
   IdleDetectionCard,
   EscalationCard,
   PresenceCard,
+  GamingCard,
   ScheduleCard,
   WolCard,
   FritzBoxCard,
@@ -38,6 +40,7 @@ export function SleepConfigPanel() {
   const [coreUptimeMasterOn, setCoreUptimeMasterOn] = useState(false);
   const [alwaysAwakeOn, setAlwaysAwakeOn] = useState(false);
   const [presenceStatus, setPresenceStatus] = useState<PresenceStatus | null>(null);
+  const [gamingStatus, setGamingStatus] = useState<GamingStatus | null>(null);
 
   const sleepForm = useSleepConfigForm();
   const fbForm = useFritzBoxForm();
@@ -67,6 +70,7 @@ export function SleepConfigPanel() {
         setCoreUptimeMasterOn(st.core_uptime?.enabled ?? false);
         setAlwaysAwakeOn(st.always_awake?.enabled ?? false);
         setPresenceStatus(st.presence ?? null);
+        setGamingStatus(st.gaming ?? null);
       } catch {
         // ignore — status is best-effort here
       }
@@ -117,6 +121,7 @@ export function SleepConfigPanel() {
       <IdleDetectionCard {...sleepForm.form} update={sleepForm.update} />
       <EscalationCard {...sleepForm.form} update={sleepForm.update} />
       <PresenceCard {...sleepForm.form} update={sleepForm.update} presenceStatus={presenceStatus} />
+      <GamingCard {...sleepForm.form} update={sleepForm.update} gamingStatus={gamingStatus} />
       <ScheduleCard {...sleepForm.form} update={sleepForm.update} coreUptimeMasterOn={coreUptimeMasterOn} alwaysAwakeOn={alwaysAwakeOn} />
       <WolCard {...sleepForm.form} update={sleepForm.update} capabilities={capabilities} />
       <FritzBoxCard {...fbForm.form} update={fbForm.update} config={fbForm.config} testing={fbForm.testing} onTest={fbForm.test} capabilities={capabilities} />

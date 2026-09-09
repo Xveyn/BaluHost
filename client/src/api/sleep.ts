@@ -63,6 +63,13 @@ export interface AlwaysAwakeStatus {
 
 export type PresenceMode = 'active' | 'session';
 
+export interface GamingStatus {
+  game_running: boolean;
+  gaming_mode: boolean;
+  block_in_gaming_mode: boolean;
+  suppressing_suspend: boolean;
+}
+
 export interface PresenceStatus {
   enabled: boolean;
   mode: PresenceMode;
@@ -112,6 +119,7 @@ export interface SleepStatusResponse {
   core_uptime: CoreUptimeStatus;
   always_awake?: AlwaysAwakeStatus;
   presence?: PresenceStatus;
+  gaming?: GamingStatus;
 }
 
 export interface SleepConfigResponse {
@@ -136,6 +144,7 @@ export interface SleepConfigResponse {
   core_uptime_suspend_on_exit: boolean;
   always_awake_enabled?: boolean;
   always_awake_until?: string | null;
+  block_suspend_in_gaming_mode: boolean;
   presence_enabled: boolean;
   presence_mode: PresenceMode;
   presence_timeout_minutes: number;
@@ -163,6 +172,7 @@ export interface SleepConfigUpdate {
   core_uptime_suspend_on_exit?: boolean;
   always_awake_enabled?: boolean;
   always_awake_until?: string | null;
+  block_suspend_in_gaming_mode?: boolean;
   presence_enabled?: boolean;
   presence_mode?: PresenceMode;
   presence_timeout_minutes?: number;

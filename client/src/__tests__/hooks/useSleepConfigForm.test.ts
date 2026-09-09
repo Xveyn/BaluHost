@@ -13,6 +13,7 @@ const response: SleepConfigResponse = {
   pause_monitoring: false, pause_disk_io: false, reduced_telemetry_interval: 45,
   disk_spindown_enabled: false,
   core_uptime_enabled: false, core_uptime_suspend_on_exit: false,
+  block_suspend_in_gaming_mode: false,
   presence_enabled: false, presence_mode: 'session', presence_timeout_minutes: 5,
 };
 
@@ -37,6 +38,7 @@ describe('useSleepConfigForm', () => {
       wol_mac_address: 'AA:BB:CC:DD:EE:FF', wol_broadcast_address: '10.0.0.255',
       pause_monitoring: false, pause_disk_io: false, reduced_telemetry_interval: 45,
       disk_spindown_enabled: false,
+      block_suspend_in_gaming_mode: false,
       presence_enabled: false, presence_mode: 'session', presence_timeout_minutes: 5,
     };
     expect(result.current.toPayload()).toEqual(expected);

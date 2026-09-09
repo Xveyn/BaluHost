@@ -795,6 +795,15 @@
       "modeHint": "\"Aktive Nutzung\" spart Energie: Ein vergessener Hintergrund-Tab hält den Server nicht wach.",
       "timeoutLabel": "Timeout (Minuten)",
       "suppressing": "True Suspend blockiert: {{count}} aktive Sitzung(en)"
+    },
+    "gaming": {
+      "title": "Gaming",
+      "description": "Solange auf der Box gespielt wird, wird kein automatischer Suspend ausgeloest — auch nicht nach dem Ende der Kernbetriebszeit. Ein laufendes Spiel blockiert immer.",
+      "bigPictureLabel": "Big Picture haelt die Box wach",
+      "bigPictureHint": "Gilt, wenn Big Picture laeuft, aber gerade kein Spiel gestartet ist.",
+      "gameRunning": "Ein Spiel laeuft — automatischer Suspend ist ausgesetzt.",
+      "bigPictureActive": "Big Picture laeuft — automatischer Suspend ist ausgesetzt.",
+      "bigPictureIgnored": "Big Picture laeuft, haelt die Box laut Einstellung aber nicht wach."
     }
   },
   "fanControl": {

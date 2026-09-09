@@ -329,8 +329,11 @@ class SleepManagerService:
         """Converge the logind block-sleep inhibitor to the desired state.
 
         The inhibitor is held while ANY of these is in effect: an active
-        core-uptime window, an active Always-Awake override, or an active
-        user presence (issue #214). All three block third-party suspend
+        core-uptime window, an active Always-Awake override, an active
+        user presence (issue #214), or gaming activity. Gaming matters here
+        beyond BaluHost's own guards: a gamepad in Big Picture never resets
+        the Wayland idle timer, so KDE PowerDevil would otherwise suspend a
+        live session all by itself. All four block third-party suspend
         (logind idle, desktop daemons, manual systemctl suspend) at the
         logind layer. Soft sleep is unaffected — the block lock only
         prevents kernel suspend. Releasing/acquiring is idempotent.
@@ -344,7 +347,8 @@ class SleepManagerService:
         core_active = bool(in_core)
         aa_active = self._is_always_awake(config)
         presence_active = self._is_user_present(config)
-        should_hold = core_active or aa_active or presence_active
+        gaming_active = self._is_gaming_active(config)
+        should_hold = core_active or aa_active or presence_active or gaming_active
 
         if should_hold and not self._core_uptime_inhibitor.is_held():
             parts = []
@@ -354,6 +358,8 @@ class SleepManagerService:
                 parts.append("always_awake")
             if presence_active:
                 parts.append("user_present")
+            if gaming_active:
+                parts.append("gaming")
             reason = "_and_".join(parts) + "_active"
             self._core_uptime_inhibitor.acquire(reason)
         elif not should_hold and self._core_uptime_inhibitor.is_held():
@@ -480,6 +486,24 @@ class SleepManagerService:
             logger.warning("Presence check failed (failing open toward suspend): %s", e)
             return False
 
+    def _is_gaming_active(self, config) -> bool:
+        """True while gaming should suppress an automatic suspend.
+
+        The fourth suppressor next to always-awake, core uptime and presence.
+        Presence asks whether a human is in the web app; this asks whether one
+        is at the box, playing — a question `_is_system_idle` cannot answer,
+        because it measures NAS load and a game produces none of it.
+
+        Fails toward energy saving (returns False) on any error, matching
+        `_is_user_present`: a broken detector must not pin the box awake.
+        """
+        try:
+            from app.services.power import gaming_presence
+            return gaming_presence.blocks_suspend(config)
+        except Exception as e:
+            logger.warning("Gaming check failed (failing open toward suspend): %s", e)
+            return False
+
     async def _idle_detection_loop(self) -> None:
         """Background loop that checks system idle status every 30 seconds."""
         check_interval = 30  # seconds
@@ -500,6 +524,13 @@ class SleepManagerService:
                     continue
 
                 if self._is_always_awake(config):
+                    self._consecutive_idle_checks = 0
+                    self._idle_seconds = 0.0
+                    continue
+
+                # Soft sleep locks the CPU to the IDLE profile — the last
+                # thing a running game needs.
+                if self._is_gaming_active(config):
                     self._consecutive_idle_checks = 0
                     self._idle_seconds = 0.0
                     continue
@@ -607,6 +638,7 @@ class SleepManagerService:
                     and config is not None
                     and not self._is_always_awake(config)
                     and not self._is_user_present(config)
+                    and not self._is_gaming_active(config)
                     and self._is_system_idle(config, self._get_activity_metrics())
                 ):
                     logger.info(
@@ -698,6 +730,11 @@ class SleepManagerService:
             # Skip escalation while a user is present (issue #214)
             if self._is_user_present(config):
                 logger.info("Auto-escalation skipped: user presence active")
+                return
+
+            # Skip escalation while someone is gaming at the box
+            if self._is_gaming_active(config):
+                logger.info("Auto-escalation skipped: gaming activity")
                 return
 
             logger.info("Auto-escalation: soft sleep -> true suspend after %d minutes",
@@ -1089,6 +1126,15 @@ class SleepManagerService:
             )
             return False
 
+        # Gaming guard: same shape as the presence guard above. A manual
+        # suspend from the UI still wins — the admin can see the box.
+        if trigger != SleepTrigger.MANUAL and self._is_gaming_active(config_check):
+            logger.info(
+                "enter_true_suspend blocked: gaming activity (trigger=%s, reason=%s)",
+                trigger.value, reason,
+            )
+            return False
+
         # Enter soft sleep first if awake
         if self._current_state == SleepState.AWAKE:
             ok = await self.enter_soft_sleep(reason, trigger)
@@ -1284,6 +1330,22 @@ class SleepManagerService:
                 except Exception as e:
                     logger.warning("Presence status read failed: %s", e)
 
+        # Gaming status — split so the UI can say "a game is running" rather
+        # than only "something is keeping the box awake".
+        from app.schemas.sleep import GamingStatus
+        gaming_status = GamingStatus()
+        try:
+            from app.services.power import gaming_presence
+            raw = getattr(config, "block_suspend_in_gaming_mode", None)
+            gaming_status.block_in_gaming_mode = True if raw is None else bool(raw)
+            gaming_status.game_running = gaming_presence.game_is_running()
+            gaming_status.gaming_mode = gaming_presence.gaming_mode_on_screen()
+            gaming_status.suppressing_suspend = gaming_status.game_running or (
+                gaming_status.block_in_gaming_mode and gaming_status.gaming_mode
+            )
+        except Exception as e:
+            logger.warning("Gaming status read failed: %s", e)
+
         return SleepStatusResponse(
             current_state=self._current_state,
             state_since=self._state_since,
@@ -1298,6 +1360,7 @@ class SleepManagerService:
             core_uptime=core_status,
             always_awake=always_awake_status,
             presence=presence_status,
+            gaming=gaming_status,
         )
 
     def get_config(self) -> SleepConfigResponse:
@@ -1334,6 +1397,14 @@ class SleepManagerService:
             presence_enabled=bool(config.presence_enabled),
             presence_mode=PresenceMode(config.presence_mode or "active"),
             presence_timeout_minutes=config.presence_timeout_minutes or 3,
+            # None (column absent on a legacy object) means the database
+            # default, which is True — unlike the presence flags above, where
+            # None means "off". Reading it as False here would silently ship
+            # the feature disabled.
+            block_suspend_in_gaming_mode=(
+                True if config.block_suspend_in_gaming_mode is None
+                else bool(config.block_suspend_in_gaming_mode)
+            ),
         )
 
     def update_config(self, update: SleepConfigUpdate) -> SleepConfigResponse:

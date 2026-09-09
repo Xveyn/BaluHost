@@ -19,6 +19,7 @@ export interface SleepConfigForm {
   pauseDiskIo: boolean;
   reducedTelemetry: number;
   diskSpindown: boolean;
+  blockSuspendInGamingMode: boolean;
   presenceEnabled: boolean;
   presenceMode: PresenceMode;
   presenceTimeout: number;
@@ -42,6 +43,7 @@ const DEFAULT_FORM: SleepConfigForm = {
   pauseDiskIo: true,
   reducedTelemetry: 30,
   diskSpindown: true,
+  blockSuspendInGamingMode: true,
   presenceEnabled: true,
   presenceMode: 'active',
   presenceTimeout: 3,
@@ -80,6 +82,7 @@ export function useSleepConfigForm(): UseSleepConfigFormResult {
       pauseDiskIo: c.pause_disk_io,
       reducedTelemetry: c.reduced_telemetry_interval,
       diskSpindown: c.disk_spindown_enabled,
+      blockSuspendInGamingMode: c.block_suspend_in_gaming_mode,
       presenceEnabled: c.presence_enabled,
       presenceMode: c.presence_mode,
       presenceTimeout: c.presence_timeout_minutes,
@@ -104,6 +107,7 @@ export function useSleepConfigForm(): UseSleepConfigFormResult {
     pause_disk_io: form.pauseDiskIo,
     reduced_telemetry_interval: form.reducedTelemetry,
     disk_spindown_enabled: form.diskSpindown,
+    block_suspend_in_gaming_mode: form.blockSuspendInGamingMode,
     presence_enabled: form.presenceEnabled,
     presence_mode: form.presenceMode,
     presence_timeout_minutes: form.presenceTimeout,
