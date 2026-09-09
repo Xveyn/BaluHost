@@ -40,7 +40,6 @@ from app.plugins.installed.steam_gaming.launcher import close_big_picture, open_
 from app.plugins.installed.steam_gaming.poller import SteamSessionPoller
 from app.services.power.desktop import get_desktop_service
 from app.services.power.desktop_windows import show_desktop
-from app.services.power.gpu.display_detector import get_active_display_count_sync
 from app.services.power.session_lock import unlock_if_permitted
 
 logger = logging.getLogger(__name__)
@@ -139,16 +138,19 @@ def _displays_on() -> bool:
     small sysfs reads, the async sibling only wraps the same helper in a
     thread. Unreadable sysfs counts as "off": that steers the menu to the
     start action, which is the harmless one to offer wrongly.
+
+    The implementation lives in services/power/gaming_presence.py because the
+    sleep service asks the identical question when deciding whether Big
+    Picture should suppress a suspend - two copies of this policy would drift.
+
+    Imported inside the function on purpose: gaming_presence imports this
+    package's detector at module level, so a top-level import here would be a
+    cycle - and the loser of that cycle is the detector, which silently
+    degrades to "no game is ever running".
     """
-    if settings.is_dev_mode:
-        # No DRM connectors on a Windows dev box, so the count would pin the
-        # menu to "start" forever and the toggle could not be tried locally.
-        return True
-    try:
-        return get_active_display_count_sync() > 0
-    except Exception as exc:  # pragma: no cover - defensive
-        logger.debug("display count unreadable: %s", exc)
-        return False
+    from app.services.power.gaming_presence import displays_on  # noqa: PLC0415
+
+    return displays_on()
 
 
 def _end_action_is_current() -> bool:

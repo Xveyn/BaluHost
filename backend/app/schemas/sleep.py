@@ -102,6 +102,18 @@ class PresenceStatus(BaseModel):
     suppressing_suspend: bool = Field(default=False, description="True when presence currently blocks true suspend")
 
 
+class GamingStatus(BaseModel):
+    """Snapshot of the gaming suppressor.
+
+    Two separate flags because they are governed differently: a running game
+    blocks unconditionally, Big Picture only when the setting allows it.
+    """
+    game_running: bool = Field(default=False, description="A Steam game is running")
+    gaming_mode: bool = Field(default=False, description="Big Picture is up and a display is lit")
+    block_in_gaming_mode: bool = Field(default=True, description="Whether Big Picture alone may block suspend")
+    suppressing_suspend: bool = Field(default=False, description="True when gaming currently blocks auto-suspend")
+
+
 # ---------------------------------------------------------------------------
 # OS Sleep Inspector
 # ---------------------------------------------------------------------------
@@ -140,6 +152,7 @@ class SleepStatusResponse(BaseModel):
     core_uptime: CoreUptimeStatus = Field(default_factory=CoreUptimeStatus)
     always_awake: AlwaysAwakeStatus = Field(default_factory=AlwaysAwakeStatus)
     presence: PresenceStatus = Field(default_factory=PresenceStatus)
+    gaming: GamingStatus = Field(default_factory=GamingStatus)
 
 
 # ---------------------------------------------------------------------------
@@ -206,6 +219,12 @@ class SleepConfigResponse(BaseModel):
     always_awake_until: Optional[datetime] = Field(
         default=None, description="UTC expiry, None = permanent"
     )
+    # Gaming-aware suspend
+    block_suspend_in_gaming_mode: bool = Field(
+        default=True,
+        description="Block auto-suspend while Big Picture is up (a running game always blocks)",
+    )
+
     # Presence-aware suspend (issue #214)
     presence_enabled: bool = Field(default=True, description="Block auto-suspend while a user is present")
     presence_mode: PresenceMode = Field(default=PresenceMode.ACTIVE)
@@ -237,6 +256,7 @@ class SleepConfigUpdate(BaseModel):
     always_awake_until: Optional[datetime] = Field(
         default=None, description="UTC expiry for always-awake override; None = permanent"
     )
+    block_suspend_in_gaming_mode: Optional[bool] = None
     presence_enabled: Optional[bool] = None
     presence_mode: Optional[PresenceMode] = None
     presence_timeout_minutes: Optional[int] = Field(default=None, ge=1, le=60)

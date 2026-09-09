@@ -28,6 +28,7 @@ const config: SleepConfigResponse = {
   schedule_mode: 'soft', wol_mac_address: null, wol_broadcast_address: null,
   pause_monitoring: true, pause_disk_io: true, reduced_telemetry_interval: 30,
   disk_spindown_enabled: true, core_uptime_enabled: false, core_uptime_suspend_on_exit: false,
+  block_suspend_in_gaming_mode: true,
   presence_enabled: true, presence_mode: 'active', presence_timeout_minutes: 3,
 };
 const caps: SleepCapabilities = {

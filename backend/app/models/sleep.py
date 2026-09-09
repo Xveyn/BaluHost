@@ -57,6 +57,12 @@ class SleepConfig(Base):
         DateTime(timezone=True), nullable=True
     )
 
+    # Gaming-aware suspend: a running game always suppresses suspend (no
+    # setting); this governs only the Big Picture case, where no game runs.
+    block_suspend_in_gaming_mode: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default="true", nullable=False
+    )
+
     # Presence-aware suspend (issue #214)
     presence_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     presence_mode: Mapped[str] = mapped_column(String(20), default="active", nullable=False)  # "active" | "session"

@@ -800,6 +800,15 @@
       "modeHint": "\"Active interaction\" saves energy: a forgotten background tab does not keep the server awake.",
       "timeoutLabel": "Timeout (minutes)",
       "suppressing": "True suspend blocked: {{count}} active session(s)"
+    },
+    "gaming": {
+      "title": "Gaming",
+      "description": "While someone is playing on the box, no automatic suspend is triggered — not even after core operating hours end. A running game always blocks.",
+      "bigPictureLabel": "Big Picture keeps the box awake",
+      "bigPictureHint": "Applies while Big Picture is up but no game has been started.",
+      "gameRunning": "A game is running — automatic suspend is suspended.",
+      "bigPictureActive": "Big Picture is up — automatic suspend is suspended.",
+      "bigPictureIgnored": "Big Picture is up, but per your setting it does not keep the box awake."
     }
   },
   "fanControl": {
