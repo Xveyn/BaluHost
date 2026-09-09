@@ -12,8 +12,15 @@ export default defineConfig({
     actionTimeout: 10_000,
     locale: 'en-US',
   },
+  // Zwei Engines, damit engine-spezifische Layout-/API-Unterschiede auffallen (#545).
+  // Beide Device-Profile bringen 1280x720 mit und ueberschreiben damit `use.viewport`
+  // oben — der Viewport ist bewusst identisch, hier geht es nur um die Engine.
+  // Ein zusaetzlicher Viewport folgt separat; 1920x1080 waere wirkungslos (zwischen
+  // 1280 und 1920 unterscheiden sich genau drei `2xl:`-Utilities in CpuTab.tsx,
+  // die keine Spec anfasst) — die ungetestete Flaeche liegt unter 640px.
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+    { name: 'firefox', use: { ...devices['Desktop Firefox'] } },
   ],
   webServer: {
     command: 'npm run dev -- --port 5173',

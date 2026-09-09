@@ -122,7 +122,12 @@ jobs:
                 "v$have"|"v$have"-*) ;;
                 *) echo "::error::Playwright version drift: package-lock has $have, image is $want — bump PLAYWRIGHT_IMAGE"; exit 1 ;;
               esac
-              npx playwright test --project=chromium --reporter=list --workers=2
+              # Kein --project-Filter: die Projektliste in client/playwright.config.ts
+              # ist die einzige Quelle (chromium + firefox, #545). Ein Filter hier
+              # wuerde ein neu aufgenommenes Projekt stillschweigend uebergehen —
+              # genau das war der Fall, als firefox dazukam.
+              # Die Browser liegen fertig in /ms-playwright des Images, auch firefox.
+              npx playwright test --reporter=list --workers=2
             '
 
   live-e2e:
