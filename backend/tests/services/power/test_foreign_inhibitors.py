@@ -114,7 +114,9 @@ class TestCovers:
 
 class TestBlockingLookup:
     def test_finds_a_foreign_block_inhibitor_on_sleep(self):
-        runner = lambda: _payload(STEAM, NM_DELAY, POWERDEVIL)
+        def runner():
+            return _payload(STEAM, NM_DELAY, POWERDEVIL)
+
         found = fi.first_blocking("sleep", runner=runner)
         assert found is not None and found.who == "steam-bpm-inhibit"
 
@@ -130,7 +132,9 @@ class TestBlockingLookup:
         assert fi.first_blocking("sleep", runner=lambda: _payload(POWERDEVIL)) is None
 
     def test_idle_kind_is_matched_separately(self):
-        runner = lambda: _payload(STEAM)
+        def runner():
+            return _payload(STEAM)
+
         assert fi.first_blocking("idle", runner=runner) is not None
 
     def test_runner_failure_allows_suspend(self):
