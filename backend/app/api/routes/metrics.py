@@ -24,6 +24,8 @@ from prometheus_client import (
 )
 import logging
 import psutil
+
+from app.services.cpu_percent_sampler import measure_cpu_percent
 import time
 
 from app.api import deps
@@ -342,7 +344,9 @@ def collect_system_metrics():
     """Collect system resource metrics."""
     try:
         # CPU
-        cpu_percent = psutil.cpu_percent(interval=0.1)
+        # Self-contained blocking measurement (#600): psutil.cpu_percent(0.1)
+        # would reset the process-global reference point the telemetry loop uses.
+        cpu_percent = measure_cpu_percent(0.1)
         cpu_usage_percent.set(cpu_percent)
         cpu_count.set(psutil.cpu_count() or 0)
 

@@ -16,6 +16,7 @@ import {
   type SleepCapabilities,
   type PresenceStatus,
   type GamingStatus,
+  type ForeignInhibitorStatus,
 } from '../../api/sleep';
 import { getFritzBoxConfig, updateFritzBoxConfig } from '../../api/fritzbox';
 import { useSleepConfigForm } from '../../hooks/useSleepConfigForm';
@@ -26,6 +27,7 @@ import {
   EscalationCard,
   PresenceCard,
   GamingCard,
+  ForeignInhibitorNotice,
   ScheduleCard,
   WolCard,
   FritzBoxCard,
@@ -41,6 +43,7 @@ export function SleepConfigPanel() {
   const [alwaysAwakeOn, setAlwaysAwakeOn] = useState(false);
   const [presenceStatus, setPresenceStatus] = useState<PresenceStatus | null>(null);
   const [gamingStatus, setGamingStatus] = useState<GamingStatus | null>(null);
+  const [foreignInhibitor, setForeignInhibitor] = useState<ForeignInhibitorStatus | null>(null);
 
   const sleepForm = useSleepConfigForm();
   const fbForm = useFritzBoxForm();
@@ -71,6 +74,7 @@ export function SleepConfigPanel() {
         setAlwaysAwakeOn(st.always_awake?.enabled ?? false);
         setPresenceStatus(st.presence ?? null);
         setGamingStatus(st.gaming ?? null);
+        setForeignInhibitor(st.foreign_inhibitor ?? null);
       } catch {
         // ignore — status is best-effort here
       }
@@ -122,6 +126,7 @@ export function SleepConfigPanel() {
       <EscalationCard {...sleepForm.form} update={sleepForm.update} />
       <PresenceCard {...sleepForm.form} update={sleepForm.update} presenceStatus={presenceStatus} />
       <GamingCard {...sleepForm.form} update={sleepForm.update} gamingStatus={gamingStatus} />
+      <ForeignInhibitorNotice inhibitor={foreignInhibitor} />
       <ScheduleCard {...sleepForm.form} update={sleepForm.update} coreUptimeMasterOn={coreUptimeMasterOn} alwaysAwakeOn={alwaysAwakeOn} />
       <WolCard {...sleepForm.form} update={sleepForm.update} capabilities={capabilities} />
       <FritzBoxCard {...fbForm.form} update={fbForm.update} config={fbForm.config} testing={fbForm.testing} onTest={fbForm.test} capabilities={capabilities} />

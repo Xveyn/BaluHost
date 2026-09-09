@@ -19,7 +19,11 @@ def _explode(*args, **kwargs):
 
 
 def _break_system(monkeypatch):
-    monkeypatch.setattr(metrics.psutil, "cpu_percent", _explode)
+    # Patches the CPU seam the collector actually uses. It moved from
+    # psutil.cpu_percent to measure_cpu_percent in #600 (per-consumer
+    # reference point); patching the old name left this test green while
+    # exercising nothing.
+    monkeypatch.setattr(metrics, "measure_cpu_percent", _explode)
     return metrics.collect_system_metrics
 
 

@@ -114,6 +114,18 @@ class GamingStatus(BaseModel):
     suppressing_suspend: bool = Field(default=False, description="True when gaming currently blocks auto-suspend")
 
 
+class ForeignInhibitorStatus(BaseModel):
+    """A third-party logind block inhibitor currently keeping the box awake.
+
+    Surfaced so "the box will not sleep" comes with a name attached — without
+    it the behaviour is indistinguishable from a hang (issue #602).
+    """
+    what: str = Field(..., description="Colon-separated logind lock types, e.g. 'sleep:idle'")
+    who: str = Field(..., description="Program holding the lock")
+    why: str = Field(..., description="Reason the program gave")
+    pid: int = Field(..., description="PID of the holder, so it can be found")
+
+
 # ---------------------------------------------------------------------------
 # OS Sleep Inspector
 # ---------------------------------------------------------------------------
@@ -153,6 +165,9 @@ class SleepStatusResponse(BaseModel):
     always_awake: AlwaysAwakeStatus = Field(default_factory=AlwaysAwakeStatus)
     presence: PresenceStatus = Field(default_factory=PresenceStatus)
     gaming: GamingStatus = Field(default_factory=GamingStatus)
+    foreign_inhibitor: Optional[ForeignInhibitorStatus] = Field(
+        default=None, description="Third-party sleep inhibitor blocking auto-suspend, if any"
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -804,6 +804,11 @@
       "gameRunning": "Ein Spiel laeuft — automatischer Suspend ist ausgesetzt.",
       "bigPictureActive": "Big Picture laeuft — automatischer Suspend ist ausgesetzt.",
       "bigPictureIgnored": "Big Picture laeuft, haelt die Box laut Einstellung aber nicht wach."
+    },
+    "foreignInhibitor": {
+      "title": "Ein anderes Programm hält die Box wach",
+      "description": "Automatischer Suspend ist ausgesetzt, solange dieses Programm seine Sperre hält. Manuelles Schlafenlegen bleibt möglich.",
+      "detailsLabel": "Sperre:"
     }
   },
   "fanControl": {

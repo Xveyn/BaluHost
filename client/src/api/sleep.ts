@@ -63,6 +63,13 @@ export interface AlwaysAwakeStatus {
 
 export type PresenceMode = 'active' | 'session';
 
+export interface ForeignInhibitorStatus {
+  what: string;
+  who: string;
+  why: string;
+  pid: number;
+}
+
 export interface GamingStatus {
   game_running: boolean;
   gaming_mode: boolean;
@@ -120,6 +127,7 @@ export interface SleepStatusResponse {
   always_awake?: AlwaysAwakeStatus;
   presence?: PresenceStatus;
   gaming?: GamingStatus;
+  foreign_inhibitor?: ForeignInhibitorStatus | null;
 }
 
 export interface SleepConfigResponse {
