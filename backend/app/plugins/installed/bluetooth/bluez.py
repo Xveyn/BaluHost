@@ -6,14 +6,21 @@ Client ueber dem System-Bus. ``parse_objects`` erwartet die bereits per
 """
 from __future__ import annotations
 
+import asyncio
+import logging
 import re
 from dataclasses import dataclass
-from typing import Any, Optional, Sequence
+from typing import Any, Awaitable, Callable, Optional, Sequence
 
 try:
-    from dbus_next import Variant
+    from dbus_next import BusType, Message, MessageType, Variant
+    from dbus_next.aio import MessageBus
+    _DBUS_AVAILABLE = True
 except ImportError:  # pragma: no cover — dbus-next ist Abhaengigkeit, nur Rueckfall
-    Variant = None  # type: ignore[assignment,misc]
+    BusType = Message = MessageType = Variant = MessageBus = None  # type: ignore[assignment,misc]
+    _DBUS_AVAILABLE = False
+
+logger = logging.getLogger(__name__)
 
 BLUEZ = "org.bluez"
 ADAPTER_IFACE = "org.bluez.Adapter1"
@@ -156,3 +163,98 @@ def select_adapter(
     if len(adapters) > 1:
         return None, "Mehrere Bluetooth-Adapter — BLUETOOTH_ADAPTER_ADDRESS setzen", None
     return adapters[0], None, None
+
+
+# --- Bus-Client --------------------------------------------------------------
+
+CALL_TIMEOUT_SECONDS = 10.0
+PROPERTIES_IFACE = "org.freedesktop.DBus.Properties"
+OBJECT_MANAGER_IFACE = "org.freedesktop.DBus.ObjectManager"
+TIMEOUT_ERROR = "org.baluhost.Error.Timeout"
+BUS_ERROR = "org.baluhost.Error.BusUnavailable"
+
+
+class BlueZError(Exception):
+    """Ein Fehler von BlueZ oder vom Bus, mit dem D-Bus-Fehlernamen.
+
+    ``text`` stammt roh von BlueZ. Er wird geloggt, aber NIE an einen Client
+    ausgeliefert — die Route bildet ``name`` auf kuratierte Meldungen ab.
+    """
+
+    def __init__(self, name: str, text: str = "") -> None:
+        super().__init__(f"{name}: {text}" if text else name)
+        self.name = name
+        self.text = text
+
+
+async def _connect_system_bus() -> Any:
+    if not _DBUS_AVAILABLE:
+        raise BlueZError(BUS_ERROR, "dbus-next nicht verfuegbar")
+    return await MessageBus(bus_type=BusType.SYSTEM).connect()
+
+
+class BlueZClient:
+    """Eine Bus-Verbindung pro Worker, bei Bedarf und nach Fehlern neu aufgebaut."""
+
+    def __init__(self, bus_factory: Optional[Callable[[], Awaitable[Any]]] = None) -> None:
+        self._factory = bus_factory or _connect_system_bus
+        self._bus: Any = None
+        self._lock = asyncio.Lock()
+
+    async def _get_bus(self) -> Any:
+        async with self._lock:
+            if self._bus is None or not getattr(self._bus, "connected", True):
+                try:
+                    self._bus = await self._factory()
+                except BlueZError:
+                    raise
+                except Exception as exc:
+                    raise BlueZError(BUS_ERROR, type(exc).__name__) from exc
+            return self._bus
+
+    async def call(
+        self,
+        path: str,
+        interface: str,
+        member: str,
+        signature: str = "",
+        body: Optional[Sequence[Any]] = None,
+        timeout: Optional[float] = CALL_TIMEOUT_SECONDS,
+    ) -> list:
+        """Ruft eine Methode an ``org.bluez`` und liefert den Antwort-Rumpf."""
+        bus = await self._get_bus()
+        msg = Message(
+            destination=BLUEZ, path=path, interface=interface, member=member,
+            signature=signature, body=list(body or []),
+        )
+        try:
+            pending = bus.call(msg)
+            reply = await (asyncio.wait_for(pending, timeout) if timeout is not None else pending)
+        except asyncio.TimeoutError as exc:
+            raise BlueZError(TIMEOUT_ERROR, member) from exc
+        except (OSError, EOFError) as exc:
+            self._bus = None
+            raise BlueZError(BUS_ERROR, type(exc).__name__) from exc
+        if reply.message_type == MessageType.ERROR:
+            text = reply.body[0] if reply.body else ""
+            raise BlueZError(reply.error_name or "org.bluez.Error.Failed", str(text))
+        return list(reply.body or [])
+
+    async def get_managed_objects(self) -> dict:
+        body = await self.call("/", OBJECT_MANAGER_IFACE, "GetManagedObjects")
+        return unwrap(body[0]) if body else {}
+
+    async def set_property(
+        self, path: str, interface: str, name: str, signature: str, value: Any,
+    ) -> None:
+        await self.call(
+            path, PROPERTIES_IFACE, "Set", "ssv", [interface, name, Variant(signature, value)],
+        )
+
+    async def export(self, path: str, interface_obj: Any) -> None:
+        bus = await self._get_bus()
+        bus.export(path, interface_obj)
+
+    def unexport(self, path: str) -> None:
+        if self._bus is not None:
+            self._bus.unexport(path)
