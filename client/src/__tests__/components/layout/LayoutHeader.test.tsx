@@ -17,9 +17,11 @@ vi.mock('../../../components/topbar/TopbarStatusStrip', () => ({ TopbarStatusStr
 // audioEnabled ist per-Test umschaltbar - das ist die Nahtstelle des Defekts:
 // usePluginEnabled('audio_control') war dauerhaft false, weil das Plugin nie
 // im UI-Manifest auftauchte (siehe AudioControlPlugin.get_ui_manifest()).
-const pluginState = vi.hoisted(() => ({ audioEnabled: false }));
+const pluginState = vi.hoisted(() => ({ audioEnabled: false, bluetoothEnabled: false }));
 vi.mock('../../../contexts/PluginContext', () => ({
-  usePluginEnabled: (name: string) => name === 'audio_control' && pluginState.audioEnabled,
+  usePluginEnabled: (name: string) =>
+    (name === 'audio_control' && pluginState.audioEnabled) ||
+    (name === 'bluetooth' && pluginState.bluetoothEnabled),
 }));
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (k: string) => k }) }));
 
@@ -35,8 +37,15 @@ vi.mock('../../../api/audioControl', () => ({
   setStreamVolume: vi.fn().mockResolvedValue(undefined),
   setStreamMute: vi.fn().mockResolvedValue(undefined),
 }));
+vi.mock('../../../api/bluetooth', () => ({
+  TERMINAL_STAGES: new Set(['succeeded', 'failed', 'cancelled']),
+  getBluetoothState: vi.fn().mockResolvedValue({ available: false, detail: null, warning: null, adapter: null, devices: [], can_pair_here: false, pairing_active: false }),
+  setAdapterPowered: vi.fn(), startScan: vi.fn(), connectDevice: vi.fn(), disconnectDevice: vi.fn(),
+  removeDevice: vi.fn(), startPairing: vi.fn(), getPairingSession: vi.fn().mockResolvedValue(null),
+  answerPairing: vi.fn(), cancelPairing: vi.fn(),
+}));
 vi.mock('../../../api/powerPermissions', () => ({
-  getMyPowerPermissions: vi.fn().mockResolvedValue({ can_control_audio: true }),
+  getMyPowerPermissions: vi.fn().mockResolvedValue({ can_control_audio: true, can_manage_bluetooth: true }),
 }));
 
 const props = {
@@ -51,6 +60,7 @@ const props = {
 beforeEach(() => {
   featureState.isPi = false;
   pluginState.audioEnabled = false;
+  pluginState.bluetoothEnabled = false;
 });
 
 describe('LayoutHeader', () => {
@@ -69,6 +79,14 @@ describe('LayoutHeader', () => {
 
   it('audio_control aktiviert: Lautsprecher-Symbol erscheint (Regression fuer das fehlende UI-Manifest)', async () => {
     pluginState.audioEnabled = true;
+    render(<MemoryRouter><LayoutHeader {...props} /></MemoryRouter>);
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'title' })).toBeInTheDocument(),
+    );
+  });
+
+  it('bluetooth aktiviert: Bluetooth-Symbol erscheint', async () => {
+    pluginState.bluetoothEnabled = true;
     render(<MemoryRouter><LayoutHeader {...props} /></MemoryRouter>);
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'title' })).toBeInTheDocument(),
