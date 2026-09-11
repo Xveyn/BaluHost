@@ -1,4 +1,6 @@
 """Dev-Backend (Zustand im Speicher) und BlueZ-Backend (Aufrufreihenfolge)."""
+import asyncio
+
 import pytest
 
 from app.plugins.installed.bluetooth.backend import (
@@ -93,6 +95,32 @@ class TestDevBackend:
         with pytest.raises(BlueZError) as info:
             await backend.remove(DEV_ADAPTER_PATH, XBOX)
         assert info.value.name == "org.bluez.Error.DoesNotExist"
+
+    async def test_cancelling_mid_pairing_raises_cancelled_and_leaves_it_unpaired(self):
+        backend = DevBluetoothBackend(step_seconds=0.05, passkey=482913)
+        await backend.start_scan(DEV_ADAPTER_PATH)
+        prompter = _Prompter()
+        task = asyncio.create_task(backend.pair(KEYBOARD, prompter))
+        while not prompter.passkeys:
+            await asyncio.sleep(0.005)
+        await backend.cancel_pairing(KEYBOARD)
+        with pytest.raises(BlueZError) as info:
+            await task
+        assert info.value.name == "org.bluez.Error.AuthenticationCanceled"
+        paired = next(d for d in (await backend.snapshot()).devices if d.path == KEYBOARD)
+        assert paired.paired is False
+
+    async def test_stop_scan_does_not_drop_an_in_flight_pairing(self):
+        backend = DevBluetoothBackend(step_seconds=0.05, passkey=482913)
+        await backend.start_scan(DEV_ADAPTER_PATH)
+        prompter = _Prompter()
+        task = asyncio.create_task(backend.pair(KEYBOARD, prompter))
+        while not prompter.passkeys:
+            await asyncio.sleep(0.005)
+        await backend.stop_scan(DEV_ADAPTER_PATH)
+        await task
+        paired = next(d for d in (await backend.snapshot()).devices if d.path == KEYBOARD)
+        assert paired.paired is True
 
 
 class _RecordingClient:

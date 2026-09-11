@@ -7,6 +7,7 @@ und Produktion dieselbe ist.
 from __future__ import annotations
 
 import asyncio
+import logging
 import secrets
 from dataclasses import dataclass
 from typing import Dict, Optional, Protocol
@@ -30,6 +31,8 @@ try:
     from dbus_next import Variant
 except ImportError:  # pragma: no cover
     Variant = None  # type: ignore[assignment,misc]
+
+logger = logging.getLogger(__name__)
 
 CONNECT_TIMEOUT_SECONDS = 30.0
 AGENT_MANAGER_PATH = "/org/bluez"
@@ -91,6 +94,13 @@ class DevBluetoothBackend:
             device_path(DEV_ADAPTER_PATH, d.address): d for d in _dev_paired()
         }
         self._cancelled: set[str] = set()
+        # Pfade mit einer laufenden pair()-Ausfuehrung. stop_scan() muss diese
+        # Geraete behalten, auch wenn sie aus derselben Scan-Runde stammen wie
+        # ein inzwischen verworfenes Geraet (Fix-Runde 1, Finding 1): pair()
+        # haelt sonst eine Referenz auf ein Objekt, das nicht mehr im Dict
+        # steht, und "koppelt erfolgreich" ein Geraet, das aus snapshot()
+        # bereits verschwunden ist.
+        self._pairing: set[str] = set()
 
     def _get(self, path: str) -> _DevDevice:
         device = self._devices.get(path)
@@ -133,7 +143,12 @@ class DevBluetoothBackend:
 
     async def stop_scan(self, adapter_path: str) -> None:
         self._discovering = False
-        self._devices = {p: d for p, d in self._devices.items() if d.paired}
+        # Ein Geraet mit laufender Kopplung bleibt erhalten, selbst wenn es
+        # (noch) nicht "paired" ist — sonst faellt es aus dem Dict, waehrend
+        # pair() gerade auf sein Objekt zeigt (siehe self._pairing oben).
+        self._devices = {
+            p: d for p, d in self._devices.items() if d.paired or p in self._pairing
+        }
 
     async def connect(self, device_path: str) -> None:
         self._require_powered()
@@ -155,21 +170,32 @@ class DevBluetoothBackend:
         if device.paired:
             raise BlueZError("org.bluez.Error.AlreadyExists", "Dev: schon gekoppelt")
         self._cancelled.discard(device_path)
-        key = self._passkey if self._passkey is not None else secrets.randbelow(10**6)
-        if device.flow == "passkey":
-            for entered in range(7):
+        # Waehrend dieses Aufrufs mehrfach awaited wird, muss stop_scan() das
+        # Geraet im Dict lassen (siehe dort) — sonst haelt "device" hier eine
+        # Referenz auf ein Objekt, das aus snapshot() bereits verschwunden ist.
+        self._pairing.add(device_path)
+        try:
+            key = self._passkey if self._passkey is not None else secrets.randbelow(10**6)
+            if device.flow == "passkey":
+                for entered in range(7):
+                    self._raise_if_cancelled(device_path)
+                    prompter.show_passkey(key, entered)
+                    await asyncio.sleep(self._step)
+            elif device.flow == "confirm":
+                accepted = await prompter.ask_confirmation(key)
                 self._raise_if_cancelled(device_path)
-                prompter.show_passkey(key, entered)
+                if not accepted:
+                    raise BlueZError("org.bluez.Error.AuthenticationRejected", "Dev: abgelehnt")
+            else:
                 await asyncio.sleep(self._step)
-        elif device.flow == "confirm":
-            accepted = await prompter.ask_confirmation(key)
             self._raise_if_cancelled(device_path)
-            if not accepted:
-                raise BlueZError("org.bluez.Error.AuthenticationRejected", "Dev: abgelehnt")
-        else:
-            await asyncio.sleep(self._step)
-        self._raise_if_cancelled(device_path)
-        device.paired = True
+            # remove() kann das Geraet trotzdem geloescht haben — dann ist
+            # "nicht mehr vorhanden" die ehrliche Antwort, nicht "gekoppelt".
+            if device_path not in self._devices:
+                raise BlueZError("org.bluez.Error.DoesNotExist", "Dev: waehrend Kopplung entfernt")
+            device.paired = True
+        finally:
+            self._pairing.discard(device_path)
 
     def _raise_if_cancelled(self, device_path: str) -> None:
         if device_path in self._cancelled:
@@ -243,7 +269,14 @@ class BlueZBackend:
                 except BlueZError:
                     pass
         finally:
-            self._client.unexport(AGENT_PATH)
+            # Ein Fehler hier wuerde in Pythons finally-Semantik die
+            # eigentliche Ausnahme (z. B. AuthenticationRejected) ersetzen —
+            # genau das, wovor UnregisterAgent oben schon geschuetzt ist.
+            # Nie den Rohtext loggen, nur den Ausnahme-Typ.
+            try:
+                self._client.unexport(AGENT_PATH)
+            except Exception as exc:
+                logger.warning("Bluetooth: unexport fehlgeschlagen (%s)", type(exc).__name__)
 
     async def set_trusted(self, device_path: str, trusted: bool) -> None:
         await self._client.set_property(device_path, DEVICE_IFACE, "Trusted", "b", trusted)
