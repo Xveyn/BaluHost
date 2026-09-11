@@ -50,12 +50,31 @@ class TestOnlyTheSessionDevice:
         with pytest.raises(DBusError):
             await BluezAgent(_Prompter()).handle_request_confirmation(FOREIGN, 1)
 
+    def test_display_pin_code_for_a_foreign_device_is_rejected(self):
+        prompter = _Prompter()
+        _rejected(lambda: BluezAgent(prompter).handle_display_pin_code(FOREIGN, "482913"))
+        assert prompter.pins == []
+
+    def test_request_pin_code_for_a_foreign_device_is_rejected_even_for_a_keyboard(self):
+        _rejected(lambda: BluezAgent(_Prompter(icon="input-keyboard")).handle_request_pin_code(FOREIGN))
+
+    def test_request_passkey_for_a_foreign_device_is_rejected(self):
+        _rejected(lambda: BluezAgent(_Prompter()).handle_request_passkey(FOREIGN))
+
+    def test_authorize_service_for_a_foreign_device_is_rejected(self):
+        _rejected(lambda: BluezAgent(_Prompter()).handle_authorize_service(FOREIGN, "0000110b"))
+
 
 class TestFlows:
     def test_display_passkey_reaches_the_prompter(self):
         prompter = _Prompter()
         BluezAgent(prompter).handle_display_passkey(SESSION, 4821, 3)
         assert prompter.passkeys == [(4821, 3)]
+
+    def test_display_pin_code_reaches_the_prompter(self):
+        prompter = _Prompter()
+        BluezAgent(prompter).handle_display_pin_code(SESSION, "482913")
+        assert prompter.pins == ["482913"]
 
     def test_request_pin_code_generates_a_six_digit_pin_for_a_keyboard(self):
         prompter = _Prompter(icon="input-keyboard")

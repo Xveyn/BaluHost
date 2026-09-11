@@ -76,9 +76,11 @@ class BluezAgent(ServiceInterface):
         self._require_session_device(device)
 
     def handle_request_passkey(self, device: str) -> int:
+        self._require_session_device(device)
         raise DBusError(REJECTED, "Passkey-Eingabe am Rechner nicht unterstuetzt")
 
     def handle_authorize_service(self, device: str, uuid: str) -> None:
+        self._require_session_device(device)
         raise DBusError(REJECTED, "Dienstfreigaben entscheidet dieser Agent nicht")
 
     def handle_cancel(self) -> None:
