@@ -7,6 +7,7 @@
  * einen Code, der nicht mehr gilt.
  */
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { Loader2 } from 'lucide-react';
 import {
@@ -40,11 +41,16 @@ export function BluetoothPairingDialog({
   const [sending, setSending] = useState(false);
   const seen = useRef(false);
   const finished = useRef(false);
+  const inFlight = useRef(false);
 
   useEffect(() => {
     let active = true;
     const poll = async () => {
       if (finished.current) return;
+      // Läuft noch eine Antwort, wird übersprungen — sonst stauen sich bei
+      // langsamer Verbindung die Anfragen (spiegelt BluetoothMenu.refresh()).
+      if (inFlight.current) return;
+      inFlight.current = true;
       try {
         const next = await getPairingSession();
         if (!active) return;
@@ -59,6 +65,8 @@ export function BluetoothPairingDialog({
         }
       } catch {
         // Nächster Takt versucht es erneut.
+      } finally {
+        inFlight.current = false;
       }
     };
     void poll();
@@ -87,7 +95,13 @@ export function BluetoothPairingDialog({
   const code = session?.code ?? null;
   const entered = session?.entered ?? null;
 
-  return (
+  // Ueber ein Portal direkt an document.body rendern. Der Dialog liegt als
+  // Kind von BluetoothMenu im DOM-Baum der Topbar (LayoutHeader), und die
+  // Topbar traegt backdrop-blur-2xl. Ein Vorfahre mit backdrop-filter wird
+  // zum containing block fuer position:fixed-Nachfahren - ohne das Portal
+  // wuerde der Dialog also in den Header-Streifen gezogen statt zentriert
+  // im Viewport zu liegen (siehe ConfirmDialog fuer dasselbe Muster).
+  return createPortal(
     <div
       role="dialog"
       aria-modal="true"
@@ -179,6 +193,7 @@ export function BluetoothPairingDialog({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

@@ -100,4 +100,15 @@ describe('BluetoothPairingDialog', () => {
     renderDialog('input');
     expect(await screen.findByText('bluetooth:dialog.inputWarning')).toBeTruthy();
   });
+
+  it('rendert ueber ein Portal an document.body statt in den eigenen Container', async () => {
+    vi.mocked(getPairingSession).mockResolvedValue(session({}) as never);
+    const onClose = vi.fn();
+    const { container } = render(
+      <BluetoothPairingDialog sessionId="s1" deviceName="Dev-Tastatur" kind="input" onClose={onClose} pollMs={10} />,
+    );
+    await waitFor(() => expect(getPairingSession).toHaveBeenCalled());
+    expect(container.querySelector('[role="dialog"]')).toBeNull();
+    expect(document.body.querySelector('[role="dialog"]')).toBeTruthy();
+  });
 });
