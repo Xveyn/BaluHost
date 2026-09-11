@@ -139,6 +139,38 @@ async def test_success_trusts_and_connects_and_clears_the_code(coord):
     assert pairing.pairing_active() is False
 
 
+async def test_a_broken_set_trusted_does_not_turn_success_into_failure(coord):
+    class _BrokenTrust(_FakeBackend):
+        async def set_trusted(self, device_path, trusted):
+            raise RuntimeError("boom")
+
+    async def script(prompter, backend):
+        prompter.show_passkey(123456, 6)
+
+    finished = _Finished()
+    coord.start(_BrokenTrust(script), DEVICE, 1, finished)
+    await coord.wait_idle()
+    assert finished.calls == [("succeeded", None)]
+    session = pairing.read_session_for(1)
+    assert session.stage == "succeeded"
+
+
+async def test_a_broken_cancel_pairing_does_not_hide_the_timeout(coord, monkeypatch):
+    monkeypatch.setattr(pairing, "PAIR_TIMEOUT_SECONDS", 0.05)
+
+    class _BrokenCancel(_FakeBackend):
+        async def cancel_pairing(self, device_path):
+            raise RuntimeError("boom")
+
+    async def forever(prompter, backend):
+        await asyncio.sleep(10)
+
+    finished = _Finished()
+    coord.start(_BrokenCancel(forever), DEVICE, 1, finished)
+    await coord.wait_idle()
+    assert finished.calls == [("failed", "timeout")]
+
+
 async def test_confirmation_accept_succeeds(coord):
     async def script(prompter, backend):
         if not await prompter.ask_confirmation(654321):

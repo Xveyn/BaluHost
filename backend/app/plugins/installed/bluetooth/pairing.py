@@ -252,10 +252,24 @@ class ActivePairing:
 
 
 async def _quietly(action: Awaitable[Any], what: str) -> None:
+    """Fuehrt einen Best-Effort-Schritt aus, der das Ergebnis nie kippen darf.
+
+    ``set_trusted``/``connect`` nach Erfolg und ``cancel_pairing`` nach einem
+    Timeout sind Aufraeumarbeiten, keine Bedingungen fuer den Ausgang der
+    Kopplung. Jeder Fehler hier — auch ein unerwarteter, nicht nur
+    ``BlueZError`` — wird deshalb geloggt und verschluckt, statt in den
+    aeusseren ``except Exception`` von ``_run`` durchzuschlagen, der sonst
+    einen bereits erfolgreichen Ausgang zu ``("failed", "unknown")`` verwandeln
+    wuerde. ``BaseException`` bleibt bewusst aussen vor: ``CancelledError``
+    (Shutdown, Testabbruch) muss weiter nach oben laufen.
+    """
     try:
         await action
     except BlueZError as exc:
         logger.warning("Bluetooth: %s fehlgeschlagen (%s)", what, exc.name)
+    except Exception as exc:
+        # Nie exc selbst loggen — koennte BlueZ-Rohtext mit Code/PIN enthalten.
+        logger.warning("Bluetooth: %s fehlgeschlagen (%s)", what, type(exc).__name__)
 
 
 class PairingCoordinator:
