@@ -76,10 +76,18 @@ async def managed_objects(bus) -> dict:
 
 
 def only_adapter_and_paired(objects: dict) -> dict:
-    kept = {}
+    """Filter to Adapter1 and paired Device1 only; drop child objects of unpaired devices."""
+    excluded_device_paths = set()
     for path, ifaces in objects.items():
         device = ifaces.get("org.bluez.Device1")
         if device is not None and not device.get("Paired"):
+            excluded_device_paths.add(path)
+
+    kept = {}
+    for path, ifaces in objects.items():
+        if path in excluded_device_paths:
+            continue
+        if any(path.startswith(excluded + "/") for excluded in excluded_device_paths):
             continue
         kept[path] = ifaces
     return kept
@@ -111,7 +119,19 @@ def anonymize(objects: dict) -> dict:
             return match.group(0)
         return fake.replace(":", sep)
 
-    return json.loads(MAC_RE.sub(replace, text))
+    text = MAC_RE.sub(replace, text)
+
+    def has_unanonymized_mac(s: str) -> bool:
+        for match in MAC_RE.finditer(s):
+            mac = match.group(0)
+            if not mac.replace("_", ":").upper().startswith("AA:AA:AA:AA:AA:"):
+                return True
+        return False
+
+    if has_unanonymized_mac(text):
+        raise SystemExit("Unanonymisierte MAC im Mitschnitt — abgebrochen")
+
+    return json.loads(text)
 
 
 class ProbeAgent(ServiceInterface):
