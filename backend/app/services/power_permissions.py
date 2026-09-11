@@ -22,6 +22,7 @@ _ACTION_FIELD_MAP = {
     "unlock_session": "can_unlock_session",
     "control_audio": "can_control_audio",
     "manage_displays": "can_manage_displays",
+    "manage_bluetooth": "can_manage_bluetooth",
 }
 
 
@@ -51,6 +52,7 @@ def get_permissions(db: Session, user_id: int) -> UserPowerPermissionsResponse:
         can_unlock_session=perm.can_unlock_session,
         can_control_audio=perm.can_control_audio,
         can_manage_displays=perm.can_manage_displays,
+        can_manage_bluetooth=perm.can_manage_bluetooth,
         granted_by=perm.granted_by,
         granted_by_username=granted_by_username,
         granted_at=perm.granted_at,
@@ -115,6 +117,7 @@ def update_permissions(
     if not perm:
         perm = UserPowerPermission(user_id=user_id, granted_by=granted_by)
         db.add(perm)
+        db.flush()  # Ensure defaults are initialized from database
 
     old_values = {
         "can_soft_sleep": perm.can_soft_sleep,
@@ -125,6 +128,7 @@ def update_permissions(
         "can_unlock_session": perm.can_unlock_session,
         "can_control_audio": perm.can_control_audio,
         "can_manage_displays": perm.can_manage_displays,
+        "can_manage_bluetooth": perm.can_manage_bluetooth,
     }
 
     # Track which fields were explicitly set so implications can be applied
@@ -161,6 +165,8 @@ def update_permissions(
         perm.can_control_audio = update.can_control_audio
     if update.can_manage_displays is not None:
         perm.can_manage_displays = update.can_manage_displays
+    if update.can_manage_bluetooth is not None:
+        perm.can_manage_bluetooth = update.can_manage_bluetooth
 
     # Apply implication rules
     perm.can_soft_sleep, perm.can_wake, perm.can_suspend, perm.can_wol = (
@@ -185,6 +191,7 @@ def update_permissions(
         "can_unlock_session": perm.can_unlock_session,
         "can_control_audio": perm.can_control_audio,
         "can_manage_displays": perm.can_manage_displays,
+        "can_manage_bluetooth": perm.can_manage_bluetooth,
     }
 
     # Audit log
@@ -211,7 +218,7 @@ def check_permission(db: Session, user_id: int, action: str) -> bool:
         db: Database session
         user_id: User ID to check
         action: One of 'soft_sleep', 'wake', 'suspend', 'wol', 'toggle_desktop',
-            'unlock_session', 'control_audio', 'manage_displays'
+            'unlock_session', 'control_audio', 'manage_displays', 'manage_bluetooth'
 
     Returns:
         True if the user has the permission, False otherwise.

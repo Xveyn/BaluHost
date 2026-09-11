@@ -28,6 +28,7 @@ class UserPowerPermission(Base):
     can_unlock_session: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
     can_control_audio: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
     can_manage_displays: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
+    can_manage_bluetooth: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
 
     granted_by: Mapped[Optional[int]] = mapped_column(
         Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True

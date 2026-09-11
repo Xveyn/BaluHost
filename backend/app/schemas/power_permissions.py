@@ -18,6 +18,7 @@ class UserPowerPermissionsResponse(BaseModel):
     can_unlock_session: bool = False
     can_control_audio: bool = False
     can_manage_displays: bool = False
+    can_manage_bluetooth: bool = False
     granted_by: Optional[int] = None
     granted_by_username: Optional[str] = None
     granted_at: Optional[datetime] = None
@@ -36,6 +37,7 @@ class UserPowerPermissionsUpdate(BaseModel):
     can_unlock_session: Optional[bool] = Field(default=None, description="Allow unlocking the desktop session from the web app")
     can_control_audio: Optional[bool] = Field(default=None, description="Allow controlling desktop audio (volume, output device, per-app mixer)")
     can_manage_displays: Optional[bool] = Field(default=None, description="Allow choosing display outputs and video modes")
+    can_manage_bluetooth: Optional[bool] = Field(default=None, description="Allow connecting, removing and pairing Bluetooth devices")
 
 
 class MyPowerPermissionsResponse(BaseModel):
@@ -49,3 +51,4 @@ class MyPowerPermissionsResponse(BaseModel):
     can_unlock_session: bool = False
     can_control_audio: bool = False
     can_manage_displays: bool = False
+    can_manage_bluetooth: bool = False
