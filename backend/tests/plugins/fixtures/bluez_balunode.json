@@ -1,0 +1,577 @@
+{
+  "/org/bluez": {
+    "org.bluez.AgentManager1": {},
+    "org.bluez.HealthManager1": {},
+    "org.bluez.ProfileManager1": {},
+    "org.freedesktop.DBus.Introspectable": {}
+  },
+  "/org/bluez/hci0": {
+    "org.bluez.Adapter1": {
+      "Address": "AA:AA:AA:AA:AA:01",
+      "AddressType": "public",
+      "Alias": "BaluNode",
+      "Class": 8126724,
+      "Connectable": false,
+      "Discoverable": false,
+      "DiscoverableTimeout": 180,
+      "Discovering": false,
+      "ExperimentalFeatures": [
+        "671b10b5-42c0-4696-9227-eb28d1b049d6",
+        "6fbaf188-05e0-496a-9885-d6ddfdb4e03e",
+        "15c0a148-c273-11ea-b3de-0242ac130004"
+      ],
+      "Manufacturer": 93,
+      "Modalias": "usb:v1D6Bp0246d0552",
+      "Name": "BaluNode",
+      "Pairable": true,
+      "PairableTimeout": 0,
+      "PowerState": "on",
+      "Powered": true,
+      "Roles": [
+        "central",
+        "peripheral",
+        "central-peripheral"
+      ],
+      "UUIDs": [
+        "0000110e-0000-1000-8000-00805f9b34fb",
+        "03b80e5a-ede8-4b33-a751-6ce34ec4c700",
+        "0000184e-0000-1000-8000-00805f9b34fb",
+        "00001845-0000-1000-8000-00805f9b34fb",
+        "00001200-0000-1000-8000-00805f9b34fb",
+        "00001104-0000-1000-8000-00805f9b34fb",
+        "00001844-0000-1000-8000-00805f9b34fb",
+        "00005005-0000-1000-8000-0002ee000001",
+        "0000184d-0000-1000-8000-00805f9b34fb",
+        "00001843-0000-1000-8000-00805f9b34fb",
+        "0000110c-0000-1000-8000-00805f9b34fb",
+        "00001801-0000-1000-8000-00805f9b34fb",
+        "0000180a-0000-1000-8000-00805f9b34fb",
+        "0000110b-0000-1000-8000-00805f9b34fb",
+        "00001800-0000-1000-8000-00805f9b34fb",
+        "0000112e-0000-1000-8000-00805f9b34fb",
+        "0000111f-0000-1000-8000-00805f9b34fb",
+        "0000110a-0000-1000-8000-00805f9b34fb",
+        "00001850-0000-1000-8000-00805f9b34fb",
+        "0000112d-0000-1000-8000-00805f9b34fb",
+        "0000184f-0000-1000-8000-00805f9b34fb",
+        "0000111e-0000-1000-8000-00805f9b34fb"
+      ],
+      "Version": 13
+    },
+    "org.bluez.AdvertisementMonitorManager1": {
+      "SupportedFeatures": [],
+      "SupportedMonitorTypes": [
+        "or_patterns"
+      ]
+    },
+    "org.bluez.BatteryProviderManager1": {},
+    "org.bluez.GattManager1": {},
+    "org.bluez.LEAdvertisingManager1": {
+      "ActiveInstances": 0,
+      "SupportedCapabilities": {
+        "MaxAdvLen": 251,
+        "MaxScnRspLen": 251,
+        "MaxTxPower": 10,
+        "MinTxPower": 0
+      },
+      "SupportedFeatures": [
+        "CanSetTxPower",
+        "HardwareOffload"
+      ],
+      "SupportedIncludes": [
+        "tx-power",
+        "appearance",
+        "local-name"
+      ],
+      "SupportedInstances": 4,
+      "SupportedSecondaryChannels": [
+        "1M",
+        "2M"
+      ]
+    },
+    "org.bluez.Media1": {
+      "SupportedUUIDs": [
+        "0000110a-0000-1000-8000-00805f9b34fb",
+        "0000110b-0000-1000-8000-00805f9b34fb",
+        "00002bc9-0000-1000-8000-00805f9b34fb",
+        "00002bcb-0000-1000-8000-00805f9b34fb",
+        "00001852-0000-1000-8000-00805f9b34fb",
+        "00001851-0000-1000-8000-00805f9b34fb",
+        "0000FDF0-0000-1000-8000-00805f9b34fb"
+      ]
+    },
+    "org.bluez.NetworkServer1": {},
+    "org.bluez.SimAccess1": {
+      "Connected": false
+    },
+    "org.freedesktop.DBus.Introspectable": {},
+    "org.freedesktop.DBus.Properties": {}
+  },
+  "/org/bluez/hci0/dev_AA_AA_AA_AA_AA_02": {
+    "org.bluez.Battery1": {
+      "Percentage": 88,
+      "Source": "GATT Battery Service"
+    },
+    "org.bluez.Device1": {
+      "Adapter": "/org/bluez/hci0",
+      "Address": "AA:AA:AA:AA:AA:02",
+      "AddressType": "public",
+      "Alias": "Xbox Wireless Controller",
+      "Appearance": 964,
+      "Blocked": false,
+      "Bonded": true,
+      "Connected": true,
+      "Icon": "input-gaming",
+      "LegacyPairing": false,
+      "Modalias": "usb:v045Ep0B13d0523",
+      "Name": "Xbox Wireless Controller",
+      "Paired": true,
+      "ServicesResolved": true,
+      "Trusted": true,
+      "UUIDs": [
+        "00000001-5f60-4c4f-9c83-a7953298d40d",
+        "00001800-0000-1000-8000-00805f9b34fb",
+        "00001801-0000-1000-8000-00805f9b34fb",
+        "0000180a-0000-1000-8000-00805f9b34fb",
+        "0000180f-0000-1000-8000-00805f9b34fb",
+        "00001812-0000-1000-8000-00805f9b34fb"
+      ],
+      "WakeAllowed": true
+    },
+    "org.freedesktop.DBus.Introspectable": {},
+    "org.freedesktop.DBus.Properties": {}
+  },
+  "/org/bluez/hci0/dev_AA_AA_AA_AA_AA_02/service0001": {
+    "org.bluez.GattService1": {
+      "Device": "/org/bluez/hci0/dev_AA_AA_AA_AA_AA_02",
+      "Handle": 1,
+      "Includes": [],
+      "Primary": true,
+      "UUID": "00001800-0000-1000-8000-00805f9b34fb"
+    },
+    "org.freedesktop.DBus.Introspectable": {},
+    "org.freedesktop.DBus.Properties": {}
+  },
+  "/org/bluez/hci0/dev_AA_AA_AA_AA_AA_02/service0001/char0002": {
+    "org.bluez.GattCharacteristic1": {
+      "Flags": [
+        "read"
+      ],
+      "Handle": 2,
+      "MTU": 23,
+      "Service": "/org/bluez/hci0/dev_AA_AA_AA_AA_AA_02/service0001",
+      "UUID": "00002a00-0000-1000-8000-00805f9b34fb",
+      "Value": ""
+    },
+    "org.freedesktop.DBus.Introspectable": {},
+    "org.freedesktop.DBus.Properties": {}
+  },
+  "/org/bluez/hci0/dev_AA_AA_AA_AA_AA_02/service0001/char0004": {
+    "org.bluez.GattCharacteristic1": {
+      "Flags": [
+        "read"
+      ],
+      "Handle": 4,
+      "MTU": 23,
+      "Service": "/org/bluez/hci0/dev_AA_AA_AA_AA_AA_02/service0001",
+      "UUID": "00002a01-0000-1000-8000-00805f9b34fb",
+      "Value": ""
+    },
+    "org.freedesktop.DBus.Introspectable": {},
+    "org.freedesktop.DBus.Properties": {}
+  },
+  "/org/bluez/hci0/dev_AA_AA_AA_AA_AA_02/service0001/char0006": {
+    "org.bluez.GattCharacteristic1": {
+      "Flags": [
+        "read"
+      ],
+      "Handle": 6,
+      "MTU": 23,
+      "Service": "/org/bluez/hci0/dev_AA_AA_AA_AA_AA_02/service0001",
+      "UUID": "00002a04-0000-1000-8000-00805f9b34fb",
+      "Value": ""
+    },
+    "org.freedesktop.DBus.Introspectable": {},
+    "org.freedesktop.DBus.Properties": {}
+  },
+  "/org/bluez/hci0/dev_AA_AA_AA_AA_AA_02/service0008": {
+    "org.bluez.GattService1": {
+      "Device": "/org/bluez/hci0/dev_AA_AA_AA_AA_AA_02",
+      "Handle": 8,
+      "Includes": [],
+      "Primary": true,
+      "UUID": "00001801-0000-1000-8000-00805f9b34fb"
+    },
+    "org.freedesktop.DBus.Introspectable": {},
+    "org.freedesktop.DBus.Properties": {}
+  },
+  "/org/bluez/hci0/dev_AA_AA_AA_AA_AA_02/service0009": {
+    "org.bluez.GattService1": {
+      "Device": "/org/bluez/hci0/dev_AA_AA_AA_AA_AA_02",
+      "Handle": 9,
+      "Includes": [],
+      "Primary": true,
+      "UUID": "0000180a-0000-1000-8000-00805f9b34fb"
+    },
+    "org.freedesktop.DBus.Introspectable": {},
+    "org.freedesktop.DBus.Properties": {}
+  },
+  "/org/bluez/hci0/dev_AA_AA_AA_AA_AA_02/service0009/char000a": {
+    "org.bluez.GattCharacteristic1": {
+      "Flags": [
+        "read"
+      ],
+      "Handle": 10,
+      "MTU": 23,
+      "Service": "/org/bluez/hci0/dev_AA_AA_AA_AA_AA_02/service0009",
+      "UUID": "00002a29-0000-1000-8000-00805f9b34fb",
+      "Value": ""
+    },
+    "org.freedesktop.DBus.Introspectable": {},
+    "org.freedesktop.DBus.Properties": {}
+  },
+  "/org/bluez/hci0/dev_AA_AA_AA_AA_AA_02/service0009/char000c": {
+    "org.bluez.GattCharacteristic1": {
+      "Flags": [
+        "read"
+      ],
+      "Handle": 12,
+      "MTU": 23,
+      "Service": "/org/bluez/hci0/dev_AA_AA_AA_AA_AA_02/service0009",
+      "UUID": "00002a50-0000-1000-8000-00805f9b34fb",
+      "Value": ""
+    },
+    "org.freedesktop.DBus.Introspectable": {},
+    "org.freedesktop.DBus.Properties": {}
+  },
+  "/org/bluez/hci0/dev_AA_AA_AA_AA_AA_02/service0009/char000e": {
+    "org.bluez.GattCharacteristic1": {
+      "Flags": [
+        "read"
+      ],
+      "Handle": 14,
+      "MTU": 23,
+      "Service": "/org/bluez/hci0/dev_AA_AA_AA_AA_AA_02/service0009",
+      "UUID": "00002a26-0000-1000-8000-00805f9b34fb",
+      "Value": "352e32332e362e30"
+    },
+    "org.freedesktop.DBus.Introspectable": {},
+    "org.freedesktop.DBus.Properties": {}
+  },
+  "/org/bluez/hci0/dev_AA_AA_AA_AA_AA_02/service0009/char0010": {
+    "org.bluez.GattCharacteristic1": {
+      "Flags": [
+        "read"
+      ],
+      "Handle": 16,
+      "MTU": 23,
+      "Service": "/org/bluez/hci0/dev_AA_AA_AA_AA_AA_02/service0009",
+      "UUID": "00002a25-0000-1000-8000-00805f9b34fb",
+      "Value": "3039373130323235313632343039"
+    },
+    "org.freedesktop.DBus.Introspectable": {},
+    "org.freedesktop.DBus.Properties": {}
+  },
+  "/org/bluez/hci0/dev_AA_AA_AA_AA_AA_02/service0012": {
+    "org.bluez.GattService1": {
+      "Device": "/org/bluez/hci0/dev_AA_AA_AA_AA_AA_02",
+      "Handle": 18,
+      "Includes": [],
+      "Primary": true,
+      "UUID": "0000180f-0000-1000-8000-00805f9b34fb"
+    },
+    "org.freedesktop.DBus.Introspectable": {},
+    "org.freedesktop.DBus.Properties": {}
+  },
+  "/org/bluez/hci0/dev_AA_AA_AA_AA_AA_02/service0012/char0013": {
+    "org.bluez.GattCharacteristic1": {
+      "Flags": [
+        "read",
+        "notify"
+      ],
+      "Handle": 19,
+      "MTU": 23,
+      "NotifyAcquired": false,
+      "Notifying": false,
+      "Service": "/org/bluez/hci0/dev_AA_AA_AA_AA_AA_02/service0012",
+      "UUID": "00002a19-0000-1000-8000-00805f9b34fb",
+      "Value": ""
+    },
+    "org.freedesktop.DBus.Introspectable": {},
+    "org.freedesktop.DBus.Properties": {}
+  },
+  "/org/bluez/hci0/dev_AA_AA_AA_AA_AA_02/service0012/char0013/desc0015": {
+    "org.bluez.GattDescriptor1": {
+      "Characteristic": "/org/bluez/hci0/dev_AA_AA_AA_AA_AA_02/service0012/char0013",
+      "Handle": 21,
+      "UUID": "00002902-0000-1000-8000-00805f9b34fb",
+      "Value": ""
+    },
+    "org.freedesktop.DBus.Introspectable": {},
+    "org.freedesktop.DBus.Properties": {}
+  },
+  "/org/bluez/hci0/dev_AA_AA_AA_AA_AA_02/service0016": {
+    "org.bluez.GattService1": {
+      "Device": "/org/bluez/hci0/dev_AA_AA_AA_AA_AA_02",
+      "Handle": 22,
+      "Includes": [],
+      "Primary": true,
+      "UUID": "00001812-0000-1000-8000-00805f9b34fb"
+    },
+    "org.freedesktop.DBus.Introspectable": {},
+    "org.freedesktop.DBus.Properties": {}
+  },
+  "/org/bluez/hci0/dev_AA_AA_AA_AA_AA_02/service0016/char0017": {
+    "org.bluez.GattCharacteristic1": {
+      "Flags": [
+        "read"
+      ],
+      "Handle": 23,
+      "MTU": 23,
+      "Service": "/org/bluez/hci0/dev_AA_AA_AA_AA_AA_02/service0016",
+      "UUID": "00002a4a-0000-1000-8000-00805f9b34fb",
+      "Value": ""
+    },
+    "org.freedesktop.DBus.Introspectable": {},
+    "org.freedesktop.DBus.Properties": {}
+  },
+  "/org/bluez/hci0/dev_AA_AA_AA_AA_AA_02/service0016/char0019": {
+    "org.bluez.GattCharacteristic1": {
+      "Flags": [
+        "write-without-response"
+      ],
+      "Handle": 25,
+      "MTU": 23,
+      "Service": "/org/bluez/hci0/dev_AA_AA_AA_AA_AA_02/service0016",
+      "UUID": "00002a4c-0000-1000-8000-00805f9b34fb",
+      "Value": "",
+      "WriteAcquired": false
+    },
+    "org.freedesktop.DBus.Introspectable": {},
+    "org.freedesktop.DBus.Properties": {}
+  },
+  "/org/bluez/hci0/dev_AA_AA_AA_AA_AA_02/service0016/char001b": {
+    "org.bluez.GattCharacteristic1": {
+      "Flags": [
+        "read"
+      ],
+      "Handle": 27,
+      "MTU": 23,
+      "Service": "/org/bluez/hci0/dev_AA_AA_AA_AA_AA_02/service0016",
+      "UUID": "00002a4b-0000-1000-8000-00805f9b34fb",
+      "Value": "05010905a10185010901a10009300931150027ffff0000950275108102c00901a10009320935150027ffff0000950275108102c0050209c5150026ff039501750a810215002500750695018103050209c4150026ff039501750a81021500250075069501810305010939150125083500463b016614007504950181427504950115002500350045006500810305091901290f150025017501950f810215002500750195018103050c0ab2001500250195017501810215002500750795018103050f09218503a102099715002501750495019102150025007504950191030970150025647508950491020950660110550e150026ff0075089501910209a7150026ff0075089501910265005500097c150026ff00750895019102c0c0"
+    },
+    "org.freedesktop.DBus.Introspectable": {},
+    "org.freedesktop.DBus.Properties": {}
+  },
+  "/org/bluez/hci0/dev_AA_AA_AA_AA_AA_02/service0016/char001d": {
+    "org.bluez.GattCharacteristic1": {
+      "Flags": [
+        "read",
+        "notify"
+      ],
+      "Handle": 29,
+      "MTU": 23,
+      "NotifyAcquired": false,
+      "Notifying": false,
+      "Service": "/org/bluez/hci0/dev_AA_AA_AA_AA_AA_02/service0016",
+      "UUID": "00002a4d-0000-1000-8000-00805f9b34fb",
+      "Value": ""
+    },
+    "org.freedesktop.DBus.Introspectable": {},
+    "org.freedesktop.DBus.Properties": {}
+  },
+  "/org/bluez/hci0/dev_AA_AA_AA_AA_AA_02/service0016/char001d/desc001f": {
+    "org.bluez.GattDescriptor1": {
+      "Characteristic": "/org/bluez/hci0/dev_AA_AA_AA_AA_AA_02/service0016/char001d",
+      "Handle": 31,
+      "UUID": "00002902-0000-1000-8000-00805f9b34fb",
+      "Value": ""
+    },
+    "org.freedesktop.DBus.Introspectable": {},
+    "org.freedesktop.DBus.Properties": {}
+  },
+  "/org/bluez/hci0/dev_AA_AA_AA_AA_AA_02/service0016/char001d/desc0020": {
+    "org.bluez.GattDescriptor1": {
+      "Characteristic": "/org/bluez/hci0/dev_AA_AA_AA_AA_AA_02/service0016/char001d",
+      "Handle": 32,
+      "UUID": "00002908-0000-1000-8000-00805f9b34fb",
+      "Value": ""
+    },
+    "org.freedesktop.DBus.Introspectable": {},
+    "org.freedesktop.DBus.Properties": {}
+  },
+  "/org/bluez/hci0/dev_AA_AA_AA_AA_AA_02/service0016/char0021": {
+    "org.bluez.GattCharacteristic1": {
+      "Flags": [
+        "read",
+        "write-without-response",
+        "write"
+      ],
+      "Handle": 33,
+      "MTU": 23,
+      "Service": "/org/bluez/hci0/dev_AA_AA_AA_AA_AA_02/service0016",
+      "UUID": "00002a4d-0000-1000-8000-00805f9b34fb",
+      "Value": "",
+      "WriteAcquired": false
+    },
+    "org.freedesktop.DBus.Introspectable": {},
+    "org.freedesktop.DBus.Properties": {}
+  },
+  "/org/bluez/hci0/dev_AA_AA_AA_AA_AA_02/service0016/char0021/desc0023": {
+    "org.bluez.GattDescriptor1": {
+      "Characteristic": "/org/bluez/hci0/dev_AA_AA_AA_AA_AA_02/service0016/char0021",
+      "Handle": 35,
+      "UUID": "00002908-0000-1000-8000-00805f9b34fb",
+      "Value": ""
+    },
+    "org.freedesktop.DBus.Introspectable": {},
+    "org.freedesktop.DBus.Properties": {}
+  },
+  "/org/bluez/hci0/dev_AA_AA_AA_AA_AA_02/service0024": {
+    "org.bluez.GattService1": {
+      "Device": "/org/bluez/hci0/dev_AA_AA_AA_AA_AA_02",
+      "Handle": 36,
+      "Includes": [],
+      "Primary": true,
+      "UUID": "00000001-5f60-4c4f-9c83-a7953298d40d"
+    },
+    "org.freedesktop.DBus.Introspectable": {},
+    "org.freedesktop.DBus.Properties": {}
+  },
+  "/org/bluez/hci0/dev_AA_AA_AA_AA_AA_02/service0024/char0025": {
+    "org.bluez.GattCharacteristic1": {
+      "Flags": [
+        "read"
+      ],
+      "Handle": 37,
+      "MTU": 23,
+      "Service": "/org/bluez/hci0/dev_AA_AA_AA_AA_AA_02/service0024",
+      "UUID": "00000002-5f60-4c4f-9c83-a7953298d40d",
+      "Value": ""
+    },
+    "org.freedesktop.DBus.Introspectable": {},
+    "org.freedesktop.DBus.Properties": {}
+  },
+  "/org/bluez/hci0/dev_AA_AA_AA_AA_AA_02/service0024/char0027": {
+    "org.bluez.GattCharacteristic1": {
+      "Flags": [
+        "read"
+      ],
+      "Handle": 39,
+      "MTU": 23,
+      "Service": "/org/bluez/hci0/dev_AA_AA_AA_AA_AA_02/service0024",
+      "UUID": "00000003-5f60-4c4f-9c83-a7953298d40d",
+      "Value": ""
+    },
+    "org.freedesktop.DBus.Introspectable": {},
+    "org.freedesktop.DBus.Properties": {}
+  },
+  "/org/bluez/hci0/dev_AA_AA_AA_AA_AA_02/service0024/char0029": {
+    "org.bluez.GattCharacteristic1": {
+      "Flags": [
+        "write"
+      ],
+      "Handle": 41,
+      "MTU": 23,
+      "Service": "/org/bluez/hci0/dev_AA_AA_AA_AA_AA_02/service0024",
+      "UUID": "00000004-5f60-4c4f-9c83-a7953298d40d",
+      "Value": ""
+    },
+    "org.freedesktop.DBus.Introspectable": {},
+    "org.freedesktop.DBus.Properties": {}
+  },
+  "/org/bluez/hci0/dev_AA_AA_AA_AA_AA_03": {
+    "org.bluez.Battery1": {
+      "Percentage": 70
+    },
+    "org.bluez.Device1": {
+      "Adapter": "/org/bluez/hci0",
+      "Address": "AA:AA:AA:AA:AA:03",
+      "AddressType": "public",
+      "Alias": "JBL TUNE510BT",
+      "Blocked": false,
+      "Bonded": true,
+      "Class": 2360344,
+      "Connected": true,
+      "Icon": "audio-headphones",
+      "LegacyPairing": false,
+      "Modalias": "bluetooth:v005Dp223Bd0100",
+      "Name": "JBL TUNE510BT",
+      "Paired": true,
+      "ServicesResolved": false,
+      "Trusted": true,
+      "UUIDs": [
+        "00001000-0000-1000-8000-00805f9b34fb",
+        "00001101-0000-1000-8000-00805f9b34fb",
+        "00001108-0000-1000-8000-00805f9b34fb",
+        "0000110b-0000-1000-8000-00805f9b34fb",
+        "0000110c-0000-1000-8000-00805f9b34fb",
+        "0000110d-0000-1000-8000-00805f9b34fb",
+        "0000110e-0000-1000-8000-00805f9b34fb",
+        "0000110f-0000-1000-8000-00805f9b34fb",
+        "0000111e-0000-1000-8000-00805f9b34fb",
+        "00001131-0000-1000-8000-00805f9b34fb",
+        "00001200-0000-1000-8000-00805f9b34fb",
+        "00001203-0000-1000-8000-00805f9b34fb"
+      ]
+    },
+    "org.bluez.MediaControl1": {
+      "Connected": true
+    },
+    "org.freedesktop.DBus.Introspectable": {},
+    "org.freedesktop.DBus.Properties": {}
+  },
+  "/org/bluez/hci0/dev_AA_AA_AA_AA_AA_03/sep1": {
+    "org.bluez.MediaEndpoint1": {
+      "Capabilities": "ffff0235",
+      "Codec": 0,
+      "DelayReporting": true,
+      "Device": "/org/bluez/hci0/dev_AA_AA_AA_AA_AA_03",
+      "UUID": "0000110b-0000-1000-8000-00805f9b34fb"
+    },
+    "org.freedesktop.DBus.Introspectable": {},
+    "org.freedesktop.DBus.Properties": {}
+  },
+  "/org/bluez/hci0/dev_AA_AA_AA_AA_AA_03/sep1/fd0": {
+    "org.bluez.MediaTransport1": {
+      "Codec": 0,
+      "Configuration": "11150235",
+      "Delay": 1240,
+      "Device": "/org/bluez/hci0/dev_AA_AA_AA_AA_AA_03",
+      "Endpoint": "/org/bluez/hci0/dev_AA_AA_AA_AA_AA_03/sep1",
+      "State": "idle",
+      "UUID": "0000110a-0000-1000-8000-00805f9b34fb",
+      "Volume": 50
+    },
+    "org.freedesktop.DBus.Introspectable": {},
+    "org.freedesktop.DBus.Properties": {}
+  },
+  "/org/bluez/hci0/dev_AA_AA_AA_AA_AA_03/sep2": {
+    "org.bluez.MediaEndpoint1": {
+      "Capabilities": "80018c800000",
+      "Codec": 2,
+      "DelayReporting": true,
+      "Device": "/org/bluez/hci0/dev_AA_AA_AA_AA_AA_03",
+      "UUID": "0000110b-0000-1000-8000-00805f9b34fb"
+    },
+    "org.freedesktop.DBus.Introspectable": {},
+    "org.freedesktop.DBus.Properties": {}
+  },
+  "/org/bluez/hci0/pac_bcast0": {
+    "org.bluez.MediaEndpoint1": {
+      "Codec": 6,
+      "Context": 0,
+      "Device": "/org/bluez/hci0",
+      "Locations": 0,
+      "SupportedContext": 0,
+      "UUID": "00001851-0000-1000-8000-00805f9b34fb"
+    },
+    "org.freedesktop.DBus.Introspectable": {},
+    "org.freedesktop.DBus.Properties": {}
+  },
+  "/org/bluez/test": {
+    "org.bluez.SimAccessTest1": {},
+    "org.freedesktop.DBus.Introspectable": {}
+  }
+}
