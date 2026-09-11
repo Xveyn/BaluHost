@@ -1,0 +1,47 @@
+{
+  "title": "Bluetooth",
+  "powerOn": "Turn on",
+  "powerOff": "Turn off",
+  "adapterOff": "Bluetooth is turned off.",
+  "unavailable": "Bluetooth is not available.",
+  "kind": {
+    "controller": "Controllers",
+    "audio": "Audio",
+    "input": "Input devices",
+    "other": "Other devices"
+  },
+  "battery": "Battery {{percent}} %",
+  "connect": "Connect",
+  "disconnect": "Disconnect",
+  "remove": "Remove",
+  "removeConfirm": "Really remove {{name}}? It will have to be paired again.",
+  "noDevices": "No paired devices.",
+  "addDevice": "Add device",
+  "scanning": "Searching … {{seconds}} s left",
+  "noneFound": "Nothing found yet. Is the device in pairing mode?",
+  "pair": "Pair",
+  "pairOnlyLocal": "Pairing only on the local network",
+  "pairBusy": "Another device is being paired",
+  "actionError": "Action failed",
+  "loadError": "Could not load the Bluetooth state",
+  "dialog": {
+    "title": "Pair {{name}}",
+    "connecting": "Put the device into pairing mode …",
+    "displayPasskey": "Type this code on the keyboard and press Enter:",
+    "displayPin": "Type this PIN on the device and press Enter:",
+    "confirm": "Does the device show the same code?",
+    "accept": "Yes, it matches",
+    "reject": "No",
+    "succeeded": "Paired and connected.",
+    "cancelled": "Pairing cancelled.",
+    "cancel": "Cancel",
+    "close": "Close",
+    "inputWarning": "Input devices can type into the desktop session. Only pair your own devices.",
+    "error": {
+      "auth_failed": "Wrong or expired code.",
+      "unreachable": "Device not reachable — is pairing mode active?",
+      "timeout": "Timed out — please try again.",
+      "unknown": "Pairing failed."
+    }
+  }
+}

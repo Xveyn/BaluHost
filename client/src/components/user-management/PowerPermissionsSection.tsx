@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Moon, Sun, Power, Wifi, MonitorOff, Monitor, LockOpen, Volume2, Loader2 } from 'lucide-react';
+import { Moon, Sun, Power, Wifi, MonitorOff, Monitor, LockOpen, Volume2, Loader2, Bluetooth } from 'lucide-react';
 import {
   getUserPowerPermissions,
   updateUserPowerPermissions,
@@ -33,6 +33,7 @@ const FIELD_TO_I18N: Record<keyof UserPowerPermissionsUpdate, string> = {
   can_unlock_session: 'unlockSession',
   can_control_audio: 'controlAudio',
   can_manage_displays: 'manageDisplays',
+  can_manage_bluetooth: 'manageBluetooth',
 };
 
 const PERMISSION_TOGGLES: PermissionToggle[] = [
@@ -44,6 +45,7 @@ const PERMISSION_TOGGLES: PermissionToggle[] = [
   { key: 'can_unlock_session', icon: <LockOpen className="h-4 w-4" /> },
   { key: 'can_control_audio', icon: <Volume2 className="h-4 w-4" /> },
   { key: 'can_manage_displays', icon: <Monitor className="h-4 w-4" /> },
+  { key: 'can_manage_bluetooth', icon: <Bluetooth className="h-4 w-4" /> },
 ];
 
 export function PowerPermissionsSection({ userId, userRole }: PowerPermissionsSectionProps) {
