@@ -5,8 +5,10 @@
  * ein Auswahlfeld für den Video-Modus.
  *
  * Drei Eigenheiten, die Absicht sind:
- * - Der Zustand wird nur abgefragt, solange das Popover offen ist. Eine
- *   Fernbedienung, die im Hintergrund pollt, kostet Anfragen ohne Gegenwert.
+ * - Abgefragt wird einmal beim Mounten und danach nur, solange das Popover
+ *   offen ist. Eine Fernbedienung, die im Hintergrund taktet, kostet Anfragen
+ *   ohne Gegenwert; der eine Abruf dagegen verhindert, dass das Symbol bis
+ *   zum ersten Klick einen Zustand behauptet, den niemand erfragt hat.
  * - „gewählt" (KWin) und „leuchtet" (DRM) sind getrennte Aussagen. Beides in
  *   ein Abzeichen zu falten, ist die Verwechslung, die dieses Feature auflöst.
  * - Der globale Ein/Aus-Schalter fehlt bewusst: er steht zwei Symbole weiter
@@ -102,6 +104,17 @@ export function DisplayMenu() {
     // und wird erst beim Rendern übersetzt, nie hier drin.
   }, []);
 
+  // Ein einziger Abruf, sobald das Recht feststeht. Ohne ihn bliebe das
+  // Symbol bis zum ersten Öffnen auf „unbekannt" stehen — und weil es dafür
+  // kein eigenes Zeichen gibt, las sich das als „an", auch wenn alles dunkel
+  // war. Kein Intervall: Hintergrund-Takt kostet Anfragen ohne Gegenwert.
+  // Gated auf `allowed === true`, sonst feuert jeder Nutzer ohne Recht bei
+  // jedem Seitenaufbau eine Anfrage, die nur mit 403 zurückkommt.
+  useEffect(() => {
+    if (allowed !== true) return;
+    void refresh();
+  }, [allowed, refresh]);
+
   useEffect(() => {
     if (!isOpen) return;
     // Eine saveError/conflictError aus einer vorigen Sitzung gehört nicht in
@@ -175,11 +188,13 @@ export function DisplayMenu() {
   if (!allowed) return null;
 
   const anyLit = layout?.outputs.some((o) => o.lit === true) ?? false;
-  // Vor dem ersten geladenen Layout ist "leuchtet keiner" nicht beantwortet,
-  // sondern schlicht noch nicht gefragt — dasselbe Falschaussage-Muster wie
-  // bei `lit`. Erst nach einem geladenen Layout darf das Symbol wirklich
-  // "dunkel" behaupten.
-  const showLitIcon = layout === null || anyLit;
+  // Drei Zustände, zwei Symbole: „unbekannt" darf weder als „dunkel" noch als
+  // „an" durchgehen. `MonitorOff` bleibt dem beantworteten Fall vorbehalten,
+  // und solange die Antwort aussteht, dämpft `unknown` das Symbol — sonst
+  // behauptet die ungedämpfte `Monitor`-Form „an" (der gemeldete Fehler).
+  const unknown = layout === null;
+  const showLitIcon = unknown || anyLit;
+  const iconClass = `h-5 w-5${unknown ? ' opacity-40' : ''}`;
 
   return (
     <div className="relative" ref={dropdownRef}>
@@ -196,7 +211,7 @@ export function DisplayMenu() {
         }}
         className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-800 text-slate-400 transition hover:border-sky-500/50 hover:text-sky-400"
       >
-        {showLitIcon ? <Monitor className="h-5 w-5" /> : <MonitorOff className="h-5 w-5" />}
+        {showLitIcon ? <Monitor className={iconClass} /> : <MonitorOff className={iconClass} />}
       </button>
 
       {isOpen && (
