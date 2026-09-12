@@ -179,29 +179,33 @@ class NotificationScheduler:
         if now < warning_time:
             return False, "Not yet due"
 
-        # Already handled for this exact expiry (sent or superseded)?
-        existing_notification = db.query(ExpirationNotification).filter(
+        # Already handled for this exact expiry? Ask for a successful row
+        # specifically -- _send_warning appends a row per attempt and
+        # _record_superseded writes success=True, so failure rows may sit
+        # alongside it. Matching on "any row" and reading its success flag
+        # would re-send to a user who already got the warning.
+        sent_notification = db.query(ExpirationNotification).filter(
             ExpirationNotification.device_id == device.id,
             ExpirationNotification.notification_type == warning_type,
-            ExpirationNotification.device_expires_at == device.expires_at
+            ExpirationNotification.device_expires_at == device.expires_at,
+            ExpirationNotification.success == True
         ).first()
 
-        if existing_notification:
-            # Retry previously failed notifications (up to 3 attempts)
-            if not existing_notification.success:
-                fail_count = db.query(ExpirationNotification).filter(
-                    ExpirationNotification.device_id == device.id,
-                    ExpirationNotification.notification_type == warning_type,
-                    ExpirationNotification.device_expires_at == device.expires_at,
-                    ExpirationNotification.success == False
-                ).count()
-                if fail_count < 3:
-                    # Delete failed record so _send_warning creates a fresh one
-                    db.delete(existing_notification)
-                    db.flush()
-                    return True, ""
-                return False, f"Max retries reached ({fail_count} failures)"
+        if sent_notification:
             return False, "Warning already sent"
+
+        # Retry previously failed notifications (up to 3 attempts). The failure
+        # rows are kept so this count grows 1 -> 2 -> 3 across ticks; deleting
+        # the row before each retry pinned it at 1 and made the cap below
+        # unreachable, retrying a dead FCM token until the device expired (#231).
+        fail_count = db.query(ExpirationNotification).filter(
+            ExpirationNotification.device_id == device.id,
+            ExpirationNotification.notification_type == warning_type,
+            ExpirationNotification.device_expires_at == device.expires_at,
+            ExpirationNotification.success == False
+        ).count()
+        if fail_count >= 3:
+            return False, f"Max retries reached ({fail_count} failures)"
 
         return True, ""
     
