@@ -188,9 +188,15 @@ verbucht **plus** eine „Scheduler erfolgreich"-Push sendet. Eine Phantom-Zeile
 „Geplanter Neustart erfolgreich" in der Historie, ohne dass je ein Neustart
 stattfand, ist bei genau diesem Scheduler nicht hinnehmbar.
 
-`_load_and_schedule_jobs()` und `_check_config_changes()` überspringen Einträge
-mit `worker_job is False`. Für alle bestehenden Einträge fehlt der Schlüssel,
-`info.get("worker_job", True)` erhält also das heutige Verhalten.
+**Drei** Worker-Stellen überspringen Einträge mit `worker_job is False`:
+`_load_and_schedule_jobs()`, `_check_config_changes()` und
+`_update_all_heartbeats()`. Die dritte ist leicht zu übersehen und trotzdem
+nötig: sie schreibt eine `scheduler_state`-Zeile für **jeden** Registry-Namen,
+unabhängig davon, ob ein Job existiert. Bliebe sie unangetastet, meldete die
+Dashboard-Karte einen erfundenen Gesundheitszustand mit `next_run_at = None`.
+
+Für alle bestehenden Einträge fehlt der Schlüssel; `info.get("worker_job", True)`
+erhält also das heutige Verhalten.
 (`auto_update` hat dasselbe Problem heute schon — das zu beheben ist ein
 eigener Vorgang und nicht Teil dieser Arbeit.)
 
@@ -509,11 +515,15 @@ Wieder-Suspend ausdrücklich gelten.
 
 ## 7. Notifications
 
-Vier neue Ereignistypen in der **bestehenden** Kategorie `lifecycle`, damit das
-vorhandene Routing über `receive_lifecycle` ohne Migration greift. Eine neue
+Vier neue Ereignistypen in der **bestehenden** Kategorie `lifecycle`. Eine neue
 Kategorie würde einen Eintrag in `_CATEGORY_FIELD_MAP`
 (`services/notification_routing.py`) plus Modell- und Schema-Änderung verlangen,
 ohne dass ein Nutzer sie getrennt abbestellen wollen dürfte.
+
+Empfänger sind ausschließlich Admins: die bestehenden Lifecycle-Emitter rufen
+`emit_for_admins_sync()`, nicht den allgemeinen Verteiler. Die neuen tun
+dasselbe. Das deckt sich mit „nur Admins verwalten" und braucht keine eigene
+Entscheidung.
 
 | EventType | Prio | Wann | Inhalt |
 |---|---|---|---|
