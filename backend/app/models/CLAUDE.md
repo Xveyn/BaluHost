@@ -22,7 +22,7 @@ SQLAlchemy 2.0 ORM models. All models inherit from `Base` (declarative base in `
 
 **Networking**: `vpn.py` (VPNConfig, VPNClient), `vpn_profile.py`, `mobile.py`, `server_profile.py`, `fritzbox.py`, `webdav_state.py`, `device.py`, `nfs_export.py`
 
-**System Services**: `scheduler_history.py` (SchedulerExecution, SchedulerConfig), `scheduler_state.py`, `backup.py`, `audit_log.py`, `notification.py`, `update_history.py`, `version_history.py`, `status_bar.py`, `notification_routing.py`, `rate_limit_config.py`, `system_lifecycle.py`
+**System Services**: `scheduler_history.py` (SchedulerExecution, SchedulerConfig), `scheduler_state.py`, `scheduled_reboot.py` (ScheduledRebootState — singleton `scheduled_reboot_state` table, id=1, for the scheduled-reboot state machine; deliberately separate from `scheduler_history.py`'s `extra_config`/executions), `backup.py`, `audit_log.py`, `notification.py`, `update_history.py`, `version_history.py`, `status_bar.py`, `notification_routing.py`, `rate_limit_config.py`, `system_lifecycle.py`
 
 **Versioning**: `vcl.py` (FileVersion, VersionBlob, VCLSettings, VCLStats)
 

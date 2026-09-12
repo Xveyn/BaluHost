@@ -44,6 +44,7 @@ class SleepTrigger(str, Enum):
     RTC_WAKE = "rtc_wake"
     CORE_UPTIME_WAKE = "core_uptime_wake"
     CORE_UPTIME_EXIT = "core_uptime_exit"
+    SCHEDULED_REBOOT = "scheduled_reboot"
 
 
 class ScheduleMode(str, Enum):

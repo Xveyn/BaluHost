@@ -1,6 +1,7 @@
 """Scheduler API routes."""
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status, Query
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.api import deps
@@ -16,7 +17,9 @@ from app.schemas.scheduler import (
     RunNowResponse,
     SchedulerToggleRequest,
     SchedulerToggleResponse,
+    RebootPreviewResponse,
 )
+from app.services.audit.logger_db import get_audit_logger_db
 from app.services.scheduler import get_scheduler_service
 
 
@@ -43,6 +46,68 @@ async def list_schedulers(
     """
     service = get_scheduler_service(db)
     return service.get_all_schedulers()
+
+
+@router.get("/system_reboot/preview", response_model=RebootPreviewResponse)
+@user_limiter.limit(get_limit("admin_operations"))
+async def get_reboot_preview(
+    request: Request, response: Response,
+    weekday: Optional[int] = Query(
+        None, description="Wochentag 0=Montag..6=Sonntag statt des gespeicherten"
+    ),
+    time: Optional[str] = Query(
+        None, description="Uhrzeit HH:MM (server-lokal) statt der gespeicherten"
+    ),
+    retry_window_hours: Optional[int] = Query(
+        None, description="Nachholfrist in Stunden statt der gespeicherten"
+    ),
+    _: UserPublic = Depends(deps.get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """Nächster Neustart-Termin und seine Kollision mit der Kernbetriebszeit.
+
+    `reachable: false` heißt: der Termin liegt in einem Kernbetriebszeit-Fenster,
+    das erst NACH Ablauf der Nachholfrist endet — der Neustart läuft so nie.
+
+    Ohne Parameter rechnet die Vorschau mit der gespeicherten Konfiguration.
+    Mit Parametern rechnet sie mit diesen — auch dann, wenn der Zeitplan noch
+    aus ist. Genau dafür sind sie da: das Feature ist standardmäßig aus, und
+    der Admin, der es zum ersten Mal einrichtet, bekäme die Warnung sonst nie
+    zu sehen (und nach dem Einschalten immer nur den gespeicherten Stand,
+    nicht den, den er gerade im Formular wählt).
+
+    `enabled` in der Antwort meint weiterhin den gespeicherten Zustand;
+    `computed_from_parameters` sagt, womit gerechnet wurde.
+
+    Diese Route MUSS vor `GET /{name}` registriert sein, sonst fängt der
+    Platzhalter sie ab und `/system_reboot/preview` landet als Scheduler-Name
+    `system_reboot` im Detail-Endpunkt.
+    """
+    overrides: dict = {}
+    if weekday is not None:
+        overrides["weekday"] = weekday
+    if time is not None:
+        overrides["time"] = time
+    if retry_window_hours is not None:
+        overrides["retry_window_hours"] = retry_window_hours
+
+    if overrides:
+        # Dieselben Regeln wie beim Speichern, damit es nur eine Definition
+        # gibt — keine zweite Kopie der Grenzen in der Query-Signatur. Die
+        # nicht übergebenen Felder füllt Pydantic mit seinen Defaults; die
+        # drei Felder validieren unabhängig voneinander, das Ergebnis ist
+        # deshalb dasselbe wie eine Prüfung auf dem gespeicherten Stand.
+        from app.schemas.scheduler import RebootScheduleConfig
+
+        try:
+            RebootScheduleConfig(**overrides)
+        except ValidationError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=exc.errors(),
+            ) from exc
+
+    return get_scheduler_service(db).get_reboot_preview(overrides=overrides or None)
 
 
 @router.get("/{name}", response_model=SchedulerStatusResponse)
@@ -172,6 +237,21 @@ async def update_scheduler_config(
     Changes to interval may require a scheduler restart to take effect.
     Note: Some schedulers have fixed intervals and cannot be configured.
     """
+    validated: Optional["RebootScheduleConfig"] = None
+    if name == "system_reboot" and config.extra_config is not None:
+        # Für diesen einen Scheduler ist extra_config kein freies Dict.
+        # Pydantic wirft ValidationError -> FastAPI antwortet 422.
+        from app.schemas.scheduler import RebootScheduleConfig
+
+        try:
+            validated = RebootScheduleConfig(**config.extra_config)
+        except ValidationError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=exc.errors(),
+            ) from exc
+        config = config.model_copy(update={"extra_config": validated.model_dump()})
+
     service = get_scheduler_service(db)
     success = service.update_scheduler_config(
         name=name,
@@ -185,6 +265,18 @@ async def update_scheduler_config(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Scheduler '{name}' not found",
+        )
+
+    # Erst persistiert, dann auditiert — ein Audit-Eintrag über eine Änderung,
+    # die anschließend nicht zustande kam, ist irreführender als ein fehlender.
+    if validated is not None:
+        get_audit_logger_db().log_event(
+            event_type="ADMIN",
+            user=current_user.username,
+            action="update_reboot_schedule",
+            resource="system_reboot",
+            details=validated.model_dump(),
+            success=True,
         )
 
     return {"success": True, "message": f"Configuration updated for {name}"}
@@ -206,4 +298,16 @@ async def toggle_scheduler(
     When enabled, it will be started with the configured interval.
     """
     service = get_scheduler_service(db)
-    return service.toggle_scheduler(name, body.enabled, current_user.id)
+    result = service.toggle_scheduler(name, body.enabled, current_user.id)
+
+    if name == "system_reboot":
+        get_audit_logger_db().log_event(
+            event_type="ADMIN",
+            user=current_user.username,
+            action="toggle_reboot_schedule",
+            resource="system_reboot",
+            details={"enabled": body.enabled},
+            success=True,
+        )
+
+    return result

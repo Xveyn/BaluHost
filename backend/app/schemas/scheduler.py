@@ -181,6 +181,59 @@ class SchedulerToggleResponse(BaseModel):
     message: str
 
 
+class RebootScheduleConfig(BaseModel):
+    """`extra_config` des Schedulers `system_reboot`.
+
+    Zeiten sind server-lokal, wie die Kernbetriebszeit-Fenster.
+    """
+
+    weekday: int = Field(
+        default=6, ge=0, le=6,
+        description="0=Montag .. 6=Sonntag, wie CoreUptimeWindow.weekdays",
+    )
+    time: str = Field(
+        default="04:00", pattern=r"^([01]\d|2[0-3]):[0-5]\d$",
+        description="Uhrzeit HH:MM, server-lokal",
+    )
+    retry_window_hours: int = Field(
+        default=6, ge=1, le=24,
+        description="Nachholfrist ab dem Termin, in Stunden",
+    )
+    warning_lead_minutes: int = Field(
+        default=10, ge=0, le=120,
+        description="Vorwarnung in Minuten; 0 schaltet sie ab",
+    )
+
+
+class RebootPreviewResponse(BaseModel):
+    """Vorschau auf den nächsten Neustart-Termin, inklusive Kollisionsprüfung.
+
+    Serverseitig gerechnet, weil die Kollisionsregel dieselbe sein muss wie im
+    Tick. Zwei Implementierungen derselben Regel driften auseinander.
+    """
+
+    enabled: bool = Field(
+        description=(
+            "Der GESPEICHERTE Zustand des Zeitplans. Bleibt `false`, wenn die "
+            "Vorschau mit übergebenen Parametern für einen noch nicht "
+            "eingeschalteten Zeitplan gerechnet wurde."
+        ),
+    )
+    computed_from_parameters: bool = Field(
+        default=False,
+        description=(
+            "true = mit den Query-Parametern gerechnet (ungespeicherte "
+            "Formularwerte), false = mit der gespeicherten Konfiguration."
+        ),
+    )
+    next_due_at: Optional[datetime] = None
+    in_core_uptime: bool = False
+    window_label: Optional[str] = None
+    window_ends_at: Optional[datetime] = None
+    retry_deadline_at: Optional[datetime] = None
+    reachable: bool = True
+
+
 # Scheduler registry info for frontend
 SCHEDULER_REGISTRY: dict[str, dict[str, Any]] = {
     "raid_scrub": {
@@ -252,5 +305,17 @@ SCHEDULER_REGISTRY: dict[str, dict[str, Any]] = {
         "config_key": None,
         "default_interval": 21600,  # 6 hours
         "can_run_manually": True,
+    },
+    "system_reboot": {
+        "display_name": "Geplanter Neustart",
+        "description": "Startet das System zu einem festen Wochentermin vollständig neu",
+        "config_key": None,
+        "default_interval": 604800,  # Formalie; die Anzeige kommt aus extra_config
+        "can_run_manually": False,
+        # KEIN APScheduler-Job: die Ausführung liegt im Power-Layer
+        # (services/power/scheduled_reboot.py). Ohne dieses Flag würde der
+        # Worker einen Sieben-Tage-Intervalljob registrieren, der eine
+        # Phantom-Execution "erfolgreich" plus Push erzeugt.
+        "worker_job": False,
     },
 }

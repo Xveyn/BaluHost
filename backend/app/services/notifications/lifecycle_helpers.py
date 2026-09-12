@@ -12,6 +12,7 @@ _TRIGGER_LABELS_DE: dict[str, str] = {
     "auto_wake": "Auto-Wake",
     "api": "API",
     "signal": "Signal",
+    "scheduled_reboot": "geplanter Neustart",
 }
 
 

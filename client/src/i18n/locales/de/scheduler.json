@@ -1,6 +1,15 @@
 {
   "title": "Scheduler Dashboard",
   "description": "Systemplaner verwalten und Ausführungsverlauf anzeigen",
+  "weekdays": {
+    "0": "Montag",
+    "1": "Dienstag",
+    "2": "Mittwoch",
+    "3": "Donnerstag",
+    "4": "Freitag",
+    "5": "Samstag",
+    "6": "Sonntag"
+  },
   "schedulers": {
     "raid_scrub": {
       "name": "RAID-Bereinigung",
@@ -109,6 +118,14 @@
       "minutes": "Minuten",
       "hours": "Stunden",
       "days": "Tage"
+    },
+    "reboot": {
+      "weekday": "Wochentag",
+      "time": "Uhrzeit",
+      "retryHours": "Nachholfrist (Stunden)",
+      "leadMinutes": "Vorwarnung (Minuten, 0 = aus)",
+      "warningDeferred": "Dieser Termin liegt in der Kernbetriebszeit „{{window}}“. Der Neustart wird übersprungen und um {{windowEnds}} nachgeholt.",
+      "warningNever": "Dieser Termin liegt in der Kernbetriebszeit „{{window}}“. Das Fenster endet erst um {{windowEnds}} und damit außerhalb der Nachholfrist von {{retryHours}} Stunden. Der Neustart läuft so nie."
     }
   },
   "history": {

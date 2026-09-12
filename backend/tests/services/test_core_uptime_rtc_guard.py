@@ -156,6 +156,56 @@ class TestOnPrepareForSleep:
         mock_acquire.assert_called_once()
 
     @pytest.mark.asyncio
+    async def test_arm_failure_notifies_the_provider(self):
+        """A failed rtcwake must revoke whatever claim the provider staked.
+
+        The provider can clamp the wake time to a scheduled reboot and set
+        `woke_for_reboot` while doing so. No alarm means no wake, so the claim
+        would be a lie that triggers a pointless re-suspend after the reboot.
+        """
+        next_start = _dt.datetime(2026, 5, 6, 8, 0)
+        arm_failures = []
+        guard = CoreUptimeRtcGuard(
+            next_core_start_provider=lambda: next_start,
+            is_baluhost_suspend_in_progress=lambda: False,
+            on_arm_failed=lambda: arm_failures.append(True),
+        )
+        with patch.object(guard, "_set_rtc_alarm", return_value=False), \
+             patch.object(guard, "_release_delay_inhibitor"):
+            await guard.on_prepare_for_sleep(True)
+        assert arm_failures == [True]
+
+    @pytest.mark.asyncio
+    async def test_arm_failure_notifies_the_provider_when_rtcwake_raises(self):
+        next_start = _dt.datetime(2026, 5, 6, 8, 0)
+        arm_failures = []
+        guard = CoreUptimeRtcGuard(
+            next_core_start_provider=lambda: next_start,
+            is_baluhost_suspend_in_progress=lambda: False,
+            on_arm_failed=lambda: arm_failures.append(True),
+        )
+        with patch.object(guard, "_set_rtc_alarm",
+                          side_effect=RuntimeError("rtcwake failed")), \
+             patch.object(guard, "_release_delay_inhibitor"):
+            await guard.on_prepare_for_sleep(True)
+        assert arm_failures == [True]
+
+    @pytest.mark.asyncio
+    async def test_successful_arm_leaves_the_claim_alone(self):
+        """The counterpart: a set alarm must NOT revoke the claim."""
+        next_start = _dt.datetime(2026, 5, 6, 8, 0)
+        arm_failures = []
+        guard = CoreUptimeRtcGuard(
+            next_core_start_provider=lambda: next_start,
+            is_baluhost_suspend_in_progress=lambda: False,
+            on_arm_failed=lambda: arm_failures.append(True),
+        )
+        with patch.object(guard, "_set_rtc_alarm", return_value=True), \
+             patch.object(guard, "_release_delay_inhibitor"):
+            await guard.on_prepare_for_sleep(True)
+        assert arm_failures == []
+
+    @pytest.mark.asyncio
     async def test_start_true_releases_even_if_rtc_fails(self):
         """If rtcwake raises, we MUST still release the delay lock so the
         suspend isn't permanently stuck waiting on BaluHost."""
