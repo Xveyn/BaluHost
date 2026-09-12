@@ -9,18 +9,40 @@ from __future__ import annotations
 
 import logging
 import subprocess
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models.scheduler_history import SchedulerExecution, SchedulerStatus
+from app.schemas.scheduler import RebootScheduleConfig
+from app.services.audit.logger_db import get_audit_logger_db
+from app.services.notifications.events import (
+    emit_reboot_scheduled_sync,
+    emit_reboot_skipped_sync,
+    emit_reboot_started_sync,
+)
 from app.services.power import core_uptime as core_uptime_helpers
 from app.services.power.gpu.display_detector import get_active_display_count_sync
+from app.services.power.reboot_schedule import due_occurrence, next_weekday_occurrence
+from app.services.power.reboot_state import (
+    PHASE_ARMED,
+    PHASE_EXECUTING,
+    PHASE_IDLE,
+    PHASE_RESUSPEND_PENDING,
+    close_execution,
+    get_state,
+    load_enabled_config,
+    open_execution,
+    reset_to_idle,
+    to_local,
+    to_utc,
+)
 
 if TYPE_CHECKING:
     # Nur für den Type Checker — vermeidet einen Zirkelimport mit sleep.py.
+    from app.models.scheduled_reboot import ScheduledRebootState
     from app.services.power.sleep import SleepManagerService
 
 logger = logging.getLogger(__name__)
@@ -188,3 +210,312 @@ def run_reboot_command() -> tuple[bool, str]:
         detail = (result.stderr or result.stdout or "").strip()
         return False, detail or f"rc={result.returncode}"
     return True, "ok"
+
+
+# ---------------------------------------------------------------------------
+# Zustandsautomat
+# ---------------------------------------------------------------------------
+
+# Ein `executing`, das länger als das hier zurückliegt, gilt als gescheitert.
+# Großzügig gegenüber einem normalen Boot (unter zwei Minuten), eng genug,
+# dass die Fehlmeldung nicht Tage später kommt.
+STALE_EXECUTING_AFTER = timedelta(minutes=30)
+
+# Kommt der Wieder-Suspend in dieser Zeit nicht zustande, übernimmt die
+# normale Auto-Idle-Mechanik.
+RESUSPEND_TIMEOUT = timedelta(minutes=30)
+
+_WEEKDAY_NAMES_DE = [
+    "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag",
+]
+
+
+def _now_local() -> datetime:
+    """Server-lokale naive Zeit. Eigene Funktion, damit Tests sie ersetzen können."""
+    return datetime.now()
+
+
+def _human_due(due_local: datetime) -> str:
+    """Der Termin als deutsche Klartextangabe für die Vorwarnung."""
+    return f"{_WEEKDAY_NAMES_DE[due_local.weekday()]}, {due_local:%H:%M}"
+
+
+def _audit_reboot(due_local: datetime, execution_id: Optional[int]) -> None:
+    """Schreibt den Audit-Eintrag unmittelbar vor der Ausführung."""
+    try:
+        get_audit_logger_db().log_event(
+            event_type="system",
+            user=None,
+            action="scheduled_reboot",
+            resource="system_reboot",
+            details={
+                "due_at": due_local.isoformat(),
+                "execution_id": execution_id,
+                "gates": "open",
+            },
+            success=True,
+        )
+    except Exception as exc:  # pragma: no cover - Audit darf nie blockieren
+        logger.warning("Audit-Eintrag für den Neustart fehlgeschlagen: %s", exc)
+
+
+def tick(db: Session, sleep_service: "SleepManagerService", awake: bool) -> None:
+    """Ein Schritt des Automaten. Wird alle 60 Sekunden aufgerufen.
+
+    `awake` sagt, ob die Box gerade wach ist — davon hängt nur die Vorwarnung ab.
+    Wirft nie; der Aufrufer ist der Sleep-Loop und darf nicht abreißen.
+    """
+    try:
+        state = get_state(db)
+        if state.phase == PHASE_RESUSPEND_PENDING:
+            _tick_resuspend(db, state)
+            return
+        if state.phase == PHASE_EXECUTING:
+            # Der Neustart läuft; nach dem Boot übernimmt `on_boot`.
+            return
+
+        config = load_enabled_config(db)
+        if config is None:
+            if state.phase != PHASE_IDLE:
+                reset_to_idle(db, state)
+            return
+
+        now = _now_local()
+        if state.phase == PHASE_ARMED:
+            _tick_armed(db, state, config, sleep_service, now)
+            return
+
+        _tick_idle(db, state, config, sleep_service, now, awake)
+    except Exception as exc:
+        logger.warning("Neustart-Tick fehlgeschlagen (Zustand unverändert): %s", exc)
+
+
+def _tick_idle(
+    db: Session,
+    state: "ScheduledRebootState",
+    config: RebootScheduleConfig,
+    sleep_service: "SleepManagerService",
+    now: datetime,
+    awake: bool,
+) -> None:
+    """Vorwarnung senden und bei Fälligkeit armen."""
+    retry = timedelta(hours=config.retry_window_hours)
+
+    # Vorwarnung — nur wach, nur einmal pro Termin.
+    if awake and config.warning_lead_minutes > 0:
+        upcoming = next_weekday_occurrence(now, config.weekday, config.time)
+        lead = timedelta(minutes=config.warning_lead_minutes)
+        already = (
+            state.warned_for_due_at is not None
+            and to_local(state.warned_for_due_at) == upcoming
+        )
+        if not already and upcoming - now <= lead:
+            emit_reboot_scheduled_sync(_human_due(upcoming))
+            state.warned_for_due_at = to_utc(upcoming)
+            db.commit()
+
+    due = due_occurrence(now, config.weekday, config.time, retry)
+    if due is None:
+        return
+
+    # Wiederholungssperre. `due_occurrence` kann „Zustand ging verloren" und
+    # „Termin ist erledigt" nicht unterscheiden; ohne diese Prüfung startet
+    # die Box nach dem Neustart in einer Schleife erneut neu.
+    if state.last_completed_due_at is not None and to_local(
+        state.last_completed_due_at
+    ) == due:
+        return
+
+    state.phase = PHASE_ARMED
+    state.due_at = to_utc(due)
+    state.deadline_at = to_utc(due + retry)
+    state.execution_id = open_execution(db)
+    state.last_skip_reason = None
+    state.phase_entered_at = datetime.now(timezone.utc)
+    db.commit()
+    logger.info("Geplanter Neustart gearmt für %s (Frist bis %s)", due, due + retry)
+
+    _tick_armed(db, state, config, sleep_service, now)
+
+
+def _tick_armed(
+    db: Session,
+    state: "ScheduledRebootState",
+    config: RebootScheduleConfig,
+    sleep_service: "SleepManagerService",
+    now: datetime,
+) -> None:
+    """Frist prüfen, Gates prüfen, ausführen."""
+    due_local = to_local(state.due_at) if state.due_at else now
+
+    if state.deadline_at is not None and now > to_local(state.deadline_at):
+        reason = state.last_skip_reason or SKIP_NOT_IDLE
+        close_execution(
+            db, state.execution_id, SchedulerStatus.CANCELLED.value,
+            error=SKIP_REASON_LABELS.get(reason, reason),
+        )
+        emit_reboot_skipped_sync(SKIP_REASON_LABELS.get(reason, reason))
+        reset_to_idle(db, state, completed_due_at=to_utc(due_local))
+        logger.info("Geplanter Neustart verfallen (%s)", reason)
+        return
+
+    blocking = gates_blocking(db, sleep_service, state.execution_id)
+    if blocking is not None:
+        if state.last_skip_reason != blocking:
+            state.last_skip_reason = blocking
+            db.commit()
+        logger.info("Geplanter Neustart wartet: %s", SKIP_REASON_LABELS.get(blocking))
+        return
+
+    _execute(db, state, due_local)
+
+
+def _execute(db: Session, state: "ScheduledRebootState", due_local: datetime) -> None:
+    """Audit, Meldung, Phasenwechsel, Neustart-Befehl — in dieser Reihenfolge."""
+    _audit_reboot(due_local, state.execution_id)
+
+    try:
+        emit_reboot_started_sync()
+    except Exception as exc:
+        logger.warning("Startmeldung fehlgeschlagen — Neustart läuft trotzdem: %s", exc)
+
+    # Diese Zeile MUSS vor dem Befehl committet sein. Nach dem Neustart ist sie
+    # der einzige Beweis, dass es ein geplanter war.
+    state.phase = PHASE_EXECUTING
+    state.phase_entered_at = datetime.now(timezone.utc)
+    db.commit()
+
+    ok, detail = run_reboot_command()
+    if not ok:
+        logger.error("Geplanter Neustart fehlgeschlagen: %s", detail)
+        close_execution(
+            db, state.execution_id, SchedulerStatus.FAILED.value, error=detail,
+        )
+        emit_reboot_skipped_sync(
+            f"{SKIP_REASON_LABELS[SKIP_REBOOT_FAILED]} ({detail})"
+        )
+        reset_to_idle(db, state, completed_due_at=to_utc(due_local))
+        return
+
+    if settings.is_dev_mode:
+        # Kein echter Neustart — den Boot-Übergang direkt simulieren, sonst
+        # bliebe der Automat lokal für immer auf `executing` stehen.
+        logger.info("DEV-MODE: simuliere den Boot-Übergang")
+        on_boot(db)
+
+
+def _tick_resuspend(db: Session, state: "ScheduledRebootState") -> None:
+    """Timeout-Wache. Der eigentliche Suspend passiert im Sleep-Loop (Task 8)."""
+    entered = state.phase_entered_at
+    if entered is None:
+        reset_to_idle(db, state)
+        return
+    if entered.tzinfo is None:
+        entered = entered.replace(tzinfo=timezone.utc)
+    if datetime.now(timezone.utc) - entered > RESUSPEND_TIMEOUT:
+        logger.info(
+            "Wieder-Suspend nach dem Neustart kam nicht zustande — "
+            "die normale Auto-Idle-Mechanik übernimmt"
+        )
+        reset_to_idle(db, state)
+
+
+def on_boot(db: Session) -> Optional[str]:
+    """Wertet die Phase nach einem Boot aus. Von `lifespan` aufgerufen.
+
+    Rückgabe:
+      "completed" — geplanter Neustart erfolgreich; Folgephase gesetzt
+      "stale"     — `executing` zu alt, als gescheitert gewertet
+      None        — kein geplanter Neustart im Spiel
+    """
+    try:
+        state = get_state(db)
+        if state.phase != PHASE_EXECUTING:
+            return None
+
+        due_utc = state.due_at
+        entered = state.phase_entered_at
+        if entered is not None and entered.tzinfo is None:
+            entered = entered.replace(tzinfo=timezone.utc)
+
+        stale = (
+            entered is None
+            or datetime.now(timezone.utc) - entered > STALE_EXECUTING_AFTER
+        )
+
+        if stale:
+            close_execution(
+                db, state.execution_id, SchedulerStatus.FAILED.value,
+                error=SKIP_REASON_LABELS[SKIP_STALE],
+            )
+            # Kein Wieder-Suspend: bei unklarem Ausgang darf die Box nicht
+            # wieder schlafen gehen, sonst kommt niemand mehr dran.
+            reset_to_idle(db, state, completed_due_at=due_utc)
+            return "stale"
+
+        close_execution(
+            db, state.execution_id, SchedulerStatus.COMPLETED.value,
+            result='{"rebooted": true}',
+        )
+
+        if state.woke_for_reboot:
+            state.phase = PHASE_RESUSPEND_PENDING
+            state.execution_id = None
+            state.due_at = None
+            state.deadline_at = None
+            state.last_completed_due_at = due_utc
+            state.phase_entered_at = datetime.now(timezone.utc)
+            db.commit()
+        else:
+            reset_to_idle(db, state, completed_due_at=due_utc)
+        return "completed"
+    except Exception as exc:
+        logger.warning("Boot-Auswertung des Neustarts fehlgeschlagen: %s", exc)
+        return None
+
+
+def should_defer_suspend(db: Session, sleep_service: "SleepManagerService") -> bool:
+    """Ob ein automatischer Suspend zugunsten eines scharfen Neustarts ausfällt.
+
+    Nur wenn die Gates offen sind — sonst würde ein blockierter Termin die Box
+    bis zum Ablauf der Frist wachhalten und Strom verbrennen.
+    """
+    try:
+        state = get_state(db)
+        if state.phase != PHASE_ARMED:
+            return False
+        return gates_blocking(db, sleep_service, state.execution_id) is None
+    except Exception as exc:
+        logger.warning("Suspend-Verdrängung nicht prüfbar: %s", exc)
+        return False
+
+
+def reset_before_suspend(db: Session) -> None:
+    """Vor einem Suspend, der trotz `armed` stattfindet, aufräumen.
+
+    Sonst stünde `phase=armed` mit einem `due_at` von gestern da, während die
+    Weckzeit schon auf den Termin nächster Woche zeigt.
+    """
+    try:
+        state = get_state(db)
+        if state.phase != PHASE_ARMED:
+            return
+        reason = state.last_skip_reason or SKIP_NOT_IDLE
+        close_execution(
+            db, state.execution_id, SchedulerStatus.CANCELLED.value,
+            error=SKIP_REASON_LABELS.get(reason, reason),
+        )
+        reset_to_idle(db, state, completed_due_at=state.due_at)
+    except Exception as exc:
+        logger.warning("Zurücksetzen vor dem Suspend fehlgeschlagen: %s", exc)
+
+
+def resuspend_target(db: Session) -> tuple[bool, Optional[datetime]]:
+    """`(ist ein Wieder-Suspend fällig, wake_at)` für den Sleep-Loop."""
+    try:
+        state = get_state(db)
+        if state.phase != PHASE_RESUSPEND_PENDING:
+            return False, None
+        return True, state.resuspend_wake_at
+    except Exception:
+        return False, None

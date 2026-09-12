@@ -104,6 +104,57 @@ def next_reboot_due(db: Session, now_local: datetime) -> Optional[datetime]:
         return None
 
 
+def open_execution(db: Session) -> int:
+    """Legt die `scheduler_executions`-Zeile für einen fälligen Termin an."""
+    from app.models.scheduler_history import (
+        SchedulerExecution,
+        SchedulerStatus,
+        TriggerType,
+    )
+
+    row = SchedulerExecution(
+        scheduler_name=SCHEDULER_NAME,
+        trigger_type=TriggerType.SCHEDULED.value,
+        started_at=datetime.now(timezone.utc),
+        status=SchedulerStatus.RUNNING.value,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row.id
+
+
+def close_execution(
+    db: Session,
+    execution_id: Optional[int],
+    status: str,
+    *,
+    error: Optional[str] = None,
+    result: Optional[str] = None,
+) -> None:
+    """Schließt die Execution ab. Fehlt die Zeile, passiert nichts."""
+    from app.models.scheduler_history import SchedulerExecution
+
+    if execution_id is None:
+        return
+    row = db.query(SchedulerExecution).filter(
+        SchedulerExecution.id == execution_id
+    ).first()
+    if row is None:
+        return
+    completed = datetime.now(timezone.utc)
+    row.status = status
+    row.completed_at = completed
+    row.error_message = error
+    row.result_summary = result
+    started = row.started_at
+    if started is not None:
+        if started.tzinfo is None:
+            started = started.replace(tzinfo=timezone.utc)
+        row.duration_ms = int((completed - started).total_seconds() * 1000)
+    db.commit()
+
+
 def reset_to_idle(
     db: Session,
     state: ScheduledRebootState,
