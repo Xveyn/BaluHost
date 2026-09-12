@@ -26,6 +26,11 @@
 - `backup/` - Backup/restore functionality
 - `sync/` - Desktop sync client coordination
 - `scheduler/` - Unified scheduler management with execution history
+- `power/scheduled_reboot.py` - Scheduled weekly system reboot (gates, state
+  machine, execution); schedule and history live under the scheduler entry
+  `system_reboot`, but the execution itself sits in the power layer because
+  that's where core uptime, display detection, and the `wake_at` clamp
+  already live
 - `monitoring/` - Unified monitoring system with collectors
 - `notifications/` - Firebase push notifications, scheduling
 - `cloud/` - Cloud import (rclone integration)

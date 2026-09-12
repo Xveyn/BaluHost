@@ -82,6 +82,7 @@ client/
 **Network discovery**: `backend/app/services/network_discovery.py`
 **Scheduler service**: `backend/app/services/scheduler/service.py`
 **Scheduler Dashboard**: `client/src/pages/SchedulerDashboard.tsx`
+**Geplanter Systemneustart**: `backend/app/services/power/scheduled_reboot.py` (Automat + Gates), `reboot_schedule.py` (Terminmathematik), `reboot_state.py` (Zustand über den Reboot hinweg); Design: `docs/superpowers/specs/2026-09-12-scheduled-system-reboot-design.md`
 **Setup wizard**: `backend/app/services/setup/`, `backend/app/api/routes/setup.py`
 **Marketplace index signing**: `backend/app/plugins/signing.py`, gate in `backend/app/services/plugin_marketplace.py:get_index()`
 

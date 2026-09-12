@@ -1634,6 +1634,97 @@ GET  /api/plugins/ui-manifest         - Combined UI manifest for frontend
 
 ---
 
+### 24. Scheduled System Reboot
+
+**Service:** `app/services/power/scheduled_reboot.py` (gates, state machine, execution), `app/services/power/reboot_schedule.py` (schedule math), `app/services/power/reboot_state.py` (state/config persistence)
+**API Route:** `app/api/routes/schedulers.py` (the `system_reboot` scheduler entry's endpoints)
+**Models:** `app/models/scheduled_reboot.py`
+**Schemas:** `app/schemas/scheduler.py` (`RebootScheduleConfig`, `RebootPreviewResponse`)
+
+An admin can configure a fixed weekday and time at which the box performs a full `systemctl reboot`. Off by default, admin-only, and built to fail closed at every uncertain step rather than reboot when it isn't sure it should.
+
+#### Configuration
+
+Held in `scheduler_configs.extra_config` under the scheduler name `system_reboot` — there is no dedicated config table.
+
+| Field | Default | Meaning |
+|---|---|---|
+| `weekday` | 6 (Sunday) | 0=Monday .. 6=Sunday |
+| `time` | `04:00` | Server-local HH:MM |
+| `retry_window_hours` | 6 | How long a blocked or interrupted occurrence stays catchable before it's abandoned |
+| `warning_lead_minutes` | 10 | Advance warning before the due time; 0 disables it |
+
+#### The Four Gates
+
+All four must be open before the reboot fires; they're checked in this order, and the order also decides which reason appears in a "waiting" or "skipped" message:
+
+1. **Core uptime** — an active core-uptime window blocks the reboot. A reboot cuts SMB, sync, and uploads even when no display is on, so it must not land inside the availability window promised to users.
+2. **Displays on** — a powered-on display means someone is sitting at the box.
+3. **Running scheduler job** — a maintenance job already in progress (backup, RAID scrub, ...) must finish first; a half-completed backup is worse than a delayed reboot.
+4. **System not idle** — the same CPU/disk-I/O/upload/HTTP-rate thresholds that gate auto-suspend.
+
+Anything the gates can't read (database unreachable, display state unreadable, idle metrics unreadable) counts as blocking, not as passing — this is the one place on the box where "unknown" defers the action instead of allowing it, because a reboot is the more disruptive direction to guess wrong in.
+
+#### Wake and Re-Suspend Behavior
+
+If the due date falls while the box is suspended, the reboot's due time takes over the next RTC wake alarm from whatever wake-up was already scheduled (typically the start of a core-uptime window). The box wakes only far enough to reboot; the wake time it displaced is remembered and, once the reboot completes, used to suspend the box again — not a freshly recalculated one, the same moment that would have applied without the reboot.
+
+#### Catch-Up and Expiry
+
+If the gates aren't all open exactly at the due time — or the automaton's state was lost mid-flight, e.g. by a backend crash — the occurrence is still caught up and fired as long as it's within `retry_window_hours` of the original due time. Past that deadline the occurrence is abandoned (not retried early, not carried into the next week) and a `reboot.skipped` notification explains why.
+
+#### Notifications
+
+Four dedicated notifications replace the generic shutdown/startup push for a scheduled reboot, sent to admins only, so a planned reboot doesn't read like a crash:
+
+| Event | When |
+|---|---|
+| `reboot.scheduled` | Advance warning, `warning_lead_minutes` before the due time — sent only if the box is awake at that moment |
+| `reboot.started` | Immediately before the `systemctl reboot` call |
+| `reboot.completed` | On the next boot, in place of the generic startup notification; includes the downtime |
+| `reboot.skipped` | Retry window expired, the reboot command itself failed, or the outcome after a reboot couldn't be determined |
+
+#### API Endpoints:
+```
+GET  /api/schedulers/system_reboot          - Status (phase, next due date, ...)
+GET  /api/schedulers/system_reboot/preview  - Next due date plus core-uptime collision check
+PUT  /api/schedulers/system_reboot/config   - Update weekday/time/retry window/warning lead
+POST /api/schedulers/system_reboot/toggle   - Enable/disable
+GET  /api/schedulers/system_reboot/history  - Execution history
+```
+
+#### Database Table:
+```sql
+CREATE TABLE scheduled_reboot_state (
+    id INTEGER PRIMARY KEY,                    -- singleton row, always 1
+    phase VARCHAR(24) NOT NULL DEFAULT 'idle',  -- idle, armed, executing, resuspend_pending
+    due_at TIMESTAMP,
+    deadline_at TIMESTAMP,
+    last_completed_due_at TIMESTAMP,            -- repeat lock against re-arming after a reboot
+    woke_for_reboot BOOLEAN NOT NULL DEFAULT FALSE,
+    resuspend_wake_at TIMESTAMP,                -- the wake time the reboot displaced
+    execution_id INTEGER,
+    last_skip_reason VARCHAR(64),
+    warned_for_due_at TIMESTAMP,
+    phase_entered_at TIMESTAMP,
+    updated_at TIMESTAMP
+);
+```
+
+Execution history reuses the shared `scheduler_executions` table (see "Background Jobs & Scheduler System" above); this table only holds the state machine's own bookkeeping.
+
+#### One-Time Ops Step
+
+The `systemctl reboot` sudoers entry (`deploy/install/templates/sudoers-baluhost-power`) reaches an already-installed box only through a deploy run with `SYNC_PERMISSIONS=1` — a routine deploy skips it. Until that has run once, the reboot command comes back `sudo: no entry`, and the feature fails closed: no reboot happens, and a `reboot.skipped` notification tells the admin why instead of the box silently never rebooting.
+
+#### Two Things Worth Knowing
+
+**A due date inside a core-uptime window that outlasts the retry window never runs.** If the core-uptime window covering the due date doesn't end until after `retry_window_hours` has elapsed, Gate 1 stays closed for the whole retry window and the occurrence expires unfired — every week, indefinitely, until the schedule or the core-uptime window changes. The configuration UI warns about this when it applies (`GET /api/schedulers/system_reboot/preview` reports `reachable: false`), but it bears repeating here because otherwise nothing looks like an error — the reboot just never happens.
+
+**A due time between 02:00 and 03:00 collides with the daylight-saving transition.** That local hour doesn't exist on the spring-forward day and occurs twice on the fall-back day. Either way the reboot is skipped on that particular day. Anyone who wants to avoid that should schedule outside this one-hour window.
+
+---
+
 ## 🎨 Frontend Features
 
 ### 1. Authentication
