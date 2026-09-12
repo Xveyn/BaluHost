@@ -7,6 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable, Optional
 
+from app.core.capabilities import require_tool
 from app.services.cloud.adapters.base import CloudAdapter, CloudFile, DownloadResult, UploadResult
 
 logger = logging.getLogger(__name__)
@@ -41,6 +42,7 @@ class RcloneAdapter(CloudAdapter):
 
     async def _run_rclone(self, *args: str, timeout: int = 300) -> str:
         """Run an rclone command via subprocess_exec (no shell) and return stdout."""
+        require_tool("rclone", "Cloud import/export", "rclone")
         config_path = self._get_config_path()
         cmd = ["rclone", "--config", config_path, *args]
 

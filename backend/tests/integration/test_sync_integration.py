@@ -53,8 +53,11 @@ async def async_client():
         finally:
             pass
 
-    # Ensure app startup does not perform global init/seed
-    os.environ.setdefault("SKIP_APP_INIT", "1")
+    # Ensure app startup does not perform global init/seed. Remember the
+    # previous value: conftest sets SKIP_APP_INIT for the whole session, and
+    # dropping it here leaks into every later test (see teardown).
+    _prev_skip_app_init = os.environ.get("SKIP_APP_INIT")
+    os.environ["SKIP_APP_INIT"] = "1"
     app.dependency_overrides[get_db] = override_get_db
 
     # Patch SessionLocal in modules that call it directly (bypassing get_db).
@@ -106,10 +109,15 @@ async def async_client():
     if _orig_session_local is not None:
         _db_mod.SessionLocal = _orig_session_local
         _meta_mod.SessionLocal = _orig_session_local
-    try:
-        del os.environ["SKIP_APP_INIT"]
-    except Exception:
-        pass
+    # Restore instead of delete. conftest only ``setdefault``s SKIP_APP_INIT
+    # once at import, so an unconditional delete here disarmed it for the rest
+    # of the session: every later test that booted the app ran the real
+    # _startup(). That turned one stale import in core/lifespan.py into 57
+    # errors across unrelated suites in CI, invisible in any partial run (#543).
+    if _prev_skip_app_init is None:
+        os.environ.pop("SKIP_APP_INIT", None)
+    else:
+        os.environ["SKIP_APP_INIT"] = _prev_skip_app_init
 
 
 @pytest.fixture(scope="function")
@@ -621,3 +629,16 @@ class TestSyncPerformance:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "-s"])
+
+
+def test_skip_app_init_survives_the_async_client_fixture():
+    """SKIP_APP_INIT must still be armed after this module's fixtures ran.
+
+    Placed last on purpose: pytest executes tests in file order, so by the time
+    this runs the async_client fixture above has been set up and torn down
+    several times. Its teardown used to ``del`` the variable outright, which
+    left every later test in the session booting the real _startup().
+    """
+    import os
+
+    assert os.environ.get("SKIP_APP_INIT") == "1"

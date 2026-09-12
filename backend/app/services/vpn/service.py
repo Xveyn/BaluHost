@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 from app.core.config import settings
+from app.core.capabilities import require_tool
 from app.models.vpn import VPNClient, VPNConfig
 from app.schemas.vpn import VPNConfigResponse
 
@@ -453,7 +454,12 @@ class VPNService:
             private_key = base64.b64encode(secrets.token_bytes(32)).decode()
             public_key = base64.b64encode(secrets.token_bytes(32)).decode()
             return private_key, public_key
-        
+
+        # Checked before the try below: that block converts every exception into
+        # a RuntimeError, which the route turns into an opaque 500. A missing
+        # package deserves a 503 that names it.
+        require_tool("wg", "WireGuard VPN", "wireguard-tools")
+
         try:
             # Generate private key
             private_result = subprocess.run(
@@ -483,7 +489,9 @@ class VPNService:
         """Generate WireGuard preshared key for additional security."""
         if settings.is_dev_mode:
             return base64.b64encode(secrets.token_bytes(32)).decode()
-        
+
+        require_tool("wg", "WireGuard VPN", "wireguard-tools")
+
         try:
             result = subprocess.run(
                 ["wg", "genpsk"],
