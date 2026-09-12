@@ -402,11 +402,27 @@ async def _emit_lifecycle_shutdown(trigger: str = "signal") -> None:
         # 2. Push (best effort, max 3s) — beim geplanten Neustart entfällt er:
         #    der Automat hat `reboot_started` bereits gesendet, und zwei
         #    Meldungen wären genau die Verwirrung, die das Feature vermeidet.
+        #    Die Unterdrückung ist selbstbegrenzend: `executing` verlässt der
+        #    Automat ausschließlich über `on_boot()`. Wirft `on_boot()`
+        #    (z. B. transienter DB-Fehler beim Boot) und die Phase bliebe
+        #    hängen, dürfte das nicht auf ewig jeden künftigen Shutdown-Push
+        #    stillstellen — deshalb zusätzlich `phase_entered_at` gegen
+        #    `STALE_EXECUTING_AFTER` prüfen, dieselbe Grenze wie in
+        #    `on_boot`, damit „zu alt" nur eine Definition hat. Ein fehlender
+        #    Zeitstempel gilt als nicht frisch (nicht unterdrücken).
         planned = False
         try:
             from app.services.power.reboot_state import PHASE_EXECUTING, get_state
+            from app.services.power.scheduled_reboot import STALE_EXECUTING_AFTER
             with SessionLocal() as db:
-                planned = get_state(db).phase == PHASE_EXECUTING
+                state = get_state(db)
+                entered = state.phase_entered_at
+                if state.phase == PHASE_EXECUTING and entered is not None:
+                    # Naiver Wert aus SQLite gilt als UTC — dieselbe Annahme
+                    # wie in `reboot_state.to_local`.
+                    if entered.tzinfo is None:
+                        entered = entered.replace(tzinfo=timezone.utc)
+                    planned = (datetime.now(timezone.utc) - entered) <= STALE_EXECUTING_AFTER
         except Exception:
             planned = False
 

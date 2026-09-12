@@ -110,6 +110,33 @@ async def test_shutdown_push_is_suppressed_during_a_planned_reboot(
 
 
 @pytest.mark.asyncio
+async def test_shutdown_push_proceeds_when_executing_is_stuck_and_stale(
+    db_session, monkeypatch
+):
+    """Ein `executing`, das `on_boot` nie verlassen hat (z. B. weil die
+    Boot-Auswertung selbst an einem transienten DB-Fehler scheiterte), darf
+    nicht auf ewig jeden künftigen Shutdown-Push stillstellen. Die
+    Unterdrückung greift nur, solange `phase_entered_at` frisch genug ist —
+    `STALE_EXECUTING_AFTER`, dieselbe Grenze wie in `on_boot`."""
+    from app.services.power.scheduled_reboot import STALE_EXECUTING_AFTER
+
+    stuck_minutes = int(STALE_EXECUTING_AFTER.total_seconds() // 60) + 5
+    _mark_executing(db_session, entered_minutes_ago=stuck_minutes)
+    monkeypatch.setattr(lifespan_mod, "IS_PRIMARY_WORKER", True, raising=False)
+
+    # Vorbedingung: die Phase selbst bleibt `executing` — nur `on_boot`
+    # verlässt sie normalerweise, und das läuft hier nicht. Der Test misst
+    # also wirklich die Frische-Prüfung, nicht die Phase.
+    assert get_state(db_session).phase == PHASE_EXECUTING
+
+    generic = AsyncMock()
+    with patch("app.services.notifications.events.emit_system_shutdown", new=generic):
+        await lifespan_mod._emit_lifecycle_shutdown(trigger="signal")
+
+    generic.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_shutdown_still_writes_its_lifecycle_row(db_session, monkeypatch):
     """Die Zeile bleibt — aus ihr berechnet der nächste Start die Downtime."""
     from app.models.system_lifecycle import SystemLifecycleEvent

@@ -537,6 +537,20 @@ def on_boot(db: Session) -> Optional[str]:
     except Exception as exc:
         logger.warning("Boot-Auswertung des Neustarts fehlgeschlagen: %s", exc)
         _safe_rollback(db)
+        # Die Phase darf hier nicht auf `executing` festfrieren — sonst hält
+        # `lifespan._emit_lifecycle_shutdown()` jeden künftigen Shutdown für
+        # einen laufenden geplanten Neustart und unterdrückt dessen Push
+        # dauerhaft. Best-effort und muss selbst nie werfen.
+        try:
+            state = get_state(db)
+            if state.phase == PHASE_EXECUTING:
+                reset_to_idle(db, state)
+        except Exception as reset_exc:
+            logger.warning(
+                "Zurücksetzen der Phase nach fehlgeschlagener Boot-Auswertung "
+                "fehlgeschlagen: %s", reset_exc,
+            )
+            _safe_rollback(db)
         return None
 
 

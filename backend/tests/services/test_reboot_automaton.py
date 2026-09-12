@@ -383,6 +383,24 @@ def test_on_boot_treats_stale_executing_as_failure(db_session):
     assert get_state(db_session).phase == PHASE_IDLE
 
 
+def test_on_boot_resets_the_phase_when_the_evaluation_itself_fails(db_session, monkeypatch):
+    """Sonst friert `executing` fest, und jeder künftige Shutdown hält sich
+    für einen laufenden geplanten Neustart und unterdrückt seinen Push."""
+    state = get_state(db_session)
+    state.phase = PHASE_EXECUTING
+    state.due_at = to_utc(SUNDAY_0400)
+    state.phase_entered_at = datetime.now(timezone.utc)
+    db_session.commit()
+
+    monkeypatch.setattr(
+        scheduled_reboot, "close_execution",
+        MagicMock(side_effect=RuntimeError("transient db hiccup")),
+    )
+
+    assert scheduled_reboot.on_boot(db_session) is None
+    assert get_state(db_session).phase == PHASE_IDLE
+
+
 # --- Suspend-Wechselwirkung ----------------------------------------------
 
 def test_should_defer_suspend_only_when_gates_open(db_session):
