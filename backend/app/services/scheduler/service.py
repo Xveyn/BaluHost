@@ -127,6 +127,46 @@ class SchedulerService:
         if next_run_at is None and is_enabled and last_run_at:
             next_run_at = last_run_at + timedelta(seconds=interval)
 
+        # system_reboot hat keinen Worker-Job und damit keine scheduler_state-
+        # Zeile. Ohne diesen Zweig zeigt die Karte "nicht laufend, kein
+        # nächster Lauf". worker_healthy bleibt None — dieser Eintrag hängt
+        # nicht am Worker, und eine erfundene Angabe wäre schlechter als keine.
+        if name == "system_reboot":
+            from app.services.power.reboot_state import (
+                PHASE_ARMED, PHASE_EXECUTING, get_state, next_reboot_due, to_utc,
+            )
+
+            due_local = next_reboot_due(self.db, datetime.now()) if is_enabled else None
+            next_run_at = to_utc(due_local) if due_local is not None else None
+            phase = get_state(self.db).phase
+            is_running = phase in (PHASE_ARMED, PHASE_EXECUTING)
+            worker_healthy = None
+            if extra_config:
+                weekday = int(extra_config.get("weekday", 6))
+                names = ["Montag", "Dienstag", "Mittwoch", "Donnerstag",
+                         "Freitag", "Samstag", "Sonntag"]
+                interval_label = f"{names[weekday]} {extra_config.get('time', '04:00')}"
+            else:
+                interval_label = "Sonntag 04:00"
+            return SchedulerStatusResponse(
+                name=name,
+                display_name=info["display_name"],
+                description=info["description"],
+                is_running=is_running,
+                is_enabled=is_enabled,
+                interval_seconds=interval,
+                interval_display=interval_label,
+                last_run_at=last_run_at,
+                next_run_at=next_run_at,
+                last_status=last_status,
+                last_error=last_error,
+                last_duration_ms=last_duration,
+                config_key=info.get("config_key"),
+                can_run_manually=info.get("can_run_manually", True),
+                extra_config=extra_config,
+                worker_healthy=worker_healthy,
+            )
+
         return SchedulerStatusResponse(
             name=name,
             display_name=info["display_name"],
@@ -406,6 +446,44 @@ class SchedulerService:
 
         self.db.commit()
         return True
+
+    def get_reboot_preview(self) -> "RebootPreviewResponse":
+        """Nächster Termin plus Kollision mit der Kernbetriebszeit."""
+        from app.models.sleep import CoreUptimeWindow
+        from app.schemas.scheduler import RebootPreviewResponse
+        from app.services.power import core_uptime as cu
+        from app.services.power.reboot_state import load_enabled_config, to_utc
+        from app.services.power.reboot_schedule import next_weekday_occurrence
+
+        config = load_enabled_config(self.db)
+        if config is None:
+            return RebootPreviewResponse(enabled=False)
+
+        due = next_weekday_occurrence(datetime.now(), config.weekday, config.time)
+        deadline = due + timedelta(hours=config.retry_window_hours)
+
+        windows = self.db.query(CoreUptimeWindow).all()
+        in_core, window = cu.is_in_core_uptime(due, windows)
+        if not in_core:
+            return RebootPreviewResponse(
+                enabled=True,
+                next_due_at=to_utc(due),
+                in_core_uptime=False,
+                retry_deadline_at=to_utc(deadline),
+                reachable=True,
+            )
+
+        window_end = cu.current_window_end(due, window)
+        return RebootPreviewResponse(
+            enabled=True,
+            next_due_at=to_utc(due),
+            in_core_uptime=True,
+            window_label=window.label,
+            window_ends_at=to_utc(window_end),
+            retry_deadline_at=to_utc(deadline),
+            # Erreichbar nur, wenn das Fenster noch innerhalb der Frist endet.
+            reachable=window_end <= deadline,
+        )
 
 
 def get_scheduler_service(db: Session) -> SchedulerService:

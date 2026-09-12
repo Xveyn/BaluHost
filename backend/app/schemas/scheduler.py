@@ -205,6 +205,22 @@ class RebootScheduleConfig(BaseModel):
     )
 
 
+class RebootPreviewResponse(BaseModel):
+    """Vorschau auf den nächsten Neustart-Termin, inklusive Kollisionsprüfung.
+
+    Serverseitig gerechnet, weil die Kollisionsregel dieselbe sein muss wie im
+    Tick. Zwei Implementierungen derselben Regel driften auseinander.
+    """
+
+    enabled: bool
+    next_due_at: Optional[datetime] = None
+    in_core_uptime: bool = False
+    window_label: Optional[str] = None
+    window_ends_at: Optional[datetime] = None
+    retry_deadline_at: Optional[datetime] = None
+    reachable: bool = True
+
+
 # Scheduler registry info for frontend
 SCHEDULER_REGISTRY: dict[str, dict[str, Any]] = {
     "raid_scrub": {

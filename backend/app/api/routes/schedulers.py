@@ -1,6 +1,7 @@
 """Scheduler API routes."""
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status, Query
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.api import deps
@@ -16,7 +17,9 @@ from app.schemas.scheduler import (
     RunNowResponse,
     SchedulerToggleRequest,
     SchedulerToggleResponse,
+    RebootPreviewResponse,
 )
+from app.services.audit.logger_db import get_audit_logger_db
 from app.services.scheduler import get_scheduler_service
 
 
@@ -43,6 +46,25 @@ async def list_schedulers(
     """
     service = get_scheduler_service(db)
     return service.get_all_schedulers()
+
+
+@router.get("/system_reboot/preview", response_model=RebootPreviewResponse)
+@user_limiter.limit(get_limit("admin_operations"))
+async def get_reboot_preview(
+    request: Request, response: Response,
+    _: UserPublic = Depends(deps.get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """Nächster Neustart-Termin und seine Kollision mit der Kernbetriebszeit.
+
+    `reachable: false` heißt: der Termin liegt in einem Kernbetriebszeit-Fenster,
+    das erst NACH Ablauf der Nachholfrist endet — der Neustart läuft so nie.
+
+    Diese Route MUSS vor `GET /{name}` registriert sein, sonst fängt der
+    Platzhalter sie ab und `/system_reboot/preview` landet als Scheduler-Name
+    `system_reboot` im Detail-Endpunkt.
+    """
+    return get_scheduler_service(db).get_reboot_preview()
 
 
 @router.get("/{name}", response_model=SchedulerStatusResponse)
@@ -172,6 +194,29 @@ async def update_scheduler_config(
     Changes to interval may require a scheduler restart to take effect.
     Note: Some schedulers have fixed intervals and cannot be configured.
     """
+    if name == "system_reboot" and config.extra_config is not None:
+        # Für diesen einen Scheduler ist extra_config kein freies Dict.
+        # Pydantic wirft ValidationError -> FastAPI antwortet 422.
+        from app.schemas.scheduler import RebootScheduleConfig
+
+        try:
+            validated = RebootScheduleConfig(**config.extra_config)
+        except ValidationError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=exc.errors(),
+            ) from exc
+        config = config.model_copy(update={"extra_config": validated.model_dump()})
+
+        get_audit_logger_db().log_event(
+            event_type="admin",
+            user=current_user.username,
+            action="update_reboot_schedule",
+            resource="system_reboot",
+            details=validated.model_dump(),
+            success=True,
+        )
+
     service = get_scheduler_service(db)
     success = service.update_scheduler_config(
         name=name,
@@ -206,4 +251,16 @@ async def toggle_scheduler(
     When enabled, it will be started with the configured interval.
     """
     service = get_scheduler_service(db)
-    return service.toggle_scheduler(name, body.enabled, current_user.id)
+    result = service.toggle_scheduler(name, body.enabled, current_user.id)
+
+    if name == "system_reboot":
+        get_audit_logger_db().log_event(
+            event_type="admin",
+            user=current_user.username,
+            action="toggle_reboot_schedule",
+            resource="system_reboot",
+            details={"enabled": body.enabled},
+            success=True,
+        )
+
+    return result
