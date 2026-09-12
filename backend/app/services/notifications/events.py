@@ -127,6 +127,12 @@ class EventType(str, Enum):
     DESKTOP_DISABLED = "lifecycle.desktop_disabled"
     DESKTOP_ENABLED = "lifecycle.desktop_enabled"
 
+    # Geplanter Systemneustart
+    REBOOT_SCHEDULED = "lifecycle.reboot_scheduled"
+    REBOOT_STARTED = "lifecycle.reboot_started"
+    REBOOT_COMPLETED = "lifecycle.reboot_completed"
+    REBOOT_SKIPPED = "lifecycle.reboot_skipped"
+
 
 @dataclass
 class EventConfig:
@@ -427,6 +433,38 @@ EVENT_CONFIGS: dict[str, EventConfig] = {
         title_template="NAS hochgefahren",
         message_template="NAS ist wieder einsatzbereit. Letzter Shutdown vor {downtime_human}.",
         action_url="/",
+    ),
+    EventType.REBOOT_SCHEDULED: EventConfig(
+        priority=1,
+        category="lifecycle",
+        notification_type="info",
+        title_template="Geplanter Neustart steht an",
+        message_template="Der NAS startet um {due_at_human} planmäßig neu.",
+        action_url="/admin/schedulers",
+    ),
+    EventType.REBOOT_STARTED: EventConfig(
+        priority=2,
+        category="lifecycle",
+        notification_type="warning",
+        title_template="Wartungsneustart läuft",
+        message_template="Der NAS startet jetzt planmäßig neu und ist kurz nicht erreichbar.",
+        action_url="/admin/schedulers",
+    ),
+    EventType.REBOOT_COMPLETED: EventConfig(
+        priority=1,
+        category="lifecycle",
+        notification_type="info",
+        title_template="Wartungsneustart abgeschlossen",
+        message_template="Der geplante Neustart ist durch. Ausfallzeit: {downtime_human}.",
+        action_url="/",
+    ),
+    EventType.REBOOT_SKIPPED: EventConfig(
+        priority=1,
+        category="lifecycle",
+        notification_type="info",
+        title_template="Geplanter Neustart verschoben",
+        message_template="Der Neustart wurde nicht ausgeführt: {reason_label}.",
+        action_url="/admin/schedulers",
     ),
     EventType.DESKTOP_DISABLED: EventConfig(
         priority=1,
@@ -1337,6 +1375,43 @@ async def emit_system_shutdown(trigger: str) -> None:
 async def emit_system_startup(downtime_seconds: Optional[float]) -> None:
     """Async wrapper — used in `_startup()`."""
     emit_system_startup_sync(downtime_seconds)
+
+
+# ---------------------------------------------------------------------------
+# Geplanter Systemneustart
+# ---------------------------------------------------------------------------
+
+
+def emit_reboot_scheduled_sync(due_at_human: str) -> None:
+    """Vorwarnung. Wird nur gesendet, wenn die Box zu dem Zeitpunkt wach ist."""
+    get_event_emitter().emit_for_admins_sync(
+        EventType.REBOOT_SCHEDULED,
+        due_at_human=due_at_human,
+    )
+
+
+def emit_reboot_started_sync() -> None:
+    """Unmittelbar vor `systemctl reboot`."""
+    get_event_emitter().emit_for_admins_sync(EventType.REBOOT_STARTED)
+
+
+def emit_reboot_completed_sync(downtime_seconds: Optional[float]) -> None:
+    """Beim Boot, anstelle von `lifecycle.startup`."""
+    from app.services.notifications.lifecycle_helpers import format_duration_human
+
+    get_event_emitter().emit_for_admins_sync(
+        EventType.REBOOT_COMPLETED,
+        downtime_seconds=downtime_seconds,
+        downtime_human=format_duration_human(downtime_seconds),
+    )
+
+
+def emit_reboot_skipped_sync(reason_label: str) -> None:
+    """Bei Fristablauf, Ausführungsfehler oder unklarem Ausgang."""
+    get_event_emitter().emit_for_admins_sync(
+        EventType.REBOOT_SKIPPED,
+        reason_label=reason_label,
+    )
 
 
 # ---------------------------------------------------------------------------
