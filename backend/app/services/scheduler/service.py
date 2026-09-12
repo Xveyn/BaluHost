@@ -30,6 +30,7 @@ from app.schemas.scheduler import (
     SchedulerHistoryResponse,
     RunNowResponse,
     SchedulerToggleResponse,
+    RebootPreviewResponse,
     SCHEDULER_REGISTRY,
 )
 from .execution import _format_interval, _is_worker_healthy
@@ -459,7 +460,7 @@ class SchedulerService:
 
     def get_reboot_preview(
         self, overrides: Optional[dict] = None
-    ) -> "RebootPreviewResponse":
+    ) -> RebootPreviewResponse:
         """Nächster Termin plus Kollision mit der Kernbetriebszeit.
 
         Args:
@@ -477,7 +478,7 @@ class SchedulerService:
             `computed_from_parameters`.
         """
         from app.models.sleep import CoreUptimeWindow, SleepConfig
-        from app.schemas.scheduler import RebootPreviewResponse, RebootScheduleConfig
+        from app.schemas.scheduler import RebootScheduleConfig
         from app.services.power import core_uptime as cu
         from app.services.power.reboot_state import load_enabled_config, to_utc
         from app.services.power.reboot_schedule import next_weekday_occurrence
