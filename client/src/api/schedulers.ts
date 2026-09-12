@@ -91,6 +91,17 @@ export interface SchedulerConfigUpdate {
   extra_config?: Record<string, any>;
 }
 
+export interface RebootPreview {
+  enabled: boolean;
+  next_due_at: string | null;
+  in_core_uptime: boolean;
+  window_label: string | null;
+  window_ends_at: string | null;
+  retry_deadline_at: string | null;
+  /** false = der Termin liegt in einem Fenster, das erst nach der Nachholfrist endet -> läuft nie. */
+  reachable: boolean;
+}
+
 // API Functions
 
 /**
@@ -174,6 +185,14 @@ export async function updateSchedulerConfig(
     `/api/schedulers/${name}/config`,
     config
   );
+  return response.data;
+}
+
+/**
+ * Get the collision preview for the scheduled system reboot (admin only)
+ */
+export async function getRebootPreview(): Promise<RebootPreview> {
+  const response = await apiClient.get<RebootPreview>('/api/schedulers/system_reboot/preview');
   return response.data;
 }
 

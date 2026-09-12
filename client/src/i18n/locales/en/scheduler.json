@@ -1,6 +1,15 @@
 {
   "title": "Scheduler Dashboard",
   "description": "Manage system schedulers and view execution history",
+  "weekdays": {
+    "0": "Monday",
+    "1": "Tuesday",
+    "2": "Wednesday",
+    "3": "Thursday",
+    "4": "Friday",
+    "5": "Saturday",
+    "6": "Sunday"
+  },
   "schedulers": {
     "raid_scrub": {
       "name": "RAID Scrub",
@@ -109,6 +118,14 @@
       "minutes": "Minutes",
       "hours": "Hours",
       "days": "Days"
+    },
+    "reboot": {
+      "weekday": "Weekday",
+      "time": "Time",
+      "retryHours": "Catch-up window (hours)",
+      "leadMinutes": "Advance warning (minutes, 0 = off)",
+      "warningDeferred": "This time falls inside core operating hours \"{{window}}\". The reboot will be skipped and caught up at {{windowEnds}}.",
+      "warningNever": "This time falls inside core operating hours \"{{window}}\". The window only ends at {{windowEnds}}, which is outside the {{retryHours}}-hour catch-up window. The reboot will never run."
     }
   },
   "history": {

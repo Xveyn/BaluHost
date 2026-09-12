@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { X, Save, Loader2 } from 'lucide-react';
-import type { SchedulerStatus, SchedulerConfigUpdate } from '../../api/schedulers';
+import type { SchedulerStatus, SchedulerConfigUpdate, RebootPreview } from '../../api/schedulers';
+import { getRebootPreview } from '../../api/schedulers';
 
 interface SchedulerConfigModalProps {
   scheduler: SchedulerStatus | null;
@@ -11,6 +12,14 @@ interface SchedulerConfigModalProps {
 }
 
 type IntervalUnit = 'seconds' | 'minutes' | 'hours' | 'days';
+
+/** Reine Uhrzeit, keine Relativangabe - fuer den Kernbetriebszeit-Warntext. */
+function formatTime(iso: string | null): string {
+  if (!iso) return '-';
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '-';
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
 
 export function SchedulerConfigModal({
   scheduler,
@@ -25,6 +34,13 @@ export function SchedulerConfigModal({
   const [backupType, setBackupType] = useState('full');
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const isReboot = scheduler?.name === 'system_reboot';
+  const [weekday, setWeekday] = useState(6);
+  const [time, setTime] = useState('04:00');
+  const [retryHours, setRetryHours] = useState(6);
+  const [leadMinutes, setLeadMinutes] = useState(10);
+  const [preview, setPreview] = useState<RebootPreview | null>(null);
 
   // Initialize form when scheduler changes
   useEffect(() => {
@@ -54,8 +70,34 @@ export function SchedulerConfigModal({
       } else {
         setBackupType('full');
       }
+
+      // Initialize weekday/time/retry/lead from extra_config (system_reboot)
+      if (scheduler.name === 'system_reboot') {
+        const extra = scheduler.extra_config ?? {};
+        setWeekday(Number(extra.weekday ?? 6));
+        setTime(String(extra.time ?? '04:00'));
+        setRetryHours(Number(extra.retry_window_hours ?? 6));
+        setLeadMinutes(Number(extra.warning_lead_minutes ?? 10));
+      }
     }
   }, [scheduler]);
+
+  // Load the server-computed collision preview for system_reboot. The
+  // collision rule lives once, in the backend automaton (spec section 8);
+  // duplicating it client-side would drift. This is why the preview reflects
+  // the *saved* schedule, not whatever is currently being typed - it reloads
+  // after a successful save.
+  useEffect(() => {
+    if (!isOpen || !isReboot) {
+      setPreview(null);
+      return;
+    }
+    let cancelled = false;
+    getRebootPreview()
+      .then((value) => { if (!cancelled) setPreview(value); })
+      .catch(() => { if (!cancelled) setPreview(null); });
+    return () => { cancelled = true; };
+  }, [isOpen, isReboot, weekday, time, retryHours]);
 
   const handleSave = async () => {
     if (!scheduler) return;
@@ -78,20 +120,30 @@ export function SchedulerConfigModal({
           break;
       }
 
-      // Validate minimum interval (60 seconds)
-      if (intervalSeconds < 60) {
+      // Validate minimum interval (60 seconds) - system_reboot has no interval
+      if (!isReboot && intervalSeconds < 60) {
         setError(t('scheduler:configModal.minIntervalError'));
         setIsSaving(false);
         return;
       }
 
-      const config: SchedulerConfigUpdate = {
-        interval_seconds: intervalSeconds,
-        is_enabled: isEnabled,
-        ...(scheduler.name === 'backup' && {
-          extra_config: { backup_type: backupType },
-        }),
-      };
+      const config: SchedulerConfigUpdate = isReboot
+        ? {
+            is_enabled: isEnabled,
+            extra_config: {
+              weekday,
+              time,
+              retry_window_hours: retryHours,
+              warning_lead_minutes: leadMinutes,
+            },
+          }
+        : {
+            interval_seconds: intervalSeconds,
+            is_enabled: isEnabled,
+            ...(scheduler.name === 'backup' && {
+              extra_config: { backup_type: backupType },
+            }),
+          };
 
       const success = await onSave(scheduler.name, config);
       if (success) {
@@ -141,34 +193,120 @@ export function SchedulerConfigModal({
           {/* Info */}
           <p className="text-sm text-slate-400">{t('scheduler:schedulers.' + scheduler.name + '.description', { defaultValue: scheduler.description })}</p>
 
-          {/* Interval */}
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">
-              {t('scheduler:configModal.runInterval')}
-            </label>
-            <div className="flex gap-2">
-              <input
-                type="number"
-                min="1"
-                value={intervalValue}
-                onChange={(e) => setIntervalValue(Math.max(1, parseInt(e.target.value) || 1))}
-                className="flex-1 rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-white focus:border-sky-500 focus:ring-1 focus:ring-sky-500 outline-none"
-              />
-              <select
-                value={intervalUnit}
-                onChange={(e) => setIntervalUnit(e.target.value as IntervalUnit)}
-                className="rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-white focus:border-sky-500 focus:ring-1 focus:ring-sky-500 outline-none"
-              >
-                <option value="seconds">{t('scheduler:configModal.units.seconds')}</option>
-                <option value="minutes">{t('scheduler:configModal.units.minutes')}</option>
-                <option value="hours">{t('scheduler:configModal.units.hours')}</option>
-                <option value="days">{t('scheduler:configModal.units.days')}</option>
-              </select>
+          {/* Interval (not applicable to system_reboot, which has no interval) */}
+          {!isReboot && (
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                {t('scheduler:configModal.runInterval')}
+              </label>
+              <div className="flex gap-2">
+                <input
+                  data-testid="interval-value"
+                  type="number"
+                  min="1"
+                  value={intervalValue}
+                  onChange={(e) => setIntervalValue(Math.max(1, parseInt(e.target.value) || 1))}
+                  className="flex-1 rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-white focus:border-sky-500 focus:ring-1 focus:ring-sky-500 outline-none"
+                />
+                <select
+                  value={intervalUnit}
+                  onChange={(e) => setIntervalUnit(e.target.value as IntervalUnit)}
+                  className="rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-white focus:border-sky-500 focus:ring-1 focus:ring-sky-500 outline-none"
+                >
+                  <option value="seconds">{t('scheduler:configModal.units.seconds')}</option>
+                  <option value="minutes">{t('scheduler:configModal.units.minutes')}</option>
+                  <option value="hours">{t('scheduler:configModal.units.hours')}</option>
+                  <option value="days">{t('scheduler:configModal.units.days')}</option>
+                </select>
+              </div>
+              <p className="mt-1 text-xs text-slate-500">
+                {t('scheduler:configModal.minIntervalHint')}
+              </p>
             </div>
-            <p className="mt-1 text-xs text-slate-500">
-              {t('scheduler:configModal.minIntervalHint')}
-            </p>
-          </div>
+          )}
+
+          {/* Weekday/time (system_reboot only, in place of the interval controls) */}
+          {isReboot && (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  {t('scheduler:configModal.reboot.weekday')}
+                </label>
+                <select
+                  data-testid="reboot-weekday"
+                  value={weekday}
+                  onChange={(e) => setWeekday(Number(e.target.value))}
+                  className="w-full rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-white focus:border-sky-500 focus:ring-1 focus:ring-sky-500 outline-none"
+                >
+                  {[0, 1, 2, 3, 4, 5, 6].map((day) => (
+                    <option key={day} value={day}>{t(`scheduler:weekdays.${day}`)}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  {t('scheduler:configModal.reboot.time')}
+                </label>
+                <input
+                  data-testid="reboot-time"
+                  type="time"
+                  value={time}
+                  onChange={(e) => setTime(e.target.value)}
+                  className="w-full rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-white focus:border-sky-500 focus:ring-1 focus:ring-sky-500 outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  {t('scheduler:configModal.reboot.retryHours')}
+                </label>
+                <input
+                  data-testid="reboot-retry"
+                  type="number"
+                  min={1}
+                  max={24}
+                  value={retryHours}
+                  onChange={(e) => setRetryHours(Number(e.target.value))}
+                  className="w-full rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-white focus:border-sky-500 focus:ring-1 focus:ring-sky-500 outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  {t('scheduler:configModal.reboot.leadMinutes')}
+                </label>
+                <input
+                  data-testid="reboot-lead"
+                  type="number"
+                  min={0}
+                  max={120}
+                  value={leadMinutes}
+                  onChange={(e) => setLeadMinutes(Number(e.target.value))}
+                  className="w-full rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-white focus:border-sky-500 focus:ring-1 focus:ring-sky-500 outline-none"
+                />
+              </div>
+
+              {/* Core-uptime collision warning - not blocking, the window can be changed later */}
+              {preview?.in_core_uptime && (
+                <div
+                  data-testid="reboot-core-uptime-warning"
+                  className="rounded-md bg-amber-900/30 border border-amber-800 px-3 py-2 text-sm text-amber-300"
+                >
+                  {preview.reachable
+                    ? t('scheduler:configModal.reboot.warningDeferred', {
+                        window: preview.window_label ?? '',
+                        windowEnds: formatTime(preview.window_ends_at),
+                      })
+                    : t('scheduler:configModal.reboot.warningNever', {
+                        window: preview.window_label ?? '',
+                        windowEnds: formatTime(preview.window_ends_at),
+                        retryHours,
+                      })}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Backup Type (only for backup scheduler) */}
           {scheduler.name === 'backup' && (
