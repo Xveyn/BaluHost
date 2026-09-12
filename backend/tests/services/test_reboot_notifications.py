@@ -70,3 +70,16 @@ def test_trigger_label_exists():
     from app.services.notifications.lifecycle_helpers import german_trigger_label
 
     assert german_trigger_label("scheduled_reboot") == "geplanter Neustart"
+
+
+def test_action_urls_point_at_existing_routes():
+    """Ein action_url, den es im Frontend nicht gibt, ist ein toter Link.
+    /admin/schedulers existierte nie — die Route heißt /schedulers (App.tsx)."""
+    allowed = {"/", "/schedulers"}
+    for event in (
+        EventType.REBOOT_SCHEDULED,
+        EventType.REBOOT_STARTED,
+        EventType.REBOOT_COMPLETED,
+        EventType.REBOOT_SKIPPED,
+    ):
+        assert EVENT_CONFIGS[event].action_url in allowed, event

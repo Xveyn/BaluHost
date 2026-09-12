@@ -440,7 +440,7 @@ EVENT_CONFIGS: dict[str, EventConfig] = {
         notification_type="info",
         title_template="Geplanter Neustart steht an",
         message_template="Der NAS startet um {due_at_human} planmäßig neu.",
-        action_url="/admin/schedulers",
+        action_url="/schedulers",
     ),
     EventType.REBOOT_STARTED: EventConfig(
         priority=2,
@@ -448,7 +448,7 @@ EVENT_CONFIGS: dict[str, EventConfig] = {
         notification_type="warning",
         title_template="Wartungsneustart läuft",
         message_template="Der NAS startet jetzt planmäßig neu und ist kurz nicht erreichbar.",
-        action_url="/admin/schedulers",
+        action_url="/schedulers",
     ),
     EventType.REBOOT_COMPLETED: EventConfig(
         priority=1,
@@ -464,7 +464,7 @@ EVENT_CONFIGS: dict[str, EventConfig] = {
         notification_type="info",
         title_template="Geplanter Neustart verschoben",
         message_template="Der Neustart wurde nicht ausgeführt: {reason_label}.",
-        action_url="/admin/schedulers",
+        action_url="/schedulers",
     ),
     EventType.DESKTOP_DISABLED: EventConfig(
         priority=1,
