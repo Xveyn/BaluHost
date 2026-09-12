@@ -346,8 +346,28 @@ async def _emit_lifecycle_startup() -> None:
             db.add(ev)
             db.commit()
 
+        # Geplanter Neustart? Dann tritt seine Meldung an die Stelle der
+        # generischen — sonst liest sich ein Wartungsneustart wie ein Absturz.
+        outcome = None
         try:
-            await emit_system_startup(downtime_seconds=downtime_seconds)
+            from app.services.power.scheduled_reboot import on_boot
+            with SessionLocal() as db:
+                outcome = on_boot(db)
+        except Exception as exc:
+            logger.warning("Neustart-Auswertung beim Boot fehlgeschlagen: %s", exc)
+
+        try:
+            if outcome == "completed":
+                from app.services.notifications.events import emit_reboot_completed
+                await emit_reboot_completed(downtime_seconds=downtime_seconds)
+            elif outcome == "stale":
+                from app.services.notifications.events import emit_reboot_skipped
+                from app.services.power.scheduled_reboot import (
+                    SKIP_REASON_LABELS, SKIP_STALE,
+                )
+                await emit_reboot_skipped(SKIP_REASON_LABELS[SKIP_STALE])
+            else:
+                await emit_system_startup(downtime_seconds=downtime_seconds)
         except Exception as exc:
             logger.warning("Lifecycle startup push failed: %s", exc)
     except Exception as exc:
@@ -379,7 +399,21 @@ async def _emit_lifecycle_shutdown(trigger: str = "signal") -> None:
             db.add(ev)
             db.commit()
 
-        # 2. Emit the push (best-effort, 3s max).
+        # 2. Push (best effort, max 3s) — beim geplanten Neustart entfällt er:
+        #    der Automat hat `reboot_started` bereits gesendet, und zwei
+        #    Meldungen wären genau die Verwirrung, die das Feature vermeidet.
+        planned = False
+        try:
+            from app.services.power.reboot_state import PHASE_EXECUTING, get_state
+            with SessionLocal() as db:
+                planned = get_state(db).phase == PHASE_EXECUTING
+        except Exception:
+            planned = False
+
+        if planned:
+            logger.info("Shutdown-Push unterdrückt: geplanter Neustart läuft")
+            return
+
         try:
             await asyncio.wait_for(
                 emit_system_shutdown(trigger=trigger),

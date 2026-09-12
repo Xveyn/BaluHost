@@ -1416,6 +1416,16 @@ def emit_reboot_skipped_sync(reason_label: str) -> None:
     )
 
 
+async def emit_reboot_completed(downtime_seconds: Optional[float]) -> None:
+    """Async-Wrapper — genutzt in `_emit_lifecycle_startup()`."""
+    emit_reboot_completed_sync(downtime_seconds)
+
+
+async def emit_reboot_skipped(reason_label: str) -> None:
+    """Async-Wrapper — genutzt in `_emit_lifecycle_startup()`."""
+    emit_reboot_skipped_sync(reason_label)
+
+
 # ---------------------------------------------------------------------------
 # Desktop power event helpers
 # ---------------------------------------------------------------------------
