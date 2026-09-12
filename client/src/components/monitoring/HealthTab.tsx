@@ -196,7 +196,7 @@ export function HealthTab() {
             <div className="space-y-2 text-xs text-slate-400">
               <p>of {formatBytes(health.system.disk.total)} total</p>
               <p>{formatBytes(health.system.disk.free)} free</p>
-              {health.smart?.devices.length && (
+              {health.smart && health.smart.devices.length > 0 && (
                 <p>{health.smart.devices.length} drive{health.smart.devices.length > 1 ? 's' : ''} detected</p>
               )}
             </div>

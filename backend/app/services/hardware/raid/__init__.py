@@ -24,7 +24,8 @@ from app.services.hardware.raid.mdadm_backend import MdadmRaidBackend
 # --- Public API ---
 from app.services.hardware.raid.api import (
     _audit_event,
-    _backend,
+    RaidUnavailableError,
+    _get_backend,
     _payload_to_dict,
     _select_backend,
     add_mock_disk,
@@ -66,9 +67,11 @@ def __getattr__(name: str):
 
     Tests that do ``raid._backend`` or ``raid.settings`` after monkey-patching
     will be redirected to the canonical location in ``api.py`` / ``config``.
+    ``_backend`` resolves lazily now and raises RaidUnavailableError on a host
+    without mdadm -- reading it is a call, not a plain module attribute (#543).
     """
     if name == "_backend":
-        return _api_module._backend
+        return _api_module._get_backend()
     if name == "settings":
         from app.core.config import settings as _s
         return _s
@@ -100,7 +103,8 @@ __all__ = [
     "delete_array",
     "add_mock_disk",
     "find_raid_mountpoint",
-    "_backend",
+    "RaidUnavailableError",
+    "_get_backend",
     "_select_backend",
     "_payload_to_dict",
     "_audit_event",

@@ -5,6 +5,7 @@ Depends on: cache, collector, mock_data.
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 
 from app.core.config import settings
 from app.schemas.system import SmartStatusResponse
@@ -56,6 +57,11 @@ def _check_smart_for_notifications(status: SmartStatusResponse) -> None:
         logger.debug("Failed to check SMART notifications: %s", exc)
 
 
+def _empty_status() -> SmartStatusResponse:
+    """No SMART data available on this host (smartctl missing / unreadable)."""
+    return SmartStatusResponse(checked_at=datetime.now(tz=timezone.utc), devices=[])
+
+
 def get_smart_status() -> SmartStatusResponse:
     """Return SMART diagnostics information.
 
@@ -91,7 +97,11 @@ def get_smart_status() -> SmartStatusResponse:
                 _cache._set_smart_cache(mock)
                 return mock
 
-    # Production: Versuche echte Daten, Fallback zu Mock
+    # Production: echte Daten -- und sonst eine LEERE Antwort, niemals Mock.
+    # smartmontools ist optional (ENABLE_SMART=false per Default); ohne das
+    # Werkzeug zeigte der Fallback erfundene Platten ("BaluHost Dev Disk 5GB",
+    # status PASSED) auf einer Prod-Box. Keine Daten ist ehrlicher als
+    # erfundene gesunde Hardware (#543).
     try:
         data = _read_real_smart_data()
         if not data.devices:
@@ -100,15 +110,15 @@ def get_smart_status() -> SmartStatusResponse:
         _check_smart_for_notifications(data)
         return data
     except _cache.SmartUnavailableError as e:
-        logger.warning("SMART fallback to mock: %s", e)
-        mock = _mock_status()
-        _cache._set_smart_cache(mock)
-        return mock
+        logger.warning("SMART unavailable, reporting no devices: %s", e)
+        empty = _empty_status()
+        _cache._set_smart_cache(empty)
+        return empty
     except Exception as e:
-        logger.error("SMART unexpected error fallback: %s", e)
-        mock = _mock_status()
-        _cache._set_smart_cache(mock)
-        return mock
+        logger.error("SMART unexpected error, reporting no devices: %s", e)
+        empty = _empty_status()
+        _cache._set_smart_cache(empty)
+        return empty
 
 
 def get_smart_device_models() -> dict[str, str]:
