@@ -56,17 +56,23 @@ class CoreUptimeRtcGuard:
         self,
         next_core_start_provider: Callable[[], Optional[object]],
         is_baluhost_suspend_in_progress: Callable[[], bool],
+        on_arm_failed: Optional[Callable[[], None]] = None,
     ) -> None:
         """
         Args:
-            next_core_start_provider: returns next datetime when a core-uptime
-                window starts, or None if none configured / master toggle off.
+            next_core_start_provider: returns the next datetime the system
+                should wake at — a core-uptime window start, a scheduled
+                reboot, or None if neither applies.
             is_baluhost_suspend_in_progress: returns True iff `enter_true_suspend`
                 is currently between its rtcwake call and resume — used to skip
                 clobbering a BaluHost-initiated RTC alarm.
+            on_arm_failed: called when the alarm could NOT be set. The provider
+                may have staked a claim on the wake time (scheduled reboot);
+                without this the claim would outlive the alarm it depends on.
         """
         self._next_core_start = next_core_start_provider
         self._baluhost_in_progress = is_baluhost_suspend_in_progress
+        self._on_arm_failed = on_arm_failed
         self._delay_proc: Optional[subprocess.Popen] = None
         self._binary_missing_logged = False
         self._dbus_bus: Optional["MessageBus"] = None
@@ -194,25 +200,38 @@ class CoreUptimeRtcGuard:
                 )
                 return
 
+            armed = False
             try:
-                self._set_rtc_alarm(next_start)
+                armed = bool(self._set_rtc_alarm(next_start))
             except Exception as exc:
                 # Failure is non-fatal — system still suspends, but won't auto-wake.
                 logger.warning(
                     "PrepareForSleep(start=true) — failed to set RTC alarm: %s", exc,
                 )
+            if not armed and self._on_arm_failed is not None:
+                # The provider may have claimed this wake time for a scheduled
+                # reboot. No alarm means no wake, so the claim must go too —
+                # the same symmetry `clear_wakeup_claim` keeps on the suspend path.
+                try:
+                    self._on_arm_failed()
+                except Exception as exc:
+                    logger.warning("RTC arm-failure handler failed: %s", exc)
         finally:
             # Always release the delay lock so logind doesn't time out on us.
             self._release_delay_inhibitor()
 
     # --- rtcwake invocation ---
 
-    def _set_rtc_alarm(self, wake_at: datetime) -> None:
-        """Run `sudo rtcwake -m no -t <unix_ts>` to set the RTC alarm without suspending."""
+    def _set_rtc_alarm(self, wake_at: datetime) -> bool:
+        """Run `sudo rtcwake -m no -t <unix_ts>` to set the RTC alarm without suspending.
+
+        Returns True when the alarm was set. The wake time is not necessarily a
+        core-uptime start — a scheduled reboot can claim it — so the log message
+        stays neutral about the reason.
+        """
         timestamp = str(int(wake_at.timestamp()))
         cmd = ["sudo", "rtcwake", "-m", "no", "-t", timestamp]
-        logger.info("Setting RTC alarm at %s (ts=%s) for next core uptime start",
-                    wake_at.isoformat(), timestamp)
+        logger.info("Setting RTC alarm at %s (ts=%s)", wake_at.isoformat(), timestamp)
         result = subprocess.run(
             cmd,
             capture_output=True,
@@ -224,6 +243,8 @@ class CoreUptimeRtcGuard:
                 "rtcwake failed (rc=%s): stdout=%r stderr=%r",
                 result.returncode, result.stdout.strip(), result.stderr.strip(),
             )
+            return False
+        return True
 
     # --- lifecycle ---
 

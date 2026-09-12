@@ -132,20 +132,32 @@ def claim_wakeup(
     nach dem Neustart neu geratener Wert, sondern derselbe, der ohne den
     Neustart gegolten hätte. `regular_utc` darf `None` sein.
 
+    `regular_utc` MUSS UTC-aware sein. Die internen Weckzeit-Quellen
+    (`_next_occurrence`, `next_core_uptime_start`) liefern naiv **server-lokale**
+    Werte; einen davon stillschweigend als UTC zu deuten verschöbe die
+    Klemm-Entscheidung um den UTC-Offset und schriebe eine lokale Uhrzeit in
+    eine `DateTime(timezone=True)`-Spalte. Deshalb wirft ein naiver Wert hier
+    `ValueError`, statt eine Annahme zu treffen — der Aufrufer konvertiert.
+
     Schreibt bewusst in die Datenbank — der Aufrufer steht unmittelbar vor dem
     Suspend, und danach gibt es keine Gelegenheit mehr dazu.
+
+    Raises:
+        ValueError: wenn `regular_utc` naiv (ohne tzinfo) übergeben wird.
     """
+    if regular_utc is not None and regular_utc.tzinfo is None:
+        raise ValueError(
+            "claim_wakeup: regular_utc muss UTC-aware sein — ein naiver Wert "
+            "ist server-lokal und darf nicht als UTC gedeutet werden"
+        )
+
     due_local = next_reboot_due(db, now_local)
     if due_local is None:
         return regular_utc
 
     due_utc = to_utc(due_local)
-    if regular_utc is not None:
-        regular_aware = regular_utc
-        if regular_aware.tzinfo is None:
-            regular_aware = regular_aware.replace(tzinfo=timezone.utc)
-        if regular_aware <= due_utc:
-            return regular_utc
+    if regular_utc is not None and regular_utc <= due_utc:
+        return regular_utc
 
     state = get_state(db)
     state.woke_for_reboot = True

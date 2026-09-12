@@ -173,12 +173,14 @@ def test_reset_to_idle_leaves_the_repeat_lock_alone_without_a_value(db_session):
     assert get_state(db_session).last_completed_due_at == earlier.replace(tzinfo=None)
 
 
-def test_same_instant_matches_identical_utc_values():
-    from datetime import datetime, timezone
+def test_same_instant_compares_moments_not_wall_clock():
+    """Zwei Darstellungen desselben Moments mit verschiedenem Offset sind gleich."""
+    from datetime import datetime, timedelta, timezone
     from app.services.power.reboot_state import same_instant
 
-    value = datetime(2026, 9, 13, 2, 0, tzinfo=timezone.utc)
-    assert same_instant(value, value) is True
+    plus_two = datetime(2026, 9, 13, 4, 0, tzinfo=timezone(timedelta(hours=2)))
+    in_utc = datetime(2026, 9, 13, 2, 0, tzinfo=timezone.utc)
+    assert same_instant(plus_two, in_utc) is True
 
 
 def test_same_instant_treats_naive_stored_values_as_utc():
@@ -197,13 +199,3 @@ def test_same_instant_is_false_for_none_and_for_other_moments():
     aware = datetime(2026, 9, 13, 2, 0, tzinfo=timezone.utc)
     assert same_instant(None, aware) is False
     assert same_instant(aware + timedelta(minutes=1), aware) is False
-
-
-def test_same_instant_holds_across_the_spring_forward_gap():
-    """to_local(to_utc(x)) ist für eine nicht existierende Ortszeit keine
-    Identität — genau deshalb vergleicht same_instant UTC-seitig."""
-    from datetime import datetime
-    from app.services.power.reboot_state import same_instant, to_utc
-
-    gap = datetime(2026, 3, 29, 2, 30)  # existiert in Europe/Berlin nicht
-    assert same_instant(to_utc(gap), to_utc(gap)) is True

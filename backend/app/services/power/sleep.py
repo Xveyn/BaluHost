@@ -162,6 +162,7 @@ class SleepManagerService:
         self._core_uptime_rtc_guard = CoreUptimeRtcGuard(
             next_core_start_provider=self._next_core_start_for_guard,
             is_baluhost_suspend_in_progress=lambda: self._baluhost_suspend_in_progress,
+            on_arm_failed=self._clear_reboot_wakeup_claim,
         )
 
     @classmethod
@@ -376,6 +377,10 @@ class SleepManagerService:
         einer KDE-Gaming-Box kein Randfall. Der Rückgabewert bleibt eine naive
         server-lokale Zeit, weil der Guard darauf `.timestamp()` für
         `rtcwake -t <unix_ts>` aufruft.
+
+        Setzt `claim_wakeup` dabei einen Anspruch und scheitert danach das
+        `rtcwake`, räumt der Guard ihn über `_clear_reboot_wakeup_claim`
+        wieder ab (Konstruktor-Argument `on_arm_failed`).
         """
         try:
             master, windows = self._load_core_uptime()
@@ -398,6 +403,22 @@ class SleepManagerService:
         except Exception as exc:
             logger.warning("RTC guard provider failed: %s", exc)
             return None
+
+    def _clear_reboot_wakeup_claim(self) -> None:
+        """Einen gesetzten `woke_for_reboot`-Anspruch wieder abräumen.
+
+        Aufgerufen, wenn der Suspend bzw. das `rtcwake` nach der Klemmung nicht
+        zustande kam. Ein stehengebliebenes Flag wäre gelogen und löste nach dem
+        nächsten Neustart einen unnötigen Wieder-Suspend aus. Wirft nie.
+        """
+        try:
+            db = SessionLocal()
+            try:
+                reboot_state.clear_wakeup_claim(db)
+            finally:
+                db.close()
+        except Exception as exc:
+            logger.warning("Neustart-Weckanspruch nicht abräumbar: %s", exc)
 
     def is_baluhost_suspend_in_progress(self) -> bool:
         """Public read-only accessor for the in-progress flag (for tests)."""
@@ -1253,21 +1274,30 @@ class SleepManagerService:
         # drei suspendieren können. Sie LEHNT AB, statt selbst neu zu starten —
         # der nächste 60s-Tick führt den Neustart aus.
         if trigger != SleepTrigger.MANUAL:
-            db = SessionLocal()
+            defer_for_reboot = False
             try:
-                if scheduled_reboot.should_defer_suspend(db, self):
-                    logger.info(
-                        "enter_true_suspend abgelehnt: geplanter Neustart ist scharf "
-                        "(trigger=%s, reason=%s)", trigger.value, reason,
-                    )
-                    return False
-                # Findet trotzdem ein Suspend statt, während ein Termin scharf
-                # aber blockiert ist, muss der Automat zurückgesetzt werden —
-                # sonst zeigt `due_at` auf gestern und die Weckzeit auf
-                # nächste Woche.
-                scheduled_reboot.reset_before_suspend(db)
-            finally:
-                db.close()
+                db = SessionLocal()
+                try:
+                    defer_for_reboot = scheduled_reboot.should_defer_suspend(db, self)
+                    if not defer_for_reboot:
+                        # Findet trotzdem ein Suspend statt, während ein Termin
+                        # scharf aber blockiert ist, muss der Automat
+                        # zurückgesetzt werden — sonst zeigt `due_at` auf
+                        # gestern und die Weckzeit auf nächste Woche.
+                        scheduled_reboot.reset_before_suspend(db)
+                finally:
+                    db.close()
+            except Exception as exc:
+                # Wie die anderen DB-Blöcke hier: ein Fehler darf den Suspend
+                # nicht abreißen lassen. Im Zweifel wird nicht verdrängt.
+                logger.warning("Neustart-Verdrängung nicht prüfbar: %s", exc)
+                defer_for_reboot = False
+            if defer_for_reboot:
+                logger.info(
+                    "enter_true_suspend abgelehnt: geplanter Neustart ist scharf "
+                    "(trigger=%s, reason=%s)", trigger.value, reason,
+                )
+                return False
 
         # Enter soft sleep first if awake
         if self._current_state == SleepState.AWAKE:
@@ -1325,12 +1355,26 @@ class SleepManagerService:
         # Der Neustart-Termin darf die Weckzeit übernehmen — und merkt sich
         # dabei die verdrängte. Muss unmittelbar vor dem Backend-Aufruf
         # stehen, weil es danach keine Gelegenheit zum Schreiben mehr gibt.
+        #
+        # `wake_at` ist bis hierher naiv SERVER-LOKAL (so liefern es
+        # `_next_occurrence` und `next_core_uptime_start`), `claim_wakeup`
+        # rechnet und persistiert in UTC. Deshalb hin- und zurückkonvertieren —
+        # symmetrisch zu `_next_core_start_for_guard`. Ungewandelt läge die
+        # Klemm-Entscheidung um den UTC-Offset daneben und in
+        # `resuspend_wake_at` stünde eine Ortszeit in einer UTC-Spalte.
         try:
+            wake_at_utc = (
+                wake_at.astimezone(timezone.utc) if wake_at is not None else None
+            )
             db = SessionLocal()
             try:
-                wake_at = reboot_state.claim_wakeup(db, wake_at, datetime.now())
+                claimed = reboot_state.claim_wakeup(db, wake_at_utc, datetime.now())
             finally:
                 db.close()
+            wake_at = (
+                claimed.astimezone().replace(tzinfo=None)
+                if claimed is not None else None
+            )
         except Exception as exc:
             logger.warning("Weckzeit-Klemmung auf den Neustart fehlgeschlagen: %s", exc)
 
@@ -1344,14 +1388,7 @@ class SleepManagerService:
             # Der Suspend kam nicht zustande — ein gesetztes woke_for_reboot
             # wäre gelogen und würde nach dem Neustart einen unnötigen
             # Wieder-Suspend auslösen.
-            try:
-                db = SessionLocal()
-                try:
-                    reboot_state.clear_wakeup_claim(db)
-                finally:
-                    db.close()
-            except Exception:
-                pass
+            self._clear_reboot_wakeup_claim()
 
         # When system resumes (or suspend failed), we'll be back here.
         # Revert to SOFT_SLEEP so _exit_soft_sleep accepts the transition.
