@@ -163,3 +163,72 @@ class TestCheckAndSendWarnings:
         # Less-urgent warnings must NOT be superseded — they retry next tick.
         assert "3_days" not in rows
         assert "7_days" not in rows
+
+    def test_failed_send_stops_after_three_attempts(self, db_session, admin_user, monkeypatch):
+        """The 3-attempt cap must actually stop the retries (#231).
+
+        _should_send_warning deleted the failed row before each retry, so
+        fail_count was pinned at 1, "Max retries reached" was dead code, and a
+        permanently broken FCM token was retried on every tick (hourly plus
+        every resume/startup catch-up) until the device expired.
+        """
+        calls = []
+
+        def _send_fail(device_token, device_name, expires_at, warning_type, server_url):
+            calls.append(warning_type)
+            return {"success": False, "message_id": None, "error": "token expired"}
+
+        monkeypatch.setattr(
+            "app.services.notifications.firebase.FirebaseService.send_expiration_warning",
+            staticmethod(_send_fail),
+        )
+        now = datetime.now(timezone.utc)
+        device = _make_device(db_session, admin_user, now + timedelta(minutes=30))
+
+        for _ in range(5):
+            NotificationScheduler.check_and_send_warnings(db_session)
+
+        assert calls == ["1_hour"] * 3
+        failed = [
+            r for r in self._rows(db_session, device)
+            if r.notification_type == "1_hour" and not r.success
+        ]
+        assert len(failed) == 3
+
+        should_send, reason = NotificationScheduler._should_send_warning(
+            db=db_session, device=device, warning_type="1_hour",
+            warning_time=now - timedelta(minutes=1), now=now,
+        )
+        assert should_send is False
+        assert "Max retries reached" in reason
+
+    def test_no_resend_after_a_retry_succeeds(self, db_session, admin_user, monkeypatch):
+        """A succeeded retry ends it -- kept failure rows must not re-trigger.
+
+        Guard for the naive #231 fix (just drop the delete and let failure rows
+        accumulate): _should_send_warning picked an arbitrary row via .first()
+        and only read its success flag, so a lingering failure row made every
+        later tick re-send a warning the user had already received.
+        """
+        state = {"fail": True}
+        sends = []
+
+        def _send(device_token, device_name, expires_at, warning_type, server_url):
+            if state["fail"]:
+                return {"success": False, "message_id": None, "error": "transient"}
+            sends.append(warning_type)
+            return {"success": True, "message_id": "mid-retry", "error": None}
+
+        monkeypatch.setattr(
+            "app.services.notifications.firebase.FirebaseService.send_expiration_warning",
+            staticmethod(_send),
+        )
+        now = datetime.now(timezone.utc)
+        device = _make_device(db_session, admin_user, now + timedelta(minutes=30))
+
+        NotificationScheduler.check_and_send_warnings(db_session)  # attempt 1 fails
+        state["fail"] = False
+        for _ in range(4):
+            NotificationScheduler.check_and_send_warnings(db_session)
+
+        assert sends == ["1_hour"]
