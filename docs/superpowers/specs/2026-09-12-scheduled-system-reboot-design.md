@@ -1,7 +1,8 @@
 # Geplanter Systemneustart (Scheduler) — Design
 
 **Datum:** 2026-09-12
-**Status:** Genehmigt (Abschnitte 1–8 im Chat abgenommen)
+**Status:** Genehmigt; überarbeitet nach kritischem Review (9 Befunde, davon
+einer fatal — die Wiederholungssperre in Abschnitt 3)
 **Branch:** `feat/scheduled-system-reboot`
 **Basis:** `main` @ `7bacd7b9`
 
@@ -174,8 +175,24 @@ In `SCHEDULER_REGISTRY` (`backend/app/schemas/scheduler.py`):
     "config_key": None,
     "default_interval": 604800,   # nur Formalie, s. Abschnitt 9
     "can_run_manually": False,
+    "worker_job": False,          # KEIN APScheduler-Job, s. u.
 },
 ```
+
+**`worker_job` ist neu und zwingend.** `SchedulerWorker._load_and_schedule_jobs()`
+iteriert die Registry und ruft `_add_job()` für **jeden aktivierten** Eintrag.
+Ohne dieses Flag würde der Worker, sobald der Admin den Toggle umlegt, einen
+Sieben-Tage-Intervalljob registrieren, der `_dispatch_job("system_reboot")`
+aufruft, `None` zurückbekommt und daraufhin eine Execution als `completed`
+verbucht **plus** eine „Scheduler erfolgreich"-Push sendet. Eine Phantom-Zeile
+„Geplanter Neustart erfolgreich" in der Historie, ohne dass je ein Neustart
+stattfand, ist bei genau diesem Scheduler nicht hinnehmbar.
+
+`_load_and_schedule_jobs()` und `_check_config_changes()` überspringen Einträge
+mit `worker_job is False`. Für alle bestehenden Einträge fehlt der Schlüssel,
+`info.get("worker_job", True)` erhält also das heutige Verhalten.
+(`auto_update` hat dasselbe Problem heute schon — das zu beheben ist ein
+eigener Vorgang und nicht Teil dieser Arbeit.)
 
 ### 1.2 Konfiguration — `scheduler_configs`, Zeile `system_reboot`
 
@@ -213,6 +230,7 @@ irgendein Scheduler-Code läuft.
 | `phase` | str(24) | `idle` \| `armed` \| `executing` \| `resuspend_pending` |
 | `due_at` | timestamptz? | konkreter Termin, auf den gerade gezielt wird |
 | `deadline_at` | timestamptz? | `due_at + retry_window_hours` |
+| `last_completed_due_at` | timestamptz? | letzter Termin, der abgeschlossen ODER verfallen ist |
 | `woke_for_reboot` | bool | die Box wurde für diesen Termin aus dem Suspend geholt |
 | `resuspend_wake_at` | timestamptz? | der vom Termin verdrängte reguläre Weckzeitpunkt; `NULL` = keiner |
 | `execution_id` | int? | zugehörige `scheduler_executions.id` |
@@ -277,8 +295,16 @@ abreißen lassen; ein Fehler wird geloggt und der Zustand unverändert gelassen.
    Ist die Box suspendiert, entfällt die Vorwarnung ersatzlos. Die Alternative
    wäre, die Box zehn Minuten früher zu wecken, um um 3:50 Uhr ein Push aufs
    Handy zu schicken — Lärm ohne Empfänger, plus unnötige Wachzeit.
-4. **Fälligkeit:** `fällig = due_occurrence(now, weekday, time, retry_window)`.
-   Ist das nicht `None`, wird gearmt: `phase=armed`, `due_at = fällig`,
+4. **Fälligkeit:**
+
+   ```
+   fällig = due_occurrence(now, weekday, time, retry_window)
+   wenn fällig ist None:                       → nichts tun
+   wenn last_completed_due_at == fällig:       → nichts tun   ← Wiederholungssperre
+   sonst: armen
+   ```
+
+   Armen heißt: `phase=armed`, `due_at = fällig`,
    `deadline_at = fällig + retry_window`, `scheduler_executions`-Zeile anlegen
    (`trigger_type="scheduled"`, `status="running"`), `execution_id` merken.
 
@@ -288,11 +314,28 @@ abreißen lassen; ein Fehler wird geloggt und der Zustand unverändert gelassen.
    Backends seinen Zustand verloren hätte, wird um 04:01 wieder als fällig
    erkannt, solange die Frist läuft.
 
+   > **Die Wiederholungssperre ist nicht optional.** Ohne sie sieht der Automat
+   > nach dem Neustart um 04:03 exakt denselben 04:00-Termin — er liegt drei
+   > Minuten zurück und damit innerhalb der Frist — armt erneut und startet
+   > erneut neu. Ergebnis: sechs Stunden lang alle drei Minuten ein Reboot.
+   > `due_occurrence` kann „Zustand ging verloren" und „Termin ist erledigt"
+   > nicht unterscheiden; genau dafür ist `last_completed_due_at` da.
+   >
+   > `last_completed_due_at` wird auf **jedem** Weg aus `armed` heraus gesetzt:
+   > nach erfolgreicher Ausführung (in `lifespan` beim Boot), bei Ablauf der
+   > Frist und bei einem Ausführungsfehler. Wird einer dieser Wege vergessen,
+   > ist die Schleife wieder da.
+   >
+   > Nebeneffekt, der die Zeitumstellung abdeckt: bei Rückstellung existiert
+   > 02:30 zweimal, beide Vorkommen haben denselben naiven Wert und werden von
+   > der Sperre als derselbe Termin erkannt.
+
 ### `armed`
 
 1. `now > deadline_at` → Execution auf `cancelled` mit
    `error_message = last_skip_reason`, `lifecycle.reboot_skipped` senden,
-   `phase=idle`, `woke_for_reboot` und `resuspend_wake_at` löschen.
+   `phase=idle`, `last_completed_due_at = due_at`, `woke_for_reboot` und
+   `resuspend_wake_at` löschen.
    Wurde die Box für diesen Termin geweckt und ist er dann verfallen, bleibt
    sie wach — die normale Auto-Idle- bzw. Suspend-on-Exit-Mechanik schickt sie
    wieder schlafen, sobald sie idle ist. Ein eigener Sonderweg dafür wäre
@@ -327,7 +370,19 @@ gespeichert und in der Skip-Meldung im Klartext genannt.
 | 1 | Kernbetriebszeit aktiv | `core_uptime_helpers.is_in_core_uptime(now, windows)` | Das Fenster ist eine Verfügbarkeitszusage. Ein Neustart bricht SMB-Sessions, Sync und Uploads ab, auch wenn kein Monitor an ist. |
 | 2 | Display an | eigene Abfrage, s. u. | Jemand sitzt an der Box. Einziges Nutzungssignal — bewusst nicht Presence, nicht Gaming, nicht Session-Lock. |
 | 3 | Laufender Scheduler-Job | `scheduler_executions.status == "running"`, eigene Zeile ausgenommen | Ein Neustart mitten im automatischen Backup hinterlässt ein halbes Backup. |
-| 4 | Aktiver Upload | `_get_activity_metrics().active_uploads > 0` | Abgebrochener Upload ist Datenverlust für den Nutzer. |
+| 4 | System nicht idle | `not _is_system_idle(config, _get_activity_metrics())` | Ein Neustart kappt laufende Übertragungen. |
+
+**Zu Gate 4:** Ursprünglich war hier nur `active_uploads > 0` vorgesehen. Das
+fängt aber ausschließlich HTTP-Uploads — ein laufender SMB-Kopiervorgang, der
+Normalfall auf einem NAS, rutscht durch und würde vom Neustart gekappt.
+`_is_system_idle()` prüft CPU-Last, Disk-I/O, aktive Uploads und HTTP-Rate
+gegen dieselben konfigurierbaren Schwellen, die schon über den Auto-Suspend
+entscheiden; ein SMB-Transfer schlägt über den Disk-I/O-Wert an.
+
+Der Einwand „dann läuft der Neustart nie, wenn die Box nie idle wird" trägt
+nicht: dieselben Schwellen bestimmen heute, ob die Box überhaupt jemals
+suspendiert. Sind sie so gesetzt, dass nie Ruhe herrscht, schläft die Box auch
+heute nie. Das Verhalten ist damit konsistent, nicht neu.
 
 **Display-Abfrage.** Nicht `gaming_presence.displays_on()` direkt aufrufen:
 die Funktion liefert im Dev-Mode hart `True` (für das Gaming-Gate die harmlose
@@ -345,11 +400,18 @@ eingeschaltetes Display und ist damit von Gate 2 abgedeckt.
 ## 5. Ausführung
 
 ```
-1. lifecycle.reboot_started senden (best effort, 3s Timeout — wie
+1. Audit-Eintrag schreiben (Termin, Gate-Zustand, auslösender Automat)
+2. lifecycle.reboot_started senden (best effort, 3s Timeout — wie
    emit_system_suspend es vor dem Kernel-Suspend macht)
-2. phase = "executing", phase_entered_at  →  COMMIT
-3. sudo systemctl reboot
+3. phase = "executing", phase_entered_at  →  COMMIT
+4. sudo systemctl reboot
 ```
+
+Schritt 1 über `get_audit_logger_db()`. Ein automatischer Hardware-Neustart ist
+ein sicherheitsrelevanter Vorgang und muss nachvollziehbar sein — nicht nur die
+Konfigurationsänderung, die ihn Wochen vorher eingerichtet hat. Der Eintrag
+entsteht **vor** dem Neustart, weil danach niemand mehr da ist, der ihn
+schreiben könnte.
 
 `resuspend_wake_at` wird hier **nicht** berechnet — es steht schon in der Zeile
 (Abschnitt 6a). Wurde die Box für diesen Termin aus dem Suspend geholt, hat der
@@ -359,14 +421,16 @@ Neustart wach — „erneut suspenden" gilt nur für den Fall, aus dem sie gehol
 wurde. Die normale Auto-Idle- und Suspend-on-Exit-Mechanik greift danach wie
 sonst auch.
 
-Schritt 2 **vor** Schritt 3, und mit eigenem Commit. Nach dem Reboot ist diese
+Schritt 3 **vor** Schritt 4, und mit eigenem Commit. Nach dem Reboot ist diese
 Zeile der einzige Beweis, dass es ein geplanter Neustart war; wird sie erst
 danach geschrieben, wird sie nie geschrieben.
 
 Scheitert Schritt 4 (fehlender sudoers-Eintrag, `systemctl` nicht gefunden),
-wird `phase=idle` gesetzt, die Execution auf `failed` mit der stderr-Ausgabe,
-und `lifecycle.reboot_skipped` mit dem technischen Grund gesendet. Fail-closed:
-lieber kein Neustart als ein halber Zustand.
+wird `phase=idle` gesetzt, `last_completed_due_at = due_at`, die Execution auf
+`failed` mit der stderr-Ausgabe, und `lifecycle.reboot_skipped` mit dem
+technischen Grund gesendet. Fail-closed: lieber kein Neustart als ein halber
+Zustand — und die Wiederholungssperre verhindert, dass ein dauerhaft
+scheiternder `systemctl reboot` im Minutentakt neu versucht wird.
 
 Die Reboot-Ausführung selbst liegt hinter einer kleinen Abstraktion, damit sie
 im Dev-Mode nur loggt — dasselbe Muster wie `DevSleepBackend`.
@@ -403,12 +467,38 @@ denselben Helper zurück. Ohne das verschläft die Box den Termin genau dann,
 wenn PowerDevil den Suspend ausgelöst hat statt BaluHost — und das ist auf einer
 KDE-Gaming-Box kein Randfall.
 
-**c) Ein scharfer Neustart verdrängt einen Auto-Suspend.** Steht der Automat auf
-`armed` und sind die Gates offen, wird neu gestartet statt suspendiert. Ohne
-diese Regel suspendiert die Box und weckt sich per RTC eine Sekunde später
-wieder auf, nur um dann neu zu starten. Umgesetzt dadurch, dass der
-`scheduled_reboot`-Tick **vor** den Suspend-Entscheidungen der Schleife läuft
-und im Erfolgsfall gar nicht mehr zurückkehrt (der Prozess ist weg).
+**c) Ein scharfer Neustart verdrängt einen Auto-Suspend.** Ohne diese Regel
+suspendiert die Box und weckt sich per RTC eine Sekunde später wieder auf, nur
+um dann neu zu starten.
+
+Die Regel sitzt in `enter_true_suspend()`, bei den bestehenden
+Defensiv-Guards — **nicht** im `_schedule_check_loop`. Suspendieren können auch
+`_idle_detection_loop()` und `_escalation_monitor()`; eine Regel in nur einer
+der drei Schleifen wäre in den anderen beiden nicht vorhanden.
+
+Und sie **lehnt den Suspend ab**, statt selbst neu zu starten:
+
+```
+wenn trigger != MANUAL und phase == "armed" und alle Gates offen:
+    logge und return False       # der nächste 60s-Tick startet neu
+```
+
+Ein `systemctl reboot` aus dem Inneren einer Suspend-Funktion heraus wäre eine
+Verschachtelung, die im Fehlerfall niemand auseinanderdividiert. Die Ablehnung
+kostet höchstens einen Tick Verzögerung.
+
+Wichtig ist die Bedingung **„alle Gates offen"**: sind sie zu, darf normal
+suspendiert werden. Sonst würde ein scharfer, aber blockierter Termin die Box
+bis zum Ablauf der Frist wachhalten und Strom verbrennen.
+
+**d) Suspend während `armed` setzt den Automaten zurück.** Wird trotz (c)
+suspendiert — also bei geschlossenen Gates —, klemmt (a) auf den Termin der
+**nächsten** Woche. Stünde `phase` weiterhin auf `armed` mit dem alten
+`due_at`, ergäbe das einen widersprüchlichen Zustand: gearmt auf gestern,
+geweckt für nächste Woche. Deshalb setzt der Suspend-Pfad vorher zurück:
+`phase=idle`, `last_completed_due_at = due_at`, Execution auf `cancelled` mit
+`last_skip_reason`. Der laufende Termin gilt damit als verfallen — konsistent
+mit der Regel, dass die Nachholfrist einen Suspend nicht überlebt.
 
 Neuer Enum-Wert `SleepTrigger.SCHEDULED_REBOOT = "scheduled_reboot"` in
 `backend/app/schemas/sleep.py`, plus deutsches Label in
@@ -449,10 +539,25 @@ Zwei Dinge bleiben dabei unangetastet:
   begrenzt und darf den Shutdown nie aufhalten.
 
 `_emit_lifecycle_startup()` schaltet nach der Abschlussmeldung den Automaten
-weiter: Execution auf `completed`, dann `phase = resuspend_pending`, falls
-`woke_for_reboot` gesetzt ist, sonst `idle`. Maßgeblich ist das Flag, nicht
-`resuspend_wake_at` — letzteres darf legitim `None` sein (Suspend ohne
-RTC-Alarm), und eine Prüfung darauf würde genau diesen Fall wach lassen.
+weiter: Execution auf `completed`, **`last_completed_due_at = due_at`** (ohne
+das startet die Box in einer Schleife neu, s. Abschnitt 3), dann
+`phase = resuspend_pending`, falls `woke_for_reboot` gesetzt ist, sonst `idle`.
+Maßgeblich ist das Flag, nicht `resuspend_wake_at` — letzteres darf legitim
+`None` sein (Suspend ohne RTC-Alarm), und eine Prüfung darauf würde genau
+diesen Fall wach lassen.
+
+**Plausibilitätsgrenze für ein hängengebliebenes `executing`.** Kommt das
+Backend nach dem Neustart nicht hoch — fehlgeschlagene Migration, Dienst
+startet nicht —, bleibt die Phase stehen. Beim nächsten erfolgreichen Start
+ginge sonst eine „Neustart abgeschlossen"-Meldung mit tagealter Downtime raus.
+Liegt `phase_entered_at` mehr als 30 Minuten zurück, wird der Vorgang deshalb
+als gescheitert behandelt: Execution auf `failed`, `lifecycle.reboot_skipped`
+statt `reboot_completed`, `last_completed_due_at = due_at`, `phase=idle`, und
+**kein** Wieder-Suspend. Ein Neustart, dessen Ausgang wir nicht kennen, darf
+die Box nicht wieder schlafen legen — dann kommt niemand mehr dran.
+
+Die 30 Minuten sind großzügig gegenüber einem normalen Boot (unter zwei
+Minuten), aber eng genug, dass die Fehlmeldung nicht Tage später kommt.
 
 ## 8. API und Rechte
 
@@ -512,11 +617,29 @@ geändert werden). Der Text nennt die Rechnung konkret, nicht nur den Konflikt:
 Bei Kollision mit erreichbarer Nachholphase entsprechend milder: „… wird
 übersprungen und um 22:00 nachgeholt."
 
-**`SchedulerCard`**: `interval_display` würde für diesen Eintrag „Alle 7 Tage"
-zeigen — nicht falsch, aber nutzlos. `SchedulerService._get_scheduler_status()`
-leitet die Anzeige für `system_reboot` stattdessen aus `extra_config` ab
-(„Sonntag 04:00"). `can_run_manually: false`, also kein „Jetzt ausführen"-Knopf:
-er liefe durch den Scheduler-Worker, der den Reboot gar nicht ausführt.
+**`SchedulerCard` braucht mehr als eine Beschriftung.** `is_running`,
+`next_run_at` und `worker_healthy` kommen aus der Tabelle `scheduler_state`,
+die **ausschließlich der Worker schreibt** — und der hat für `system_reboot`
+keinen Job (`worker_job: False`). Die Karte zeigt ohne Eingriff „nicht laufend,
+kein nächster Lauf"; der Fallback `last_run_at + interval` träfe rein zufällig
+in die Nähe.
+
+`SchedulerService._get_scheduler_status()` bekommt deshalb einen
+`system_reboot`-Zweig, der drei Felder aus der Wahrheit ableitet statt aus
+`scheduler_state`:
+
+| Feld | Quelle |
+|---|---|
+| `next_run_at` | `next_weekday_occurrence(...)`, `None` wenn deaktiviert |
+| `is_running` | `scheduled_reboot_state.phase in ("armed", "executing")` |
+| `interval_display` | aus `extra_config` gebaut: „Sonntag 04:00" |
+
+`worker_healthy` bleibt `None` — dieser Eintrag hängt nicht am Worker, und eine
+erfundene Gesundheitsangabe wäre schlechter als keine. `get_all_schedulers()`
+filtert `None` beim Bilden der globalen Gesundheit bereits heraus.
+
+`can_run_manually: false`, also kein „Jetzt ausführen"-Knopf: er liefe durch den
+Scheduler-Worker, der den Reboot gar nicht ausführt.
 
 **i18n**: `de` und `en`, im vorhandenen Scheduler-Namespace. Die
 Warnung enthält Platzhalter — ein fehlender `{{platzhalter}}` in einer
@@ -563,8 +686,31 @@ vier Gates blockiert einzeln und schreibt seinen Grund; Deadline-Ablauf setzt
 `cancelled` und sendet die Skip-Meldung; ein blockierter Termin feuert beim
 ersten offenen Tick innerhalb der Frist; Feature aus armt nie.
 
-**Suspend-Verdrängung**: bei `phase=armed` und offenen Gates wird neu gestartet
-statt suspendiert.
+**Wiederholungssperre — der wichtigste Test des Ganzen**
+(`test_scheduled_reboot_no_loop`): Nach dem Boot mit `phase=executing` und
+einem `due_at`, das zwei Minuten zurückliegt, darf der `idle`-Tick **nicht**
+erneut armen. Je ein eigener Test für alle drei Wege, auf denen
+`last_completed_due_at` gesetzt werden muss — erfolgreicher Boot,
+Fristablauf, Ausführungsfehler. Wird einer davon vergessen, startet die Box in
+einer Schleife neu; ein Test pro Weg ist billiger als dieser Vorfall.
+
+**Suspend-Verdrängung**: bei `phase=armed` und offenen Gates gibt
+`enter_true_suspend()` mit einem Nicht-`MANUAL`-Trigger `False` zurück und ruft
+das Backend nicht auf; bei geschlossenen Gates suspendiert es normal und setzt
+den Automaten dabei zurück (`phase=idle`, `last_completed_due_at` gesetzt).
+Ein `MANUAL`-Suspend wird nie abgelehnt.
+
+**Kein APScheduler-Job**: nach `_load_and_schedule_jobs()` mit aktiviertem
+`system_reboot` enthält `scheduler.get_jobs()` keinen Job dieses Namens, und
+alle anderen Registry-Einträge sind unverändert vorhanden (der
+`info.get("worker_job", True)`-Default darf nichts anderes abschalten).
+
+**Dashboard-Status**: `get_scheduler("system_reboot")` liefert ohne jede
+`scheduler_state`-Zeile ein plausibles `next_run_at`, `is_running` aus der
+Phase und `worker_healthy is None`.
+
+**Hängengebliebenes `executing`**: `phase_entered_at` vor mehr als 30 Minuten
+führt beim Boot zu `failed` + `reboot_skipped` und **keinem** Wieder-Suspend.
 
 **Klemmung und Merken**: `enter_true_suspend(wake_at=None)` mit einem
 Reboot-Termin vor dem nächsten Kernbetriebszeit-Start ergibt den Reboot-Termin
@@ -590,11 +736,34 @@ milderen Variante bei erreichbarer Nachholphase, und gar nicht ohne Kollision.
 Dazu ein Vertragstest, dass die Platzhalter der Warnung in `de.json` und
 `en.json` tatsächlich vorhanden sind.
 
-## Offene Punkte für die Implementierung
+## Bekannte Einschränkungen
 
-- Der Prod-Provisioning-Schritt (`SYNC_PERMISSIONS=1`-Deploy für den
-  sudoers-Eintrag) ist ein einmaliger Ops-Schritt und gehört in die PR-
-  Beschreibung, nicht in den Code.
-- Die Nachholfrist läuft bewusst nicht über einen Suspend hinweg neu an: wacht
-  die Box innerhalb der Frist auf, wird der Termin nachgeholt; wacht sie später
-  auf, ist er verfallen. Das ist gewollt und wird so getestet.
+**Zeitumstellung.** Ein Termin um 02:30 existiert am Umstellungstag im Frühjahr
+nicht und im Herbst zweimal. Im Frühjahr wird er an diesem einen Tag
+übersprungen und eine Woche später wieder normal ausgeführt; im Herbst fängt
+die Wiederholungssperre das zweite Vorkommen ab, weil beide denselben naiven
+Zeitwert haben. Die Kernbetriebszeit behandelt Umstellungstage genauso — hier
+eine Sonderlogik einzubauen würde zwei Zeitmodelle im selben Subsystem
+erzeugen. Wer das vermeiden will, legt den Termin nicht zwischen 02:00 und
+03:00.
+
+**Latenz nach dem Aufwachen.** Der Tick läuft alle 60 Sekunden und beginnt mit
+`await asyncio.sleep(60)`; `CLOCK_MONOTONIC` steht während des Suspends. Nach
+dem RTC-Wecken um 04:00 kann der Neustart daher bis zu eine Minute später
+losgehen. Für einen Wartungsneustart ohne Belang, aber es erklärt, warum in der
+Historie 04:00:47 steht.
+
+**Ein Neustart, der nicht zurückkommt**, lässt sich softwareseitig nicht
+absichern — es gibt niemanden mehr, der eingreifen könnte. Kompensiert wird das
+durch Default-Aus, das Admin-Gate und die vier Gates; das Restrisiko trägt der
+Admin, der das Feature einschaltet.
+
+**Nachholfrist über einen Suspend hinweg.** Sie läuft bewusst nicht neu an:
+wacht die Box innerhalb der Frist auf, wird der Termin nachgeholt; suspendiert
+sie in der Frist oder wacht später auf, ist er verfallen. Gewollt und getestet.
+
+## Offener Ops-Schritt
+
+Der `SYNC_PERMISSIONS=1`-Deploy für den sudoers-Eintrag ist einmalig und gehört
+in die PR-Beschreibung, nicht in den Code. Bis er gelaufen ist, scheitert der
+Neustart sauber und meldet den Grund.
