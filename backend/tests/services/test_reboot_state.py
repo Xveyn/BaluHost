@@ -108,3 +108,66 @@ def test_to_local_accepts_naive_as_utc():
     aware = datetime(2026, 9, 13, 2, 0, tzinfo=timezone.utc)
     naive_from_db = aware.replace(tzinfo=None)
     assert to_local(naive_from_db) == to_local(aware)
+
+
+def test_load_enabled_config_survives_non_dict_json(db_session):
+    row = SchedulerConfig(
+        scheduler_name="system_reboot", is_enabled=True,
+        interval_seconds=604800, extra_config="[1, 2, 3]",
+    )
+    db_session.add(row)
+    db_session.commit()
+    cfg = load_enabled_config(db_session)
+    assert cfg is not None and cfg.time == "04:00"  # Defaults statt Absturz
+
+
+def test_reset_to_idle_clears_all_date_bound_fields(db_session):
+    from app.services.power.reboot_state import PHASE_ARMED, reset_to_idle
+
+    state = get_state(db_session)
+    state.phase = PHASE_ARMED
+    state.due_at = datetime(2026, 9, 13, 2, 0, tzinfo=timezone.utc)
+    state.deadline_at = datetime(2026, 9, 13, 8, 0, tzinfo=timezone.utc)
+    state.execution_id = 42
+    state.woke_for_reboot = True
+    state.resuspend_wake_at = datetime(2026, 9, 13, 6, 0, tzinfo=timezone.utc)
+    state.warned_for_due_at = datetime(2026, 9, 13, 2, 0, tzinfo=timezone.utc)
+    db_session.commit()
+
+    reset_to_idle(db_session, state)
+
+    state = get_state(db_session)
+    assert state.phase == PHASE_IDLE
+    assert state.due_at is None
+    assert state.deadline_at is None
+    assert state.execution_id is None
+    assert state.woke_for_reboot is False
+    assert state.resuspend_wake_at is None
+    assert state.warned_for_due_at is None
+    assert state.phase_entered_at is not None
+
+
+def test_reset_to_idle_sets_the_repeat_lock_when_given_one(db_session):
+    """Ohne diese Sperre startet die Box nach dem Neustart in einer Schleife neu."""
+    from app.services.power.reboot_state import reset_to_idle
+
+    due = datetime(2026, 9, 13, 2, 0, tzinfo=timezone.utc)
+    state = get_state(db_session)
+    reset_to_idle(db_session, state, completed_due_at=due)
+    # SQLite gibt timestamptz naiv zurück (dieselbe Annahme wie in `to_local`);
+    # der Vergleich erfolgt deshalb naiv statt gegen den aware Ausgangswert.
+    assert get_state(db_session).last_completed_due_at == due.replace(tzinfo=None)
+
+
+def test_reset_to_idle_leaves_the_repeat_lock_alone_without_a_value(db_session):
+    from app.services.power.reboot_state import reset_to_idle
+
+    earlier = datetime(2026, 9, 6, 2, 0, tzinfo=timezone.utc)
+    state = get_state(db_session)
+    state.last_completed_due_at = earlier
+    db_session.commit()
+
+    reset_to_idle(db_session, get_state(db_session))
+    # SQLite gibt timestamptz naiv zurück (dieselbe Annahme wie in `to_local`);
+    # der Vergleich erfolgt deshalb naiv statt gegen den aware Ausgangswert.
+    assert get_state(db_session).last_completed_due_at == earlier.replace(tzinfo=None)

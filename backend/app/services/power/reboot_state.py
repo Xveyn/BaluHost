@@ -78,6 +78,10 @@ def load_enabled_config(db: Session) -> Optional[RebootScheduleConfig]:
             parsed = json.loads(row.extra_config)
             if isinstance(parsed, dict):
                 raw = parsed
+            else:
+                logger.warning(
+                    "system_reboot: extra_config kein Objekt — nutze Defaults"
+                )
         except (json.JSONDecodeError, TypeError):
             logger.warning("system_reboot: extra_config unlesbar — nutze Defaults")
 
@@ -121,5 +125,6 @@ def reset_to_idle(
     state.execution_id = None
     state.woke_for_reboot = False
     state.resuspend_wake_at = None
+    state.warned_for_due_at = None
     state.phase_entered_at = datetime.now(timezone.utc)
     db.commit()
