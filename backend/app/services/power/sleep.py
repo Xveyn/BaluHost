@@ -28,6 +28,8 @@ from app.services.audit.logger_db import get_audit_logger_db
 from app.services.power import core_uptime as core_uptime_helpers
 from app.services.power.core_uptime_inhibitor import CoreUptimeInhibitor
 from app.services.power.core_uptime_rtc_guard import CoreUptimeRtcGuard
+from app.services.power import reboot_state
+from app.services.power import scheduled_reboot
 from app.schemas.sleep import (
     SleepState,
     SleepTrigger,
@@ -367,12 +369,32 @@ class SleepManagerService:
 
     def _next_core_start_for_guard(self) -> Optional[datetime]:
         """Provider used by CoreUptimeRtcGuard. Returns None on any failure
-        so the guard cleanly skips arming the RTC."""
+        so the guard cleanly skips arming the RTC.
+
+        Berücksichtigt den Neustart-Termin: sonst verschläft die Box ihn genau
+        dann, wenn nicht BaluHost, sondern PowerDevil suspendiert hat — auf
+        einer KDE-Gaming-Box kein Randfall. Der Rückgabewert bleibt eine naive
+        server-lokale Zeit, weil der Guard darauf `.timestamp()` für
+        `rtcwake -t <unix_ts>` aufruft.
+        """
         try:
             master, windows = self._load_core_uptime()
-            if not master:
+            next_core = None
+            if master:
+                next_core = core_uptime_helpers.next_core_uptime_start(
+                    datetime.now(), windows
+                )
+            next_core_utc = (
+                next_core.astimezone(timezone.utc) if next_core is not None else None
+            )
+            db = SessionLocal()
+            try:
+                claimed = reboot_state.claim_wakeup(db, next_core_utc, datetime.now())
+            finally:
+                db.close()
+            if claimed is None:
                 return None
-            return core_uptime_helpers.next_core_uptime_start(datetime.now(), windows)
+            return claimed.astimezone().replace(tzinfo=None)
         except Exception as exc:
             logger.warning("RTC guard provider failed: %s", exc)
             return None
@@ -692,6 +714,40 @@ class SleepManagerService:
                     self._was_in_core_uptime = in_core
                 else:
                     self._was_in_core_uptime = False
+
+                # Geplanter Systemneustart. Bewusst vor dem
+                # `schedule_enabled`-Abbruch: das Feature hängt nicht am
+                # Sleep-Zeitplan.
+                try:
+                    db = SessionLocal()
+                    try:
+                        scheduled_reboot.tick(
+                            db, self,
+                            awake=self._current_state == SleepState.AWAKE,
+                        )
+                        due, wake_at = scheduled_reboot.resuspend_target(db)
+                    finally:
+                        db.close()
+                except Exception as exc:
+                    logger.warning("Neustart-Tick fehlgeschlagen: %s", exc)
+                    due, wake_at = False, None
+
+                if (
+                    due
+                    and self._current_state == SleepState.AWAKE
+                    and config is not None
+                    and not self._is_always_awake(config)
+                    and not self._is_user_present(config)
+                    and not self._is_gaming_active(config)
+                    and self._foreign_inhibitor("sleep") is None
+                    and self._is_system_idle(config, self._get_activity_metrics())
+                ):
+                    logger.info("Wieder-Suspend nach geplantem Neustart")
+                    await self.enter_true_suspend(
+                        "scheduled_reboot_resuspend",
+                        SleepTrigger.SCHEDULED_REBOOT,
+                        wake_at=wake_at,
+                    )
 
                 if not config or not config.schedule_enabled:
                     continue
@@ -1192,6 +1248,27 @@ class SleepManagerService:
                 )
                 return False
 
+        # Ein scharfer Neustart verdrängt einen automatischen Suspend. Die
+        # Regel sitzt hier und nicht in einer der drei Schleifen, weil alle
+        # drei suspendieren können. Sie LEHNT AB, statt selbst neu zu starten —
+        # der nächste 60s-Tick führt den Neustart aus.
+        if trigger != SleepTrigger.MANUAL:
+            db = SessionLocal()
+            try:
+                if scheduled_reboot.should_defer_suspend(db, self):
+                    logger.info(
+                        "enter_true_suspend abgelehnt: geplanter Neustart ist scharf "
+                        "(trigger=%s, reason=%s)", trigger.value, reason,
+                    )
+                    return False
+                # Findet trotzdem ein Suspend statt, während ein Termin scharf
+                # aber blockiert ist, muss der Automat zurückgesetzt werden —
+                # sonst zeigt `due_at` auf gestern und die Weckzeit auf
+                # nächste Woche.
+                scheduled_reboot.reset_before_suspend(db)
+            finally:
+                db.close()
+
         # Enter soft sleep first if awake
         if self._current_state == SleepState.AWAKE:
             ok = await self.enter_soft_sleep(reason, trigger)
@@ -1245,11 +1322,36 @@ class SleepManagerService:
         #    ``rtcwake -m mem`` which sets the RTC alarm and suspends atomically.
         # The flag tells CoreUptimeRtcGuard to skip its own rtcwake on the
         # PrepareForSleep signal (we already set wake_at via rtcwake -m mem).
+        # Der Neustart-Termin darf die Weckzeit übernehmen — und merkt sich
+        # dabei die verdrängte. Muss unmittelbar vor dem Backend-Aufruf
+        # stehen, weil es danach keine Gelegenheit zum Schreiben mehr gibt.
+        try:
+            db = SessionLocal()
+            try:
+                wake_at = reboot_state.claim_wakeup(db, wake_at, datetime.now())
+            finally:
+                db.close()
+        except Exception as exc:
+            logger.warning("Weckzeit-Klemmung auf den Neustart fehlgeschlagen: %s", exc)
+
         self._baluhost_suspend_in_progress = True
         try:
             ok = await self._backend.suspend_system(wake_at=wake_at)
         finally:
             self._baluhost_suspend_in_progress = False
+
+        if not ok:
+            # Der Suspend kam nicht zustande — ein gesetztes woke_for_reboot
+            # wäre gelogen und würde nach dem Neustart einen unnötigen
+            # Wieder-Suspend auslösen.
+            try:
+                db = SessionLocal()
+                try:
+                    reboot_state.clear_wakeup_claim(db)
+                finally:
+                    db.close()
+            except Exception:
+                pass
 
         # When system resumes (or suspend failed), we'll be back here.
         # Revert to SOFT_SLEEP so _exit_soft_sleep accepts the transition.

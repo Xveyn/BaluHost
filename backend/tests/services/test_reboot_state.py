@@ -171,3 +171,39 @@ def test_reset_to_idle_leaves_the_repeat_lock_alone_without_a_value(db_session):
     # SQLite gibt timestamptz naiv zurück (dieselbe Annahme wie in `to_local`);
     # der Vergleich erfolgt deshalb naiv statt gegen den aware Ausgangswert.
     assert get_state(db_session).last_completed_due_at == earlier.replace(tzinfo=None)
+
+
+def test_same_instant_matches_identical_utc_values():
+    from datetime import datetime, timezone
+    from app.services.power.reboot_state import same_instant
+
+    value = datetime(2026, 9, 13, 2, 0, tzinfo=timezone.utc)
+    assert same_instant(value, value) is True
+
+
+def test_same_instant_treats_naive_stored_values_as_utc():
+    """SQLite gibt timestamptz naiv zurück — sonst schlägt die Sperre dort fehl."""
+    from datetime import datetime, timezone
+    from app.services.power.reboot_state import same_instant
+
+    aware = datetime(2026, 9, 13, 2, 0, tzinfo=timezone.utc)
+    assert same_instant(aware.replace(tzinfo=None), aware) is True
+
+
+def test_same_instant_is_false_for_none_and_for_other_moments():
+    from datetime import datetime, timedelta, timezone
+    from app.services.power.reboot_state import same_instant
+
+    aware = datetime(2026, 9, 13, 2, 0, tzinfo=timezone.utc)
+    assert same_instant(None, aware) is False
+    assert same_instant(aware + timedelta(minutes=1), aware) is False
+
+
+def test_same_instant_holds_across_the_spring_forward_gap():
+    """to_local(to_utc(x)) ist für eine nicht existierende Ortszeit keine
+    Identität — genau deshalb vergleicht same_instant UTC-seitig."""
+    from datetime import datetime
+    from app.services.power.reboot_state import same_instant, to_utc
+
+    gap = datetime(2026, 3, 29, 2, 30)  # existiert in Europe/Berlin nicht
+    assert same_instant(to_utc(gap), to_utc(gap)) is True

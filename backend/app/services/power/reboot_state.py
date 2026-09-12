@@ -119,6 +119,54 @@ def next_reboot_due(db: Session, now_local: datetime) -> Optional[datetime]:
         return None
 
 
+def claim_wakeup(
+    db: Session,
+    regular_utc: Optional[datetime],
+    now_local: datetime,
+) -> Optional[datetime]:
+    """Der Neustart-Termin stiehlt die Weckzeit — und legt die gestohlene daneben.
+
+    Liegt der nächste Neustart-Termin vor `regular_utc`, wird er zurückgegeben,
+    `woke_for_reboot` gesetzt und `regular_utc` als `resuspend_wake_at`
+    hinterlegt. Genau das ist „bis zum regulären Aufwachzeitpunkt": nicht ein
+    nach dem Neustart neu geratener Wert, sondern derselbe, der ohne den
+    Neustart gegolten hätte. `regular_utc` darf `None` sein.
+
+    Schreibt bewusst in die Datenbank — der Aufrufer steht unmittelbar vor dem
+    Suspend, und danach gibt es keine Gelegenheit mehr dazu.
+    """
+    due_local = next_reboot_due(db, now_local)
+    if due_local is None:
+        return regular_utc
+
+    due_utc = to_utc(due_local)
+    if regular_utc is not None:
+        regular_aware = regular_utc
+        if regular_aware.tzinfo is None:
+            regular_aware = regular_aware.replace(tzinfo=timezone.utc)
+        if regular_aware <= due_utc:
+            return regular_utc
+
+    state = get_state(db)
+    state.woke_for_reboot = True
+    state.resuspend_wake_at = regular_utc
+    db.commit()
+    logger.info(
+        "Weckzeit auf den Neustart-Termin %s vorgezogen (regulär war %s)",
+        due_local, regular_utc,
+    )
+    return due_utc
+
+
+def clear_wakeup_claim(db: Session) -> None:
+    """Nach einem gescheiterten Suspend: das Flag wieder abräumen."""
+    state = get_state(db)
+    if state.woke_for_reboot:
+        state.woke_for_reboot = False
+        state.resuspend_wake_at = None
+        db.commit()
+
+
 def open_execution(db: Session) -> int:
     """Legt die `scheduler_executions`-Zeile für einen fälligen Termin an."""
     from app.models.scheduler_history import (
