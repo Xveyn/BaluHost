@@ -104,6 +104,7 @@ All API routes are prefixed with `/api`:
 - `/api/plugins/*` - Plugin system
 - `/api/plugins/audio_control/*` - Audiosteuerung (Pegel, Ausgabegerät, Per-App-Mixer)
 - `/api/plugins/display_output/*` - Displaysteuerung (Ausgangswahl, Video-Modus)
+- `/api/plugins/bluetooth/*` - Bluetooth (Geräte, Scan, Kopplung mit Code im Web-UI; Koppeln nur aus privaten Netzen)
 - `/api/pihole/*` - Pi-hole DNS management
 - `/api/updates/*` - Self-hosted update mechanism
 - `/api/sleep/*` - Sleep mode management

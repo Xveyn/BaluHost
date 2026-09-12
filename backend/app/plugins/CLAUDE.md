@@ -27,6 +27,7 @@ plugins/
 ├── smart_device/        # SmartDevice plugin framework (base class, manager, poller, capabilities)
 └── installed/           # Bundled plugin implementations (one CLAUDE.md each)
     ├── audio_control/      # Volume, output device and per-app mixer of the desktop session (pactl)
+    ├── bluetooth/          # BlueZ over D-Bus: devices, scan, pairing with an own agent
     ├── display_output/     # KWin output selection and video mode (kscreen-doctor)
     ├── optical_drive/      # CD/DVD burning, reading, ISO browsing (own router)
     ├── steam_gaming/       # Status pill, session ledger, Gaming-Mode menu action

@@ -63,6 +63,13 @@ verify_mobile_device_token — Validates JWT + X-Device-ID header + device expir
   öffnen. Durchgesetzt ausschließlich in
   `services/power/session_lock.unlock_if_permitted()`, die auch den
   Audit-Eintrag schreibt.
+- `can_manage_bluetooth` (power permission) verbindet, entfernt und koppelt
+  Bluetooth-Geräte. Koppeln und Bestätigen sind doppelt gegated: Recht **und**
+  `is_private_or_local_ip(request.client.host)` — für alle Rollen, VPN zählt als
+  lokal. Ein gekoppeltes Eingabegerät tippt in die Desktop-Session; ein
+  gestohlenes Web-Konto plus Funkreichweite darf dafür nicht reichen.
+  Durchgesetzt in `plugins/installed/bluetooth/service.py` (`start_pairing`,
+  `answer`); abgelehnte Versuche von außen werden auditiert.
 
 ### Password Policy (`schemas/auth.py:20-59`)
 - Length: 8-128 characters
