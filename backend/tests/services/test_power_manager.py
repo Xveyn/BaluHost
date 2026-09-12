@@ -488,6 +488,63 @@ class TestPowerManagerServiceStartStop:
             await service.stop()
 
     @pytest.mark.asyncio
+    async def test_failed_dynamic_mode_restore_reports_disabled(self):
+        """A dynamic-mode restore that fails on start must not leave the flag on.
+
+        start() hydrates ``_dynamic_mode_enabled=True`` from
+        ``power_runtime_state`` before attempting the restore. When
+        ``_primary_enable_dynamic_mode()`` then fails -- e.g. the configured
+        governor no longer exists after a kernel/driver change -- the code falls
+        back to the IDLE profile, but the flag stayed True. Status (and with it
+        the topbar pill) kept claiming dynamic mode while profile scaling was
+        actually running.
+        """
+        from app.schemas.power import DynamicModeConfig
+        from app.services.power.config_store import (
+            load_runtime_state,
+            update_runtime_state,
+        )
+
+        stored = DynamicModeConfig(
+            enabled=True,
+            governor="nonexistent-gov",  # not in DevCpuPowerBackend's governor list
+            min_freq_mhz=800,
+            max_freq_mhz=3200,
+        )
+        update_runtime_state(dynamic_mode_enabled=True)
+
+        service = PowerManagerService()
+        saved = MagicMock(return_value=True)
+        with patch('app.services.power.manager.load_auto_scaling_config', return_value=AutoScalingConfig()),              patch('app.services.power.manager.load_dynamic_mode_config', return_value=stored),              patch('app.services.power.manager.save_dynamic_mode_config', saved):
+            await service.start()
+
+        try:
+            assert service._current_profile == PowerProfile.IDLE
+            assert service._dynamic_mode_enabled is False
+            assert service._dynamic_mode_config is None
+            assert load_runtime_state()["dynamic_mode_enabled"] is False
+
+            status = await service.get_power_status()
+            assert status.dynamic_mode_enabled is False
+            assert status.dynamic_mode_config is None
+
+            # Profile scaling must work again afterwards. While the stale flag
+            # was set, _apply_profile_internal() short-circuited with "Skipping
+            # profile change - dynamic mode active" and _check_auto_scaling()
+            # early-returned on the same flag, so the box ran with neither
+            # dynamic mode nor profile scaling until the next restart.
+            await service._primary_apply_profile(PowerProfile.MEDIUM, reason="post_restore")
+            assert service._current_profile == PowerProfile.MEDIUM
+
+            # The user's governor/frequency choice survives; only the flag flips
+            assert saved.call_args is not None
+            persisted = saved.call_args.args[0]
+            assert persisted.enabled is False
+            assert persisted.governor == "nonexistent-gov"
+        finally:
+            await service.stop()
+
+    @pytest.mark.asyncio
     async def test_stop_cleans_up(self):
         """Test that stop() cleans up properly."""
         service = PowerManagerService()
@@ -635,6 +692,59 @@ class TestPowerManagerServiceStatus:
         assert resp.available_governors == ["powersave", "performance", "schedutil"]
         assert resp.system_min_freq_mhz == 400
         assert resp.system_max_freq_mhz == 4600
+
+    @pytest.mark.asyncio
+    async def test_follower_power_status_restores_dynamic_mode_config(self):
+        """A follower must report the dynamic-mode config, not only the flag.
+
+        Regression (multi-worker): ``_hydrate_from_runtime_state`` synced
+        ``_dynamic_mode_enabled`` from ``power_runtime_state`` but never
+        ``_dynamic_mode_config``, which only ``_primary_enable_dynamic_mode``
+        ever set. With 4 Uvicorn workers a status request landing on one of the
+        3 followers returned ``dynamic_mode_config=None``, so the topbar power
+        pill flapped between "Dynamic - <governor>" (primary) and a bare
+        "Dynamic" (follower), and the dynamic-mode override of
+        ``target_frequency_range`` never fired there either.
+        """
+        from app.schemas.power import DynamicModeConfig
+        from app.services.power.config_store import (
+            save_dynamic_mode_config,
+            update_runtime_state,
+        )
+
+        save_dynamic_mode_config(
+            DynamicModeConfig(
+                enabled=True,
+                governor="powersave",
+                min_freq_mhz=800,
+                max_freq_mhz=3200,
+            )
+        )
+        update_runtime_state(dynamic_mode_enabled=True)
+        try:
+            follower = PowerManagerService()
+            follower._is_running = True
+            follower._primary = False
+            follower._backend = None  # follower owns no hardware backend
+            follower._dynamic_mode_config = None  # never set outside the primary
+
+            status = await follower.get_power_status()
+
+            assert status.dynamic_mode_enabled is True
+            assert status.dynamic_mode_config is not None
+            assert status.dynamic_mode_config.governor == "powersave"
+            # The dynamic-mode freq-range override must fire on followers too
+            assert status.target_frequency_range == "800-3200 MHz"
+        finally:
+            update_runtime_state(dynamic_mode_enabled=False)
+            save_dynamic_mode_config(
+                DynamicModeConfig(
+                    enabled=False,
+                    governor="powersave",
+                    min_freq_mhz=800,
+                    max_freq_mhz=3200,
+                )
+            )
 
     @pytest.mark.asyncio
     async def test_primary_writes_capabilities_into_shm(self, service):

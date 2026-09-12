@@ -219,17 +219,27 @@ class PowerManagerService:
             return False, "Failed to enqueue command"
         return await command_queue.wait_for_completion(cmd_id)
 
-    async def _primary_disable_dynamic_mode(self) -> Tuple[bool, Optional[str]]:
+    async def _mark_dynamic_mode_off(self) -> None:
+        """Clear dynamic mode locally and in both shared stores.
+
+        ``power_dynamic_mode_config`` keeps the governor and frequency window so
+        a later re-enable starts from the user's settings; only ``enabled``
+        flips. The flag must be cleared before any profile is applied:
+        ``_apply_profile_internal()`` and ``_check_auto_scaling()`` both
+        early-return while it is set.
+        """
         async with self._state_lock:
             self._dynamic_mode_enabled = False
             self._dynamic_mode_config = None
 
-        # Save disabled state
         saved_config = load_dynamic_mode_config()
         if saved_config:
             saved_config.enabled = False
             save_dynamic_mode_config(saved_config)
         update_runtime_state(dynamic_mode_enabled=False)
+
+    async def _primary_disable_dynamic_mode(self) -> Tuple[bool, Optional[str]]:
+        await self._mark_dynamic_mode_off()
 
         # Recalculate and apply the appropriate profile
         async with self._state_lock:
@@ -431,7 +441,16 @@ class PowerManagerService:
         if dynamic_config and dynamic_config.enabled:
             success, error = await self._primary_enable_dynamic_mode(dynamic_config)
             if not success:
-                logger.warning(f"Failed to restore dynamic mode on start: {error}, falling back to IDLE")
+                logger.warning(
+                    f"Failed to restore dynamic mode on start: {error} - "
+                    "turning dynamic mode off and falling back to IDLE"
+                )
+                # _hydrate_from_runtime_state() already set the flag from the
+                # shared state. Leaving it set after a failed restore left the
+                # box with no power management at all: dynamic mode was never
+                # applied, while the flag made _apply_profile_internal() skip
+                # the IDLE fallback and _check_auto_scaling() return early.
+                await self._mark_dynamic_mode_off()
                 await self._primary_apply_profile(PowerProfile.IDLE, reason="service_start")
         else:
             await self._primary_apply_profile(PowerProfile.IDLE, reason="service_start")
@@ -465,6 +484,18 @@ class PowerManagerService:
         self._manual_override_until = state.get("manual_override_until")
         self._cooldown_until = state.get("cooldown_until")
         self._dynamic_mode_enabled = bool(state.get("dynamic_mode_enabled"))
+        # The runtime-state row carries only the on/off flag. Governor and
+        # frequency window live in power_dynamic_mode_config, written by
+        # _primary_enable_dynamic_mode() in the same breath as the flag -- but
+        # only the primary ever fills the local field. Without this re-read a
+        # follower answers with dynamic_mode_config=None, which shows up as a
+        # bare "Dynamic" pill and skips the dynamic-mode freq-range override in
+        # get_power_status(). Read per call so a governor change on the primary
+        # reaches followers at once.
+        if self._dynamic_mode_enabled:
+            self._dynamic_mode_config = load_dynamic_mode_config() or self._dynamic_mode_config
+        else:
+            self._dynamic_mode_config = None
         self._last_profile_change = state.get("last_profile_change")
 
     async def stop(self) -> None:

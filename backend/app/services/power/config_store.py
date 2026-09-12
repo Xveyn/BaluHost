@@ -127,10 +127,10 @@ def load_dynamic_mode_config() -> Optional[DynamicModeConfig]:
                     min_freq_mhz=db_config.min_freq_mhz,
                     max_freq_mhz=db_config.max_freq_mhz,
                 )
-                logger.info(f"Loaded dynamic mode config from DB: enabled={config.enabled}")
+                logger.debug(f"Loaded dynamic mode config from DB: enabled={config.enabled}")
                 return config
             else:
-                logger.info("No dynamic mode config in DB, using defaults")
+                logger.debug("No dynamic mode config in DB, using defaults")
                 return DynamicModeConfig()  # type: ignore[call-arg]
         finally:
             db.close()
