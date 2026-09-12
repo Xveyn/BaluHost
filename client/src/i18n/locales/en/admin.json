@@ -96,7 +96,8 @@
           "desc": "Also unlock the desktop session when turning the displays on (home network or VPN only)"
         },
         "controlAudio": { "label": "Audio", "desc": "Control volume, output device and the per-app mixer" },
-        "manageDisplays": { "label": "Displays", "desc": "Choose the display output and resolution" }
+        "manageDisplays": { "label": "Displays", "desc": "Choose the display output and resolution" },
+        "manageBluetooth": { "label": "Bluetooth", "desc": "Connect and pair Bluetooth devices (pairing on the local network only)" }
       }
     }
   },

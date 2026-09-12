@@ -1,0 +1,47 @@
+{
+  "title": "Bluetooth",
+  "powerOn": "Einschalten",
+  "powerOff": "Ausschalten",
+  "adapterOff": "Bluetooth ist ausgeschaltet.",
+  "unavailable": "Bluetooth ist nicht verfügbar.",
+  "kind": {
+    "controller": "Controller",
+    "audio": "Audio",
+    "input": "Eingabegeräte",
+    "other": "Weitere Geräte"
+  },
+  "battery": "Akku {{percent}} %",
+  "connect": "Verbinden",
+  "disconnect": "Trennen",
+  "remove": "Entfernen",
+  "removeConfirm": "{{name}} wirklich entfernen? Das Gerät muss danach neu gekoppelt werden.",
+  "noDevices": "Keine gekoppelten Geräte.",
+  "addDevice": "Gerät hinzufügen",
+  "scanning": "Suche läuft … noch {{seconds}} s",
+  "noneFound": "Noch nichts gefunden. Ist das Gerät im Kopplungsmodus?",
+  "pair": "Koppeln",
+  "pairOnlyLocal": "Koppeln nur im lokalen Netz",
+  "pairBusy": "Es wird gerade ein Gerät gekoppelt",
+  "actionError": "Aktion fehlgeschlagen",
+  "loadError": "Bluetooth-Zustand konnte nicht geladen werden",
+  "dialog": {
+    "title": "{{name}} koppeln",
+    "connecting": "Gerät in den Kopplungsmodus versetzen …",
+    "displayPasskey": "Diesen Code auf der Tastatur eintippen und mit Enter bestätigen:",
+    "displayPin": "Diese PIN auf dem Gerät eintippen und mit Enter bestätigen:",
+    "confirm": "Zeigt das Gerät denselben Code?",
+    "accept": "Ja, stimmt überein",
+    "reject": "Nein",
+    "succeeded": "Gekoppelt und verbunden.",
+    "cancelled": "Kopplung abgebrochen.",
+    "cancel": "Abbrechen",
+    "close": "Schließen",
+    "inputWarning": "Eingabegeräte können in die Desktop-Sitzung tippen. Nur eigene Geräte koppeln.",
+    "error": {
+      "auth_failed": "Code falsch oder abgelaufen.",
+      "unreachable": "Gerät nicht erreichbar — ist der Kopplungsmodus aktiv?",
+      "timeout": "Zeitüberschreitung — bitte erneut versuchen.",
+      "unknown": "Kopplung fehlgeschlagen."
+    }
+  }
+}

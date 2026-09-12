@@ -403,6 +403,7 @@ require_power_wol = _make_power_dependency("wol")
 require_power_toggle_desktop = _make_power_dependency("toggle_desktop")
 require_power_control_audio = _make_power_dependency("control_audio")
 require_power_manage_displays = _make_power_dependency("manage_displays")
+require_power_manage_bluetooth = _make_power_dependency("manage_bluetooth")
 
 
 async def require_local_or_setup_secret(

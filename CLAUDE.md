@@ -75,6 +75,7 @@ client/
 **Fan control**: `backend/app/services/power/fan_control.py`
 **Audio control**: `backend/app/plugins/installed/audio_control/` (bundled Plugin; `pactl.py` kapselt den gesamten pactl-Kontakt)
 **Display outputs**: `backend/app/plugins/installed/display_output/` (bundled Plugin; `kscreen.py` kapselt den gesamten kscreen-doctor-Kontakt)
+**Bluetooth**: `backend/app/plugins/installed/bluetooth/` (bundled Plugin; `bluez.py` kapselt den gesamten org.bluez-Kontakt, `pairing.py` + `agent.py` die Kopplung)
 **Power management**: `backend/app/services/power/manager.py`
 **Monitoring orchestrator**: `backend/app/services/monitoring/orchestrator.py`
 **Service status**: `backend/app/services/service_status.py`

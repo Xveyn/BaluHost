@@ -35,6 +35,8 @@ Translations are split by feature domain. Each namespace is a separate JSON file
 | `setup` | Setup wizard steps |
 | `statusBar` | Status bar strip labels and tooltips |
 | `audio` | Topbar audio control (`AudioMenu`) |
+| `display` | Topbar display output control (`DisplayMenu`) |
+| `bluetooth` | Topbar Bluetooth control (`BluetoothMenu`, `BluetoothPairingDialog`) |
 
 ## Usage in Components
 

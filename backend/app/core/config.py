@@ -3,6 +3,7 @@ from typing import Literal
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import AnyHttpUrl, Field, field_validator, model_validator
 import logging
+import re
 
 class Settings(BaseSettings):
     app_name: str = "Baluhost NAS API"
@@ -256,6 +257,11 @@ class Settings(BaseSettings):
     # Detached signature URL; None → derived as <index_url> + ".sig".
     plugins_marketplace_signature_url: str | None = None
 
+    # Bluetooth-Plugin — MAC des zu benutzenden Adapters. Leer = der einzige
+    # vorhandene Adapter; bei mehreren ohne diese Einstellung verweigert das
+    # Plugin, statt zu raten (Bonds haengen an der Adapter-MAC).
+    bluetooth_adapter_address: str = ""
+
     # Plugin sandbox (Track B, Phase 5a) — hardened worker spawn.
     # The unprivileged OS user the external-plugin worker runs as, and the
     # root-owned wrapper that drops to it. Only consulted on prod Linux; dev
@@ -507,6 +513,13 @@ class Settings(BaseSettings):
         if isinstance(value, list):
             return value
         return []
+
+    @field_validator("bluetooth_adapter_address", mode="before")
+    def parse_bluetooth_adapter_address(cls, value: object) -> str:
+        text = str(value or "").strip().upper()
+        if text and not re.fullmatch(r"([0-9A-F]{2}:){5}[0-9A-F]{2}", text):
+            raise ValueError("BLUETOOTH_ADAPTER_ADDRESS muss eine MAC-Adresse sein")
+        return text
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

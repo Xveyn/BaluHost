@@ -201,6 +201,23 @@ else
     log_warn "GPU Power Management will report 'WRITE PERMISSION: missing' until applied manually."
 fi
 
+# --- Bluetooth group (bluetooth plugin) ---
+log_step "Bluetooth Group"
+
+# The BlueZ D-Bus policy grants org.bluez to the 'bluetooth' group. Only act
+# when BlueZ is installed (the group exists); without it the plugin reports
+# available=false and nothing else breaks.
+if getent group bluetooth &>/dev/null; then
+    if id -nG "$BALUHOST_USER" | tr ' ' '\n' | grep -qx bluetooth; then
+        log_info "$BALUHOST_USER already in 'bluetooth' group."
+    else
+        usermod -aG bluetooth "$BALUHOST_USER"
+        log_info "Added $BALUHOST_USER to 'bluetooth' group (takes effect on next service start)."
+    fi
+else
+    log_warn "Group 'bluetooth' not found (BlueZ not installed) — bluetooth plugin will be unavailable."
+fi
+
 # --- Reload systemd ---
 log_step "Reloading Systemd"
 

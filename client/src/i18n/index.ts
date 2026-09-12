@@ -45,6 +45,8 @@ import audioDe from './locales/de/audio.json';
 import audioEn from './locales/en/audio.json';
 import displayDe from './locales/de/display.json';
 import displayEn from './locales/en/display.json';
+import bluetoothDe from './locales/de/bluetooth.json';
+import bluetoothEn from './locales/en/bluetooth.json';
 
 const resources = {
   de: {
@@ -69,6 +71,7 @@ const resources = {
     statusBar: statusBarDe,
     audio: audioDe,
     display: displayDe,
+    bluetooth: bluetoothDe,
   },
   en: {
     common: commonEn,
@@ -92,6 +95,7 @@ const resources = {
     statusBar: statusBarEn,
     audio: audioEn,
     display: displayEn,
+    bluetooth: bluetoothEn,
   },
 };
 
@@ -102,7 +106,7 @@ i18n
     resources,
     fallbackLng: 'de',
     defaultNS: 'common',
-    ns: ['common', 'dashboard', 'fileManager', 'settings', 'admin', 'login', 'system', 'shares', 'plugins', 'devices', 'scheduler', 'notifications', 'updates', 'remoteServers', 'apiDocs', 'manual', 'setup', 'pihole', 'statusBar', 'audio', 'display'],
+    ns: ['common', 'dashboard', 'fileManager', 'settings', 'admin', 'login', 'system', 'shares', 'plugins', 'devices', 'scheduler', 'notifications', 'updates', 'remoteServers', 'apiDocs', 'manual', 'setup', 'pihole', 'statusBar', 'audio', 'display', 'bluetooth'],
     
     detection: {
       // Order of language detection methods

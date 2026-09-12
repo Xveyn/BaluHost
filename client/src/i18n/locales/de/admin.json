@@ -96,7 +96,8 @@
           "desc": "Beim Einschalten der Displays die Desktop-Sitzung mit entsperren (nur aus dem Heimnetz oder VPN)"
         },
         "controlAudio": { "label": "Audio", "desc": "Lautstärke, Ausgabegerät und Anwendungs-Mixer steuern" },
-        "manageDisplays": { "label": "Displays", "desc": "Bildschirm-Ausgang und Auflösung wählen" }
+        "manageDisplays": { "label": "Displays", "desc": "Bildschirm-Ausgang und Auflösung wählen" },
+        "manageBluetooth": { "label": "Bluetooth", "desc": "Bluetooth-Geräte verbinden und koppeln (Koppeln nur im lokalen Netz)" }
       }
     }
   },

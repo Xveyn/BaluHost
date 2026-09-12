@@ -191,6 +191,11 @@ RATE_LIMITS = {
     # ab (~12/Minute). admin_operations (30/Minute) waere bei zwei offenen
     # Tabs bereits knapp.
     "display_output": "60/minute",
+
+    # Bluetooth — Popover-Abfrage alle 3 s, waehrend einer Kopplung jede
+    # Sekunde. admin_operations (30/Minute) waere schon von der
+    # Kopplungs-Abfrage allein aufgebraucht.
+    "bluetooth": "120/minute",
 }
 
 
