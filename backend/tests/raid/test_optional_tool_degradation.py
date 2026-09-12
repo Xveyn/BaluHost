@@ -80,6 +80,25 @@ class TestRaidBackendUnavailable:
             raid_api.create_array(CreateArrayRequest(name="md9", level="1", devices=["sda", "sdb"]))
 
 
+    def test_dev_mode_banner_survives_without_mdadm(self, monkeypatch):
+        """The startup banner must never be what keeps the service from starting.
+
+        core/lifespan.py pulled ``_backend`` out of raid.api at call time. After
+        the lazy refactor that name was gone, so app startup raised ImportError
+        and every TestClient-based test errored out -- the exact failure mode
+        this fix set out to remove, reintroduced one layer up.
+        """
+        from app.core import lifespan as lifespan_mod
+
+        def _boom():
+            raise raid_api.RaidUnavailableError()
+
+        monkeypatch.setattr(settings, "is_dev_mode", True)
+        monkeypatch.setattr(raid_api, "_get_backend", _boom)
+
+        lifespan_mod._log_dev_mode_summary()  # must not raise
+
+
 class TestSmartUnavailableInProduction:
     def test_prod_without_smartctl_returns_empty_not_mock(self, monkeypatch):
         """Production must report "no data", never invented disks.

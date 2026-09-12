@@ -289,13 +289,19 @@ def _log_dev_mode_summary() -> None:
                 return "not started"
         return type(obj).__name__
 
-    from app.services.hardware.raid.api import _backend as raid_backend
+    from app.services.hardware.raid.api import RaidUnavailableError, _get_backend
     from app.services.power.manager import PowerManagerService
     from app.services.power.fan_control import FanControlService
     from app.services.power.sleep import SleepManagerService
 
     lines = ["Dev mode backends active:"]
-    lines.append(f"  RAID: {type(raid_backend).__name__}")
+    try:
+        raid_backend_name = type(_get_backend()).__name__
+    except RaidUnavailableError:
+        # No mdadm on this host -- the banner must never be the thing that
+        # keeps the service from starting (#543).
+        raid_backend_name = "unavailable"
+    lines.append(f"  RAID: {raid_backend_name}")
     lines.append(f"  Power: {_backend_name(lambda: PowerManagerService._instance, '_backend')}")
     lines.append(f"  Fans: {_backend_name(lambda: FanControlService._instance, '_backend')}")
     lines.append(f"  Sleep: {_backend_name(lambda: SleepManagerService._instance, '_backend')}")
