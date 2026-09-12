@@ -47,6 +47,21 @@ def to_local(value: datetime) -> datetime:
     return value.astimezone().replace(tzinfo=None)
 
 
+def same_instant(stored: Optional[datetime], candidate_utc: datetime) -> bool:
+    """Ob ein DB-Zeitstempel denselben Moment meint wie `candidate_utc`.
+
+    Naive Werte aus SQLite gelten als UTC — dieselbe Annahme wie in `to_local`.
+    Der Vergleich läuft bewusst UTC-seitig: `to_local(to_utc(x))` ist an einem
+    Sommerzeit-Umstellungstag keine Identität, und ein Vergleich in Ortszeit
+    würde dort die Wiederholungssperre stillschweigend aushebeln.
+    """
+    if stored is None:
+        return False
+    if stored.tzinfo is None:
+        stored = stored.replace(tzinfo=timezone.utc)
+    return stored == candidate_utc
+
+
 def get_state(db: Session) -> ScheduledRebootState:
     """Die Singleton-Zeile, bei Bedarf angelegt."""
     state = db.query(ScheduledRebootState).filter(ScheduledRebootState.id == 1).first()

@@ -439,7 +439,9 @@ EVENT_CONFIGS: dict[str, EventConfig] = {
         category="lifecycle",
         notification_type="info",
         title_template="Geplanter Neustart steht an",
-        message_template="Der NAS startet um {due_at_human} planmäßig neu.",
+        # „am", nicht „um": `_human_due()` liefert „Sonntag, 04:00" — also
+        # Wochentag plus Uhrzeit, kein reiner Zeitpunkt.
+        message_template="Der NAS startet am {due_at_human} planmäßig neu.",
         action_url="/schedulers",
     ),
     EventType.REBOOT_STARTED: EventConfig(

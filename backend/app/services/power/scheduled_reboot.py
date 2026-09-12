@@ -16,7 +16,6 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models.scheduler_history import SchedulerExecution, SchedulerStatus
-from app.schemas.scheduler import RebootScheduleConfig
 from app.services.audit.logger_db import get_audit_logger_db
 from app.services.notifications.events import (
     emit_reboot_scheduled_sync,
@@ -36,13 +35,17 @@ from app.services.power.reboot_state import (
     load_enabled_config,
     open_execution,
     reset_to_idle,
+    same_instant,
     to_local,
     to_utc,
 )
 
 if TYPE_CHECKING:
     # Nur für den Type Checker — vermeidet einen Zirkelimport mit sleep.py.
+    # `from __future__ import annotations` oben macht alle Annotationen zu
+    # Strings, deshalb braucht keiner dieser Namen einen Laufzeitimport.
     from app.models.scheduled_reboot import ScheduledRebootState
+    from app.schemas.scheduler import RebootScheduleConfig
     from app.services.power.sleep import SleepManagerService
 
 logger = logging.getLogger(__name__)
@@ -259,6 +262,20 @@ def _audit_reboot(due_local: datetime, execution_id: Optional[int]) -> None:
         logger.warning("Audit-Eintrag für den Neustart fehlgeschlagen: %s", exc)
 
 
+def _safe_rollback(db: Session) -> None:
+    """Rollback, der selbst nie wirft.
+
+    Ein geplatzter `commit()` lässt die Transaktion vergiftet zurück; jeder
+    weitere Zugriff auf dieselbe Session scheitert dann mit
+    `PendingRollbackError`. Der Sleep-Loop öffnet zwar pro Tick eine frische
+    Session, aber diese Funktionen dürfen sich darauf nicht verlassen.
+    """
+    try:
+        db.rollback()
+    except Exception as exc:  # pragma: no cover - defensiv
+        logger.warning("Rollback nach einem Fehler fehlgeschlagen: %s", exc)
+
+
 def tick(db: Session, sleep_service: "SleepManagerService", awake: bool) -> None:
     """Ein Schritt des Automaten. Wird alle 60 Sekunden aufgerufen.
 
@@ -277,6 +294,14 @@ def tick(db: Session, sleep_service: "SleepManagerService", awake: bool) -> None
         config = load_enabled_config(db)
         if config is None:
             if state.phase != PHASE_IDLE:
+                # Die offene Execution MUSS mit weg. Bliebe sie auf `running`,
+                # zählte sie in Gate 3 als fremder Wartungsjob (dort wird nur
+                # die *eigene* ID ausgeschlossen) und blockierte jeden künftigen
+                # Neustart, bis ein Prozessneustart sie aufräumt.
+                close_execution(
+                    db, state.execution_id, SchedulerStatus.CANCELLED.value,
+                    error="Zeitplan wurde deaktiviert",
+                )
                 reset_to_idle(db, state)
             return
 
@@ -288,6 +313,7 @@ def tick(db: Session, sleep_service: "SleepManagerService", awake: bool) -> None
         _tick_idle(db, state, config, sleep_service, now, awake)
     except Exception as exc:
         logger.warning("Neustart-Tick fehlgeschlagen (Zustand unverändert): %s", exc)
+        _safe_rollback(db)
 
 
 def _tick_idle(
@@ -305,10 +331,10 @@ def _tick_idle(
     if awake and config.warning_lead_minutes > 0:
         upcoming = next_weekday_occurrence(now, config.weekday, config.time)
         lead = timedelta(minutes=config.warning_lead_minutes)
-        already = (
-            state.warned_for_due_at is not None
-            and to_local(state.warned_for_due_at) == upcoming
-        )
+        # UTC-seitig vergleichen, siehe `same_instant` — in Ortszeit wäre der
+        # Vergleich am Umstellungssonntag falsch und die Vorwarnung ginge in
+        # derselben Minute erneut raus.
+        already = same_instant(state.warned_for_due_at, to_utc(upcoming))
         if not already and upcoming - now <= lead:
             emit_reboot_scheduled_sync(_human_due(upcoming))
             state.warned_for_due_at = to_utc(upcoming)
@@ -321,9 +347,12 @@ def _tick_idle(
     # Wiederholungssperre. `due_occurrence` kann „Zustand ging verloren" und
     # „Termin ist erledigt" nicht unterscheiden; ohne diese Prüfung startet
     # die Box nach dem Neustart in einer Schleife erneut neu.
-    if state.last_completed_due_at is not None and to_local(
-        state.last_completed_due_at
-    ) == due:
+    #
+    # Der Vergleich läuft UTC-seitig (`same_instant`), nicht über `to_local`:
+    # bei einer `time` zwischen 02:00 und 02:59 gibt es die Ortszeit am
+    # Umstellungssonntag im Frühjahr nicht, `to_local(to_utc(x)) != x`, und
+    # die Sperre würde genau dort ausfallen, wo sie gebraucht wird.
+    if same_instant(state.last_completed_due_at, to_utc(due)):
         return
 
     state.phase = PHASE_ARMED
@@ -346,7 +375,25 @@ def _tick_armed(
     now: datetime,
 ) -> None:
     """Frist prüfen, Gates prüfen, ausführen."""
-    due_local = to_local(state.due_at) if state.due_at else now
+    if state.due_at is None:
+        # `armed` ohne Termin ist ein korrupter Zustand — nur so entstanden,
+        # dass jemand die Zeile von Hand angefasst hat. Weiterlaufen wäre
+        # gefährlich: die Frist ließe sich nicht prüfen, und ein Abschluss über
+        # `to_utc(now)` würde die Wiederholungssperre auf den falschen Moment
+        # setzen. Also aufräumen und die bestehende Sperre NICHT anfassen
+        # (`reset_to_idle` ohne `completed_due_at` lässt sie stehen).
+        logger.warning(
+            "Neustart-Zustand korrupt (Phase %s ohne due_at) — zurückgesetzt",
+            state.phase,
+        )
+        close_execution(
+            db, state.execution_id, SchedulerStatus.CANCELLED.value,
+            error=SKIP_REASON_LABELS[SKIP_STALE],
+        )
+        reset_to_idle(db, state)
+        return
+
+    due_local = to_local(state.due_at)
 
     if state.deadline_at is not None and now > to_local(state.deadline_at):
         reason = state.last_skip_reason or SKIP_NOT_IDLE
@@ -425,7 +472,7 @@ def on_boot(db: Session) -> Optional[str]:
 
     Rückgabe:
       "completed" — geplanter Neustart erfolgreich; Folgephase gesetzt
-      "stale"     — `executing` zu alt, als gescheitert gewertet
+      "stale"     — `executing` zu alt oder korrupt, als gescheitert gewertet
       None        — kein geplanter Neustart im Spiel
     """
     try:
@@ -434,6 +481,24 @@ def on_boot(db: Session) -> Optional[str]:
             return None
 
         due_utc = state.due_at
+        if due_utc is None:
+            # Korrupter Zustand. Ohne diesen Zweig schriebe der
+            # `woke_for_reboot`-Pfad unten `last_completed_due_at = None` und
+            # löschte damit eine bestehende Sperre — aus einem kaputten
+            # Zustand würde eine Neustart-Schleife. Wie beim echten `stale`:
+            # kein Wieder-Suspend, Ausgang unbekannt. Die vorhandene Sperre
+            # bleibt unangetastet (`reset_to_idle` ohne `completed_due_at`).
+            logger.warning(
+                "Neustart-Zustand korrupt (executing ohne due_at) — "
+                "als gescheitert gewertet, Wiederholungssperre unverändert"
+            )
+            close_execution(
+                db, state.execution_id, SchedulerStatus.FAILED.value,
+                error=SKIP_REASON_LABELS[SKIP_STALE],
+            )
+            reset_to_idle(db, state)
+            return "stale"
+
         entered = state.phase_entered_at
         if entered is not None and entered.tzinfo is None:
             entered = entered.replace(tzinfo=timezone.utc)
@@ -471,6 +536,7 @@ def on_boot(db: Session) -> Optional[str]:
         return "completed"
     except Exception as exc:
         logger.warning("Boot-Auswertung des Neustarts fehlgeschlagen: %s", exc)
+        _safe_rollback(db)
         return None
 
 
@@ -508,6 +574,7 @@ def reset_before_suspend(db: Session) -> None:
         reset_to_idle(db, state, completed_due_at=state.due_at)
     except Exception as exc:
         logger.warning("Zurücksetzen vor dem Suspend fehlgeschlagen: %s", exc)
+        _safe_rollback(db)
 
 
 def resuspend_target(db: Session) -> tuple[bool, Optional[datetime]]:
