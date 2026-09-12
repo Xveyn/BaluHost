@@ -425,7 +425,30 @@ def test_resuspend_target_reports_the_wake_time(db_session):
 
     pending, reported = scheduled_reboot.resuspend_target(db_session)
     assert pending is True
-    assert same_instant(reported, wake_at)
+    # Naiv server-lokal (die Form, die `enter_true_suspend` erwartet) und
+    # derselbe Moment wie der gespeicherte aware-UTC-Wert.
+    assert reported.tzinfo is None
+    assert to_utc(reported) == wake_at
+
+
+def test_resuspend_target_converts_an_aware_stored_value_to_local(db_session):
+    """Die PostgreSQL-Form: der Wert kommt UTC-aware aus der Zeile zurück.
+
+    Roh durchgereicht deutete `enter_true_suspend` ihn als naiv-lokal und der
+    Wieder-Suspend weckte um den UTC-Offset daneben. Bewusst OHNE `commit()`:
+    SQLite streift beim Zurücklesen die tzinfo ab, dann wäre der aware Fall
+    hier gar nicht abbildbar und der Test unter UTC stumm grün.
+    """
+    wake_at = to_utc(datetime(2026, 9, 13, 8, 0))
+    state = get_state(db_session)
+    state.phase = PHASE_RESUSPEND_PENDING
+    state.resuspend_wake_at = wake_at  # aware, wie PostgreSQL ihn liefert
+    state.phase_entered_at = datetime.now(timezone.utc)
+
+    pending, reported = scheduled_reboot.resuspend_target(db_session)
+    assert pending is True
+    assert reported.tzinfo is None, "resuspend_target gab einen aware Wert zurück"
+    assert to_utc(reported) == wake_at
 
 
 def test_resuspend_target_reports_none_without_a_wake_time(db_session):

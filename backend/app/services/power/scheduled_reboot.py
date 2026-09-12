@@ -578,11 +578,20 @@ def reset_before_suspend(db: Session) -> None:
 
 
 def resuspend_target(db: Session) -> tuple[bool, Optional[datetime]]:
-    """`(ist ein Wieder-Suspend fällig, wake_at)` für den Sleep-Loop."""
+    """`(ist ein Wieder-Suspend fällig, wake_at)` für den Sleep-Loop.
+
+    `wake_at` ist **naiv server-lokal** — die Form, die `enter_true_suspend`
+    erwartet und die `_next_occurrence`/`next_core_uptime_start` liefern.
+    Gespeichert ist der Wert UTC-aware; roh durchgereicht käme er unter
+    PostgreSQL aware und unter SQLite naiv-UTC an, und der Aufrufer läge im
+    zweiten Fall um den UTC-Offset daneben. `to_local` deckt beide Backends ab
+    (naive DB-Werte gelten dort als UTC, wie überall in diesem Modul).
+    """
     try:
         state = get_state(db)
         if state.phase != PHASE_RESUSPEND_PENDING:
             return False, None
-        return True, state.resuspend_wake_at
+        stored = state.resuspend_wake_at
+        return True, to_local(stored) if stored is not None else None
     except Exception:
         return False, None
