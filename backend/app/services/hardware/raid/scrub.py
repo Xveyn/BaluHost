@@ -53,17 +53,17 @@ def scrub_now(array: str | None = None) -> RaidActionResponse:
 
     When `array` is None, all known arrays will be triggered.
     """
-    from app.services.hardware.raid.api import _backend
+    from app.services.hardware.raid.api import _get_backend
 
     # Build payload(s) using RaidOptionsRequest
     if array:
         payload = RaidOptionsRequest(array=array, trigger_scrub=True)
-        return _backend.configure(payload)
+        return _get_backend().configure(payload)
 
     # Trigger scrub for all arrays
     status = None
     try:
-        status = _backend.get_status()
+        status = _get_backend().get_status()
     except Exception:
         # If get_status fails (e.g., no arrays), raise a clear error
         raise RuntimeError("Unable to determine RAID arrays for scrubbing")
@@ -72,7 +72,7 @@ def scrub_now(array: str | None = None) -> RaidActionResponse:
     for arr in status.arrays:
         try:
             payload = RaidOptionsRequest(array=arr.name, trigger_scrub=True)
-            resp = _backend.configure(payload)
+            resp = _get_backend().configure(payload)
             messages.append(resp.message)
         except Exception as exc:
             logger.warning("Failed to trigger scrub on %s: %s", arr.name, exc)

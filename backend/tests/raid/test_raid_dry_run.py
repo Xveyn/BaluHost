@@ -41,7 +41,7 @@ def test_raid_dry_run_audit_and_response(tmp_path):
         assert record.get("dry_run") is True
 
         # If the real backend was not already the dev backend, the wrapper should return a DRY-RUN message
-        if not isinstance(raid._backend, DevRaidBackend):
+        if not isinstance(raid._get_backend(), DevRaidBackend):
             assert resp.message.startswith("[DRY-RUN]"), resp.message
 
     finally:

@@ -9,6 +9,7 @@ Provides hardware management with:
 
 from app.services.hardware.raid import (
     RaidBackend,
+    RaidUnavailableError,
     DevRaidBackend,
     MdadmRaidBackend,
     MdstatInfo,
@@ -74,6 +75,7 @@ __all__ = [
     "stop_scrub_scheduler",
     "get_scrub_scheduler_status",
     # SMART
+    "RaidUnavailableError",
     "SmartUnavailableError",
     "get_smart_status",
     "get_cached_smart_status",
