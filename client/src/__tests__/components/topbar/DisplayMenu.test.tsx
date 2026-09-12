@@ -54,6 +54,10 @@ const LAYOUT = {
 };
 
 beforeEach(() => {
+  // Weder vite.config.ts noch setup.ts setzen `clearMocks`, die Zaehler
+  // ueberleben also den einzelnen Test. Ohne das hier misst jede Aussage der
+  // Form "genau einmal abgefragt" die Aufrufe aller vorherigen Tests mit.
+  vi.clearAllMocks();
   vi.mocked(getMyPowerPermissions).mockResolvedValue({ can_manage_displays: true } as never);
   vi.mocked(getDisplayLayout).mockResolvedValue(structuredClone(LAYOUT) as never);
 });
@@ -81,9 +85,31 @@ describe('DisplayMenu', () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it('fragt erst ab, wenn das Popover offen ist', async () => {
+  it('fragt einmal beim Mounten ab, damit das Symbol nicht raet', async () => {
+    // Frueher wurde erst beim Oeffnen gefragt. Dadurch behauptete das Symbol
+    // nach jedem Seitenaufbau "an", bis jemand einmal geklickt hatte.
     render(<DisplayMenu />);
     await screen.findByLabelText('display:title');
+    await waitFor(() => expect(getDisplayLayout).toHaveBeenCalledTimes(1));
+  });
+
+  it('pollt nicht weiter, solange das Popover zu bleibt', async () => {
+    // Der eine Abruf beim Mounten ersetzt kein Hintergrund-Polling: eine
+    // Fernbedienung, die im Hintergrund taktet, kostet Anfragen ohne Wert.
+    render(<DisplayMenu />);
+    await screen.findByLabelText('display:title');
+    await waitFor(() => expect(getDisplayLayout).toHaveBeenCalledTimes(1));
+    vi.useFakeTimers();
+    await vi.advanceTimersByTimeAsync(30000);
+    expect(getDisplayLayout).toHaveBeenCalledTimes(1);
+  });
+
+  it('fragt nichts ab ohne das Recht', async () => {
+    // Sonst feuert jeder Nutzer ohne Recht bei jedem Seitenaufbau eine
+    // Anfrage, die nur mit 403 zurueckkommt.
+    vi.mocked(getMyPowerPermissions).mockResolvedValue({ can_manage_displays: false } as never);
+    render(<DisplayMenu />);
+    await waitFor(() => expect(getMyPowerPermissions).toHaveBeenCalled());
     expect(getDisplayLayout).not.toHaveBeenCalled();
   });
 
@@ -138,22 +164,32 @@ describe('DisplayMenu', () => {
     expect(await screen.findByText('display:unavailable')).toBeTruthy();
   });
 
-  it('zeigt das neutrale Monitor-Symbol vor dem ersten Laden, nicht "dunkel"', async () => {
-    // Vor dem ersten Oeffnen wurde nie gefragt, ob etwas leuchtet - "dunkel"
-    // zu behaupten waere hier dieselbe Falschaussage wie bei `lit === null`.
+  it('zeichnet das Symbol gedaempft, solange der Zustand unbekannt ist', async () => {
+    // Vor der ersten Antwort ist "leuchtet" nicht beantwortet, sondern noch
+    // nicht gefragt. `Monitor` allein ist dafuer nicht neutral - es ist das
+    // An-Symbol. Die Daempfung macht den Unterschied sichtbar.
+    let resolveLayout: (value: unknown) => void = () => {};
+    vi.mocked(getDisplayLayout).mockReturnValue(
+      new Promise((resolve) => {
+        resolveLayout = resolve;
+      }) as never,
+    );
     const { container } = render(<DisplayMenu />);
     await screen.findByLabelText('display:title');
-    expect(container.querySelector('.lucide-monitor-off')).toBeNull();
-    expect(container.querySelector('.lucide-monitor')).toBeTruthy();
+    expect(container.querySelector('.lucide-monitor')?.getAttribute('class')).toContain('opacity-40');
+    resolveLayout(structuredClone(LAYOUT));
+    await waitFor(() =>
+      expect(container.querySelector('.lucide-monitor-off')?.getAttribute('class')).not.toContain(
+        'opacity-40',
+      ),
+    );
   });
 
-  it('zeigt MonitorOff erst, nachdem ein geladenes Layout nichts Leuchtendes zeigt', async () => {
-    // LAYOUT hat beide Ausgaenge mit lit: false - jetzt ist "dunkel"
-    // tatsaechlich beantwortet, nicht nur unbekannt.
+  it('zeigt MonitorOff ohne Klick, sobald das Layout nichts Leuchtendes meldet', async () => {
+    // LAYOUT hat beide Ausgaenge mit lit: false. Frueher blieb das Symbol
+    // bis zum ersten Oeffnen auf "an" stehen - genau der gemeldete Fehler.
     const { container } = render(<DisplayMenu />);
-    const button = await screen.findByLabelText('display:title');
-    fireEvent.click(button);
-    await waitFor(() => expect(getDisplayLayout).toHaveBeenCalled());
+    await screen.findByLabelText('display:title');
     await waitFor(() => expect(container.querySelector('.lucide-monitor-off')).toBeTruthy());
   });
 
