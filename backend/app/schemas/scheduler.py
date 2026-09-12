@@ -181,6 +181,30 @@ class SchedulerToggleResponse(BaseModel):
     message: str
 
 
+class RebootScheduleConfig(BaseModel):
+    """`extra_config` des Schedulers `system_reboot`.
+
+    Zeiten sind server-lokal, wie die Kernbetriebszeit-Fenster.
+    """
+
+    weekday: int = Field(
+        default=6, ge=0, le=6,
+        description="0=Montag .. 6=Sonntag, wie CoreUptimeWindow.weekdays",
+    )
+    time: str = Field(
+        default="04:00", pattern=r"^([01]\d|2[0-3]):[0-5]\d$",
+        description="Uhrzeit HH:MM, server-lokal",
+    )
+    retry_window_hours: int = Field(
+        default=6, ge=1, le=24,
+        description="Nachholfrist ab dem Termin, in Stunden",
+    )
+    warning_lead_minutes: int = Field(
+        default=10, ge=0, le=120,
+        description="Vorwarnung in Minuten; 0 schaltet sie ab",
+    )
+
+
 # Scheduler registry info for frontend
 SCHEDULER_REGISTRY: dict[str, dict[str, Any]] = {
     "raid_scrub": {
