@@ -8,6 +8,7 @@ und der Worker ist ein eigener Prozess ohne `SleepManagerService`.
 from __future__ import annotations
 
 import logging
+import subprocess
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
@@ -154,3 +155,36 @@ def gates_blocking(
             return SKIP_NOT_IDLE
 
     return None
+
+
+_REBOOT_CMD = ["sudo", "systemctl", "reboot"]
+
+
+def run_reboot_command() -> tuple[bool, str]:
+    """Startet das System neu. Rückgabe `(ok, detail)`.
+
+    Im Dev-Mode passiert nichts — der Aufrufer simuliert den Boot-Übergang
+    (siehe `tick`), damit der Automat lokal durchlaufbar bleibt.
+
+    Der sudoers-Eintrag dafür steht in
+    `deploy/install/templates/sudoers-baluhost-power` und erreicht eine
+    bestehende Box NUR über einen `SYNC_PERMISSIONS=1`-Deploy. Fehlt er,
+    scheitert der Aufruf sauber und der Automat meldet den Grund.
+    """
+    if settings.is_dev_mode:
+        logger.warning("DEV-MODE: `sudo systemctl reboot` wird NICHT ausgeführt")
+        return True, "dev-mode: simulierter Neustart"
+
+    try:
+        result = subprocess.run(
+            _REBOOT_CMD, capture_output=True, text=True, timeout=30,
+        )
+    except subprocess.TimeoutExpired:
+        return False, "timeout nach 30s"
+    except Exception as exc:  # pragma: no cover - defensiv
+        return False, str(exc)
+
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout or "").strip()
+        return False, detail or f"rc={result.returncode}"
+    return True, "ok"
