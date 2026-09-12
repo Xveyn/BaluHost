@@ -1,10 +1,12 @@
 """API-Oberfläche des geplanten Systemneustarts."""
 import json
+from unittest.mock import MagicMock, patch
 
 from fastapi.testclient import TestClient
 
 from app.models.scheduler_history import SchedulerConfig
 from app.models.sleep import CoreUptimeWindow
+from app.services.audit.logger_db import ADMIN_ONLY_EVENTS
 
 
 def _enable(db, **extra):
@@ -110,3 +112,32 @@ def test_status_has_no_next_run_when_disabled(client: TestClient, admin_headers:
     body = client.get("/api/schedulers/system_reboot", headers=admin_headers).json()
     assert body["is_enabled"] is False
     assert body["next_run_at"] is None
+
+
+def test_reboot_audit_events_stay_admin_only(client: TestClient, admin_headers: dict):
+    """update_reboot_schedule und toggle_reboot_schedule dürfen für normale
+    Nutzer nicht im Audit-Log sichtbar werden — die Sichtfilterung in
+    `routes/logging.py` entscheidet allein über `ADMIN_ONLY_EVENTS`
+    (Groß-/Kleinschreibung ist dabei relevant: die Menge enthält 'ADMIN',
+    nicht 'admin'). Importiert die Menge statt den String zu wiederholen,
+    damit der Test mitdriftet, wenn sie sich ändert.
+    """
+    mock_logger = MagicMock()
+    with patch("app.api.routes.schedulers.get_audit_logger_db", return_value=mock_logger):
+        config_resp = client.put(
+            "/api/schedulers/system_reboot/config",
+            json={"extra_config": {"weekday": 1, "time": "02:00"}},
+            headers=admin_headers,
+        )
+        toggle_resp = client.post(
+            "/api/schedulers/system_reboot/toggle",
+            json={"enabled": True},
+            headers=admin_headers,
+        )
+
+    assert config_resp.status_code == 200
+    assert toggle_resp.status_code == 200
+    assert mock_logger.log_event.call_count == 2
+
+    for call in mock_logger.log_event.call_args_list:
+        assert call.kwargs.get("event_type") in ADMIN_ONLY_EVENTS

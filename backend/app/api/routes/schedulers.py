@@ -194,6 +194,7 @@ async def update_scheduler_config(
     Changes to interval may require a scheduler restart to take effect.
     Note: Some schedulers have fixed intervals and cannot be configured.
     """
+    validated: Optional["RebootScheduleConfig"] = None
     if name == "system_reboot" and config.extra_config is not None:
         # Für diesen einen Scheduler ist extra_config kein freies Dict.
         # Pydantic wirft ValidationError -> FastAPI antwortet 422.
@@ -208,15 +209,6 @@ async def update_scheduler_config(
             ) from exc
         config = config.model_copy(update={"extra_config": validated.model_dump()})
 
-        get_audit_logger_db().log_event(
-            event_type="admin",
-            user=current_user.username,
-            action="update_reboot_schedule",
-            resource="system_reboot",
-            details=validated.model_dump(),
-            success=True,
-        )
-
     service = get_scheduler_service(db)
     success = service.update_scheduler_config(
         name=name,
@@ -230,6 +222,18 @@ async def update_scheduler_config(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Scheduler '{name}' not found",
+        )
+
+    # Erst persistiert, dann auditiert — ein Audit-Eintrag über eine Änderung,
+    # die anschließend nicht zustande kam, ist irreführender als ein fehlender.
+    if validated is not None:
+        get_audit_logger_db().log_event(
+            event_type="ADMIN",
+            user=current_user.username,
+            action="update_reboot_schedule",
+            resource="system_reboot",
+            details=validated.model_dump(),
+            success=True,
         )
 
     return {"success": True, "message": f"Configuration updated for {name}"}
@@ -255,7 +259,7 @@ async def toggle_scheduler(
 
     if name == "system_reboot":
         get_audit_logger_db().log_event(
-            event_type="admin",
+            event_type="ADMIN",
             user=current_user.username,
             action="toggle_reboot_schedule",
             resource="system_reboot",
