@@ -247,7 +247,10 @@ def _audit_reboot(due_local: datetime, execution_id: Optional[int]) -> None:
     """Schreibt den Audit-Eintrag unmittelbar vor der Ausführung."""
     try:
         get_audit_logger_db().log_event(
-            event_type="system",
+            # Großgeschrieben wie jeder andere `event_type` im Backend
+            # (`log_system_event` schreibt "SYSTEM"). Die Sichtfilterung in
+            # `routes/logging.py` vergleicht auf Groß-/Kleinschreibung genau.
+            event_type="SYSTEM",
             user=None,
             action="scheduled_reboot",
             resource="system_reboot",
@@ -302,7 +305,14 @@ def tick(db: Session, sleep_service: "SleepManagerService", awake: bool) -> None
                     db, state.execution_id, SchedulerStatus.CANCELLED.value,
                     error="Zeitplan wurde deaktiviert",
                 )
-                reset_to_idle(db, state)
+                # Auch dieser Weg aus `armed` heraus setzt die Sperre — der
+                # Vertrag von `reset_to_idle` kennt keine Ausnahme. Eine
+                # Schleife entstünde hier zwar nicht (ohne Konfiguration armt
+                # `_tick_idle` nicht), aber ein Aus-und-wieder-Ein innerhalb
+                # der Nachholfrist löste sonst sofort einen Neustart aus —
+                # das erwartet niemand, der gerade den Zeitplan abgeschaltet
+                # hat. Ist `due_at` None, bleibt die Sperre unverändert.
+                reset_to_idle(db, state, completed_due_at=state.due_at)
             return
 
         now = _now_local()
@@ -541,10 +551,18 @@ def on_boot(db: Session) -> Optional[str]:
         # `lifespan._emit_lifecycle_shutdown()` jeden künftigen Shutdown für
         # einen laufenden geplanten Neustart und unterdrückt dessen Push
         # dauerhaft. Best-effort und muss selbst nie werfen.
+        #
+        # Die Sperre MUSS dabei mitgesetzt werden. Nur die Phase zu räumen
+        # wäre der gefährlichste Fehler des ganzen Features: der Neustart hat
+        # stattgefunden (wir laufen im Boot), `due_occurrence` liefert
+        # denselben Termin über die ganze Nachholfrist weiter, und der nächste
+        # Tick armte erneut — alle zwei bis drei Minuten ein Neustart, bei
+        # sechs Stunden Frist rund 120 Stück. Ist `due_at` None, bleibt die
+        # bestehende Sperre unverändert (wie in den beiden Korrupt-Zweigen).
         try:
             state = get_state(db)
             if state.phase == PHASE_EXECUTING:
-                reset_to_idle(db, state)
+                reset_to_idle(db, state, completed_due_at=state.due_at)
         except Exception as reset_exc:
             logger.warning(
                 "Zurücksetzen der Phase nach fehlgeschlagener Boot-Auswertung "

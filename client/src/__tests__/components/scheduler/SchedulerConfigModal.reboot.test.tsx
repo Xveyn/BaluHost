@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 import { SchedulerConfigModal } from '../../../components/scheduler/SchedulerConfigModal';
@@ -29,7 +30,8 @@ describe('SchedulerConfigModal — system_reboot', () => {
   beforeEach(() => {
     getRebootPreview.mockReset();
     getRebootPreview.mockResolvedValue({
-      enabled: true, next_due_at: '2026-09-13T02:00:00Z', in_core_uptime: false,
+      enabled: true, computed_from_parameters: true,
+      next_due_at: '2026-09-13T02:00:00Z', in_core_uptime: false,
       window_label: null, window_ends_at: null,
       retry_deadline_at: '2026-09-13T08:00:00Z', reachable: true,
     });
@@ -50,9 +52,36 @@ describe('SchedulerConfigModal — system_reboot', () => {
     expect(screen.queryByTestId('reboot-core-uptime-warning')).not.toBeInTheDocument();
   });
 
+  it('asks the backend with the values currently in the form', async () => {
+    // Ohne die Parameter rechnet der Endpunkt mit der GESPEICHERTEN
+    // Konfiguration - und die gibt es beim Ersteinrichten noch gar nicht
+    // (Feature standardmaessig aus). Die Warnung koennte in genau dem Moment,
+    // fuer den sie existiert, nie erscheinen.
+    render(<SchedulerConfigModal scheduler={rebootScheduler} isOpen
+      onClose={() => {}} onSave={async () => true} />);
+    await waitFor(() => expect(getRebootPreview).toHaveBeenCalled());
+    expect(getRebootPreview).toHaveBeenCalledWith({
+      weekday: 6, time: '04:00', retry_window_hours: 6,
+    });
+  });
+
+  it('re-asks with the new weekday when the selection changes', async () => {
+    const user = userEvent.setup();
+    render(<SchedulerConfigModal scheduler={rebootScheduler} isOpen
+      onClose={() => {}} onSave={async () => true} />);
+    await waitFor(() => expect(getRebootPreview).toHaveBeenCalled());
+
+    await user.selectOptions(screen.getByTestId('reboot-weekday'), '2');
+
+    await waitFor(() => expect(getRebootPreview).toHaveBeenLastCalledWith({
+      weekday: 2, time: '04:00', retry_window_hours: 6,
+    }));
+  });
+
   it('warns that the reboot will never run when the window outlasts the retry window', async () => {
     getRebootPreview.mockResolvedValue({
-      enabled: true, next_due_at: '2026-09-14T08:00:00Z', in_core_uptime: true,
+      enabled: true, computed_from_parameters: true,
+      next_due_at: '2026-09-14T08:00:00Z', in_core_uptime: true,
       window_label: 'Wochentags', window_ends_at: '2026-09-14T20:00:00Z',
       retry_deadline_at: '2026-09-14T14:00:00Z', reachable: false,
     });
@@ -64,7 +93,8 @@ describe('SchedulerConfigModal — system_reboot', () => {
 
   it('warns more mildly when the reboot is caught up after the window', async () => {
     getRebootPreview.mockResolvedValue({
-      enabled: true, next_due_at: '2026-09-14T08:00:00Z', in_core_uptime: true,
+      enabled: true, computed_from_parameters: true,
+      next_due_at: '2026-09-14T08:00:00Z', in_core_uptime: true,
       window_label: 'Vormittag', window_ends_at: '2026-09-14T10:00:00Z',
       retry_deadline_at: '2026-09-14T20:00:00Z', reachable: true,
     });

@@ -1654,6 +1654,12 @@ Held in `scheduler_configs.extra_config` under the scheduler name `system_reboot
 | `retry_window_hours` | 6 | How long a blocked or interrupted occurrence stays catchable before it's abandoned |
 | `warning_lead_minutes` | 10 | Advance warning before the due time; 0 disables it |
 
+Off by default is enforced on the write path too: a config PUT that creates the
+`system_reboot` row without sending `is_enabled` stores `false`. Saving a
+weekday must never be what arms a feature that reboots the box — only the
+toggle does that. Every other scheduler keeps the old behavior (created rows
+default to enabled).
+
 #### The Four Gates
 
 All four must be open before the reboot fires; they're checked in this order, and the order also decides which reason appears in a "waiting" or "skipped" message:
@@ -1692,6 +1698,20 @@ PUT  /api/schedulers/system_reboot/config   - Update weekday/time/retry window/w
 POST /api/schedulers/system_reboot/toggle   - Enable/disable
 GET  /api/schedulers/system_reboot/history  - Execution history
 ```
+
+`preview` takes three optional query parameters — `weekday`, `time`,
+`retry_window_hours` — validated by the same `RebootScheduleConfig` rules as
+the config PUT (invalid → 422). Given, the preview computes from them instead
+of the saved configuration, and does so even while the schedule is still
+disabled; the config UI passes the values currently in the form so the
+core-uptime warning appears while choosing, not only after saving. Without
+them nothing changes: the saved configuration is used, and a disabled schedule
+answers `enabled: false` with no due date. `enabled` always reports the *saved*
+state — `computed_from_parameters` says which of the two was used.
+
+A due date only collides when the core-uptime **master switch**
+(`sleep_config.core_uptime_enabled`) is on. With it off, leftover window rows
+are ignored here exactly as Gate 1 ignores them.
 
 #### Database Table:
 ```sql

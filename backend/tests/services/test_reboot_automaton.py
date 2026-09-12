@@ -185,6 +185,22 @@ def test_phase_is_committed_before_the_reboot_command(db_session):
     assert seen == [PHASE_EXECUTING]
 
 
+def test_audit_event_type_is_upper_case(db_session):
+    """`SYSTEM`, wie jeder andere `event_type` im Backend.
+
+    Die Sichtfilterung in `routes/logging.py` vergleicht auf
+    Groß-/Kleinschreibung genau — ein kleingeschriebener Typ ist ein
+    Sonderfall, den keine Auswertung kennt.
+    """
+    _enable(db_session)
+    logger_mock = MagicMock()
+    with patch.object(scheduled_reboot, "get_audit_logger_db", return_value=logger_mock):
+        _at(db_session, SUNDAY_0400 + timedelta(minutes=1))
+
+    logger_mock.log_event.assert_called_once()
+    assert logger_mock.log_event.call_args.kwargs["event_type"] == "SYSTEM"
+
+
 def test_failed_command_marks_execution_failed(db_session, monkeypatch):
     _enable(db_session)
     monkeypatch.setattr(
@@ -250,6 +266,44 @@ def test_disabling_the_schedule_closes_the_open_execution(db_session, monkeypatc
     ).first()
     assert row.status == SchedulerStatus.CANCELLED.value
     assert row.completed_at is not None
+
+
+def test_disabling_the_schedule_sets_the_repeat_lock(db_session, monkeypatch):
+    """Auch dieser Weg aus `armed` heraus setzt die Sperre.
+
+    Eine Schleife entsteht daraus nicht (ohne Konfiguration armt `_tick_idle`
+    nicht), aber ein Aus-und-wieder-Ein innerhalb der Nachholfrist löste sonst
+    sofort einen Neustart aus — das erwartet niemand, der gerade den Zeitplan
+    abgeschaltet hat.
+    """
+    _enable(db_session)
+    monkeypatch.setattr(scheduled_reboot, "displays_block", lambda: True)
+    _at(db_session, SUNDAY_0400 + timedelta(minutes=1))
+    assert get_state(db_session).phase == PHASE_ARMED
+
+    db_session.query(SchedulerConfig).filter(
+        SchedulerConfig.scheduler_name == "system_reboot"
+    ).update({"is_enabled": False})
+    db_session.commit()
+    _at(db_session, SUNDAY_0400 + timedelta(minutes=2))
+
+    assert same_instant(get_state(db_session).last_completed_due_at, to_utc(SUNDAY_0400))
+
+    # Und die Wirkung: wieder eingeschaltet, Gates offen, Frist läuft noch —
+    # trotzdem kein Neustart.
+    db_session.query(SchedulerConfig).filter(
+        SchedulerConfig.scheduler_name == "system_reboot"
+    ).update({"is_enabled": True})
+    db_session.commit()
+    monkeypatch.setattr(scheduled_reboot, "displays_block", lambda: False)
+
+    reboots = []
+    with patch.object(scheduled_reboot, "run_reboot_command",
+                      side_effect=lambda: reboots.append(1) or (True, "x")):
+        _at(db_session, SUNDAY_0400 + timedelta(minutes=3))
+
+    assert reboots == []
+    assert get_state(db_session).phase == PHASE_IDLE
 
 
 # --- Korrupter Zustand ---------------------------------------------------
@@ -398,6 +452,42 @@ def test_on_boot_resets_the_phase_when_the_evaluation_itself_fails(db_session, m
     )
 
     assert scheduled_reboot.on_boot(db_session) is None
+    state = get_state(db_session)
+    assert state.phase == PHASE_IDLE
+    # Die Sperre MUSS mit. Nur die Phase zu räumen war der gefährlichste
+    # Fehler des Features: der Neustart hat stattgefunden (wir laufen im
+    # Boot), `due_occurrence` liefert denselben Termin über die ganze
+    # Nachholfrist weiter — der nächste Tick armte erneut, und die Box
+    # startete alle zwei bis drei Minuten neu, bis die Frist abläuft.
+    assert same_instant(state.last_completed_due_at, to_utc(SUNDAY_0400))
+
+
+def test_on_boot_failure_path_does_not_re_arm_the_same_occurrence(db_session):
+    """Die Wirkung derselben Sperre, gemessen statt behauptet.
+
+    Der Test oben prüft den geschriebenen Wert, dieser die Folge davon: nach
+    einer geplatzten Boot-Auswertung darf innerhalb der Nachholfrist kein Tick
+    mehr einen Neustart auslösen. Ohne die Sperre wären es rund 120.
+    """
+    _enable(db_session)
+    state = get_state(db_session)
+    state.phase = PHASE_EXECUTING
+    state.due_at = to_utc(SUNDAY_0400)
+    state.deadline_at = to_utc(SUNDAY_0400 + timedelta(hours=6))
+    state.phase_entered_at = datetime.now(timezone.utc)
+    db_session.commit()
+
+    with patch.object(scheduled_reboot, "close_execution",
+                      side_effect=RuntimeError("commit collided with the worker")):
+        assert scheduled_reboot.on_boot(db_session) is None
+
+    reboots = []
+    with patch.object(scheduled_reboot, "run_reboot_command",
+                      side_effect=lambda: reboots.append(1) or (True, "x")):
+        for minute in (3, 6, 60, 300):
+            _at(db_session, SUNDAY_0400 + timedelta(minutes=minute))
+
+    assert reboots == []
     assert get_state(db_session).phase == PHASE_IDLE
 
 

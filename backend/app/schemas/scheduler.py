@@ -212,7 +212,20 @@ class RebootPreviewResponse(BaseModel):
     Tick. Zwei Implementierungen derselben Regel driften auseinander.
     """
 
-    enabled: bool
+    enabled: bool = Field(
+        description=(
+            "Der GESPEICHERTE Zustand des Zeitplans. Bleibt `false`, wenn die "
+            "Vorschau mit übergebenen Parametern für einen noch nicht "
+            "eingeschalteten Zeitplan gerechnet wurde."
+        ),
+    )
+    computed_from_parameters: bool = Field(
+        default=False,
+        description=(
+            "true = mit den Query-Parametern gerechnet (ungespeicherte "
+            "Formularwerte), false = mit der gespeicherten Konfiguration."
+        ),
+    )
     next_due_at: Optional[datetime] = None
     in_core_uptime: bool = False
     window_label: Optional[str] = None

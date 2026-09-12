@@ -92,7 +92,10 @@ export interface SchedulerConfigUpdate {
 }
 
 export interface RebootPreview {
+  /** Der GESPEICHERTE Zustand des Zeitplans - nicht "mit Parametern gerechnet". */
   enabled: boolean;
+  /** true = mit den uebergebenen Formularwerten gerechnet, false = mit dem gespeicherten Stand. */
+  computed_from_parameters: boolean;
   next_due_at: string | null;
   in_core_uptime: boolean;
   window_label: string | null;
@@ -188,11 +191,27 @@ export async function updateSchedulerConfig(
   return response.data;
 }
 
+/** Ungespeicherte Formularwerte, mit denen die Vorschau rechnen soll. */
+export interface RebootPreviewParams {
+  weekday?: number;
+  time?: string;
+  retry_window_hours?: number;
+}
+
 /**
- * Get the collision preview for the scheduled system reboot (admin only)
+ * Get the collision preview for the scheduled system reboot (admin only).
+ *
+ * Without params the backend computes from the SAVED schedule. With params it
+ * computes from those instead - also while the schedule is still disabled,
+ * which is the case the core-uptime warning actually exists for.
  */
-export async function getRebootPreview(): Promise<RebootPreview> {
-  const response = await apiClient.get<RebootPreview>('/api/schedulers/system_reboot/preview');
+export async function getRebootPreview(
+  params?: RebootPreviewParams
+): Promise<RebootPreview> {
+  const response = await apiClient.get<RebootPreview>(
+    '/api/schedulers/system_reboot/preview',
+    params ? { params } : undefined
+  );
   return response.data;
 }
 

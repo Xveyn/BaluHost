@@ -1278,13 +1278,13 @@ class SleepManagerService:
             try:
                 db = SessionLocal()
                 try:
+                    # NUR die Verdrängungsfrage. Das Zurücksetzen des
+                    # Automaten gehört NICHT hierher: von hier bis zum
+                    # Kernel-Suspend kann `enter_soft_sleep()` noch scheitern,
+                    # und ein Termin, dessen Suspend nie stattfand, muss
+                    # innerhalb seiner Frist nachholbar bleiben. Es steht
+                    # deshalb unmittelbar vor `suspend_system()`.
                     defer_for_reboot = scheduled_reboot.should_defer_suspend(db, self)
-                    if not defer_for_reboot:
-                        # Findet trotzdem ein Suspend statt, während ein Termin
-                        # scharf aber blockiert ist, muss der Automat
-                        # zurückgesetzt werden — sonst zeigt `due_at` auf
-                        # gestern und die Weckzeit auf nächste Woche.
-                        scheduled_reboot.reset_before_suspend(db)
                 finally:
                     db.close()
             except Exception as exc:
@@ -1362,6 +1362,29 @@ class SleepManagerService:
         # symmetrisch zu `_next_core_start_for_guard`. Ungewandelt läge die
         # Klemm-Entscheidung um den UTC-Offset daneben und in
         # `resuspend_wake_at` stünde eine Ortszeit in einer UTC-Spalte.
+        #
+        # Findet trotz `armed` ein Suspend statt (Termin scharf, aber ein Gate
+        # zu), wird der Automat hier zurückgesetzt — sonst zeigte `due_at` auf
+        # gestern, während die Weckzeit schon auf den Termin nächster Woche
+        # steht. Erst hier und nicht bei den Defensiv-Guards weiter oben: bis
+        # zu dieser Stelle konnten der Inhibitor-Guard, die Verdrängung und
+        # `enter_soft_sleep()` den Suspend noch abbrechen, und ein Termin,
+        # dessen Suspend nie kam, muss innerhalb der Frist nachholbar bleiben
+        # (Spec 6d knüpft das Verfallen an den tatsächlichen Suspend).
+        # MUSS vor `claim_wakeup` stehen: `reset_to_idle` räumt
+        # `woke_for_reboot` und `resuspend_wake_at` mit ab.
+        try:
+            db = SessionLocal()
+            try:
+                scheduled_reboot.reset_before_suspend(db)
+            finally:
+                db.close()
+        except Exception as exc:
+            logger.warning(
+                "Zurücksetzen des Neustart-Termins vor dem Suspend fehlgeschlagen: %s",
+                exc,
+            )
+
         try:
             wake_at_utc = (
                 wake_at.astimezone(timezone.utc) if wake_at is not None else None

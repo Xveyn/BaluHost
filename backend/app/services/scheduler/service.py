@@ -422,9 +422,19 @@ class SchedulerService:
         )
 
         if not config:
+            # Fehlt `is_enabled` beim ANLEGEN, gilt der Scheduler bisher als
+            # aktiv. Für `system_reboot` ist das die falsche Richtung: „Default
+            # aus" ist dort die zentrale Sicherheitseigenschaft, und ein reiner
+            # Konfigurations-PUT ohne Toggle darf ein Feature, das die Box neu
+            # startet, nicht scharf schalten. Eng auf diesen einen Scheduler
+            # begrenzt — alle anderen behalten ihr Verhalten.
+            if is_enabled is not None:
+                initial_enabled = is_enabled
+            else:
+                initial_enabled = name != "system_reboot"
             config = SchedulerConfig(
                 scheduler_name=name,
-                is_enabled=is_enabled if is_enabled is not None else True,
+                is_enabled=initial_enabled,
                 interval_seconds=(
                     interval_seconds
                     if interval_seconds
@@ -447,26 +457,70 @@ class SchedulerService:
         self.db.commit()
         return True
 
-    def get_reboot_preview(self) -> "RebootPreviewResponse":
-        """Nächster Termin plus Kollision mit der Kernbetriebszeit."""
-        from app.models.sleep import CoreUptimeWindow
-        from app.schemas.scheduler import RebootPreviewResponse
+    def get_reboot_preview(
+        self, overrides: Optional[dict] = None
+    ) -> "RebootPreviewResponse":
+        """Nächster Termin plus Kollision mit der Kernbetriebszeit.
+
+        Args:
+            overrides: Bereits validierte Teilmenge aus `weekday`, `time` und
+                `retry_window_hours`. Gesetzt heißt: die Vorschau rechnet mit
+                diesen Werten statt mit der gespeicherten Konfiguration — und
+                auch dann, wenn der Zeitplan noch gar nicht eingeschaltet ist.
+                Genau das ist der Hauptfall der Warnung: das Feature ist per
+                Design standardmäßig aus, und der Admin, der es zum ersten Mal
+                einrichtet, ist der, für den sie existiert.
+
+        Returns:
+            Die Vorschau. `enabled` meint immer den GESPEICHERTEN Zustand des
+            Zeitplans, nicht „mit Parametern gerechnet" — dafür steht
+            `computed_from_parameters`.
+        """
+        from app.models.sleep import CoreUptimeWindow, SleepConfig
+        from app.schemas.scheduler import RebootPreviewResponse, RebootScheduleConfig
         from app.services.power import core_uptime as cu
         from app.services.power.reboot_state import load_enabled_config, to_utc
         from app.services.power.reboot_schedule import next_weekday_occurrence
 
-        config = load_enabled_config(self.db)
-        if config is None:
+        stored = load_enabled_config(self.db)
+        if overrides:
+            # Feldweise über den gespeicherten Stand legen: wer nur die
+            # Uhrzeit umstellt, soll den gespeicherten Wochentag behalten.
+            merged = (stored or RebootScheduleConfig()).model_dump()
+            merged.update(overrides)
+            config = RebootScheduleConfig(**merged)
+        elif stored is None:
             return RebootPreviewResponse(enabled=False)
+        else:
+            config = stored
+
+        enabled = stored is not None
+        from_parameters = bool(overrides)
 
         due = next_weekday_occurrence(datetime.now(), config.weekday, config.time)
         deadline = due + timedelta(hours=config.retry_window_hours)
 
-        windows = self.db.query(CoreUptimeWindow).all()
+        # Der Hauptschalter zählt mit. Der Automat fragt über
+        # `sleep_service._load_core_uptime()`, das bei ausgeschalteter
+        # Kernbetriebszeit `(False, [])` liefert und Gate 1 damit komplett
+        # abschaltet. Läse die Vorschau nur die Fensterzeilen, behauptete sie
+        # bei ausgeschaltetem Schalter mit übrig gebliebenen Zeilen eine
+        # Kollision — womöglich „läuft so nie" —, während der Automat
+        # ungehindert durchläuft. Keine Zeile in `sleep_config` heißt „aus",
+        # dieselbe Annahme wie in `SleepManagerService._load_core_uptime()`.
+        sleep_config = (
+            self.db.query(SleepConfig).filter(SleepConfig.id == 1).first()
+        )
+        windows = (
+            self.db.query(CoreUptimeWindow).all()
+            if sleep_config is not None and sleep_config.core_uptime_enabled
+            else []
+        )
         in_core, window = cu.is_in_core_uptime(due, windows)
         if not in_core:
             return RebootPreviewResponse(
-                enabled=True,
+                enabled=enabled,
+                computed_from_parameters=from_parameters,
                 next_due_at=to_utc(due),
                 in_core_uptime=False,
                 retry_deadline_at=to_utc(deadline),
@@ -475,7 +529,8 @@ class SchedulerService:
 
         window_end = cu.current_window_end(due, window)
         return RebootPreviewResponse(
-            enabled=True,
+            enabled=enabled,
+            computed_from_parameters=from_parameters,
             next_due_at=to_utc(due),
             in_core_uptime=True,
             window_label=window.label,

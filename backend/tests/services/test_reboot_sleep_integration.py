@@ -9,7 +9,14 @@ from sqlalchemy.orm import sessionmaker
 from app.models.scheduler_history import SchedulerConfig
 from app.schemas.sleep import SleepState, SleepTrigger
 from app.services.power import reboot_state
-from app.services.power.reboot_state import claim_wakeup, get_state, to_utc
+from app.services.power.reboot_state import (
+    PHASE_ARMED,
+    PHASE_IDLE,
+    claim_wakeup,
+    get_state,
+    same_instant,
+    to_utc,
+)
 from app.services.power.sleep import SleepManagerService
 from app.services.power.sleep_backend_dev import DevSleepBackend
 
@@ -133,6 +140,94 @@ async def test_suspend_path_converts_the_local_wake_time_before_claiming(db_sess
     # Nicht geklemmt — und in der Form, die das Backend erwartet (naiv-lokal).
     assert backend_called == [regular_local]
     assert get_state(db_session).woke_for_reboot is False
+
+
+def _arm(db):
+    """Ein scharfer, aber blockierter Termin — der Fall, in dem ein trotzdem
+    stattfindender Suspend den Automaten zurücksetzen muss."""
+    state = get_state(db)
+    state.phase = PHASE_ARMED
+    state.due_at = to_utc(SUNDAY_0400)
+    state.deadline_at = to_utc(SUNDAY_0400 + timedelta(hours=6))
+    db.commit()
+
+
+@pytest.mark.asyncio
+async def test_an_armed_occurrence_survives_a_suspend_that_never_happens(db_session):
+    """`enter_soft_sleep()` scheitert -> der Termin bleibt nachholbar.
+
+    `reset_before_suspend()` stand bei den Defensiv-Guards, also lange vor dem
+    Kernel-Suspend. Scheiterte der Suspend danach, war der Termin bereits auf
+    `cancelled` gesetzt und die Wiederholungssperre geschrieben: die Box blieb
+    wach und holte den Neustart nie nach, obwohl die Frist noch lief. Die Spec
+    (6d) knüpft das Verfallen an den TATSÄCHLICHEN Suspend.
+    """
+    svc = SleepManagerService(DevSleepBackend())
+    svc._current_state = SleepState.AWAKE  # erzwingt den enter_soft_sleep-Schritt
+    _enable(db_session)
+    _arm(db_session)
+
+    factory = sessionmaker(
+        autocommit=False, autoflush=False, bind=db_session.get_bind()
+    )
+    backend_called: list = []
+
+    async def _suspend(wake_at=None):
+        backend_called.append(wake_at)
+        return True
+
+    with patch.object(svc, "_load_config", return_value=None), \
+         patch.object(svc, "_load_core_uptime", return_value=(False, [])), \
+         patch.object(svc, "enter_soft_sleep", new=AsyncMock(return_value=False)), \
+         patch.object(svc._backend, "suspend_system", side_effect=_suspend), \
+         patch("app.services.power.sleep.scheduled_reboot.should_defer_suspend",
+               return_value=False), \
+         patch("app.services.power.sleep.SessionLocal", factory), \
+         patch("app.services.notifications.events.emit_system_suspend", new=AsyncMock()):
+        ok = await svc.enter_true_suspend("idle", SleepTrigger.AUTO_IDLE, wake_at=None)
+
+    assert ok is False
+    assert backend_called == []
+    db_session.expire_all()
+    state = get_state(db_session)
+    assert state.phase == PHASE_ARMED, "der Termin wurde ohne Suspend verworfen"
+    assert state.last_completed_due_at is None
+
+
+@pytest.mark.asyncio
+async def test_a_real_suspend_still_clears_the_armed_occurrence(db_session):
+    """Gegenprobe: findet der Suspend statt, verfällt der Termin wie gehabt.
+
+    Sonst stünde `phase=armed` mit einem `due_at` von gestern da, während die
+    Weckzeit schon auf den Termin nächster Woche zeigt.
+    """
+    svc = SleepManagerService(DevSleepBackend())
+    svc._current_state = SleepState.SOFT_SLEEP
+    _enable(db_session)
+    _arm(db_session)
+
+    factory = sessionmaker(
+        autocommit=False, autoflush=False, bind=db_session.get_bind()
+    )
+
+    async def _suspend(wake_at=None):
+        return True
+
+    with patch.object(svc, "_load_config", return_value=None), \
+         patch.object(svc, "_load_core_uptime", return_value=(False, [])), \
+         patch.object(svc._backend, "suspend_system", side_effect=_suspend), \
+         patch("app.services.power.sleep.scheduled_reboot.should_defer_suspend",
+               return_value=False), \
+         patch("app.services.power.sleep.SessionLocal", factory), \
+         patch("app.services.notifications.events.emit_system_suspend", new=AsyncMock()), \
+         patch("app.services.notifications.events.emit_system_resume", new=AsyncMock()):
+        ok = await svc.enter_true_suspend("idle", SleepTrigger.AUTO_IDLE, wake_at=None)
+
+    assert ok is True
+    db_session.expire_all()
+    state = get_state(db_session)
+    assert state.phase == PHASE_IDLE
+    assert same_instant(state.last_completed_due_at, to_utc(SUNDAY_0400))
 
 
 @pytest.mark.asyncio

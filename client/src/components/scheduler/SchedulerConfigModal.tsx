@@ -84,16 +84,21 @@ export function SchedulerConfigModal({
 
   // Load the server-computed collision preview for system_reboot. The
   // collision rule lives once, in the backend automaton (spec section 8);
-  // duplicating it client-side would drift. This is why the preview reflects
-  // the *saved* schedule, not whatever is currently being typed - it reloads
-  // after a successful save.
+  // duplicating it client-side would drift. The current form values go along
+  // as query params so the preview reflects what is being chosen right now -
+  // spec section 9 ("live beim Waehlen"). Without them the warning could
+  // never appear in its main case: the feature is disabled by default, so the
+  // saved schedule the backend would otherwise use does not exist yet.
   useEffect(() => {
     if (!isOpen || !isReboot) {
       setPreview(null);
       return;
     }
+    // A half-typed time or an emptied number field would only earn a 422 -
+    // keep the previous answer until the form is complete again.
+    if (!/^\d{2}:\d{2}$/.test(time) || !Number.isFinite(retryHours)) return;
     let cancelled = false;
-    getRebootPreview()
+    getRebootPreview({ weekday, time, retry_window_hours: retryHours })
       .then((value) => { if (!cancelled) setPreview(value); })
       .catch(() => { if (!cancelled) setPreview(null); });
     return () => { cancelled = true; };
