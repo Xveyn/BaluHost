@@ -166,6 +166,10 @@ class SchedulerService:
             return getattr(settings, "backup_auto_enabled", False)
         elif name in ("sync_check", "upload_cleanup", "notification_check"):
             return True
+        elif name == "system_reboot":
+            # Default AUS. Ohne diesen Zweig greift `return True` und das
+            # Feature wäre ab Installation scharf.
+            return False
 
         return True
 

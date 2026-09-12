@@ -455,6 +455,9 @@ class SchedulerWorker:
         db = SessionLocal()
         try:
             for name, info in SCHEDULER_REGISTRY.items():
+                if not info.get("worker_job", True):
+                    # Ausführung liegt außerhalb des Workers (system_reboot).
+                    continue
                 is_enabled = self._is_scheduler_enabled(name, db)
                 interval = self._get_interval(name, info, db)
 
@@ -524,6 +527,8 @@ class SchedulerWorker:
             return getattr(settings, "auto_update_check_enabled", True)
         elif name == "cloud_sync":
             return getattr(settings, "cloud_import_enabled", True)
+        elif name == "system_reboot":
+            return False
 
         return True
 
@@ -571,6 +576,8 @@ class SchedulerWorker:
         db = SessionLocal()
         try:
             for name, info in SCHEDULER_REGISTRY.items():
+                if not info.get("worker_job", True):
+                    continue
                 new_enabled = self._is_scheduler_enabled(name, db)
                 new_interval = self._get_interval(name, info, db)
 
@@ -606,7 +613,11 @@ class SchedulerWorker:
         try:
             now = datetime.now(timezone.utc)
 
-            for name in SCHEDULER_REGISTRY:
+            for name, info in SCHEDULER_REGISTRY.items():
+                if not info.get("worker_job", True):
+                    # Kein Worker-Job -> keine erfundene Heartbeat-Zeile. Der
+                    # Status kommt aus SchedulerService (Task 11).
+                    continue
                 is_running = self._enabled_cache.get(name, False)
                 is_executing = self._executing_scheduler == name
 

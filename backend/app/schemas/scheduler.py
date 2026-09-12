@@ -277,4 +277,16 @@ SCHEDULER_REGISTRY: dict[str, dict[str, Any]] = {
         "default_interval": 21600,  # 6 hours
         "can_run_manually": True,
     },
+    "system_reboot": {
+        "display_name": "Geplanter Neustart",
+        "description": "Startet das System zu einem festen Wochentermin vollständig neu",
+        "config_key": None,
+        "default_interval": 604800,  # Formalie; die Anzeige kommt aus extra_config
+        "can_run_manually": False,
+        # KEIN APScheduler-Job: die Ausführung liegt im Power-Layer
+        # (services/power/scheduled_reboot.py). Ohne dieses Flag würde der
+        # Worker einen Sieben-Tage-Intervalljob registrieren, der eine
+        # Phantom-Execution "erfolgreich" plus Push erzeugt.
+        "worker_job": False,
+    },
 }
