@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy.orm import Session
 
@@ -18,12 +18,17 @@ from app.models.scheduler_history import SchedulerExecution, SchedulerStatus
 from app.services.power import core_uptime as core_uptime_helpers
 from app.services.power.gpu.display_detector import get_active_display_count_sync
 
+if TYPE_CHECKING:
+    # Nur für den Type Checker — vermeidet einen Zirkelimport mit sleep.py.
+    from app.services.power.sleep import SleepManagerService
+
 logger = logging.getLogger(__name__)
 
 SKIP_CORE_UPTIME = "core_uptime"
 SKIP_DISPLAYS = "displays_on"
 SKIP_SCHEDULER_JOB = "scheduler_job_running"
 SKIP_NOT_IDLE = "system_busy"
+SKIP_UNREADABLE = "state_unreadable"
 SKIP_REBOOT_FAILED = "reboot_command_failed"
 SKIP_STALE = "reboot_outcome_unknown"
 
@@ -32,6 +37,7 @@ SKIP_REASON_LABELS: dict[str, str] = {
     SKIP_DISPLAYS: "Displays aktiv",
     SKIP_SCHEDULER_JOB: "ein Wartungsjob läuft",
     SKIP_NOT_IDLE: "das System ist ausgelastet",
+    SKIP_UNREADABLE: "der Systemzustand ist nicht lesbar",
     SKIP_REBOOT_FAILED: "der Neustart-Befehl schlug fehl",
     SKIP_STALE: "der Ausgang des Neustarts ist unbekannt",
 }
@@ -69,7 +75,7 @@ def _another_scheduler_job_running(db: Session, own_execution_id: Optional[int])
 
 def gates_blocking(
     db: Session,
-    sleep_service,
+    sleep_service: "SleepManagerService",
     own_execution_id: Optional[int],
 ) -> Optional[str]:
     """Der erste Grund, der den Neustart verhindert — oder `None`.
@@ -78,8 +84,26 @@ def gates_blocking(
     Skip-Meldung landet, und sortiert vom „grundsätzlich verboten" zum
     „gerade ungünstig".
     """
+    # 0) Erreichbarkeitsprüfung. `SleepManagerService._load_config()` und
+    #    `_load_core_uptime()` schlucken DB-Fehler bereits selbst und liefern
+    #    im Fehlerfall harmlose Defaults (`None` bzw. `(False, [])`) statt zu
+    #    werfen — die try/except-Blöcke in den einzelnen Gates unten fangen
+    #    einen DB-Ausfall also NICHT ab. Diese triviale eigene Abfrage ist
+    #    deshalb die einzige Stelle, an der "fail-closed" tatsächlich
+    #    erzwungen wird: schlägt sie fehl, ist der Systemzustand unbekannt und
+    #    der Neustart wird verschoben, bevor irgendein Gate läuft.
+    try:
+        db.query(SchedulerExecution.id).limit(1).first()
+    except Exception as exc:
+        logger.warning("Systemzustand nicht lesbar — Neustart verschoben: %s", exc)
+        return SKIP_UNREADABLE
+
     # 1) Kernbetriebszeit — Verfügbarkeitszusage. Ein Neustart kappt SMB,
     #    Sync und Uploads auch dann, wenn kein Monitor an ist.
+    #    `_load_core_uptime()` wirft laut eigenem Vertrag nie (siehe oben) —
+    #    dieses except fängt daher nur `core_uptime_helpers.is_in_core_uptime()`
+    #    ab, z. B. bei defekten Fenster-Daten. Der Schutz gegen einen
+    #    DB-Ausfall ist bereits die Erreichbarkeitsprüfung in Schritt 0.
     try:
         master, windows = sleep_service._load_core_uptime()
         if master:
@@ -87,7 +111,6 @@ def gates_blocking(
             if in_core:
                 return SKIP_CORE_UPTIME
     except Exception as exc:
-        # Fail-closed: wer die Kernbetriebszeit nicht lesen kann, startet nicht neu.
         logger.warning("Kernbetriebszeit nicht lesbar — Neustart verschoben: %s", exc)
         return SKIP_CORE_UPTIME
 
@@ -96,7 +119,9 @@ def gates_blocking(
         return SKIP_DISPLAYS
 
     # 3) Laufender Wartungsjob — ein halbes Backup ist schlimmer als ein
-    #    verschobener Neustart.
+    #    verschobener Neustart. Ein DB-Ausfall an dieser Stelle ist durch
+    #    Schritt 0 bereits abgedeckt; dieses except bleibt als Netz für
+    #    andere, unerwartete Fehler.
     try:
         if _another_scheduler_job_running(db, own_execution_id):
             return SKIP_SCHEDULER_JOB
@@ -106,15 +131,26 @@ def gates_blocking(
 
     # 4) System nicht idle — deckt CPU, Disk-I/O (und damit SMB), Uploads und
     #    HTTP-Rate mit denselben Schwellen ab, die über den Auto-Suspend
-    #    entscheiden.
-    try:
-        config = sleep_service._load_config()
-        if config is not None and not sleep_service._is_system_idle(
-            config, sleep_service._get_activity_metrics()
-        ):
+    #    entscheiden. `_load_config()` wirft laut eigenem Vertrag nie.
+    config = sleep_service._load_config()
+    if config is None:
+        # Kein Fehlerfall: die `sleep_config`-Zeile wird ausschließlich von
+        # `SleepManagerService.update_config()` angelegt (sleep.py:1488).
+        # Auf einer Box, auf der nie jemand die Schlafeinstellungen
+        # gespeichert hat, ist `config is None` der Normalfall — ohne
+        # gespeicherte Schwellen gibt es keine Definition von "idle", also
+        # wird Gate 4 übersprungen statt fälschlich zu blockieren oder
+        # durchzulassen. Ein echter DB-Ausfall ist bereits durch die
+        # Erreichbarkeitsprüfung in Schritt 0 abgefangen.
+        logger.info("Keine Sleep-Config vorhanden — Gate 4 (Idle-Check) übersprungen")
+    else:
+        try:
+            if not sleep_service._is_system_idle(
+                config, sleep_service._get_activity_metrics()
+            ):
+                return SKIP_NOT_IDLE
+        except Exception as exc:
+            logger.warning("Idle-Zustand nicht lesbar — Neustart verschoben: %s", exc)
             return SKIP_NOT_IDLE
-    except Exception as exc:
-        logger.warning("Idle-Zustand nicht lesbar — Neustart verschoben: %s", exc)
-        return SKIP_NOT_IDLE
 
     return None
