@@ -36,12 +36,12 @@ beforeEach(() => {
   vi.mocked(getUserPowerPermissions).mockResolvedValue(structuredClone(PERMS) as never);
 });
 
-describe('PowerPermissionsSection — Bluetooth', () => {
-  it('bietet den Schalter fuer can_manage_bluetooth an', async () => {
+describe('PowerPermissionsSection — Spielstart', () => {
+  it('bietet den Schalter fuer can_launch_games an', async () => {
     render(<PowerPermissionsSection userId={7} userRole="user" />);
     await waitFor(() => expect(getUserPowerPermissions).toHaveBeenCalled());
     expect(
-      await screen.findByText('admin:users.systemPermissions.items.manageBluetooth.label'),
+      await screen.findByText('admin:users.systemPermissions.items.launchGames.label'),
     ).toBeTruthy();
   });
 });
