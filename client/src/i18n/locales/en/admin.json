@@ -97,7 +97,8 @@
         },
         "controlAudio": { "label": "Audio", "desc": "Control volume, output device and the per-app mixer" },
         "manageDisplays": { "label": "Displays", "desc": "Choose the display output and resolution" },
-        "manageBluetooth": { "label": "Bluetooth", "desc": "Connect and pair Bluetooth devices (pairing on the local network only)" }
+        "manageBluetooth": { "label": "Bluetooth", "desc": "Connect and pair Bluetooth devices (pairing on the local network only)" },
+        "launchGames": { "label": "Launch games", "desc": "Start installed Steam games from the app — turns the displays on and opens Big Picture (home network or VPN only)" }
       }
     }
   },

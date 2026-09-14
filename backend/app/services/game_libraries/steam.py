@@ -32,12 +32,17 @@ _TOOL_NAME_PREFIXES = ("proton", "steam linux runtime")
 _TOOL_NAME_EXACT = ("steamworks common redistributables",)
 
 
-def _is_tool_app(name: str) -> bool:
+def is_tool_app(name: str) -> bool:
     """True if *name* is a Steam tool/runtime (Proton, Linux Runtime, redist)."""
     n = name.strip().lower()
     if n in _TOOL_NAME_EXACT:
         return True
     return any(n.startswith(prefix) for prefix in _TOOL_NAME_PREFIXES)
+
+
+# Kept for the existing callers in this module and its tests; the steam_gaming
+# plugin imports the public name.
+_is_tool_app = is_tool_app
 
 
 class SteamProvider:

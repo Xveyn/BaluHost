@@ -364,6 +364,7 @@ async def get_my_power_permissions(
             can_control_audio=True,
             can_manage_displays=True,
             can_manage_bluetooth=True,
+            can_launch_games=True,
         )
     from app.services.power_permissions import get_permissions
     perms = get_permissions(db, current_user.id)
@@ -377,6 +378,7 @@ async def get_my_power_permissions(
         can_control_audio=perms.can_control_audio,
         can_manage_displays=perms.can_manage_displays,
         can_manage_bluetooth=perms.can_manage_bluetooth,
+        can_launch_games=perms.can_launch_games,
     )
 
 

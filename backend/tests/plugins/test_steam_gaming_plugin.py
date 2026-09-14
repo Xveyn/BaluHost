@@ -154,7 +154,7 @@ def _patch_desktop(ok: bool, message: str = ""):
     service = MagicMock()
     service.enable = AsyncMock(return_value=(ok, message))
     return patch(
-        "app.plugins.installed.steam_gaming.get_desktop_service",
+        "app.plugins.installed.steam_gaming.launch.get_desktop_service",
         return_value=service,
     ), service
 
@@ -251,7 +251,7 @@ class TestMarkerBookkeeping:
     async def test_a_successful_start_records_gaming_mode(self):
         desktop_patch, _service = _patch_desktop(True, "ok")
         with desktop_patch, patch(
-            "app.plugins.installed.steam_gaming.open_big_picture",
+            "app.plugins.installed.steam_gaming.launch.open_big_picture",
             return_value=(True, "requested"),
         ):
             await SteamGamingPlugin().run_menu_action(_ACTION, db=None)
@@ -261,7 +261,7 @@ class TestMarkerBookkeeping:
     async def test_a_start_that_never_reached_steam_records_nothing(self):
         desktop_patch, _service = _patch_desktop(True, "ok")
         with desktop_patch, patch(
-            "app.plugins.installed.steam_gaming.open_big_picture",
+            "app.plugins.installed.steam_gaming.launch.open_big_picture",
             return_value=(False, "steam binary not found"),
         ):
             await SteamGamingPlugin().run_menu_action(_ACTION, db=None)
@@ -336,7 +336,7 @@ class TestGamingModeAction:
     async def test_turns_displays_on_then_opens_big_picture(self):
         desktop_patch, service = _patch_desktop(True, "ok")
         with desktop_patch, patch(
-            "app.plugins.installed.steam_gaming.open_big_picture",
+            "app.plugins.installed.steam_gaming.launch.open_big_picture",
             return_value=(True, "requested"),
         ) as launcher:
             result = await SteamGamingPlugin().run_menu_action(_ACTION, db=None)
@@ -349,7 +349,7 @@ class TestGamingModeAction:
     async def test_does_not_open_big_picture_on_dark_displays(self):
         desktop_patch, _service = _patch_desktop(False, "kscreen-doctor not found")
         with desktop_patch, patch(
-            "app.plugins.installed.steam_gaming.open_big_picture",
+            "app.plugins.installed.steam_gaming.launch.open_big_picture",
         ) as launcher:
             result = await SteamGamingPlugin().run_menu_action(_ACTION, db=None)
 
@@ -360,7 +360,7 @@ class TestGamingModeAction:
     async def test_reports_partial_success_when_steam_is_missing(self):
         desktop_patch, _service = _patch_desktop(True, "ok")
         with desktop_patch, patch(
-            "app.plugins.installed.steam_gaming.open_big_picture",
+            "app.plugins.installed.steam_gaming.launch.open_big_picture",
             return_value=(False, "steam binary not found"),
         ):
             result = await SteamGamingPlugin().run_menu_action(_ACTION, db=None)
@@ -493,7 +493,7 @@ class TestManifestAndRouteAgreeOnDeclaredActions:
 
         desktop_patch, _service = _patch_desktop(True, "ok")
         with desktop_patch, patch(
-            "app.plugins.installed.steam_gaming.open_big_picture",
+            "app.plugins.installed.steam_gaming.launch.open_big_picture",
             return_value=(True, "requested"),
         ), patch("app.api.routes.plugins.user_limiter.enabled", False), patch(
             "app.api.routes.plugins.get_audit_logger_db"
@@ -526,7 +526,7 @@ class TestGamingModeRunsLauncherOffTheEventLoop:
 
         desktop_patch, _service = _patch_desktop(True, "ok")
         with desktop_patch, patch(
-            "app.plugins.installed.steam_gaming.open_big_picture",
+            "app.plugins.installed.steam_gaming.launch.open_big_picture",
             side_effect=_record_ident_and_launch,
         ):
             result = await SteamGamingPlugin().run_menu_action(_ACTION, db=None)
@@ -578,9 +578,9 @@ class TestGamingModeUnlocksTheSession:
             return True, "session 2 unlocked"
 
         with desktop_patch, patch(
-            "app.plugins.installed.steam_gaming.unlock_if_permitted", _unlock
+            "app.plugins.installed.steam_gaming.launch.unlock_if_permitted", _unlock
         ), patch(
-            "app.plugins.installed.steam_gaming.open_big_picture",
+            "app.plugins.installed.steam_gaming.launch.open_big_picture",
             side_effect=lambda: order.append("bigpicture") or (True, "requested"),
         ):
             result = await SteamGamingPlugin().run_menu_action(
@@ -597,9 +597,9 @@ class TestGamingModeUnlocksTheSession:
             return False, "not permitted from this network"
 
         with desktop_patch, patch(
-            "app.plugins.installed.steam_gaming.unlock_if_permitted", _unlock
+            "app.plugins.installed.steam_gaming.launch.unlock_if_permitted", _unlock
         ), patch(
-            "app.plugins.installed.steam_gaming.open_big_picture",
+            "app.plugins.installed.steam_gaming.launch.open_big_picture",
             return_value=(True, "requested"),
         ) as launcher:
             result = await SteamGamingPlugin().run_menu_action(
@@ -616,9 +616,9 @@ class TestGamingModeUnlocksTheSession:
         gate = AsyncMock(return_value=(True, "unlocked"))
 
         with desktop_patch, patch(
-            "app.plugins.installed.steam_gaming.unlock_if_permitted", gate
+            "app.plugins.installed.steam_gaming.launch.unlock_if_permitted", gate
         ), patch(
-            "app.plugins.installed.steam_gaming.open_big_picture",
+            "app.plugins.installed.steam_gaming.launch.open_big_picture",
             return_value=(True, "requested"),
         ):
             result = await SteamGamingPlugin().run_menu_action(_ACTION, db=None)

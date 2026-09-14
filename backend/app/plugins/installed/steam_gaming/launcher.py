@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import subprocess
 
 from app.core.config import settings
@@ -37,6 +38,8 @@ logger = logging.getLogger(__name__)
 
 BIG_PICTURE_URL = "steam://open/bigpicture"
 CLOSE_BIG_PICTURE_URL = "steam://close/bigpicture"
+RUN_GAME_URL_PREFIX = "steam://rungameid/"
+_APP_ID_RE = re.compile(r"[0-9]{1,10}")
 
 _STEAM_RUN_TIMEOUT_SECONDS = 10
 _STDERR_LOG_LIMIT = 300
@@ -121,3 +124,19 @@ def close_big_picture() -> tuple[bool, str]:
         the outside at all (see the design doc from 2026-07-24).
     """
     return _dispatch(CLOSE_BIG_PICTURE_URL, "big picture close")
+
+
+def launch_game(app_id: str) -> tuple[bool, str]:
+    """Ask Steam to start the game *app_id*. Blocking - call via asyncio.to_thread.
+
+    Digits only, checked again here although the route already did: this is
+    the last stop before a command line. Anything else - ``//`` launch
+    arguments, 64-bit shortcut ids - never becomes a URL.
+
+    Returns:
+        (ok, detail). ok=True means the unit was started, not that the game
+        runs - the steam_gaming detector sees that once Steam's reaper appears.
+    """
+    if _APP_ID_RE.fullmatch(app_id) is None:
+        return False, "invalid app id"
+    return _dispatch(f"{RUN_GAME_URL_PREFIX}{app_id}", "game")

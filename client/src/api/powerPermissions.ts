@@ -15,6 +15,7 @@ export interface UserPowerPermissions {
   can_control_audio: boolean;
   can_manage_displays: boolean;
   can_manage_bluetooth: boolean;
+  can_launch_games: boolean;
   granted_by: number | null;
   granted_by_username: string | null;
   granted_at: string | null;
@@ -30,6 +31,7 @@ export interface UserPowerPermissionsUpdate {
   can_control_audio?: boolean;
   can_manage_displays?: boolean;
   can_manage_bluetooth?: boolean;
+  can_launch_games?: boolean;
 }
 
 export interface MyPowerPermissions {
@@ -42,6 +44,7 @@ export interface MyPowerPermissions {
   can_control_audio: boolean;
   can_manage_displays: boolean;
   can_manage_bluetooth: boolean;
+  can_launch_games: boolean;
 }
 
 /**
