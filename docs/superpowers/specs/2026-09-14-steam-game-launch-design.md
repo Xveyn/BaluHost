@@ -1,8 +1,11 @@
-# Steam-Spiele aus BaluApp starten — Design (Teil 1: BaluHost-Backend)
+# Steam-Spiele aus BaluApp starten — Design
 
-**Datum:** 2026-09-14
-**Status:** Entwurf, wartet auf Review
-**Teil 2:** BaluApp (eigenes Repo `Xveyn/BaluApp`, eigene Spec) — hier nur als Vertrag skizziert
+**Datum:** 2026-09-14 (überarbeitet nach Review am selben Tag)
+**Status:** Überarbeitet nach drei Reviews (Code-Fakten, Sicherheit, Design)
+**Umfang dieser Spec:**
+- **PR A — #640:** Steam-Start aus dem Backend über `systemd-run --user` (Vorab-PR, eigenständig verifizierbar)
+- **PR B — Feature:** Recht `can_launch_games`, Routen im `steam_gaming`-Plugin, Rechte-Schalter
+- **Teil 2 — BaluApp:** eigenes Repo `Xveyn/BaluApp`, eigene Spec; hier nur als Vertrag
 
 ## Ziel
 
@@ -12,98 +15,207 @@ entsperrt die Session (sofern der Nutzer das darf), öffnet Big Picture und star
 dann das Spiel. Das bestehende Session-Tracking (Pill, Ledger, Notifications,
 Dashboard-Panel) läuft unverändert mit.
 
-**Nicht im Umfang:**
-- Web-UI von BaluHost — außer dem Rechte-Schalter, den der Admin zum Vergeben
-  braucht. Über die Website bringt der Start keinen Mehrwert.
-- Spiele ohne Steam-Client starten (native Binaries, `umu-run`, `proton run`) —
-  verworfen, siehe „Verworfene Alternativen".
-- Nicht-Steam-Spiele, Spielcover, laufendes Spiel beenden.
+**Nicht im Umfang:** Web-UI von BaluHost (außer dem Rechte-Schalter), Spiele ohne
+Steam-Client, Nicht-Steam-Spiele, Spielcover, laufendes Spiel beenden.
 
 ## Messungen (BaluNode, 2026-09-14, SSH als `sven`)
 
-Alle Befunde mit **beobachteter Wirkung** auf dem Bildschirm, nicht nur Exit-Code.
+Alle mit **beobachteter Wirkung** auf dem Bildschirm, nicht nur Exit-Code.
 
 | # | Zustand | Aufruf | Ergebnis |
 |---|---|---|---|
 | M1 | Steam läuft | `steam steam://rungameid/400` ohne Session-Env | Portal startet; `reaper SteamLaunch AppId=400` sichtbar |
 | M2 | Steam gestoppt | derselbe Aufruf ohne `DISPLAY` | `Unable to open X11 display, exiting` — kein Start |
-| M3 | Steam gestoppt | mit `DISPLAY=:0` + `XAUTHORITY=/run/user/1000/xauth_MSLMAD` | Steam startet kalt, danach Portal sichtbar |
-| M4 | Steam gestoppt | `steam://open/bigpicture` und `steam://rungameid/400` direkt nacheinander, beide detached, beide mit X11-Env | Steam startet, Big Picture kommt, Portal startet. Der zweite Prozess meldet `Steam is already running, exiting (command line was forwarded)` |
+| M3 | Steam gestoppt | mit `DISPLAY=:0` + `XAUTHORITY=/run/user/1000/xauth_*` | Steam startet kalt, Portal sichtbar |
+| M4 | Steam gestoppt | `steam://open/bigpicture` und `steam://rungameid/400` direkt nacheinander | Steam, Big Picture und Portal kommen; der zweite Prozess meldet `Steam is already running, exiting (command line was forwarded)` |
+| M5 | Steam gestoppt | `env -i HOME=/home/sven XDG_RUNTIME_DIR=/run/user/1000 PATH=/usr/bin:/bin systemd-run --user --collect steam steam://rungameid/400` | Steam startet kalt, Portal sichtbar |
+
+Zusätzlich: `systemctl --user show-environment` enthält `DISPLAY=:0` und
+`DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus` (von KDE importiert), aber
+**kein** `XAUTHORITY` — M5 funktioniert trotzdem.
 
 Folgerungen:
-- **`steam://rungameid` ist der Startweg.** Steam kümmert sich um Proton,
-  Startoptionen, DRM und Cloud-Saves; der `reaper`-Wrapper bleibt erhalten.
-- **Der Kaltstart braucht X11.** Der Steam-Client ist ein X11-Programm (XWayland
-  unter KDE). `session_env.py` setzt heute nur `XDG_RUNTIME_DIR`/`WAYLAND_DISPLAY`
-  → Issue **#640**, wird hier mitgefixt.
-- **Der `xauth_*`-Dateiname ist pro KDE-Login zufällig** — zur Laufzeit suchen.
-- **Kein Warten auf „Steam bereit" nötig** (M4): Steam leitet die Befehlszeile
-  an den gerade startenden Client weiter.
-- Portal läuft auf der Box über erzwungenes Proton 10 — für diesen Startweg
-  irrelevant.
+- `steam://rungameid` ist der Startweg; der `reaper`-Wrapper und damit das Tracking bleiben erhalten.
+- Steam wird **im User-Manager** gestartet (M5), nicht als Kindprozess des Backends — siehe PR A.
+- Kein Warten auf „Steam bereit" nötig (M4).
+- **Offen:** M1–M5 liefen per SSH. Der Service-Kontext (`User=sven`, `PrivateTmp=true`) wird nach dem Deploy von PR A mit beobachteter Wirkung verifiziert, bevor PR B startet.
 
-## Architektur
+---
 
-Router im bestehenden bundled Plugin `steam_gaming` — nach dem Muster von
-`plugins/installed/bluetooth/`. Dort liegen schon Erkennung (`detection.py`),
-Launcher (`launcher.py`), Gaming-Mode-Ablauf und Marker (`gaming_state.py`).
+## PR A — Steam-Start über `systemd-run --user` (#640)
 
-**Konsequenz, bewusst in Kauf genommen:** Das Plugin hatte bisher keinen Router
-(`CLAUDE.md`: „No router … restart_required is always false"). Plugin-Router
-werden nur beim Start gemountet (`core/lifespan.py`). Nach dem Deploy ist das
-unkritisch — der Deploy startet das Backend neu und das Plugin ist in Prod
-aktiv. Wird es später aus- und wieder eingeschaltet, zeigt
-`PluginDetailResponse.restart_required` den nötigen Neustart korrekt an.
-Pill, Menü, Panel und Notifications wirken weiterhin sofort.
+### Problem
 
-### Neue und geänderte Dateien
+`launcher._dispatch` startet heute `Popen(["steam", url], env=wayland_session_env())`.
+Läuft Steam nicht, wird der Aufruf selbst zum Steam-Client, und der
+
+1. scheitert ohne X11 (M2);
+2. **erbt die Backend-Umgebung** — `wayland_session_env()` beginnt mit
+   `dict(os.environ)`, und `baluhost-backend.service` lädt `.env.production`
+   (`SECRET_KEY`, `TOKEN_SECRET`, `DATABASE_URL`, `VPN_ENCRYPTION_KEY`). Jedes
+   Spiel, jeder Crash-Reporter und jedes Anti-Cheat erbt sie;
+3. liegt in der **cgroup des Backend-Service** — jeder Deploy-Neustart beendet
+   Steam samt laufendem Spiel;
+4. läuft unter **`PrivateTmp=true`** der Unit.
+
+Heute verdeckt, weil Steam per `app-steam@autostart.service` dauerhaft läuft.
+
+### Lösung
+
+`launcher._dispatch(url, what)`:
+
+```python
+_STEAM_RUN_TIMEOUT_SECONDS = 10
+_ENV_ALLOWLIST = ("HOME", "USER", "LOGNAME", "PATH", "LANG",
+                  "XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS")
+
+def _user_manager_env() -> dict[str, str]:
+    env = {k: os.environ[k] for k in _ENV_ALLOWLIST if k in os.environ}
+    env.setdefault("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
+    return env
+
+argv = ["systemd-run", "--user", "--collect", "--quiet", "steam", url]
+subprocess.run(argv, env=_user_manager_env(), timeout=_STEAM_RUN_TIMEOUT_SECONDS,
+               stdin=DEVNULL, stdout=DEVNULL, stderr=PIPE, check=False)
+```
+
+- **Warum `systemd-run --user`:** Die Unit läuft im User-Manager von `sven` —
+  eigene cgroup (überlebt Backend-Neustarts), kein `PrivateTmp`, und sie bekommt
+  die **Umgebung des User-Managers**, nicht die des Aufrufers. `DISPLAY` stammt
+  von KDE (M5).
+- **Allowlist auch für den `systemd-run`-Prozess selbst:** Er ist kurzlebig, aber
+  es gibt keinen Grund, ihm Secrets zu geben. `XDG_RUNTIME_DIR` braucht er, um
+  den User-Manager zu finden.
+- **`run` statt `Popen`:** `systemd-run` kehrt zurück, sobald die transiente Unit
+  angelegt ist. Der Returncode ist damit beobachtbar — z. B. „kein User-Manager"
+  (niemand angemeldet) → `(False, "steam could not be started")`, Detail
+  (`stderr`, gekürzt) nur ins Log. Er sagt weiterhin **nicht**, ob Big Picture
+  oder das Spiel erscheint.
+- **Kein fester Unit-Name:** Bei laufendem Steam endet die Unit sofort (Befehl
+  weitergeleitet); bei Kaltstart lebt sie so lange wie Steam. Ein fester Name
+  würde beim zweiten Aufruf mit „unit already exists" scheitern.
+- Fehlerfälle: `FileNotFoundError` → `"systemd-run not found"`;
+  `TimeoutExpired` → `"steam could not be started"`; Returncode ≠ 0 → dito.
+- Dev-Modus: unverändert no-op.
+- `services/power/session_env.py` bleibt **unverändert** (Konsumenten
+  `desktop_backend`, `desktop_windows`, `audio_control/pactl`,
+  `display_output/kscreen` brauchen weiter `WAYLAND_DISPLAY`); `launcher.py`
+  importiert es nicht mehr. Docstring „Two callers" in `session_env.py` wird
+  auf die tatsächlichen Konsumenten korrigiert.
+- `launcher.py`-Modul-Docstring: „detached"-Begründung ersetzen durch die
+  User-Manager-Begründung.
+
+### Tests (`backend/tests/plugins/test_steam_gaming_launcher.py`)
+
+- argv ist exakt `["systemd-run", "--user", "--collect", "--quiet", "steam", URL]` für open und close; nie `shell`.
+- `env` enthält keine Nicht-Allowlist-Variable: `monkeypatch.setenv("SECRET_KEY", "x")` → nicht im übergebenen `env`.
+- `XDG_RUNTIME_DIR` fehlt in `os.environ` → wird aus der uid gesetzt (uid per Monkeypatch; `os.getuid` fehlt auf Windows).
+- `timeout=10` wird übergeben; `TimeoutExpired`, `FileNotFoundError`, Returncode 1 → `ok=False`, keine Exception, keine `stderr`-Interna im `detail`.
+- Dev-Modus: `subprocess.run` ungerufen.
+- Die bestehenden Tests, die `subprocess.Popen` patchen, werden auf `subprocess.run` umgestellt.
+
+### Verifikation nach Deploy (Pflicht, beobachtete Wirkung)
+
+1. `steam -shutdown`, dann im Power-Menü „Gaming Mode" → Steam startet in Big Picture.
+2. `sudo systemctl restart baluhost-backend` → Steam läuft weiter (`pgrep -c -x steam` > 0).
+3. `cat /proc/$(pgrep -x steam | head -1)/environ | tr '\0' '\n'` enthält kein `SECRET_KEY`.
+
+Erst wenn 1–3 gelten, startet PR B.
+
+---
+
+## PR B — Spielstart-Feature
+
+### Architektur
+
+Routen im bundled Plugin `steam_gaming`. Dort liegen Erkennung, Launcher,
+Gaming-Mode-Ablauf und Marker.
+
+**Router in einem bisher router-losen Plugin.** Plugin-Router werden nur beim
+Start gemountet (`core/lifespan.py`, `PluginManager.get_router()`). Nach dem
+Deploy unkritisch (Neustart, Plugin in Prod aktiv). Wird das Plugin später
+erst nach dem Start aktiviert, landen Anfragen im Catch-all-Proxy und bekommen
+`404 "Plugin not found"` (`plugins/sandbox/proxy.py:55`), bis das Backend neu
+startet; `PluginDetailResponse.restart_required` zeigt das an. Pill, Menü,
+Panel und Notifications wirken weiterhin sofort.
+
+### Dateien
 
 **Neu**
-- `backend/app/plugins/installed/steam_gaming/routes.py` — Router, Schemas-Nutzung, Audit-Helfer
-- `backend/app/plugins/installed/steam_gaming/launch.py` — gemeinsamer Startablauf (`start_gaming_mode()`) + `launch_game()`
-- `backend/app/plugins/installed/steam_gaming/schemas.py` — Pydantic-Modelle der Routen
+- `steam_gaming/routes.py` — Router, `_audit`. **Ohne** `from __future__ import annotations`: hinter `@user_limiter.limit` bricht der Future-Import die Body-Erkennung von slowapi (siehe `bluetooth/__init__.py:7-11`). Eigene Datei, weil `__init__.py` schon ~470 Zeilen hat (#301).
+- `steam_gaming/launch.py` — `start_gaming_mode()` (gemeinsamer Ablauf) und `launch_game()`.
+- `steam_gaming/library.py` — `list_installed_games()`, `find_installed_game(app_id)`.
+- `steam_gaming/models.py` — Pydantic-Modelle der Routen (Name wie in `bluetooth`, `audio_control`, `display_output`); ebenfalls ohne Future-Import.
 - `backend/alembic/versions/<rev>_add_can_launch_games_permission.py`
-- Tests (siehe „Tests")
+- Tests: `test_steam_gaming_routes.py`, `test_steam_gaming_launch.py`, `test_steam_gaming_library.py`, `test_power_permissions_launch_games.py`
 
 **Geändert**
-- `steam_gaming/__init__.py` — `get_router()`; `run_menu_action` nutzt `start_gaming_mode()`
-- `steam_gaming/launcher.py` — `launch_game(app_id)`
-- `steam_gaming/detection.py` — `running_game_strict()` (Erkennung ohne Dev-Stand-in)
-- `steam_gaming/CLAUDE.md` — Router-Abschnitt, „No router"-Satz korrigieren
-- `services/power/session_env.py` — `DISPLAY` + `XAUTHORITY` (#640)
-- `models/power_permissions.py`, `schemas/power_permissions.py`, `services/power_permissions.py`, `api/deps.py`, `api/routes/sleep.py` — neues Recht
-- `core/rate_limiter.py` — Kategorie `steam_launch`
-- `client/src/api/powerPermissions.ts`, `client/src/components/user-management/PowerPermissionsSection.tsx`, `client/src/i18n/locales/{de,en}/admin.json` — Rechte-Schalter
-- `backend/app/plugins/CLAUDE.md`, `.claude/rules/architecture.md` (API-Liste), `.claude/rules/security-agent.md` (Rollenmodell)
+- `steam_gaming/__init__.py` — `get_router()` importiert `routes` **spät** (vermeidet den Zyklus `__init__` → `routes` → `launch` → `__init__`); `run_menu_action` delegiert an `launch.start_gaming_mode()`.
+- `steam_gaming/launcher.py` — `launch_game(app_id)` über `_dispatch`.
+- `steam_gaming/detection.py` — `current_app_id(*, dev_stand_in: bool = True)`.
+- `services/game_libraries/steam.py` — `_is_tool_app` → öffentlich `is_tool_app` (Alias oder Umbenennung inkl. Aufrufer).
+- `models/power_permissions.py`, `schemas/power_permissions.py` (Response, Update, MyResponse), `services/power_permissions.py` (Map, `get_permissions`, Update-Zweig, beide Audit-Dicts, Docstring von `check_permission`), `api/deps.py`, `api/routes/sleep.py` (beide Konstruktionen)
+- `core/rate_limiter.py` — zwei Kategorien
+- `tests/plugins/test_steam_gaming_plugin.py` — Patch-Ziele umziehen (siehe Tests)
+- Frontend: `client/src/api/powerPermissions.ts` (drei Interfaces), `components/user-management/PowerPermissionsSection.tsx` (`FIELD_TO_I18N`, `PERMISSION_TOGGLES`, Icon `Gamepad2`), `i18n/locales/{de,en}/admin.json`
+- Doku: `steam_gaming/CLAUDE.md` (Layout-Tabelle, „No router"-Absatz, Gaming-Mode-Abschnitt mit gemeinsamem Helfer und Worst-Case-Laufzeit), `plugins/CLAUDE.md` (Plugin-Liste), `services/CLAUDE.md` / `models/CLAUDE.md` / `api/CLAUDE.md` (Recht und Abhängigkeit), Root-`CLAUDE.md` Quick Reference, `.claude/rules/architecture.md` (API-Liste), `.claude/rules/security-agent.md` (Rollenmodell)
 
-## Berechtigung `can_launch_games`
+### Berechtigung `can_launch_games`
 
-Exakt nach dem Vorbild `can_manage_bluetooth`:
+Nach dem Vorbild `can_manage_bluetooth` (Migration `e7c2a9d41f86`):
+- Spalte `Boolean, nullable=False, default=False, server_default="0"`.
+- Migration additiv, kettet an den echten Head **`19b0fbf9df31`** (`python -m alembic heads`, 2026-09-14). Vor dem Anlegen erneut prüfen.
+- `_ACTION_FIELD_MAP["launch_games"] = "can_launch_games"`; **keine Implikation**, insbesondere nicht `can_unlock_session`.
+- `require_power_launch_games = _make_power_dependency("launch_games")`.
+- `my-permissions`: `True` für Admins, sonst aus der DB.
 
-- **Modell:** Spalte `can_launch_games`, `Boolean, nullable=False, default=False, server_default="0"`.
-- **Migration:** additiv, kettet an den echten Head **`19b0fbf9df31`**
-  (`python -m alembic heads` am 2026-09-14, genau ein Head). Vor dem Anlegen
-  erneut prüfen, nie den Kopf der Dev-Datenbank nehmen.
-- **Dienst:** `_ACTION_FIELD_MAP["launch_games"] = "can_launch_games"`; Feld in
-  `get_permissions`, `update_permissions` und beiden Audit-Dicts. **Keine
-  Implikation** — insbesondere impliziert es **nicht** `can_unlock_session`.
-- **Abhängigkeit:** `require_power_launch_games = _make_power_dependency("launch_games")`.
-- **`my-permissions`:** `True` für Admins, sonst aus `get_permissions` — das Feld
-  liest BaluApp, um den Menüpunkt ein- oder auszublenden.
-- **Frontend:** Feld in den drei Schnittstellen von `api/powerPermissions.ts`,
-  Schalter in `PowerPermissionsSection.tsx` (Icon `Gamepad2`), Texte in `admin.json`.
+**Was das Recht faktisch erlaubt (in `security-agent.md` festzuhalten):** Spiele
+starten **und dabei** die Bildschirme einschalten und Big Picture öffnen —
+ohne `can_toggle_desktop`. Das ist der Zweck des Features. Entsperren bleibt
+bei `can_unlock_session`.
 
-Standard: verweigert. Admins haben es implizit.
+**API-Keys** (`balu_*`, ohne Scopes/TTL) erreichen die Routen wie alle anderen
+`require_power_*`-Routen. Bewusst akzeptiert und dokumentiert; die LAN-Prüfung
+gilt auch für sie.
 
-## API
+### Bibliothek (`library.py`)
 
-Prefix `/api/plugins/steam_gaming`. Jede Route: `require_power_launch_games`,
-`@user_limiter.limit(get_limit("steam_launch"))`.
+Eigene, manifestbasierte Sicht statt `get_game_libraries()`, weil jene
+Provider-Fehler verschluckt (`service.py:42`), IDs aus `libraryfolders.vdf`
+übernimmt (auch ohne Manifest, als `"App <id>"`) und alle Größen liest.
 
-| Methode | Pfad | Antwort | LAN-Prüfung |
-|---|---|---|---|
-| GET | `/games` | `GameListResponse` | — |
-| POST | `/games/{app_id}/launch` | `202 LaunchResponse` | **ja** |
+```python
+_APP_ID_RE = re.compile(r"[0-9]{1,10}")      # re.fullmatch — kein \d (Unicode), kein $ (\n)
+_NAME_MAX = 200
+
+@dataclass(frozen=True)
+class InstalledGame:
+    app_id: str
+    name: str
+
+class LibraryUnavailable(Exception): ...
+
+def list_installed_games() -> list[InstalledGame]: ...
+def find_installed_game(app_id: str) -> Optional[InstalledGame]: ...
+```
+
+- Quelle: `game_libraries.steam.find_steamapps_dirs()` (Roots **und** Bibliotheken aus `libraryfolders.vdf`).
+- **Installiert = `appmanifest_<id>.acf` existiert** und liefert einen Namen. Kein Manifest → nicht startbar.
+- ID aus dem Dateinamen, geprüft mit `_APP_ID_RE.fullmatch`; Name aus dem Manifest, auf 200 Zeichen gekürzt; `is_tool_app(name)` → ausgeschlossen.
+- Dedupliziert nach `app_id`, sortiert nach `name.casefold()`.
+- `find_installed_game` liest **gezielt eine** Datei pro Bibliothek (`appmanifest_<id>.acf`), kein Verzeichnis-Scan.
+- Kein `steamapps`-Verzeichnis gefunden → `LibraryUnavailable` (Route: `503`). Im Dev-Modus stattdessen eine feste Mock-Liste (Cyberpunk 2077 `1091500`, Dota 2 `570`, Counter-Strike 2 `730`).
+- `list_installed_games()` hat einen **Per-Worker-Cache mit 30 s TTL** (wie `_CACHE` in `detection`); `find_installed_game` liest immer frisch.
+- Alles blockierend → Aufruf nur via `asyncio.to_thread`.
+
+### API
+
+Prefix `/api/plugins/steam_gaming`.
+
+| Methode | Pfad | Antwort | Recht | LAN | Rate-Limit |
+|---|---|---|---|---|---|
+| GET | `/games` | `GameListResponse` | `require_power_launch_games` | — | `steam_games_read` `60/minute` |
+| POST | `/games/{app_id}/launch` | `202 LaunchResponse` | `require_power_launch_games` | **ja** | `steam_launch` `6/minute` |
 
 ```python
 class LaunchableGame(BaseModel):
@@ -115,271 +227,209 @@ class RunningGame(BaseModel):
     name: Optional[str]
 
 class GameListResponse(BaseModel):
-    games: list[LaunchableGame]        # alphabetisch nach name
-    running: Optional[RunningGame]     # aus detection.current_app_id()
-    can_launch_here: bool              # is_private_or_local_ip(client_host)
+    games: list[LaunchableGame]
+    running: Optional[RunningGame]
+    can_launch_here: bool              # is_private_or_local_ip(client_host) — Information, keine Kontrolle
 
 class LaunchResponse(BaseModel):
     status: Literal["requested"]
-    session_unlocked: bool
+    session_locked: Optional[bool]     # current_lock_state() nach dem Ablauf; None = unbekannt
 ```
 
-`can_launch_here` erspart BaluApp einen fehlschlagenden Klick außerhalb des LANs
-(gleiches Muster wie `can_pair_here` im Bluetooth-Plugin) — Information, keine
-Kontrolle; die Kontrolle bleibt die Prüfung im POST.
+- `running` in **beiden** Routen aus `current_app_id(dev_stand_in=False)` +
+  `resolve_game_name()`. Auf Linux identisch mit dem heutigen Verhalten; auf dem
+  Windows-Dev-Rechner `None`, sodass GET und POST dasselbe sehen.
+- `GET /games` ohne LAN-Prüfung: Lesen schafft kein Vertrauen; hinter dem Recht,
+  weil Bibliothek und laufendes Spiel Information über den Box-Besitzer sind.
+- Getrennte Rate-Limits, damit das Nachfragen nach einem Start nicht das
+  Start-Budget verbraucht.
 
-**`GET /games` ohne LAN-Prüfung:** Lesen schafft kein neues Vertrauen. Die Liste
-steht hinter demselben Recht, weil laufendes Spiel und Bibliothek Information
-über den Box-Besitzer sind (vgl. `admin_only` des Steam-Panels).
+### Startablauf
 
-**Datenquelle:** `game_libraries.service.get_game_libraries()` — Tools (Proton,
-Runtime, Redistributables) sind dort bereits gefiltert; im Dev-Modus liefert sie
-die Mock-Bibliothek. Blockierende Datei-I/O → `asyncio.to_thread`.
+**Prüfungen im POST, in dieser Reihenfolge — alle vor jedem Seiteneffekt:**
 
-### Rate-Limit-Kategorie
+1. **Recht** — Abhängigkeit (auditiert Ablehnungen selbst).
+2. **LAN/VPN** — `is_private_or_local_ip(request.client.host)` für alle Rollen,
+   sonst `ForbiddenError("Launching is only allowed from the local network")` +
+   Audit `steam_game_launch_denied` (`reason: not_local`).
+3. **`app_id`** — `_APP_ID_RE.fullmatch`, sonst `NotFoundError("Game not installed")`.
+4. **Bibliothek** — `find_installed_game(app_id)`; `LibraryUnavailable` →
+   `ServiceUnavailableError("Game library unavailable")`; `None` →
+   `NotFoundError("Game not installed")`.
+5. **Laufendes Spiel** — `current_app_id(dev_stand_in=False)` nicht `None` →
+   `ConflictError("A game is already running")`.
 
-```python
-# Steam-Spielstart — BaluApp liest die Liste beim Öffnen und fragt nach einem
-# Start ein paar Mal nach, ob das Spiel läuft. Starts selbst sind selten.
-"steam_launch": "30/minute",
-```
-
-## Startablauf
-
-### Prüfungen im POST, in dieser Reihenfolge
-
-1. **Recht** — `require_power_launch_games`; Ablehnung auditiert die Abhängigkeit selbst.
-2. **LAN/VPN** — `is_private_or_local_ip(request.client.host)`, **für alle Rollen**,
-   sonst `403` + Audit `steam_game_launch_denied` (`reason: not_local`). Sicher,
-   weil `--forwarded-allow-ips=127.0.0.1` `X-Forwarded-For` nur von nginx annimmt
-   (siehe `project_lan_gate_channel_vs_ip`).
-3. **`app_id`** — Regex `^\d{1,10}$`, sonst `404`. Danach Abgleich gegen die
-   installierte Bibliothek aus `get_game_libraries()`: nicht enthalten → `404`.
-   Beide Fälle bewusst gleich (`404`, nicht `400`), damit die Antwort nichts über
-   die Form unterscheidet. **Die Kommandozeile bekommt nur eine ID, die aus einer
-   Manifest-Datei stammt.**
-4. **Läuft schon ein Spiel?** — `detection.running_game_strict()` nicht `None` →
-   `ConflictError("Es läuft bereits: <name>")` (`409`). So nimmt niemand mit dem
-   Recht einem anderen das laufende Spiel weg. `ServiceError` trägt nur eine
-   Meldung, keinen strukturierten Body — BaluApp lädt nach einem `409` ohnehin
-   `GET /games` neu und hat `running` dann strukturiert. Warum nicht
-   `current_app_id()`: siehe „Dev-Modus".
-
-### Ausführung: `launch.start_gaming_mode()` + `launch_game()`
-
-Der bestehende Start in `SteamGamingPlugin.run_menu_action` wird **ohne
-Verhaltensänderung** in einen Helfer gezogen, den Menüaktion und Route nutzen:
+**Ausführung:**
 
 ```python
 @dataclass(frozen=True)
 class GamingModeStart:
     ok: bool
     failed_step: Optional[Literal["displays", "steam"]]
-    detail: str
-    session_unlocked: bool
+    detail: str                        # nur fürs Log
 
-async def start_gaming_mode(*, user, client_host, db) -> GamingModeStart:
-    # 1. get_desktop_service().enable()            — Fehler → Abbruch ("displays")
-    # 2. unlock_if_permitted(user, client_host, db) — Ablehnung ist KEIN Abbruch
-    # 3. to_thread(open_big_picture)                — Fehler → Abbruch ("steam")
-    # 4. to_thread(gaming_state.mark_started)
+async def start_gaming_mode(*, user: Optional[UserPublic], client_host: Optional[str],
+                            db) -> GamingModeStart:
+    # 1. await get_desktop_service().enable()            — Fehler → ok=False, "displays"
+    # 2. if user is not None: await unlock_if_permitted(user=..., client_host=..., db=...)
+    #                                                     — Ablehnung ist KEIN Abbruch
+    # 3. await to_thread(open_big_picture)                — Fehler → ok=False, "steam"
+    # 4. await to_thread(gaming_state.mark_started)
 ```
 
-`run_menu_action` übersetzt `GamingModeStart` in die bisherigen
-`MenuActionResult`-Keys (`menu_displays_failed`, `menu_steam_failed`,
-`menu_gaming_mode_started`). Die bestehenden Gaming-Mode-Tests bleiben
-**unverändert grün** — das ist der Beleg, dass der Umbau nichts verschiebt.
+- `run_menu_action` übersetzt `GamingModeStart` in die bisherigen Keys
+  (`menu_displays_failed`, `menu_steam_failed`, `menu_gaming_mode_started`) und
+  behält den `user is None`-Zweig (kein Entsperrversuch).
+- Die Route ruft danach 5. `await to_thread(launch_game, game.app_id)` — **mit der
+  ID aus dem Bibliothekseintrag**, nicht dem Request-String.
+- Danach `session_locked = await current_lock_state()`.
 
-Die Route ruft danach:
+**Kein äußerer Timeout.** `asyncio.wait_for` bricht nur das `await` ab; der Thread
+liefe weiter — ein Entsperren ohne Audit (#643) oder ein Spielstart trotz
+Fehlerantwort wären die Folge. Stattdessen begrenzen die Schritte sich selbst:
 
-5. `to_thread(launcher.launch_game, app_id)` → `steam steam://rungameid/<app_id>`,
-   über denselben `_dispatch` (detached, `start_new_session=True`, Streams nach
-   `DEVNULL`, Listen-Argumente, Session-Env).
+| Schritt | eigenes Limit | Quelle |
+|---|---|---|
+| Bildschirme | 30 s | `LinuxDesktopBackend._run` (`desktop_backend.py:73`) |
+| Entsperren | ~15 s Worst Case | `session_lock` (Poll + loginctl) |
+| Big Picture | 10 s | PR A |
+| Spiel | 10 s | PR A |
+| Sperrstatus | ~3 s | `current_lock_state` |
 
-**Bildschirme:** `enable()` schaltet die Ausgänge ein, die in KWin aktiv sind —
-also die Auswahl aus dem Display-Output-Plugin. Keine eigene Ausgangslogik.
+**Worst Case ≈ 70 s**, typisch < 3 s. nginx lässt `/api/` 300 s zu
+(`deploy/install/templates/baluhost-nginx-http.conf:102`). BaluApp setzt für den
+POST ein Client-Timeout von ≥ 90 s. Das Senken des `kscreen-doctor`-Timeouts
+gehört zu #643, nicht hierher.
 
-**Entsperren:** läuft ausschließlich über `unlock_if_permitted()` mit dessen
-eigenen Regeln (`can_unlock_session` **und** LAN) und dessen Audit. Wer nur
-`can_launch_games` hat, startet das Spiel womöglich hinter dem Sperrbildschirm —
-**bewusst**: ein Recht zum „Spiel starten" darf nicht still den physischen
-Desktop öffnen. `LaunchResponse.session_unlocked` sagt BaluApp, ob sie einen
+**Bildschirme:** `enable()` schaltet die in KWin aktiven Ausgänge ein — die
+Auswahl aus dem Display-Output-Plugin.
+
+**Entsperren:** ausschließlich über `unlock_if_permitted()` (eigene Rechte- und
+LAN-Prüfung, eigenes Audit). Wer nur `can_launch_games` hat, startet womöglich
+hinter dem Sperrbildschirm; `session_locked=true` sagt BaluApp, dass sie einen
 Hinweis zeigen soll.
 
 ### Fehlerabbildung
 
+Alle Meldungen neutral auf Englisch, wie die `public_message`-Defaults in
+`core/exceptions.py`. BaluApp verzweigt nach Statuscode, nicht nach Text.
+
 | Fall | Antwort |
 |---|---|
-| Kein Recht | `403` (Abhängigkeit, auditiert) |
-| Nicht aus LAN/VPN | `403`, Audit `steam_game_launch_denied` |
-| `app_id` ungültig oder nicht installiert | `404` |
-| Spiel läuft bereits | `409 ConflictError` mit Spielname in der Meldung |
-| Ablauf überschreitet `STEAM_LAUNCH_TIMEOUT_SECONDS` | `502 BadGatewayError` „Zeitüberschreitung beim Start" |
-| Bildschirme gehen nicht an | `502 BadGatewayError` „Bildschirme konnten nicht eingeschaltet werden", Spiel **nicht** gestartet |
-| Big Picture / Spiel: `steam` nicht startbar | `502 BadGatewayError` „Steam konnte nicht gestartet werden" |
-| Erfolg | `202 {"status": "requested", "session_unlocked": …}` |
+| Kein Recht | `403` (Abhängigkeit) |
+| Nicht aus LAN/VPN | `403` |
+| `app_id` ungültig / nicht installiert | `404 "Game not installed"` |
+| Bibliothek nicht lesbar | `503 "Game library unavailable"` |
+| Spiel läuft bereits | `409 "A game is already running"` |
+| Bildschirme gehen nicht an | `502 "Displays could not be turned on"` — nichts weiter gestartet |
+| Big Picture nicht startbar | `502 "Steam could not be started"` — kein Spiel, kein Marker |
+| Nur das Spiel nicht startbar | `502 "Steam could not be started"` — Marker bleibt gesetzt (Big Picture ist offen) |
+| Erfolg | `202 {"status": "requested", "session_locked": …}` |
 
-`BadGatewayError` (ein `ServiceError`), damit die kuratierte Meldung den globalen
-5xx-Scrubber übersteht — gleiche Begründung wie beim Marketplace-Index. Details
-(`detail` aus Launcher/kscreen-doctor) nur ins Log, nie in die Antwort.
+`ServiceError`-Subklassen (nicht `HTTPException(>=500)`), damit die Meldung den
+5xx-Scrubber übersteht. Details nur ins Log.
 
-**Scheitert nur Schritt 5** (Big Picture ist schon offen, Marker gesetzt): `502`.
-Der Marker bleibt gesetzt — Big Picture ist ja tatsächlich offen, das Power-Menü
-bietet korrekt „Gaming-Mode beenden" an.
-
-**„requested", nicht „läuft":** Der Prozess ist detached; was danach passiert,
-ist von hier nicht beobachtbar. Ob das Spiel läuft, zeigt `GET /games` über
-`running`, sobald der `reaper`-Prozess erscheint.
-
-### Timeout
-
-Die Route läuft nicht durch den Menüaktions-Dispatch und hat damit dessen 20-s-
-Timeout nicht. Sie bekommt einen eigenen `asyncio.wait_for` um die Schritte 1–5
-mit `STEAM_LAUNCH_TIMEOUT_SECONDS = 20` → bei Überschreitung `502`
-(`core/exceptions.py` hat keine 504-Klasse; eine neue anzulegen lohnt für diesen
-einen Fall nicht, und für BaluApp ist beides „Start fehlgeschlagen"). Alle
-blockierenden Schritte laufen in `asyncio.to_thread`, sonst griffe der Timeout nicht.
-
-## Session-Umgebung (#640)
-
-```python
-def wayland_session_env(uid: Optional[int] = None) -> dict:
-    resolved = uid if uid is not None else os.getuid()
-    runtime_dir = f"/run/user/{resolved}"
-    env = dict(os.environ)
-    env.setdefault("XDG_RUNTIME_DIR", runtime_dir)
-    env.setdefault("WAYLAND_DISPLAY", "wayland-0")
-    env.setdefault("DISPLAY", ":0")
-    xauth = _find_xauthority(env["XDG_RUNTIME_DIR"])
-    if xauth is not None:
-        env.setdefault("XAUTHORITY", xauth)
-    return env
-```
-
-- `_find_xauthority(runtime_dir)`: Glob `xauth_*`, bei mehreren die mit der
-  jüngsten `mtime`, `OSError` → `None`. Kein Treffer → Variable weglassen.
-- Alles per `setdefault`: eine explizite Umgebung gewinnt weiterhin.
-- Zweiter Konsument ist `desktop_backend.py` (`kscreen-doctor`) — die
-  zusätzlichen Variablen sind dort harmlos; dessen Tests laufen unverändert mit.
-- Nebenwirkung, gewollt: der Gaming-Mode aus dem Power-Menü funktioniert damit
-  auch bei gestopptem Steam.
-
-## Audit
-
-Nach dem Bluetooth-Muster (`_audit` in `routes.py`):
+### Audit
 
 - `steam_game_launch` — `event_type="POWER"`, `resource="steam_gaming"`,
-  `details={"app_id", "name", "failed_step"}`, `success` = Ergebnis.
-  `404`/`409` werden **nicht** auditiert (kein Vertrauenseffekt, häufig bei
-  veralteter App-Liste); `403` aus der LAN-Prüfung schon.
-- Nicht-Admins zusätzlich `log_security_event("delegated_power_action",
-  resource="launch_games")`.
+  `ip_address=client_host`, `details={"app_id", "failed_step"}`, `success`.
+  **Kein Spielname** (stammt aus einer von `sven` beschreibbaren Datei) und
+  **kein `detail`** (Interna).
+- `steam_game_launch_denied` bei der LAN-Ablehnung, ebenfalls mit IP.
+- Nicht-Admins zusätzlich `log_security_event("delegated_power_action", resource="launch_games")`.
+- `404`/`409`/`503` werden nicht auditiert: kein Vertrauenseffekt, und wer das
+  Recht hat, sieht die Bibliothek ohnehin über `GET`.
 - Das Entsperren auditiert `unlock_if_permitted()` selbst.
 
-## Dev-Modus (Windows)
+### Sicherheit
 
-- Bibliothek: Mock aus `get_game_libraries()` (Cyberpunk 2077, Dota 2, CS2).
-- Bildschirme: `DevDesktopBackend` no-op; Launcher: `_dispatch` no-op.
-- **Laufendes Spiel:** `detection.current_app_id()` liefert im Dev-Modus immer
-  `DEV_APP_ID` — damit würde jeder Start mit `409` beantwortet. Die Routen nutzen
-  deshalb eine eigene Funktion `detection.running_game_strict()`: dieselbe
-  `/proc`-Erkennung und dieselbe Längenbegrenzung wie `current_app_id()`, aber
-  **ohne** Dev-Stand-in. Auf Linux sind beide identisch; auf dem Windows-Dev-Rechner
-  liefert sie `None`, und der Ablauf ist lokal durchklickbar. Pill, Ledger und
-  Panel behalten ihren Stand-in unverändert.
+**Bedrohungsmodell.** Ein erbeutetes Konto (oder API-Key) mit `can_launch_games`
+startet Spiele: Bildschirme an, Big Picture, ein Spiel. Ärgerlich, aber ohne neues
+Vertrauen — solange es nicht entsperrt und nicht aus dem Internet geht.
 
-## Sicherheit
+1. Recht auf beiden Routen, Standard verweigert, keine Implikation.
+2. LAN/VPN-Prüfung beim Start für alle Rollen. **Tragend ist die Proxy-Kette:**
+   uvicorn vertraut `X-Forwarded-For` nur von `127.0.0.1`, die installierte
+   nginx-Vorlage verbindet über `127.0.0.1:8000`. Latente Umgehungen: #641
+   (`localhost` in der Referenzkonfig), #642 (Teredo gilt als privat).
+3. Entsperren nur mit `can_unlock_session`.
+4. Kommandozeile: `fullmatch([0-9]{1,10})` **und** Bibliothekseintrag mit Manifest;
+   die URL wird aus der ID des Eintrags gebaut. Listen-Argumente, kein `shell=True`,
+   keine Sudoers-Regel. Ziffern-only schließt `steam://rungameid/<id>//<args>` und
+   64-Bit-Shortcut-IDs aus.
+5. Steam erbt keine Backend-Secrets (PR A).
+6. Kein laufendes Spiel wird verdrängt (`409`).
+7. Antworten und Audit ohne Interna.
 
-**Bedrohungsmodell.** Ein erbeutetes Konto mit `can_launch_games` startet Spiele
-auf dem Gaming-PC: Bildschirme gehen an, Big Picture öffnet sich, ein Spiel
-läuft. Ärgerlich, aber ohne neues Vertrauen — solange es **nicht** entsperrt und
-**nicht** aus dem Internet geht.
+**Akzeptiert (dokumentiert):**
+- **Gleichzeitige Starts** (Doppeltipp, zwei Nutzer) passieren beide die
+  `409`-Prüfung, weil der `reaper` erst nach Sekunden erscheint. BaluApp sperrt
+  den Button bis zur Antwort.
+- **„Gaming-Mode beenden" mitten im Start** (zwischen `mark_started` und
+  `rungameid`): `close/bigpicture` + `show_desktop` laufen, danach startet das
+  Spiel trotzdem. Seltene Überschneidung zweier Admin-/Rechte-Aktionen.
+- **Wachhalten:** Scheitert nur das Spiel, hält der gesetzte Marker die Box über
+  die Gaming-Präsenz wach — konsistent, weil Big Picture offen ist.
+- **API-Keys** siehe Berechtigung.
 
-1. Recht `can_launch_games` auf beiden Routen, Standard verweigert, keine
-   Implikation.
-2. LAN/VPN-Prüfung beim Start für alle Rollen, abgelehnte Versuche auditiert.
-3. Entsperren nur mit `can_unlock_session` über `unlock_if_permitted()`.
-4. Keine Benutzereingabe erreicht die Kommandozeile ungeprüft: `app_id` ist
-   regexbeschränkt **und** muss in der installierten Bibliothek stehen; die URL
-   ist `f"steam://rungameid/{app_id}"` mit dieser geprüften ID; Listen-Argumente,
-   kein `shell=True`, keine Sudoers-Regel.
-5. Kein laufendes Spiel wird verdrängt (`409`).
-6. Antworten ohne Server-Interna; Details nur ins Log.
+### Tests
 
-**Akzeptiert:** Zwei Starts im selben Augenblick (Doppeltipp, zwei Nutzer)
-passieren beide die `409`-Prüfung, weil der `reaper`-Prozess erst nach einigen
-Sekunden erscheint. Steam behandelt den zweiten Aufruf selbst. BaluApp sperrt
-den Button während des Starts; eine workerübergreifende Sperre wäre für diesen
-Fall unverhältnismäßig.
+**Refactor:** Die bestehenden Gaming-Mode-Tests patchen Namen im Paket
+(`steam_gaming.get_desktop_service`, `.open_big_picture`, `.unlock_if_permitted`;
+`test_steam_gaming_plugin.py` u. a. Z. 157, 254, 264, 339, 352, 363, 496, 529, 581,
+600, 619). Nach dem Umzug greifen sie ins Leere. Die Patch-Ziele ziehen nach
+`app.plugins.installed.steam_gaming.launch.*` um; **die Assertions bleiben
+unverändert** — das ist der Beleg, dass sich das Verhalten nicht ändert.
 
-## Tests
+**Routen** (über `TestClient`, nicht per Direktaufruf — nur so fällt die
+Future-Import-Falle auf):
+- Recht: ohne → `401/403` auf beiden Routen; Nicht-Admin mit Recht → erlaubt.
+- LAN: öffentliche IP → `403` **auch für Admins**, Audit mit IP, weder Desktop noch Launcher gerufen; VPN-IP → erlaubt; `client_host=None` → `403`; `GET` liefert `can_launch_here=false` bei öffentlicher IP.
+- `app_id`: `abc`, `400%0A`, `٤٠٠`, 11 Ziffern, `400%2F1` → `404`; gültig aber nicht installiert → `404`; Tool (Proton-Manifest) → `404`; Launcher ungerufen, **kein Audit**.
+- Bibliothek nicht lesbar → `503`.
+- Laufendes Spiel → `409`, nichts gestartet, kein Audit.
+- Reihenfolge `displays → unlock → bigpicture → mark_started → rungameid`.
+- Bildschirme scheitern → `502`, weder Big Picture noch Spiel; Big Picture scheitert → `502`, kein Spiel, kein Marker; nur Spiel scheitert → `502`, Marker gesetzt.
+- Marker bereits gesetzt → Ablauf läuft normal (zweites `open/bigpicture`).
+- `launch_game` bekommt die ID aus dem Bibliothekseintrag.
+- `session_locked` spiegelt `current_lock_state()` (`True`/`False`/`None`).
+- Audit-`details` enthalten weder Name noch Launcher-`detail`.
+- Nicht-Admin → zusätzlich `delegated_power_action`.
+- Dev-Modus: `current_app_id(dev_stand_in=False)` ist `None`, obwohl `current_app_id()` den Stand-in liefert.
 
-`backend/tests/plugins/test_steam_gaming_routes.py`, `…_launch.py`,
-`backend/tests/test_session_env.py` (erweitert),
-`backend/tests/test_power_permissions_launch_games.py`.
+**Bibliothek:** Manifest → Eintrag; kein Manifest → kein Eintrag; Tool-Name → ausgeschlossen; Duplikat in zwei Bibliotheken → einmal; Name > 200 → gekürzt; Dateiname mit Nicht-Ziffern-ID → ignoriert; keine Verzeichnisse → `LibraryUnavailable` (prod) bzw. Mock (dev); Cache: zweiter Aufruf innerhalb der TTL liest nicht erneut.
 
-- **Recht:** beide Routen ohne Recht → `401/403`; Nicht-Admin mit Recht → erlaubt;
-  Map-Eintrag, Round-Trip über `update_permissions`, Feld in `my-permissions`
-  (Admin `True`, Nutzer aus DB). Probe: Map-Zeile bzw. Write-Through testweise
-  entfernen → Tests werden rot.
-- **LAN:** öffentliche IP → `403` **auch für Admins**, Audit geschrieben,
-  **kein** Aufruf von Desktop/Launcher; VPN-IP → erlaubt; `client_host=None` → `403`.
-- **`app_id`:** `abc`, `1; rm`, 11 Ziffern → `404`; gültige, aber nicht installierte
-  ID → `404`; Tool-ID (Proton) → `404`. Launcher in allen Fällen ungerufen.
-- **`409`:** laufendes Spiel → `409` mit Spielname in `detail`, nichts gestartet.
-- **Timeout:** hängender Schritt → `502`, Route kehrt nach dem Timeout zurück.
-- **Dev-Modus:** `running_game_strict()` liefert ohne `/proc` `None`, obwohl
-  `current_app_id()` den Stand-in liefert.
-- **Reihenfolge:** `displays → unlock → bigpicture → mark_started → rungameid`.
-- **Fehlerpfade:** Bildschirme scheitern → `502`, weder Big Picture noch Spiel;
-  Big Picture scheitert → `502`, kein Spiel, kein Marker; nur Spiel scheitert →
-  `502`, Marker gesetzt; abgelehntes Entsperren → `202` mit `session_unlocked=false`.
-- **Launcher:** `launch_game("400")` → `Popen(["steam", "steam://rungameid/400"], …)`,
-  `start_new_session=True`, `DEVNULL`, kein `shell`; Dev-Modus spawnt nichts.
-- **Session-Env:** `DISPLAY` gesetzt; `xauth_*` im temporären Runtime-Dir →
-  `XAUTHORITY`; mehrere → jüngste; keine → Variable fehlt; explizite Env wird
-  nicht überschrieben.
-- **Refactor-Beleg:** `test_steam_gaming_plugin.py` bleibt **unverändert** grün.
-- **Frontend:** `PowerPermissionsSection` rendert den neuen Schalter; Vertragstest,
-  dass die `admin.json`-Schlüssel in `de` und `en` existieren
-  (siehe `project_i18n_mock_hides_placeholder_gap`).
+**Recht:** Map-Eintrag, Round-Trip über `update_permissions`, Audit-Dicts, `my-permissions` (Admin `True`, Nutzer aus DB). Probe: Map-Zeile bzw. Write-Through testweise entfernen → rot.
+
+**Frontend:** `PowerPermissionsSection` rendert den Schalter; Vertragstest gegen `admin.json` (de + en) auf die neuen Schlüssel.
+
+### Deploy & Betrieb
+
+- Migration im normalen Deploy; keine Sudoers-Änderung.
+- Recht beim gewünschten Nutzer setzen.
+- **Verifikation mit beobachteter Wirkung:**
+  1. Aus dem LAN: Spiel starten bei laufendem Steam, dann nach `steam -shutdown`.
+  2. **Über Mobilfunk ohne VPN:** `GET /games` → `can_launch_here=false`; `POST` → `403`. Dieser Schritt prüft die Proxy-Kette, auf der die LAN-Prüfung steht.
+  3. Über VPN: Start funktioniert.
 
 ## Vertrag für Teil 2 (BaluApp)
 
-Nur als Skizze, die eigene Spec entsteht im BaluApp-Repo:
-
-1. `GET /api/system/sleep/my-permissions` → `can_launch_games` blendet „Spiele" ein.
-2. `GET /api/plugins/steam_gaming/games` → Liste, laufendes Spiel hervorgehoben,
-   Start-Button deaktiviert, wenn `running != null` oder `can_launch_here == false`.
-3. `POST …/games/{app_id}/launch` → Button gesperrt während des Starts; danach
-   `GET /games` nach ~5 s und ~15 s erneut, bis `running.app_id == app_id`.
-4. Texte: `403` „Nur im Heimnetz oder über VPN", `404` „Spiel nicht mehr
-   installiert", `409` „Es läuft bereits *X*" + Liste neu laden, `502` „Start fehlgeschlagen",
-   `session_unlocked=false` → Hinweis „Bildschirm ist gesperrt".
-5. `403` durch deaktiviertes Plugin (`PluginGateMiddleware`) wie „kein Recht" behandeln.
-
-## Deploy & Betrieb
-
-- Migration läuft im normalen Deploy. Keine Sudoers-Änderung, kein
-  `SYNC_PERMISSIONS=1` nötig.
-- Nach dem Deploy: Recht beim gewünschten Nutzer setzen; Verifikation an der Box
-  mit **beobachteter Wirkung** — einmal bei laufendem Steam, einmal nach
-  `steam -shutdown`.
+1. `GET /api/sleep/my-permissions` → `can_launch_games` blendet „Spiele" ein.
+2. `GET /api/plugins/steam_gaming/games`:
+   - `404` → „Funktion nicht verfügbar" (Router nicht gemountet); `403` → „Keine Berechtigung" (auch deaktiviertes Plugin); `503` → „Spielebibliothek nicht erreichbar".
+   - Liste anzeigen, laufendes Spiel hervorheben; Start-Buttons deaktiviert, wenn `running != null` oder `can_launch_here == false` (Hinweis „Nur im Heimnetz oder über VPN").
+3. `POST …/games/{app_id}/launch` mit Client-Timeout ≥ 90 s; Button gesperrt bis zur Antwort.
+   - `202` → „Wird gestartet"; `session_locked == true` → Hinweis „Bildschirm ist gesperrt". Danach `GET /games` nach ~5 s und ~15 s, bis `running.app_id == app_id`.
+   - `404` → „Spiel nicht mehr installiert" + Liste neu laden; `409` → Liste neu laden (zeigt das laufende Spiel); `403` → „Nur im Heimnetz oder über VPN"; `502`/`503` → „Start fehlgeschlagen".
+   - **Nach jedem Fehler erst `GET /games`, bevor ein neuer Start möglich ist** — ein Schritt kann nach der Fehlerantwort noch nachwirken.
 
 ## Verworfene Alternativen
 
-- **Core-Route neben `/api/games/libraries`** — der Core müsste Plugin-Interna
-  (Erkennung, Gaming-Mode, Marker) kennen; beim Session-Verlauf schon einmal
-  ausgeschlossen.
-- **Spiele ohne Steam-Client** (native Binary, `umu-run`, `proton run`) — die
-  meisten Titel rufen `SteamAPI_RestartAppIfNecessary` und starten sich über
-  Steam neu oder beenden sich; Steamworks-Titel brauchen Steam ohnehin. Außerdem
-  entfiele die `reaper`-Erkennung und damit das ganze Session-Tracking.
-- **Menüaktion statt Route** — Menüaktionen sind im Core admin-gegated
-  (`PluginMenuItem` hat bewusst kein `admin_only`) und kennen keine Parameter
-  wie `app_id`.
-- **`can_launch_games` impliziert Entsperren** — ein Spielstart-Recht würde still
-  den physischen Desktop öffnen; die doppelte Prüfung von `can_unlock_session`
-  existiert genau dagegen.
-- **Warten auf „Steam bereit" beim Kaltstart** — M4 zeigt, dass Steam die
-  Befehlszeile weiterleitet.
+- **`DISPLAY`/`XAUTHORITY`-Glob in `session_env`** (ursprünglicher #640-Vorschlag) — löst M2, aber Steam erbte weiter Secrets, cgroup und `PrivateTmp`.
+- **Core-Route neben `/api/games/libraries`** — der Core müsste Plugin-Interna kennen.
+- **Spiele ohne Steam-Client** (native Binary, `umu-run`, `proton run`) — die meisten Titel starten sich über Steam neu; das `reaper`-Tracking entfiele.
+- **Menüaktion statt Route** — admin-gegated im Core, keine Parameter.
+- **`can_launch_games` impliziert Entsperren** — ein Spielstart-Recht würde still den physischen Desktop öffnen.
+- **Äußerer Timeout um den Ablauf** — bricht nur das `await`, nicht den Thread (siehe oben, #643).
+- **`get_game_libraries()` als Datenquelle** — verschluckt Fehler, übernimmt IDs ohne Manifest, liest Größen unnötig.
+- **Zweite Funktion `running_game_strict()`** — dupliziert die Längenbegrenzung; ein Parameter an `current_app_id()` hält einen Codepfad.
