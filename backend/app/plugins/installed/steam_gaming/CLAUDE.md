@@ -22,7 +22,7 @@ Trust tier, lifecycle and the `PluginBase` contract are in `../../CLAUDE.md`.
 | `detector.py` | Pure `/proc` scan. No dev branch, no config — testable against a fake `proc_root` |
 | `names.py` | AppID → display name from `appmanifest_<id>.acf`, with hit/miss caches |
 | `gaming_state.py` | Marker file recording that *we* started gaming mode |
-| `launcher.py` | Detached `steam steam://open|close/bigpicture` dispatch |
+| `launcher.py` | `steam://` dispatch through `systemd-run --user` — Steam runs in sven's user manager, never as a backend child (no inherited secrets, survives backend restarts; #640) |
 | `ledger.py` | Observations → `SteamSession` rows; returns what is worth announcing |
 | `poller.py` | Background task: detect → book → announce |
 

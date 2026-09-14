@@ -2,10 +2,13 @@
 
 The backend runs as the session user (uid match) but outside the graphical
 session, so XDG_RUNTIME_DIR and WAYLAND_DISPLAY have to be supplied for
-commands like kscreen-doctor or steam to talk to it.
+commands like kscreen-doctor or pactl to talk to it.
 
-Two callers share this: the desktop (DPMS) backend and the steam_gaming
-plugin's Big Picture launcher.
+Callers: the desktop (DPMS) backend, desktop_windows (show desktop), the
+audio_control plugin (pactl) and the display_output plugin (kscreen-doctor).
+The steam_gaming launcher deliberately does NOT use it: it starts Steam through
+``systemd-run --user`` so Steam gets the user manager's environment instead of
+a copy of the backend's (see steam_gaming/launcher.py).
 """
 from __future__ import annotations
 
