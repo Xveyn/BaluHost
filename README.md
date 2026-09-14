@@ -327,7 +327,7 @@ npm run build         # Type-check + production build
 | [Security Policy](docs/security/SECURITY.en.md) | Security guidelines |
 | [Contributing](CONTRIBUTING.md) | Contribution workflow |
 | [Changelog](CHANGELOG.md) | Version history |
-| [TODO](TODO.md) | Roadmap |
+| [Issues](https://github.com/Xveyn/BaluHost/issues) | Roadmap and open work |
 
 <sub>Most docs under `docs/` exist in English (`.en.md`) and German (`.de.md`) — swap the suffix for the other language.</sub>
 
