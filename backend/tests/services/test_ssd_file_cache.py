@@ -229,6 +229,72 @@ class TestSSDFileCacheService:
         result = cache_service.cache_file("../../etc/passwd", source)
         assert result is None
 
+    def test_cache_file_absolute_path_cannot_escape_cache_root(
+        self, cache_service: SSDFileCacheService, db: Session, tmp_path: Path
+    ):
+        """An absolute source_path must never place the copy outside the cache root.
+
+        Admins get their download path back unchanged from _jail_path, so a
+        request for ``/download/%2Fsome/abs/path`` reaches cache_file with a
+        leading slash. ``cache_root / PurePosixPath("/abs")`` would drop the
+        root entirely and copy2 would write to an arbitrary location.
+        """
+        cache_root = tmp_path / "cache" / ARRAY_NAME
+        config = cache_service.get_config()
+        config.cache_path = cache_root.as_posix()
+        db.commit()
+
+        source = tmp_path / "source.bin"
+        source.write_bytes(b"x" * 2048)
+        outside = tmp_path / "outside" / "pwned.bin"
+
+        result = cache_service.cache_file(outside.as_posix(), source)
+
+        assert not outside.exists()
+        if result is not None:
+            assert result.resolve().is_relative_to(cache_root.resolve())
+
+    def test_cache_file_leading_slash_stays_under_cache_root(
+        self, cache_service: SSDFileCacheService, db: Session, tmp_path: Path
+    ):
+        """A storage-relative path with a leading slash is still cached, inside the root."""
+        cache_root = tmp_path / "cache"
+        config = cache_service.get_config()
+        config.cache_path = cache_root.as_posix()
+        db.commit()
+
+        source = tmp_path / "source.bin"
+        source.write_bytes(b"x" * 2048)
+
+        result = cache_service.cache_file("/user1/test.bin", source)
+
+        # get_config() may append "/<array>" segments to the root, so assert
+        # containment and the mirrored tail rather than one exact path.
+        assert result is not None
+        assert result.resolve().is_relative_to(cache_root.resolve())
+        assert result.parts[-2:] == ("user1", "test.bin")
+        assert result.read_bytes() == source.read_bytes()
+
+    def test_delete_cache_file_never_unlinks_outside_cache_root(
+        self, cache_service: SSDFileCacheService, sample_entries: list, db: Session, tmp_path: Path
+    ):
+        """An entry whose cache_path points outside the cache root must not delete that file."""
+        config = cache_service.get_config()
+        config.cache_path = str(tmp_path / "cache")
+        entry = sample_entries[0]
+        foreign = tmp_path / "outside" / "important.txt"
+        foreign.parent.mkdir(parents=True)
+        foreign.write_bytes(b"do not delete")
+        entry.cache_path = str(foreign)
+        db.commit()
+
+        cache_service.delete_cache_file(entry)
+        db.flush()
+
+        assert foreign.exists()
+        remaining = db.query(SSDCacheEntry).filter(SSDCacheEntry.id == entry.id).first()
+        assert remaining is None
+
     def test_cache_file_nonexistent_source(
         self, cache_service: SSDFileCacheService, tmp_path: Path
     ):
@@ -248,11 +314,19 @@ class TestSSDFileCacheService:
         assert entry.is_valid is False
 
     def test_delete_cache_file(
-        self, cache_service: SSDFileCacheService, sample_entries: list, db: Session, tmp_path: Path
+        self, cache_service: SSDFileCacheService, sample_entries: list, db: Session,
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
     ):
         """Deleting a cache file removes it from DB and disk."""
+        cache_root = tmp_path / ARRAY_NAME
+        config = cache_service.get_config()
+        config.cache_path = str(cache_root)
+        # Pin the config: get_config()'s stale-path fixup would otherwise keep
+        # appending "/<array>" on Windows and move the root away from the file.
+        monkeypatch.setattr(cache_service, "get_config", lambda: config)
         entry = sample_entries[0]
-        cache_file = tmp_path / "to_delete.pdf"
+        cache_root.mkdir()
+        cache_file = cache_root / "to_delete.pdf"
         cache_file.write_bytes(b"delete me")
         entry.cache_path = str(cache_file)
         db.commit()

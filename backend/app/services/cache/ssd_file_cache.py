@@ -6,6 +6,7 @@ file delivery. Per-array: each RAID array has its own config and entries.
 """
 import hashlib
 import logging
+import os
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
@@ -214,16 +215,26 @@ class SSDFileCacheService:
                 return Path(str(existing.cache_path))
 
             config = self.get_config()
-            cache_root = Path(str(config.cache_path))
+            root_str = os.path.realpath(str(config.cache_path))
+            cache_root = Path(root_str)
 
-            # Build cache destination — mirror source path structure
-            # Reject path traversal
-            rel = PurePosixPath(source_path)
-            if ".." in rel.parts:
-                logger.warning("Rejected cache path with ..: %s", source_path)
+            # Build cache destination — mirror source path structure.
+            # Admins get their path back unchanged from _jail_path, so a
+            # leading slash can reach us; joining an absolute path would
+            # discard cache_root and let copy2 write anywhere.
+            rel = PurePosixPath(source_path.lstrip("/"))
+            if not rel.parts or ".." in rel.parts:
+                logger.warning("Rejected cache path: %s", source_path)
                 return None
 
-            cache_dest = cache_root / rel
+            # realpath + startswith(root + sep) rather than Path.resolve /
+            # is_relative_to: same semantics, but the form CodeQL's
+            # py/path-injection query recognises as a sanitizer.
+            dest_str = os.path.realpath(os.path.join(root_str, *rel.parts))
+            if not dest_str.startswith(root_str + os.sep):
+                logger.warning("Rejected cache path outside cache root: %s", source_path)
+                return None
+            cache_dest = Path(dest_str)
             cache_dest.parent.mkdir(parents=True, exist_ok=True)
 
             # Check SSD free space before copying
@@ -318,10 +329,18 @@ class SSDFileCacheService:
     def delete_cache_file(self, entry: SSDCacheEntry) -> int:
         """Delete physical cache file and DB record. Returns freed bytes."""
         freed = int(entry.file_size_bytes)
-        cache_path = Path(str(entry.cache_path))
-        if cache_path.exists():
+        cache_path = str(entry.cache_path)
+        root_str = os.path.realpath(str(self.get_config().cache_path))
+        resolved = os.path.realpath(cache_path)
+        if not resolved.startswith(root_str + os.sep):
+            # Never unlink outside the cache — entries written before the
+            # cache_file root check may point at arbitrary files.
+            logger.warning(
+                "Refusing to delete %s: outside cache root %s", cache_path, root_str
+            )
+        elif os.path.exists(resolved):
             try:
-                cache_path.unlink()
+                os.unlink(resolved)
             except OSError:
                 logger.warning("Could not delete cache file %s", cache_path)
 
