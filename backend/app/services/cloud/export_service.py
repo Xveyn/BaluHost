@@ -27,13 +27,15 @@ class CloudExportService:
     def _resolve_source(relative_path: str) -> Path:
         """Resolve a storage-relative path; refuse anything outside the storage root.
 
-        realpath + startswith(root + sep) instead of Path.resolve/is_relative_to:
-        same semantics (symlinks resolved), but the form CodeQL's
-        py/path-injection query recognises as a sanitizer.
+        realpath + a single startswith(root + sep): the form CodeQL's
+        py/path-injection query recognises as a sanitizer. Keep it a single
+        bare check — an extra ``target != root`` branch leaves a path on which
+        the query no longer considers the value sanitized (#46–#50 stayed
+        open that way). The storage root itself is therefore not exportable.
         """
         storage_root = os.path.realpath(settings.nas_storage_path)
         target = os.path.realpath(os.path.join(storage_root, relative_path.strip("/")))
-        if target != storage_root and not target.startswith(storage_root + os.sep):
+        if not target.startswith(storage_root + os.sep):
             raise ValueError("Invalid source_path: path traversal not allowed")
         return Path(target)
 
