@@ -268,6 +268,27 @@ class TestCloudExportServiceStartExport:
                 expires_at=None,
             )
 
+    @pytest.mark.parametrize("source_path", ["", "/"])
+    def test_start_export_rejects_storage_root(self, db_session: Session, source_path: str):
+        """Exporting the storage root itself is refused.
+
+        The boundary check is a single ``startswith(root + os.sep)`` — the
+        form CodeQL recognises as a sanitizer. Allowing ``target == root``
+        as a second branch kept the downstream sinks reported (#46–#50).
+        """
+        conn = _create_connection(db_session)
+        service = CloudExportService(db_session)
+
+        with pytest.raises(ValueError, match="path traversal"):
+            service.start_export(
+                connection_id=conn.id,
+                user_id=1,
+                source_path=source_path,
+                cloud_folder="BaluHost Shares/",
+                link_type="view",
+                expires_at=None,
+            )
+
     def test_start_export_invalid_connection(self, db_session: Session):
         service = CloudExportService(db_session)
 
