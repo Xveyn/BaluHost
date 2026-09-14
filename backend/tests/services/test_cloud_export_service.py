@@ -459,3 +459,43 @@ class TestCloudExportExecuteFlow:
 
         finally:
             settings.nas_storage_path = original_storage
+
+    async def test_execute_export_refuses_source_outside_storage(
+        self, db_session: Session, tmp_path: Path
+    ):
+        """A stored source_path that escapes the storage root is never uploaded."""
+        conn = _create_connection(db_session)
+
+        from app.core.config import settings
+        original_storage = settings.nas_storage_path
+
+        try:
+            storage = tmp_path / "storage"
+            storage.mkdir()
+            settings.nas_storage_path = str(storage)
+            (tmp_path / "outside.txt").write_bytes(b"secret" * 100)
+
+            job = CloudExportJob(
+                user_id=1,
+                connection_id=conn.id,
+                source_path="../outside.txt",
+                is_directory=False,
+                file_name="outside.txt",
+                cloud_folder="BaluHost Shares/",
+                link_type="view",
+                status="pending",
+                progress_bytes=0,
+            )
+            db_session.add(job)
+            db_session.commit()
+
+            service = CloudExportService(db_session)
+            await service.execute_export(job.id)
+
+            db_session.refresh(job)
+            assert job.status == "failed"
+            assert job.share_link is None
+            assert job.cloud_path is None
+
+        finally:
+            settings.nas_storage_path = original_storage

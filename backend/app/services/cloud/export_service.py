@@ -22,6 +22,15 @@ class CloudExportService:
     def __init__(self, db: Session):
         self.db = db
 
+    @staticmethod
+    def _resolve_source(relative_path: str) -> Path:
+        """Resolve a storage-relative path; refuse anything outside the storage root."""
+        storage_root = Path(settings.nas_storage_path).resolve()
+        target = (storage_root / relative_path.strip("/")).resolve()
+        if not target.is_relative_to(storage_root):
+            raise ValueError("Invalid source_path: path traversal not allowed")
+        return target
+
     # ─── Start Export ─────────────────────────────────────────────
 
     def start_export(
@@ -34,8 +43,8 @@ class CloudExportService:
         expires_at: Optional[datetime],
     ) -> CloudExportJob:
         """Create a new export job. Validates inputs."""
-        # Reject path traversal
-        if ".." in source_path:
+        # Reject path traversal (component-wise, so "a..b.txt" stays valid)
+        if ".." in PurePosixPath(source_path).parts:
             raise ValueError("Invalid source_path: path traversal not allowed")
 
         # Validate connection ownership
@@ -48,11 +57,13 @@ class CloudExportService:
         file_name = parts.name or clean_path
         is_directory = clean_path.endswith("/") or not PurePosixPath(file_name).suffix
 
+        # Raises ValueError for paths that resolve outside the storage root
+        # (e.g. through a symlink) — outside the try so it is not swallowed.
+        full_path = self._resolve_source(clean_path)
+
         # Try to get file size from filesystem
         file_size_bytes: Optional[int] = None
         try:
-            storage_root = Path(settings.nas_storage_path).resolve()
-            full_path = storage_root / clean_path
             if full_path.exists():
                 if full_path.is_file():
                     file_size_bytes = full_path.stat().st_size
@@ -113,8 +124,7 @@ class CloudExportService:
             job.status = "uploading"
             self.db.commit()
 
-            storage_root = Path(settings.nas_storage_path).resolve()
-            local_path = storage_root / job.source_path
+            local_path = self._resolve_source(str(job.source_path))
 
             if not local_path.exists():
                 raise FileNotFoundError(f"Source path does not exist: {job.source_path}")

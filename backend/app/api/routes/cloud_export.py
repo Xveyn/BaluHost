@@ -5,6 +5,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, R
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db
+from app.api.routes.files import _jail_path
 from app.core.rate_limiter import user_limiter, get_limit
 from app.schemas.cloud_export import (
     CheckScopeRequest,
@@ -33,12 +34,15 @@ async def start_export(
     db: Session = Depends(get_db),
 ):
     """Start a cloud export job (upload + share link)."""
+    # Same boundary as the file API: a non-admin may only export their own
+    # home, Shared/ and paths shared with them (403 otherwise, 400 on "..").
+    source_path = _jail_path(body.source_path, current_user, db)
     service = CloudExportService(db)
     try:
         job = service.start_export(
             connection_id=body.connection_id,
             user_id=current_user.id,
-            source_path=body.source_path,
+            source_path=source_path,
             cloud_folder=body.cloud_folder,
             link_type=body.link_type,
             expires_at=body.expires_at,
@@ -132,6 +136,10 @@ async def retry_export(
 ):
     """Retry a failed export job."""
     service = CloudExportService(db)
+    existing = service.get_export_status(job_id, current_user.id)
+    if existing is not None:
+        # Re-check access: a share the job relied on may have been revoked.
+        _jail_path(str(existing.source_path), current_user, db)
     job = service.retry_export(job_id, current_user.id)
     if not job:
         raise HTTPException(status_code=400, detail="Cannot retry this export (not failed)")

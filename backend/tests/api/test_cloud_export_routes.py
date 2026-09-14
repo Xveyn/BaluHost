@@ -138,3 +138,49 @@ class TestCloudExportRoutes:
     def test_unauthenticated_returns_401(self, client: TestClient):
         resp = client.get("/api/cloud-export/jobs")
         assert resp.status_code in (401, 403)
+
+
+class TestCloudExportPathJail:
+    """A non-admin may only export what the file API would let them read."""
+
+    def test_regular_user_cannot_export_foreign_home(
+        self, client: TestClient, user_headers: dict, regular_user, db_session: Session
+    ):
+        conn = _create_connection(db_session, user_id=regular_user.id)
+
+        resp = client.post(
+            "/api/cloud-export/",
+            headers=user_headers,
+            json={"connection_id": conn.id, "source_path": f"{settings.admin_username}/secret.pdf"},
+        )
+
+        assert resp.status_code == 403
+        assert db_session.query(CloudExportJob).count() == 0
+
+    def test_regular_user_can_export_own_home(
+        self, client: TestClient, user_headers: dict, regular_user, db_session: Session
+    ):
+        conn = _create_connection(db_session, user_id=regular_user.id)
+
+        resp = client.post(
+            "/api/cloud-export/",
+            headers=user_headers,
+            json={"connection_id": conn.id, "source_path": "testuser/report.pdf"},
+        )
+
+        assert resp.status_code == 200
+        assert resp.json()["source_path"] == "testuser/report.pdf"
+
+    def test_regular_user_cannot_retry_export_of_foreign_path(
+        self, client: TestClient, user_headers: dict, regular_user, db_session: Session
+    ):
+        conn = _create_connection(db_session, user_id=regular_user.id)
+        job = _create_export_job(db_session, conn.id, user_id=regular_user.id, status="failed")
+        job.source_path = f"{settings.admin_username}/secret.pdf"
+        db_session.commit()
+
+        resp = client.post(f"/api/cloud-export/jobs/{job.id}/retry", headers=user_headers)
+
+        assert resp.status_code == 403
+        db_session.refresh(job)
+        assert job.status == "failed"
