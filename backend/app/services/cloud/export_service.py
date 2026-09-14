@@ -1,5 +1,6 @@
 """Cloud export service — upload NAS files to cloud and create sharing links."""
 import logging
+import os
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import Optional
@@ -24,12 +25,17 @@ class CloudExportService:
 
     @staticmethod
     def _resolve_source(relative_path: str) -> Path:
-        """Resolve a storage-relative path; refuse anything outside the storage root."""
-        storage_root = Path(settings.nas_storage_path).resolve()
-        target = (storage_root / relative_path.strip("/")).resolve()
-        if not target.is_relative_to(storage_root):
+        """Resolve a storage-relative path; refuse anything outside the storage root.
+
+        realpath + startswith(root + sep) instead of Path.resolve/is_relative_to:
+        same semantics (symlinks resolved), but the form CodeQL's
+        py/path-injection query recognises as a sanitizer.
+        """
+        storage_root = os.path.realpath(settings.nas_storage_path)
+        target = os.path.realpath(os.path.join(storage_root, relative_path.strip("/")))
+        if target != storage_root and not target.startswith(storage_root + os.sep):
             raise ValueError("Invalid source_path: path traversal not allowed")
-        return target
+        return Path(target)
 
     # ─── Start Export ─────────────────────────────────────────────
 
