@@ -18,7 +18,7 @@ SQLAlchemy 2.0 ORM models. All models inherit from `Base` (declarative base in `
 
 **Monitoring & Metrics**: `monitoring.py` (CpuSample, MemorySample, NetworkSample, DiskIoSample, ProcessSample, MonitoringConfig), `service_heartbeat.py`
 
-**Power & Hardware**: `power.py` (profiles, demands, auto-scaling), `power_preset.py`, `fans.py` (config, samples, schedules, curve profiles), `sleep.py`, `smart_device.py`, `power_permissions.py` (UI name: "System Permissions / Systemberechtigungen"; table/columns keep the `power_permissions` name), `gpu_power.py`, `power_boost_rule.py`
+**Power & Hardware**: `power.py` (profiles, demands, auto-scaling), `power_preset.py`, `fans.py` (config, samples, schedules, curve profiles), `sleep.py`, `smart_device.py`, `power_permissions.py` (UI name: "System Permissions / Systemberechtigungen"; table/columns keep the `power_permissions` name; incl. `can_launch_games`), `gpu_power.py`, `power_boost_rule.py`
 
 **Networking**: `vpn.py` (VPNConfig, VPNClient), `vpn_profile.py`, `mobile.py`, `server_profile.py`, `fritzbox.py`, `webdav_state.py`, `device.py`, `nfs_export.py`
 

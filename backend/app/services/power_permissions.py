@@ -23,6 +23,7 @@ _ACTION_FIELD_MAP = {
     "control_audio": "can_control_audio",
     "manage_displays": "can_manage_displays",
     "manage_bluetooth": "can_manage_bluetooth",
+    "launch_games": "can_launch_games",
 }
 
 
@@ -53,6 +54,7 @@ def get_permissions(db: Session, user_id: int) -> UserPowerPermissionsResponse:
         can_control_audio=perm.can_control_audio,
         can_manage_displays=perm.can_manage_displays,
         can_manage_bluetooth=perm.can_manage_bluetooth,
+        can_launch_games=perm.can_launch_games,
         granted_by=perm.granted_by,
         granted_by_username=granted_by_username,
         granted_at=perm.granted_at,
@@ -129,6 +131,7 @@ def update_permissions(
         "can_control_audio": perm.can_control_audio,
         "can_manage_displays": perm.can_manage_displays,
         "can_manage_bluetooth": perm.can_manage_bluetooth,
+        "can_launch_games": perm.can_launch_games,
     }
 
     # Track which fields were explicitly set so implications can be applied
@@ -167,6 +170,8 @@ def update_permissions(
         perm.can_manage_displays = update.can_manage_displays
     if update.can_manage_bluetooth is not None:
         perm.can_manage_bluetooth = update.can_manage_bluetooth
+    if update.can_launch_games is not None:
+        perm.can_launch_games = update.can_launch_games
 
     # Apply implication rules
     perm.can_soft_sleep, perm.can_wake, perm.can_suspend, perm.can_wol = (
@@ -192,6 +197,7 @@ def update_permissions(
         "can_control_audio": perm.can_control_audio,
         "can_manage_displays": perm.can_manage_displays,
         "can_manage_bluetooth": perm.can_manage_bluetooth,
+        "can_launch_games": perm.can_launch_games,
     }
 
     # Audit log
@@ -218,7 +224,8 @@ def check_permission(db: Session, user_id: int, action: str) -> bool:
         db: Database session
         user_id: User ID to check
         action: One of 'soft_sleep', 'wake', 'suspend', 'wol', 'toggle_desktop',
-            'unlock_session', 'control_audio', 'manage_displays', 'manage_bluetooth'
+            'unlock_session', 'control_audio', 'manage_displays', 'manage_bluetooth',
+            'launch_games'
 
     Returns:
         True if the user has the permission, False otherwise.
