@@ -296,8 +296,9 @@ class SteamGamingPlugin(PluginBase):
         # happened would hide the start action behind a useless end action.
         await asyncio.to_thread(gaming_state.mark_started)
 
-        # "started", not "Big Picture is running": the process is detached, so
-        # anything past the spawn is not observable from here.
+        # "started", not "Big Picture is running": ok means the systemd unit
+        # was started, not that Big Picture is on screen - that stays
+        # unobservable from here.
         return MenuActionResult(
             ok=True,
             message_key="menu_gaming_mode_started",
@@ -359,8 +360,9 @@ class SteamGamingPlugin(PluginBase):
                 message_text=f"Big Picture was closed, but the windows stayed up: {detail}",
             )
 
-        # "ended", not "Big Picture is gone": the close is dispatched to a
-        # detached process and the mode is not observable from here either.
+        # "ended", not "Big Picture is gone": ok means the systemd unit was
+        # started, not that Big Picture actually closed - that stays
+        # unobservable from here either.
         return MenuActionResult(
             ok=True,
             message_key="menu_gaming_mode_ended",
