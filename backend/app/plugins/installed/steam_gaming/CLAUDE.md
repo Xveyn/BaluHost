@@ -125,13 +125,16 @@ Big Picture's own state is **not detectable from the outside** (measured
   action behind a useless end action.
 - The sequence lives in `launch.py:start_gaming_mode()` and is reused by the
   launch route; tests patch `steam_gaming.launch.*`, not the package names.
-  There is no outer timeout around it (`wait_for` cancels awaits, not threads
-  — #643); each step bounds itself. `systemd-run` now blocks up to
-  `_STEAM_RUN_TIMEOUT_SECONDS` (10s) instead of returning in milliseconds like
-  the old detached `Popen`. Worst case ≈ 70s (displays 30s, unlock ~15s, Big
-  Picture 10s, game 10s, lock state ~3s), typically < 3s; in the menu path a
-  20s cut-off can leave Big Picture opening without `mark_started` running, so
-  the menu keeps offering "start".
+  Neither `start_gaming_mode()` nor the launch route adds an outer timeout
+  around it (`wait_for` cancels awaits, not threads — #643); each step bounds
+  itself instead, `systemd-run` now blocking up to `_STEAM_RUN_TIMEOUT_SECONDS`
+  (10s) instead of returning in milliseconds like the old detached `Popen`.
+  Worst case ≈ 70s (displays 30s, unlock ~15s, Big Picture 10s, game 10s, lock
+  state ~3s), typically < 3s. The MENU path is different: it still runs under
+  the core's own 20s menu-action `wait_for`, so that cut-off can fire while
+  `open_big_picture()` is still running on its worker thread — Big Picture may
+  still open, but `mark_started()` never runs, so the menu keeps offering
+  "start" (#643).
 - End refuses while a game is running, and refuses to run `steam://close` when no
   Steam client is up (that URL would **start** Steam — see `launcher.py`).
   It does **not** turn displays off: that is its own power-menu entry.
@@ -154,7 +157,11 @@ degrades to the generic plug icon. `Gamepad2` and `Monitor` are known-good.
   re-checks digits-only.
 - Audit `steam_game_launch` carries only `app_id` and `failed_step` — never the
   manifest name, never subprocess output. 404/409/503 are not audited.
-- Rate limits: `steam_games_read` 60/min, `steam_launch` 6/min.
+- Rate limits: `steam_games_read` 60/min, `steam_launch` 6/min. Both are
+  in-memory and per uvicorn worker (`core/rate_limiter.py`), so across the four
+  production workers a client can effectively get up to 4× the stated number.
+  An API-key request has no user id in that sense and falls back to the
+  per-IP key like any other `user_limiter`-keyed route.
 - `running` and the 409 use `current_app_id(dev_stand_in=False)`, so the
   Windows dev box can click through a launch.
 

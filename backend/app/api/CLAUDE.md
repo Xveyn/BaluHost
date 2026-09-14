@@ -20,7 +20,7 @@ REST API endpoints for BaluHost. All routes are registered in `routes/__init__.p
 | `get_current_admin` | `UserPublic` | Admin-only endpoints |
 | `get_current_user_optional` | `UserPublic \| None` | Optional auth (public shares) |
 | `verify_mobile_device_token` | `UserPublic` | Mobile endpoints (validates X-Device-ID header + device expiry) |
-| `require_power_launch_games` | `UserPublic` | steam_gaming launch routes (admin or `can_launch_games`) |
+| `require_power_<action>` | `UserPublic` | Delegated power actions (admin or the matching `can_<action>` permission, e.g. `require_power_launch_games` for the steam_gaming launch routes) |
 
 Supports both JWT (`Bearer <token>`) and API key (`balu_...` prefix) authentication paths.
 

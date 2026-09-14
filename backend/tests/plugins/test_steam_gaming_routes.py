@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 from app.api.deps import require_power_launch_games
 from app.core.database import get_db
 from app.core.exception_handlers import register_exception_handlers
+from app.core.network_utils import is_private_or_local_ip as real_is_private_or_local_ip
 from app.plugins.installed.steam_gaming import SteamGamingPlugin, routes
 from app.plugins.installed.steam_gaming.launch import GamingModeStart
 from app.plugins.installed.steam_gaming.library import InstalledGame, LibraryUnavailable
@@ -36,6 +37,7 @@ class _State:
     lan = True
     running: object = None
     order: list = []
+    dev_stand_in_calls: list = []
 
 
 @pytest.fixture(autouse=True)
@@ -43,14 +45,18 @@ def _stubs(monkeypatch):
     _State.lan = True
     _State.running = None
     _State.order = []
+    _State.dev_stand_in_calls = []
     monkeypatch.setattr(routes, "is_private_or_local_ip", lambda host: _State.lan)
     monkeypatch.setattr(routes.library, "list_installed_games", lambda: [PORTAL])
     monkeypatch.setattr(
         routes.library, "find_installed_game", lambda app_id: PORTAL if app_id == "400" else None
     )
-    monkeypatch.setattr(
-        routes.detection, "current_app_id", lambda *, dev_stand_in=True: _State.running
-    )
+
+    def _current_app_id(*, dev_stand_in=True):
+        _State.dev_stand_in_calls.append(dev_stand_in)
+        return _State.running
+
+    monkeypatch.setattr(routes.detection, "current_app_id", _current_app_id)
     monkeypatch.setattr(routes.detection, "resolve_game_name", lambda app_id: "Metro Exodus")
     monkeypatch.setattr(routes, "current_lock_state", AsyncMock(return_value=False))
 
@@ -104,6 +110,14 @@ class TestPermission:
         _events, security = audit
         assert _client(_User).post(f"{BASE}/games/400/launch").status_code == 202
         assert security and security[0]["resource"] == "launch_games"
+        assert security[0]["success"] is True
+
+    def test_a_delegated_user_refused_outside_the_lan_is_a_failed_security_event(self, audit):
+        _events, security = audit
+        _State.lan = False
+        resp = _client(_User).post(f"{BASE}/games/400/launch")
+        assert resp.status_code == 403
+        assert security and security[-1]["success"] is False
 
 
 class TestList:
@@ -113,9 +127,18 @@ class TestList:
         assert body["games"] == [{"app_id": "400", "name": "Portal"}]
         assert body["running"] == {"app_id": "1449560", "name": "Metro Exodus"}
         assert body["can_launch_here"] is True
+        # The pill/ledger's dev-mode stand-in must never leak into the route:
+        # a permanently "running" dev game would turn every launch into a 409.
+        assert _State.dev_stand_in_calls == [False]
 
     def test_says_when_launching_is_not_possible_from_here(self):
         _State.lan = False
+        assert _client().get(f"{BASE}/games").json()["can_launch_here"] is False
+
+    def test_fails_closed_with_the_real_lan_check(self, monkeypatch):
+        # Undo the autouse stub for this one test: TestClient's host
+        # ("testclient") is not a real IP, so the real function must say False.
+        monkeypatch.setattr(routes, "is_private_or_local_ip", real_is_private_or_local_ip)
         assert _client().get(f"{BASE}/games").json()["can_launch_here"] is False
 
     def test_an_unreadable_library_is_503(self, monkeypatch):
@@ -169,6 +192,13 @@ class TestLaunchGates:
         assert events == []
         assert _State.order == []
 
+    def test_fails_closed_with_the_real_lan_check(self, monkeypatch):
+        # Same as the list route's sibling test: undo the autouse stub and let
+        # the real function decide. TestClient's host ("testclient") is not a
+        # real IP, so this documents the fail-closed default, not a mock.
+        monkeypatch.setattr(routes, "is_private_or_local_ip", real_is_private_or_local_ip)
+        assert _client().post(f"{BASE}/games/400/launch").status_code == 403
+
 
 class TestLaunchSequence:
     def test_starts_gaming_mode_then_the_library_id(self, audit):
@@ -180,6 +210,9 @@ class TestLaunchSequence:
         assert events[-1]["action"] == "steam_game_launch"
         assert events[-1]["success"] is True
         assert events[-1]["details"] == {"app_id": "400", "failed_step": None}
+        # The running-game precondition must never accept the dev-mode
+        # stand-in either, or the Windows dev box could never launch anything.
+        assert _State.dev_stand_in_calls == [False]
 
     def test_uses_the_id_from_the_library_entry(self, monkeypatch):
         monkeypatch.setattr(

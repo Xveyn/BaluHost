@@ -30,7 +30,8 @@ __all__ = ["GamingModeStart", "launch_game", "start_gaming_mode"]
 class GamingModeStart:
     ok: bool
     failed_step: Optional[Literal["displays", "steam"]]
-    detail: str  # for the log only - never for a response or the audit trail
+    detail: str  # never for the launch route's response or the audit trail;
+    # the admin menu action shows it in its literal fallback text
 
 
 async def start_gaming_mode(

@@ -70,7 +70,7 @@ def _audit(
             user=user.username,
             resource="launch_games",
             details={"action": action},
-            success=True,
+            success=success,
         )
 
 
