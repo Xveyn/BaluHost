@@ -244,6 +244,20 @@ class SteamGamingPlugin(PluginBase):
         """
         return [_start_menu_item(), _end_menu_item()]
 
+    def get_router(self):
+        """The launch routes (routes.py).
+
+        Imported here, not at module level: routes imports detection, launch
+        and library from this package, and the package __init__ must finish
+        before those resolve. Routers are mounted once at startup, so enabling
+        the plugin later needs a backend restart before these routes exist
+        (restart_required reports that) - pill, menu and panel still work
+        immediately.
+        """
+        from app.plugins.installed.steam_gaming.routes import router  # noqa: PLC0415
+
+        return router
+
     async def run_menu_action(
         self,
         action_id: str,

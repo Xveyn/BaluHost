@@ -70,6 +70,16 @@ verify_mobile_device_token — Validates JWT + X-Device-ID header + device expir
   gestohlenes Web-Konto plus Funkreichweite darf dafür nicht reichen.
   Durchgesetzt in `plugins/installed/bluetooth/service.py` (`start_pairing`,
   `answer`); abgelehnte Versuche von außen werden auditiert.
+- `can_launch_games` (power permission) startet installierte Steam-Spiele über
+  `/api/plugins/steam_gaming/games/{app_id}/launch` und schaltet dabei **faktisch
+  auch die Displays ein und öffnet Big Picture** — ohne `can_toggle_desktop`; das
+  ist der Zweck des Rechts. Entsperren bleibt bei `can_unlock_session`. Start nur
+  bei `is_private_or_local_ip(request.client.host)` für alle Rollen; abgelehnte
+  Versuche werden mit IP auditiert. API-Keys erreichen die Route wie alle
+  `require_power_*`-Routen (bewusst akzeptiert). Die App-ID muss
+  `re.fullmatch("[0-9]{1,10}")` erfüllen und als Manifest installiert sein; die
+  URL wird aus dem Bibliothekseintrag gebaut. Durchgesetzt in
+  `plugins/installed/steam_gaming/routes.py`.
 
 ### Password Policy (`schemas/auth.py:20-59`)
 - Length: 8-128 characters

@@ -30,7 +30,7 @@ plugins/
     ├── bluetooth/          # BlueZ over D-Bus: devices, scan, pairing with an own agent
     ├── display_output/     # KWin output selection and video mode (kscreen-doctor)
     ├── optical_drive/      # CD/DVD burning, reading, ISO browsing (own router)
-    ├── steam_gaming/       # Status pill, session ledger, Gaming-Mode menu action
+    ├── steam_gaming/       # Status pill, session ledger, Gaming-Mode menu action, game launch routes
     ├── storage_analytics/  # DEMO ONLY — every number is hard-coded, see its CLAUDE.md
     └── tapo_smart_plug/    # TP-Link Tapo smart plugs via the SmartDevice framework
 ```

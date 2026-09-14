@@ -3,13 +3,19 @@
 Bundled (in-process, fully trusted) plugin. Surfaces a running Steam game as a
 topbar status pill, books play sessions into the database, sends notifications on
 the session edges, shows the last five sessions as a dashboard panel, and offers a
-"Gaming Mode" toggle in the system/power menu.
+"Gaming Mode" toggle in the system/power menu. It also lets holders of
+`can_launch_games` list installed games and launch one (`GET /games`,
+`POST /games/{app_id}/launch`), mainly for BaluApp.
 
-**No router, no `plugin.json`.** Everything is contributed through `PluginBase`
-method overrides, so enabling/disabling takes effect within seconds across all
-workers — no `baluhost-backend` restart needed (`restart_required` is always
-false). Bundled discovery works off the `PluginBase` subclass in `__init__.py`;
-a marketplace manifest is not required for that.
+**One router, no `plugin.json`.** Pill, menu, panel, notifications and the
+background task come from `PluginBase` method overrides and take effect within
+seconds across all workers. The launch routes (`routes.py`) are a router, and
+routers are mounted once at startup: enabling the plugin after the backend
+started needs a `baluhost-backend` restart before `/api/plugins/steam_gaming/*`
+exists (`restart_required` reports it; until then requests get
+`404 "Plugin not found"` from the catch-all proxy). `get_router()` imports
+`routes` lazily to avoid an import cycle. `routes.py` and `models.py` must not
+use `from __future__ import annotations` (slowapi body detection).
 
 Trust tier, lifecycle and the `PluginBase` contract are in `../../CLAUDE.md`.
 
@@ -23,6 +29,10 @@ Trust tier, lifecycle and the `PluginBase` contract are in `../../CLAUDE.md`.
 | `names.py` | AppID → display name from `appmanifest_<id>.acf`, with hit/miss caches |
 | `gaming_state.py` | Marker file recording that *we* started gaming mode |
 | `launcher.py` | `steam://` dispatch through `systemd-run --user` — Steam runs in sven's user manager, never as a backend child (no inherited secrets, survives backend restarts; #640) |
+| `library.py` | Launchable games: `appmanifest_<id>.acf` present, name readable, not a tool; 30 s per-worker list cache; `LibraryUnavailable` when no steamapps dir exists |
+| `launch.py` | `start_gaming_mode()` — the displays → unlock → Big Picture → marker sequence shared by the menu action and the launch route; re-exports `launch_game` |
+| `models.py` | Pydantic models of the routes; field names are the API contract |
+| `routes.py` | `GET /games`, `POST /games/{app_id}/launch`; right, LAN gate, audit |
 | `ledger.py` | Observations → `SteamSession` rows; returns what is worth announcing |
 | `poller.py` | Background task: detect → book → announce |
 
@@ -113,20 +123,40 @@ Big Picture's own state is **not detectable from the outside** (measured
   its own right + LAN gate and writes the audit entry) → Big Picture → *then*
   mark started. Recording a start that never happened would hide the start
   action behind a useless end action.
+- The sequence lives in `launch.py:start_gaming_mode()` and is reused by the
+  launch route; tests patch `steam_gaming.launch.*`, not the package names.
+  There is no outer timeout around it (`wait_for` cancels awaits, not threads
+  — #643); each step bounds itself. `systemd-run` now blocks up to
+  `_STEAM_RUN_TIMEOUT_SECONDS` (10s) instead of returning in milliseconds like
+  the old detached `Popen`. Worst case ≈ 70s (displays 30s, unlock ~15s, Big
+  Picture 10s, game 10s, lock state ~3s), typically < 3s; in the menu path a
+  20s cut-off can leave Big Picture opening without `mark_started` running, so
+  the menu keeps offering "start".
 - End refuses while a game is running, and refuses to run `steam://close` when no
   Steam client is up (that URL would **start** Steam — see `launcher.py`).
   It does **not** turn displays off: that is its own power-menu entry.
 - Every result is phrased as "started"/"ended", never "Big Picture is running" —
   ok means the systemd unit was started, not that Big Picture actually shows up
   or goes away, which stays unobservable from here.
-- `systemd-run` now blocks up to `_STEAM_RUN_TIMEOUT_SECONDS` (10s) instead of
-  returning in milliseconds like the old detached `Popen`. If the core's 20s
-  menu-action `wait_for` fires while `open_big_picture()` is still running on
-  its worker thread, Big Picture may still open but `mark_started()` never
-  runs, so the menu keeps offering "start" (#643).
 
 Icons come from a **closed** frontend map (#451); anything outside it silently
 degrades to the generic plug icon. `Gamepad2` and `Monitor` are known-good.
+
+## Game launch (routes)
+
+- Both routes require `require_power_launch_games` (admins implicitly). The
+  right lets a user turn the displays on and open Big Picture as part of a
+  launch; unlocking still needs `can_unlock_session` via `unlock_if_permitted()`.
+- `POST` checks, before any side effect: LAN/VPN for every role (403, audited
+  with IP) → `library.is_valid_app_id` + `find_installed_game` (404; 503 when no
+  library is readable) → `current_app_id(dev_stand_in=False)` (409).
+- The steam:// URL is built from the library entry's id; `launcher.launch_game`
+  re-checks digits-only.
+- Audit `steam_game_launch` carries only `app_id` and `failed_step` — never the
+  manifest name, never subprocess output. 404/409/503 are not audited.
+- Rate limits: `steam_games_read` 60/min, `steam_launch` 6/min.
+- `running` and the 409 use `current_app_id(dev_stand_in=False)`, so the
+  Windows dev box can click through a launch.
 
 ## Contributions in one place
 
@@ -147,7 +177,8 @@ degrades to the generic plug icon. `Gamepad2` and `Monitor` are known-good.
 ## Tests
 
 `backend/tests/plugins/test_steam_gaming_*.py` — one file per module
-(`detection`, `detector`, `launcher`, `ledger`, `names`, `panel`, `plugin`,
-`poller`, `state`). Clocks are injectable everywhere (`_monotonic()`, `_utc_now()`,
-the poller's `clock=`), `names.reset_caches()` clears the module caches, and
-`detector` takes a `proc_root` — use those rather than monkeypatching time.
+(`detection`, `detector`, `launch`, `launcher`, `ledger`, `library`, `names`,
+`panel`, `plugin`, `poller`, `routes`, `state`). Clocks are injectable everywhere
+(`_monotonic()`, `_utc_now()`, the poller's `clock=`), `names.reset_caches()`
+clears the module caches, and `detector` takes a `proc_root` — use those rather
+than monkeypatching time.

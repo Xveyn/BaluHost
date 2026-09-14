@@ -196,6 +196,13 @@ RATE_LIMITS = {
     # Sekunde. admin_operations (30/Minute) waere schon von der
     # Kopplungs-Abfrage allein aufgebraucht.
     "bluetooth": "120/minute",
+
+    # Steam-Spielstart (steam_gaming-Plugin) — BaluApp liest die Liste beim
+    # Oeffnen und fragt nach einem Start zweimal nach. Getrennt vom Start, damit
+    # das Nachfragen nicht das knappe Start-Budget verbraucht; Starts selbst
+    # sind selten, 6/Minute haelt Doppeltipps und Skripte klein.
+    "steam_games_read": "60/minute",
+    "steam_launch": "6/minute",
 }
 
 
