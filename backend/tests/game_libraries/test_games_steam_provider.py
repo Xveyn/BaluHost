@@ -213,3 +213,12 @@ def test_find_steamapps_dirs_skips_declared_path_missing_on_disk(tmp_path, monke
 
     dirs = steam.find_steamapps_dirs()  # must not raise
     assert dirs == [root / "steamapps"]
+
+
+def test_is_tool_app_is_public_and_matches_the_private_name():
+    from app.services.game_libraries.steam import _is_tool_app, is_tool_app
+
+    assert is_tool_app("Proton 10.0") is True
+    assert is_tool_app("Steam Linux Runtime 3.0 (sniper)") is True
+    assert is_tool_app("Portal") is False
+    assert _is_tool_app is is_tool_app

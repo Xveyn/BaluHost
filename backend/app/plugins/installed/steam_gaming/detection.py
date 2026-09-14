@@ -38,8 +38,14 @@ _MAX_APP_ID_LENGTH = 32
 _MAX_GAME_NAME_LENGTH = 200
 
 
-def current_app_id() -> Optional[str]:
-    """AppID of the running game, or None. Blocking - call via asyncio.to_thread."""
+def current_app_id(*, dev_stand_in: bool = True) -> Optional[str]:
+    """AppID of the running game, or None. Blocking - call via asyncio.to_thread.
+
+    ``dev_stand_in=False`` skips the dev-mode placeholder. Pill, ledger and
+    panel want it (so the strip renders on a box without /proc); the launch
+    routes do not - on the Windows dev box a permanently "running" game would
+    turn every launch into a 409.
+    """
     app_id = detect_running_app_id()
     if app_id is not None and len(app_id) > _MAX_APP_ID_LENGTH:
         logger.warning(
@@ -49,7 +55,7 @@ def current_app_id() -> Optional[str]:
             app_id,
         )
         app_id = None
-    if app_id is None and settings.is_dev_mode:
+    if app_id is None and dev_stand_in and settings.is_dev_mode:
         return DEV_APP_ID
     return app_id
 

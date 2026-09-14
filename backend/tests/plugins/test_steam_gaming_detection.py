@@ -44,3 +44,30 @@ class TestGameNameGuard:
         monkeypatch.setattr(detection, "resolve_name", lambda _app_id: None)
 
         assert detection.resolve_game_name("999") is None
+
+
+class TestDevStandIn:
+    def test_the_stand_in_is_the_default_in_dev_mode(self, monkeypatch):
+        monkeypatch.setattr(detection.settings, "is_dev_mode", True)
+        monkeypatch.setattr(detection, "detect_running_app_id", lambda: None)
+
+        assert detection.current_app_id() == detection.DEV_APP_ID
+
+    def test_it_can_be_switched_off(self, monkeypatch):
+        """The launch routes must not see a permanently running dev game -
+        every launch would be a 409 on the Windows dev box."""
+        monkeypatch.setattr(detection.settings, "is_dev_mode", True)
+        monkeypatch.setattr(detection, "detect_running_app_id", lambda: None)
+
+        assert detection.current_app_id(dev_stand_in=False) is None
+
+    def test_a_real_game_still_wins_without_the_stand_in(self, monkeypatch):
+        monkeypatch.setattr(detection.settings, "is_dev_mode", True)
+        monkeypatch.setattr(detection, "detect_running_app_id", lambda: "1449560")
+
+        assert detection.current_app_id(dev_stand_in=False) == "1449560"
+
+    def test_the_length_guard_applies_without_the_stand_in(self, monkeypatch, prod_mode):
+        monkeypatch.setattr(detection, "detect_running_app_id", lambda: "9" * 40)
+
+        assert detection.current_app_id(dev_stand_in=False) is None
