@@ -171,3 +171,27 @@ class TestDevMode:
 
         assert ok_open is True and ok_close is True
         run.assert_not_called()
+
+
+class TestLaunchGame:
+    def test_builds_the_rungameid_url(self, prod):
+        from app.plugins.installed.steam_gaming.launcher import launch_game
+
+        with patch("subprocess.run", return_value=_completed()) as run:
+            ok, _detail = launch_game("400")
+
+        assert ok is True
+        assert run.call_args.args[0][-1] == "steam://rungameid/400"
+        assert run.call_args.args[0][:5] == ["systemd-run", "--user", "--collect", "--quiet", "steam"]
+
+    def test_refuses_anything_but_digits(self, prod):
+        """Defense in depth: the route validates first, but the launcher is the
+        last stop before a command line."""
+        from app.plugins.installed.steam_gaming.launcher import launch_game
+
+        with patch("subprocess.run") as run:
+            for bad in ("400//-console", "abc", "400\n", ""):
+                ok, _detail = launch_game(bad)
+                assert ok is False
+
+        run.assert_not_called()

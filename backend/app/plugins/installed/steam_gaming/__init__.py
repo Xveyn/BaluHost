@@ -36,11 +36,10 @@ from app.plugins.installed.steam_gaming.detection import (
     resolve_game_name,
     steam_is_running,
 )
-from app.plugins.installed.steam_gaming.launcher import close_big_picture, open_big_picture
+from app.plugins.installed.steam_gaming.launch import start_gaming_mode
+from app.plugins.installed.steam_gaming.launcher import close_big_picture
 from app.plugins.installed.steam_gaming.poller import SteamSessionPoller
-from app.services.power.desktop import get_desktop_service
 from app.services.power.desktop_windows import show_desktop
-from app.services.power.session_lock import unlock_if_permitted
 
 logger = logging.getLogger(__name__)
 
@@ -258,47 +257,24 @@ class SteamGamingPlugin(PluginBase):
         if action_id != _MENU_ACTION_ID:
             return None
 
-        # Displays first: opening Big Picture onto dark screens helps nobody.
-        # LinuxDesktopBackend.enable() runs kscreen-doctor in a thread, so the
-        # core's wait_for stays effective.
-        ok, detail = await get_desktop_service().enable()
-        if not ok:
-            # The user only ever sees the translated key, so without this line
-            # the reason kscreen-doctor refused is lost for good.
-            logger.warning("gaming mode: turning the displays on failed: %s", detail)
+        # The sequence lives in launch.py so the launch route runs the very
+        # same steps. The user only ever sees the translated key; the detail
+        # goes into the literal fallback like before.
+        started = await start_gaming_mode(user=user, client_host=client_host, db=db)
+        if started.failed_step == "displays":
             return MenuActionResult(
                 ok=False,
                 message_key="menu_displays_failed",
-                message_text=f"Displays could not be turned on: {detail}",
+                message_text=f"Displays could not be turned on: {started.detail}",
             )
-
-        # Then the lock screen - Big Picture behind it would be just as useless
-        # as behind a dark monitor. Same gates as the enable route; a refusal
-        # is not a failure of the action.
-        if user is not None:
-            unlocked, unlock_detail = await unlock_if_permitted(
-                user=user, client_host=client_host, db=db
-            )
-            if not unlocked:
-                logger.info("gaming mode: session not unlocked: %s", unlock_detail)
-
-        launched, detail = await asyncio.to_thread(open_big_picture)
-        if not launched:
-            logger.warning("gaming mode: Big Picture did not start: %s", detail)
+        if started.failed_step == "steam":
             return MenuActionResult(
                 ok=False,
                 message_key="menu_steam_failed",
-                message_text=f"Displays are on, but Steam did not start: {detail}",
+                message_text=f"Displays are on, but Steam did not start: {started.detail}",
             )
-
-        # Only now, with Big Picture actually dispatched: the marker drives
-        # which direction the menu offers, so recording a start that never
-        # happened would hide the start action behind a useless end action.
-        await asyncio.to_thread(gaming_state.mark_started)
-
-        # "started", not "Big Picture is running": ok means the systemd unit
-        # was started, not that Big Picture is on screen - that stays
-        # unobservable from here.
+        # "started", not "Big Picture is running": nothing past the spawn is
+        # observable from here.
         return MenuActionResult(
             ok=True,
             message_key="menu_gaming_mode_started",
