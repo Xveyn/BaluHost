@@ -15,7 +15,8 @@ Steam client itself - and as a child of the backend it would
 
 The transient unit instead runs in sven's user manager and gets that manager's
 environment (DISPLAY is imported by KDE). Measured on BaluNode 2026-09-14 with
-an empty caller environment: Steam cold-starts and the game appears.
+a minimal caller environment (HOME, XDG_RUNTIME_DIR, PATH): Steam cold-starts
+and the game appears.
 
 ``systemd-run`` returns as soon as the unit exists, so its exit code is
 observable (e.g. no user manager because nobody is logged in). Whether Big
@@ -83,17 +84,17 @@ def _dispatch(url: str, what: str) -> tuple[bool, str]:
         return False, "systemd-run not found - cannot start steam"
     except subprocess.TimeoutExpired:
         logger.warning("systemd-run for %s timed out after %ss", url, _STEAM_RUN_TIMEOUT_SECONDS)
-        return False, "steam could not be started"
+        return False, f"{what} could not be dispatched"
     except OSError as exc:
         logger.warning("failed to dispatch %s: %s", url, exc)
-        return False, "steam could not be started"
+        return False, f"{what} could not be dispatched"
 
     if result.returncode != 0:
         stderr = (result.stderr or b"").decode("utf-8", "replace").strip()
         logger.warning(
             "systemd-run for %s exited %s: %s", url, result.returncode, stderr[:_STDERR_LOG_LIMIT]
         )
-        return False, "steam could not be started"
+        return False, f"{what} could not be dispatched"
 
     return True, f"{what} requested"
 

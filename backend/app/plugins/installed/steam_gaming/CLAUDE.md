@@ -117,7 +117,13 @@ Big Picture's own state is **not detectable from the outside** (measured
   Steam client is up (that URL would **start** Steam — see `launcher.py`).
   It does **not** turn displays off: that is its own power-menu entry.
 - Every result is phrased as "started"/"ended", never "Big Picture is running" —
-  the process is detached, so nothing past the spawn is observable.
+  ok means the systemd unit was started, not that Big Picture actually shows up
+  or goes away, which stays unobservable from here.
+- `systemd-run` now blocks up to `_STEAM_RUN_TIMEOUT_SECONDS` (10s) instead of
+  returning in milliseconds like the old detached `Popen`. If the core's 20s
+  menu-action `wait_for` fires while `open_big_picture()` is still running on
+  its worker thread, Big Picture may still open but `mark_started()` never
+  runs, so the menu keeps offering "start" (#643).
 
 Icons come from a **closed** frontend map (#451); anything outside it silently
 degrades to the generic plug icon. `Gamepad2` and `Monitor` are known-good.

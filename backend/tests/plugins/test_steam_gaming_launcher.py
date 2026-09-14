@@ -71,6 +71,15 @@ class TestArgv:
         assert run.call_args.kwargs["timeout"] == launcher._STEAM_RUN_TIMEOUT_SECONDS == 10
         assert run.call_args.kwargs["stdin"] == subprocess.DEVNULL
 
+    def test_only_stderr_is_captured(self, prod):
+        """stdout is discarded; stderr is captured (for the warning log only -
+        it never reaches the caller, see TestFailures)."""
+        with patch("subprocess.run", return_value=_completed()) as run:
+            open_big_picture()
+
+        assert run.call_args.kwargs["stdout"] == subprocess.DEVNULL
+        assert run.call_args.kwargs["stderr"] == subprocess.PIPE
+
 
 class TestEnvironment:
     def test_backend_secrets_never_reach_the_call(self, prod, monkeypatch):
@@ -127,6 +136,30 @@ class TestFailures:
 
         assert ok is False
         assert "secret-path" not in detail
+
+    def test_close_failure_detail_does_not_say_started(self, prod):
+        """A copy-pasted 'steam could not be started' on the CLOSE path would
+        read as nonsense once wrapped by the caller ('could not be closed:
+        steam could not be started')."""
+        with patch("subprocess.run", side_effect=OSError("fork failed")):
+            ok, detail = close_big_picture()
+
+        assert ok is False
+        assert "started" not in detail
+
+    def test_long_stderr_is_logged_truncated_not_leaked_whole(self, prod, caplog):
+        tail_marker = "TAIL_MARKER_PAST_THE_LIMIT"
+        stderr = ("a" * launcher._STDERR_LOG_LIMIT + tail_marker).encode()
+        failed = _completed(1, stderr)
+        with caplog.at_level("WARNING"):
+            with patch("subprocess.run", return_value=failed):
+                ok, detail = open_big_picture()
+
+        assert ok is False
+        assert "started" not in detail
+        logged = caplog.text
+        assert "a" * launcher._STDERR_LOG_LIMIT in logged
+        assert tail_marker not in logged
 
 
 class TestDevMode:
