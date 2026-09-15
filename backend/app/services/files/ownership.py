@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import os
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal, Optional, cast
@@ -249,6 +250,10 @@ def transfer_ownership(
     """
     audit = get_audit_logger_db()
     normalized_path = path.strip("/")
+    # Undo information for the except handler: (source, target) of the physical
+    # move and (target, backup) of an overwritten target. Cleared after commit.
+    moved: Optional[tuple[Path, Path]] = None
+    overwritten_backup: Optional[tuple[Path, Path]] = None
     
     try:
         # 1. VALIDATION
@@ -330,6 +335,8 @@ def transfer_ownership(
         transferred_count = 0
         skipped_count = 0
         new_relative_path = normalized_path
+        target_abs: Optional[Path] = None
+        overwrite_target = False
         
         if needs_physical_move:
             # Ensure target user has home directory
@@ -368,12 +375,13 @@ def transfer_ownership(
             target_abs = target_dir / resolved_name
             new_relative_path = f"{new_owner.username}/{resolved_name}"
             
-            # Handle overwrite
+            # Handle overwrite: drop the old target's metadata now. Its file is
+            # only moved aside right before the move and deleted after commit.
             if conflict_info.action == "overwritten" and target_abs.exists():
-                _delete_path_and_metadata(str(target_abs.relative_to(ROOT_DIR)), db)
+                overwrite_target = True
+                _delete_metadata_tree(new_relative_path, db)
             
-            # 5. PHYSICAL MOVE (atomic on same filesystem)
-            os.rename(source_abs, target_abs)
+            # 5. PHYSICAL MOVE happens after the metadata flush (step 10)
             
         # 6. UPDATE METADATA
         
@@ -418,8 +426,29 @@ def transfer_ownership(
             vcl_file_ids.extend(child.id for child in children)
         _cascade_vcl_on_transfer(vcl_file_ids, old_owner_id, new_owner_id, db)
 
-        # 10. COMMIT
+        # 10. FLUSH, PHYSICAL MOVE, COMMIT (#544)
+        # Flushing first surfaces constraint violations (e.g. a stale metadata
+        # row on the target path) while nothing on disk has been touched yet.
+        db.flush()
+
+        if needs_physical_move and target_abs is not None:
+            if overwrite_target and target_abs.exists():
+                overwritten_backup = (
+                    target_abs,
+                    target_abs.with_name(f".{target_abs.name}.overwritten-{uuid.uuid4().hex}"),
+                )
+                os.rename(target_abs, overwritten_backup[1])
+            os.rename(source_abs, target_abs)  # atomic on same filesystem
+            moved = (source_abs, target_abs)
+
         db.commit()
+
+        # Committed: the move is final and must not be undone by a later error.
+        moved = None
+        if overwritten_backup is not None:
+            backup_abs = overwritten_backup[1]
+            overwritten_backup = None
+            _remove_path(backup_abs)
 
         # 11. AUDIT LOG
         audit.log_event(
@@ -452,6 +481,7 @@ def transfer_ownership(
     except Exception as e:
         db.rollback()
         logger.exception("Ownership transfer failed for %s", path)
+        _undo_physical_move(moved, overwritten_backup)
         audit.log_event(
             event_type="FILE_MODIFY",
             user=str(requesting_user_id),
@@ -563,26 +593,61 @@ def _cascade_vcl_on_transfer(
             )
 
 
-def _delete_path_and_metadata(relative_path: str, db: Session) -> None:
-    """Delete a file/directory and its metadata (for overwrite strategy)."""
-    import shutil
-    
-    abs_path = ROOT_DIR / relative_path
-    
-    # Delete children metadata first
+def _delete_metadata_tree(relative_path: str, db: Session) -> None:
+    """Delete the metadata of a path and its children (overwrite strategy).
+
+    The file itself is not touched here: transfer_ownership moves it aside
+    right before the physical move and removes it only after the commit.
+    ``relative_path`` must use forward slashes, as stored in the database.
+    """
     db.query(FileMetadata).filter(
         FileMetadata.path.startswith(f"{relative_path}/")
     ).delete(synchronize_session=False)
-    
-    # Delete main metadata
     db.query(FileMetadata).filter(FileMetadata.path == relative_path).delete(synchronize_session=False)
-    
-    # Delete from disk
-    if abs_path.exists():
+
+
+def _remove_path(abs_path: Path) -> None:
+    """Best-effort removal of an overwritten target after the commit."""
+    import shutil
+
+    try:
         if abs_path.is_dir():
             shutil.rmtree(abs_path)
         else:
             abs_path.unlink()
+    except OSError:
+        logger.warning("Could not remove overwritten target %s", abs_path, exc_info=True)
+
+
+def _undo_physical_move(
+    moved: Optional[tuple[Path, Path]],
+    overwritten_backup: Optional[tuple[Path, Path]],
+) -> None:
+    """Reverse the disk side of a transfer whose commit did not happen (#544).
+
+    Never raises: the caller is already handling a failure. If the reversal
+    itself fails, disk and database have diverged and need a manual fix, so
+    that is logged at CRITICAL with both paths.
+    """
+    if moved is not None:
+        source_abs, target_abs = moved
+        try:
+            os.rename(target_abs, source_abs)
+        except OSError:
+            logger.critical(
+                "Ownership transfer rollback failed: %s is still at %s, database points to the old path",
+                source_abs, target_abs, exc_info=True,
+            )
+            return
+    if overwritten_backup is not None:
+        target_abs, backup_abs = overwritten_backup
+        try:
+            os.rename(backup_abs, target_abs)
+        except OSError:
+            logger.critical(
+                "Ownership transfer rollback failed: overwritten target %s is still at %s",
+                target_abs, backup_abs, exc_info=True,
+            )
 
 
 def scan_residency_violations(
