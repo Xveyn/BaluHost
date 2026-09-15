@@ -44,6 +44,22 @@ describe('usePresenceHeartbeat', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  // #453: crypto.randomUUID only exists in a secure context (HTTPS/localhost).
+  // Opening the web UI via the LAN IP over plain HTTP must not crash the app.
+  it('still sends a heartbeat when crypto.randomUUID is unavailable (non-secure context)', async () => {
+    const realCrypto = globalThis.crypto;
+    vi.stubGlobal('crypto', {
+      getRandomValues: realCrypto.getRandomValues.bind(realCrypto),
+    });
+
+    renderHook(() => usePresenceHeartbeat());
+    await flushAsync();
+
+    expect(mockedSend).toHaveBeenCalledTimes(1);
+    expect(mockedSend.mock.calls[0][0].client_id.length).toBeGreaterThanOrEqual(8);
   });
 
   it('sends an immediate heartbeat on mount when visible', async () => {
