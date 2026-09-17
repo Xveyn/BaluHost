@@ -127,11 +127,23 @@ process_template() {
     local content
     content=$(<"$template")
 
+    # patsub_replacement (bash >= 5.2, ON by default — Debian 13 ships 5.2)
+    # makes an unquoted '&' in the replacement expand to the matched text, so a
+    # value containing one would render "@@KEY@@" back into the output. The
+    # result still looks like a valid config file, so it installs silently and
+    # only the rule it belongs to stops working (#581). No-op on older bash.
+    local _patsub_was_set=""
+    shopt -q patsub_replacement 2>/dev/null && _patsub_was_set=1
+    shopt -u patsub_replacement 2>/dev/null || true
+
     for pair in "$@"; do
         local key="${pair%%=*}"
         local val="${pair#*=}"
         content="${content//@@${key}@@/$val}"
     done
+
+    # Restore — this lib is sourced, so the setting belongs to the caller.
+    [[ -n "$_patsub_was_set" ]] && shopt -s patsub_replacement 2>/dev/null
 
     echo "$content" > "$output"
 }

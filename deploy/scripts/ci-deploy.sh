@@ -16,6 +16,15 @@ set -euo pipefail
 # ─── Configuration ────────────────────────────────────────────────────
 
 INSTALL_DIR="${INSTALL_DIR:-/opt/baluhost}"
+# Trailing slash off: sudo matches a whitelisted command as an exact STRING, so
+# "/opt/baluhost//deploy/scripts/x.sh" built from a slashed DEPLOY_FORK_INSTALL_DIR
+# would not match the rule rendered without the doubled slash — and every
+# permission sync would silently degrade to a WARN line (#581). A loop, not a
+# single %/, so "/srv/x//" lands at "/srv/x" too; guarded so a literal "/" does
+# not collapse to the empty string.
+while [[ "${#INSTALL_DIR}" -gt 1 && "$INSTALL_DIR" == */ ]]; do
+    INSTALL_DIR="${INSTALL_DIR%/}"
+done
 BACKUP_DIR="$INSTALL_DIR/backups/deploys"
 DEPLOY_STATE="$INSTALL_DIR/.deploy-state"
 LOG_DIR="/var/log/baluhost/deploys"
@@ -473,8 +482,11 @@ if [[ "${SYNC_PERMISSIONS:-0}" == "1" || "${SYNC_PERMISSIONS,,}" == "true" ]]; t
     log_step "OS Permission Grants (sync requested)"
 
     # AMD GPU sysfs power nodes: chgrp video + g+w via udev rule.
-    # The script defaults BALUHOST_USER=sven internally; sudoers rule
-    # whitelists this exact bash invocation, so no env vars are passed.
+    # Der sudoers-Eintrag pinnt genau diese bash-Invocation, also lassen sich
+    # keine Umgebungsvariablen mitgeben. Das Skript leitet den Dienstbenutzer
+    # deshalb selbst aus `User=` von baluhost-backend.service ab und bricht ab,
+    # wenn das nicht geht -- frueher fiel es auf einen festen Login zurueck und
+    # trug die Gruppe 'video' auf einer Fork-Box beim falschen Konto ein (#581).
     run_permission_script "AMD GPU permission"         "$INSTALL_DIR/deploy/scripts/install-amd-gpu-permissions.sh"
 
     # Hardware sudoers: RAID/SMART/fan/CPU-freq/suspend/rtcwake/ethtool grants.

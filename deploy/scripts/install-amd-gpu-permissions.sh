@@ -26,8 +26,8 @@
 
 set -euo pipefail
 
-BALUHOST_USER="${BALUHOST_USER:-sven}"
 RULE_PATH="/etc/udev/rules.d/70-baluhost-amd-gpu.rules"
+SERVICE="${SERVICE:-baluhost-backend.service}"
 
 if [[ "$EUID" -ne 0 ]]; then
     echo "ERROR: must run as root (use sudo)." >&2
@@ -40,6 +40,30 @@ if ! ls /sys/class/drm/card*/device/power_dpm_force_performance_level >/dev/null
     echo "WARN: no AMDGPU sysfs power nodes found. Aborting (nothing to do)." >&2
     exit 0
 fi
+
+# Derive the service user from baluhost-backend.service 'User=' so the 'video'
+# group lands on whoever actually runs the backend — not a hardcoded name.
+# Order: explicit BALUHOST_USER override > systemd 'User=' > error out.
+#
+# This used to fall back to "sven", the upstream maintainer's login (#581).
+# ci-deploy.sh invokes this script through a sudoers entry that pins the exact
+# `bash <path>` call, so it cannot pass any environment variable — that
+# fallback was the only identity the script ever saw. On a fork box it meant
+# either `usermod -aG video sven` against a non-existent user, or the 'video'
+# group going to some unrelated account while the real service user never got
+# it. Both surfaced as a green deploy with one non-fatal WARN line, and the GPU
+# writes kept failing with "Permission denied".
+#
+# Resolved after the card check on purpose: a box without an AMD GPU has
+# nothing to do here and should not fail over an identity it never needs.
+SERVICE_USER="$(systemctl show -p User --value "$SERVICE" 2>/dev/null || true)"
+BALUHOST_USER="${BALUHOST_USER:-${SERVICE_USER:-}}"
+if [[ -z "$BALUHOST_USER" ]]; then
+    echo "ERROR: could not determine the service user from '$SERVICE' (User=)" >&2
+    echo "       and BALUHOST_USER is unset. Set BALUHOST_USER explicitly." >&2
+    exit 1
+fi
+echo "  ..  granting AMD GPU sysfs access to user: $BALUHOST_USER"
 
 # 1. Write the rule
 cat >"$RULE_PATH" <<EOF

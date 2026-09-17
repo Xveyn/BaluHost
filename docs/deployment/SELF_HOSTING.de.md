@@ -113,5 +113,15 @@ Pipeline vorbehalten.
   Andernfalls gilt: Der Runner muss auf der Zielmaschine online sein und das
   Installationsverzeichnis eine abgeschlossene
   `deploy/install/install.sh`-Einrichtung enthalten.
+- **Ein Permission-Sync bricht mit „could not determine the service user" ab** —
+  ein `SYNC_PERMISSIONS=1`-Deploy liest den Linux-Dienstbenutzer aus `User=` von
+  `baluhost-backend.service`, weil das die einzige Stelle ist, an der er
+  tatsächlich stimmt; `github.actor` ist ein Audit-Feld und nie eine
+  Betriebssystem-Identität (#581). Die Meldung heißt: Die Unit fehlt oder hat
+  kein `User=`. Entweder `deploy/install/install.sh` auf der Box zu Ende
+  bringen, oder den Namen explizit mitgeben:
+  `sudo env BALUHOST_USER=<user> bash <install-dir>/deploy/scripts/install-deploy-sudoers.sh`.
+  Der Abbruch ist Absicht: Ein geratener Name würde die Rechte still dem
+  falschen Konto geben und der Deploy meldete trotzdem Erfolg.
 - **PRs von Erstbeitragenden starten kein CI** — Standardverhalten von GitHub;
   den Lauf im Actions-Tab genehmigen („Approve and run").

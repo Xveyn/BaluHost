@@ -27,7 +27,7 @@ Default permissions on Debian 13:
 -rw-r--r-- 1 root root /sys/class/drm/card0/device/pp_power_profile_mode
 ```
 
-→ Only `root` can write. The BaluHost backend runs as **`sven`** (or whichever user was selected at install time), so it hits a `Permission denied` error.
+→ Only `root` can write. The BaluHost backend runs as whichever user was selected at install time (`User=` in `baluhost-backend.service`), so it hits a `Permission denied` error.
 
 ## Fix: udev rule + `video` group
 
@@ -47,7 +47,16 @@ On the server, **as root**:
 
 ```bash
 cd /opt/baluhost
-sudo BALUHOST_USER=sven bash deploy/scripts/install-amd-gpu-permissions.sh
+sudo bash deploy/scripts/install-amd-gpu-permissions.sh
+```
+
+The script reads the service user from `User=` of `baluhost-backend.service`
+and aborts if it cannot — it never guesses a login (#581). Override it only if
+you know the unit is not the right source, and note that `sudo` drops plain
+`VAR=value` assignments without `SETENV`, so `env` is required:
+
+```bash
+sudo env BALUHOST_USER=<user> bash deploy/scripts/install-amd-gpu-permissions.sh
 ```
 
 Immediate effect; backend is restarted automatically.
@@ -62,8 +71,15 @@ Starting with the branch that introduces the `SYNC_PERMISSIONS` variable:
    ```bash
    cd /opt/baluhost
    git pull
-   sudo BALUHOST_USER=sven bash deploy/scripts/install-deploy-sudoers.sh
+   sudo bash deploy/scripts/install-deploy-sudoers.sh
    ```
+
+   This file is the one whose mis-render strips the deploy user of every
+   NOPASSWD right, so the script resolves the user from `User=` of
+   `baluhost-backend.service` and aborts rather than guess. It keeps a
+   timestamped `.bak` of the previous file. Pass a name explicitly only if you
+   must — and with `env`, since `sudo` drops bare `VAR=value` assignments:
+   `sudo env BALUHOST_USER=<user> bash deploy/scripts/install-deploy-sudoers.sh`
 
    After this `bash /opt/baluhost/deploy/scripts/install-amd-gpu-permissions.sh`
    is on the deploy-user sudoers allow-list.
@@ -86,7 +102,7 @@ udev rule and adds the user to the `video` group automatically.
 The script:
 
 1. Writes `/etc/udev/rules.d/70-baluhost-amd-gpu.rules`
-2. Adds `sven` (or `$BALUHOST_USER`) to the `video` group if not already a member
+2. Adds the service user (from `User=`, or `$BALUHOST_USER` if set) to the `video` group if not already a member
 3. Reloads udev and re-triggers the DRM subsystem
 4. Restarts `baluhost-backend.service` so the process picks up the new group
 
@@ -102,7 +118,7 @@ ls -la /sys/class/drm/card0/device/power_dpm_force_performance_level
 **2. backend user in `video` group:**
 
 ```bash
-groups sven
+groups "$(systemctl show -p User --value baluhost-backend.service)"
 # Expected: ... video ...
 ```
 

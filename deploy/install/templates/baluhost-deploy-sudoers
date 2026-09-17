@@ -13,18 +13,23 @@
 # Only invoked when SYNC_PERMISSIONS=1 in ci-deploy.sh; off by default.
 # Pinning the absolute path means the deploy user cannot run *any* shell
 # script as root — only this specific, version-controlled file.
-@@BALUHOST_USER@@ ALL=(root) NOPASSWD: /bin/bash /opt/baluhost/deploy/scripts/install-amd-gpu-permissions.sh
-@@BALUHOST_USER@@ ALL=(root) NOPASSWD: /usr/bin/bash /opt/baluhost/deploy/scripts/install-amd-gpu-permissions.sh
-@@BALUHOST_USER@@ ALL=(root) NOPASSWD: /bin/bash /opt/baluhost/deploy/scripts/install-hardware-sudoers.sh
-@@BALUHOST_USER@@ ALL=(root) NOPASSWD: /usr/bin/bash /opt/baluhost/deploy/scripts/install-hardware-sudoers.sh
-@@BALUHOST_USER@@ ALL=(root) NOPASSWD: /bin/bash /opt/baluhost/deploy/scripts/install-power-sudoers.sh
-@@BALUHOST_USER@@ ALL=(root) NOPASSWD: /usr/bin/bash /opt/baluhost/deploy/scripts/install-power-sudoers.sh
+# @@INSTALL_DIR@@ is substituted at render time, so a box installed outside
+# /opt/baluhost gets rules that actually match its own paths (#581). It is a
+# literal directory, never a pattern — the rules stay exact.
+@@BALUHOST_USER@@ ALL=(root) NOPASSWD: /bin/bash @@INSTALL_DIR@@/deploy/scripts/install-amd-gpu-permissions.sh
+@@BALUHOST_USER@@ ALL=(root) NOPASSWD: /usr/bin/bash @@INSTALL_DIR@@/deploy/scripts/install-amd-gpu-permissions.sh
+@@BALUHOST_USER@@ ALL=(root) NOPASSWD: /bin/bash @@INSTALL_DIR@@/deploy/scripts/install-hardware-sudoers.sh
+@@BALUHOST_USER@@ ALL=(root) NOPASSWD: /usr/bin/bash @@INSTALL_DIR@@/deploy/scripts/install-hardware-sudoers.sh
+@@BALUHOST_USER@@ ALL=(root) NOPASSWD: /bin/bash @@INSTALL_DIR@@/deploy/scripts/install-power-sudoers.sh
+@@BALUHOST_USER@@ ALL=(root) NOPASSWD: /usr/bin/bash @@INSTALL_DIR@@/deploy/scripts/install-power-sudoers.sh
 
 # Companion (Tauri) install — only invoked when INSTALL_COMPANION=1 in
 # ci-deploy.sh; off by default. The script installs ONLY the .deb staged by
-# the deploy at the fixed path /opt/baluhost/.companion/baluhost-companion.deb.
+# the deploy at <install-dir>/.companion/baluhost-companion.deb — still one
+# fixed, non-user-controlled path, now resolved from the script's own location
+# instead of a hardcoded /opt/baluhost (#581).
 # dpkg/apt are deliberately NOT whitelisted directly — pinning this exact,
 # version-controlled script means the deploy user cannot install arbitrary
 # packages, only this one.
-@@BALUHOST_USER@@ ALL=(root) NOPASSWD: /bin/bash /opt/baluhost/deploy/scripts/install-companion.sh
-@@BALUHOST_USER@@ ALL=(root) NOPASSWD: /usr/bin/bash /opt/baluhost/deploy/scripts/install-companion.sh
+@@BALUHOST_USER@@ ALL=(root) NOPASSWD: /bin/bash @@INSTALL_DIR@@/deploy/scripts/install-companion.sh
+@@BALUHOST_USER@@ ALL=(root) NOPASSWD: /usr/bin/bash @@INSTALL_DIR@@/deploy/scripts/install-companion.sh

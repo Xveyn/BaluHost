@@ -123,5 +123,14 @@ NOT part of fork deploys — that stays exclusive to the canonical pipeline.
   missing, the job falls back to a GitHub VM and fails inside `ci-deploy.sh`.
   Otherwise: the runner must be online on the target box and the install dir
   must contain a completed `deploy/install/install.sh` setup.
+- **A permission sync aborts with "could not determine the service user"** —
+  a `SYNC_PERMISSIONS=1` deploy reads the Linux service user from `User=` of
+  `baluhost-backend.service`, because that is the only place it is actually
+  true; `github.actor` is an audit field and never an OS identity (#581). The
+  message means the unit is missing or carries no `User=` — finish
+  `deploy/install/install.sh` on the box, or pass the name explicitly:
+  `sudo env BALUHOST_USER=<user> bash <install-dir>/deploy/scripts/install-deploy-sudoers.sh`.
+  Aborting is deliberate: guessing a name would silently grant the rules to the
+  wrong account and still report a green deploy.
 - **First-time contributors' PRs don't run CI** — standard GitHub behavior;
   approve the run in the Actions tab ("Approve and run").

@@ -8,6 +8,14 @@ BALUHOST_CONFIG="${BALUHOST_CONFIG:-/etc/baluhost/install.conf}"
 # ─── Default Values ──────────────────────────────────────────────────
 
 : "${INSTALL_DIR:=/opt/baluhost}"
+# Trailing slash off before anything renders it into a template: sudo compares a
+# whitelisted command as an exact STRING, so "/opt/baluhost//deploy/scripts/x.sh"
+# from a slashed install.conf value would never match a rule written without the
+# doubled slash (#581). A loop, not a single %/, so "/srv/x//" lands at "/srv/x"
+# too; guarded so a literal "/" does not collapse to "".
+while [[ "${#INSTALL_DIR}" -gt 1 && "$INSTALL_DIR" == */ ]]; do
+    INSTALL_DIR="${INSTALL_DIR%/}"
+done
 # Derive the service user/group from the install directory owner when not
 # explicitly set (env or install.conf). Without this, a host installed under a
 # different account (e.g. "sven") falls back to a non-existent "baluhost" user,

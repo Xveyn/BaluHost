@@ -14,9 +14,13 @@
 
 set -euo pipefail
 
-INSTALL_DIR="${INSTALL_DIR:-/opt/baluhost}"
+# Where this script lives, the repo lives — so the staging path follows the
+# install directory instead of a hardcoded /opt/baluhost (#581). The path stays
+# just as fixed and just as non-user-controlled: the sudoers entry pins this
+# script's own location, and the .deb is resolved relative to it.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+INSTALL_DIR="${INSTALL_DIR:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
 # Fixed staging path written by ci-deploy.sh's build_install_companion().
-# Pinning it here is what lets the sudoers entry pin a single, exact command.
 DEB_PATH="$INSTALL_DIR/.companion/baluhost-companion.deb"
 
 if [[ "$EUID" -ne 0 ]]; then
