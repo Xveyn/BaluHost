@@ -358,6 +358,243 @@ class TestTransferOwnership:
         assert result.error == "HOME_DIRECTORY"
 
 
+@pytest.fixture
+def second_home(db_session: Session, second_user: User, storage_root: Path) -> Path:
+    """Create the second user's home directory on disk and in metadata (committed)."""
+    home = storage_root / second_user.username
+    home.mkdir(parents=True, exist_ok=True)
+    if not file_metadata_db.get_metadata(second_user.username, db=db_session):
+        file_metadata_db.create_metadata(
+            relative_path=second_user.username,
+            name=second_user.username,
+            owner_id=second_user.id,
+            is_directory=True,
+            db=db_session,
+        )
+    db_session.commit()
+    return home
+
+
+class TestTransferFailureLeavesStateConsistent:
+    """#544: a failure after the physical move must not leave disk and DB diverged."""
+
+    def test_failure_after_move_restores_source_file(
+        self,
+        db_session: Session,
+        user_with_file: tuple[User, FileMetadata, Path],
+        second_user: User,
+        second_home: Path,
+        monkeypatch,
+    ):
+        old_owner, file_meta, old_path = user_with_file
+        source_rel = file_meta.path
+        db_session.commit()
+
+        def boom(*args, **kwargs):
+            raise RuntimeError("simulated DB failure")
+
+        monkeypatch.setattr(ownership, "_cascade_vcl_on_transfer", boom)
+
+        result = ownership.transfer_ownership(
+            path=source_rel,
+            new_owner_id=second_user.id,
+            requesting_user_id=old_owner.id,
+            requesting_user_is_admin=False,
+            db=db_session,
+        )
+
+        assert not result.success
+        assert old_path.read_text() == "Hello World"
+        assert not (second_home / "testfile.txt").exists()
+        meta = file_metadata_db.get_metadata(source_rel, db=db_session)
+        assert meta is not None
+        assert meta.owner_id == old_owner.id
+
+    def test_db_path_collision_does_not_move_file(
+        self,
+        db_session: Session,
+        user_with_file: tuple[User, FileMetadata, Path],
+        second_user: User,
+        second_home: Path,
+    ):
+        """A stale metadata row at the target path (file gone from disk) passes the
+        disk-only conflict check but violates the unique path constraint."""
+        old_owner, file_meta, old_path = user_with_file
+        source_rel = file_meta.path
+        file_metadata_db.create_metadata(
+            relative_path=f"{second_user.username}/testfile.txt",
+            name="testfile.txt",
+            owner_id=second_user.id,
+            size_bytes=5,
+            is_directory=False,
+            db=db_session,
+        )
+        db_session.commit()
+
+        result = ownership.transfer_ownership(
+            path=source_rel,
+            new_owner_id=second_user.id,
+            requesting_user_id=old_owner.id,
+            requesting_user_is_admin=False,
+            db=db_session,
+            conflict_strategy="rename",
+        )
+
+        assert not result.success
+        assert old_path.read_text() == "Hello World"
+        assert not (second_home / "testfile.txt").exists()
+        meta = file_metadata_db.get_metadata(source_rel, db=db_session)
+        assert meta is not None
+        assert meta.owner_id == old_owner.id
+
+    def test_overwrite_failure_keeps_existing_target(
+        self,
+        db_session: Session,
+        user_with_file: tuple[User, FileMetadata, Path],
+        second_user: User,
+        second_home: Path,
+        monkeypatch,
+    ):
+        old_owner, file_meta, old_path = user_with_file
+        source_rel = file_meta.path
+        target_rel = f"{second_user.username}/testfile.txt"
+        (second_home / "testfile.txt").write_text("Existing file")
+        file_metadata_db.create_metadata(
+            relative_path=target_rel,
+            name="testfile.txt",
+            owner_id=second_user.id,
+            size_bytes=13,
+            is_directory=False,
+            db=db_session,
+        )
+        db_session.commit()
+
+        def boom(*args, **kwargs):
+            raise RuntimeError("simulated DB failure")
+
+        monkeypatch.setattr(ownership, "_cascade_vcl_on_transfer", boom)
+
+        result = ownership.transfer_ownership(
+            path=source_rel,
+            new_owner_id=second_user.id,
+            requesting_user_id=old_owner.id,
+            requesting_user_is_admin=False,
+            db=db_session,
+            conflict_strategy="overwrite",
+        )
+
+        assert not result.success
+        assert old_path.read_text() == "Hello World"
+        assert (second_home / "testfile.txt").read_text() == "Existing file"
+        assert file_metadata_db.get_metadata(target_rel, db=db_session) is not None
+        assert file_metadata_db.get_metadata(source_rel, db=db_session) is not None
+
+    def test_commit_failure_after_move_moves_file_back(
+        self,
+        db_session: Session,
+        user_with_file: tuple[User, FileMetadata, Path],
+        second_user: User,
+        second_home: Path,
+        monkeypatch,
+    ):
+        """The disk move has already happened when the commit fails."""
+        old_owner, file_meta, old_path = user_with_file
+        source_rel = file_meta.path
+        db_session.commit()
+
+        def failing_commit():
+            raise RuntimeError("simulated commit failure")
+
+        monkeypatch.setattr(db_session, "commit", failing_commit)
+
+        result = ownership.transfer_ownership(
+            path=source_rel,
+            new_owner_id=second_user.id,
+            requesting_user_id=old_owner.id,
+            requesting_user_is_admin=False,
+            db=db_session,
+        )
+
+        assert not result.success
+        assert old_path.read_text() == "Hello World"
+        assert not (second_home / "testfile.txt").exists()
+
+    def test_commit_failure_on_overwrite_restores_both_files(
+        self,
+        db_session: Session,
+        user_with_file: tuple[User, FileMetadata, Path],
+        second_user: User,
+        second_home: Path,
+        monkeypatch,
+    ):
+        old_owner, file_meta, old_path = user_with_file
+        source_rel = file_meta.path
+        (second_home / "testfile.txt").write_text("Existing file")
+        file_metadata_db.create_metadata(
+            relative_path=f"{second_user.username}/testfile.txt",
+            name="testfile.txt",
+            owner_id=second_user.id,
+            size_bytes=13,
+            is_directory=False,
+            db=db_session,
+        )
+        db_session.commit()
+
+        def failing_commit():
+            raise RuntimeError("simulated commit failure")
+
+        monkeypatch.setattr(db_session, "commit", failing_commit)
+
+        result = ownership.transfer_ownership(
+            path=source_rel,
+            new_owner_id=second_user.id,
+            requesting_user_id=old_owner.id,
+            requesting_user_is_admin=False,
+            db=db_session,
+            conflict_strategy="overwrite",
+        )
+
+        assert not result.success
+        assert old_path.read_text() == "Hello World"
+        assert (second_home / "testfile.txt").read_text() == "Existing file"
+        assert sorted(p.name for p in second_home.iterdir()) == ["testfile.txt"]
+
+    def test_overwrite_success_replaces_target(
+        self,
+        db_session: Session,
+        user_with_file: tuple[User, FileMetadata, Path],
+        second_user: User,
+        second_home: Path,
+    ):
+        """Guard for the happy path: overwrite still replaces the old target and
+        leaves no leftover backup next to it."""
+        old_owner, file_meta, old_path = user_with_file
+        (second_home / "testfile.txt").write_text("Existing file")
+        file_metadata_db.create_metadata(
+            relative_path=f"{second_user.username}/testfile.txt",
+            name="testfile.txt",
+            owner_id=second_user.id,
+            size_bytes=13,
+            is_directory=False,
+            db=db_session,
+        )
+        db_session.commit()
+
+        result = ownership.transfer_ownership(
+            path=file_meta.path,
+            new_owner_id=second_user.id,
+            requesting_user_id=old_owner.id,
+            requesting_user_is_admin=False,
+            db=db_session,
+            conflict_strategy="overwrite",
+        )
+
+        assert result.success
+        assert not old_path.exists()
+        assert (second_home / "testfile.txt").read_text() == "Hello World"
+        assert sorted(p.name for p in second_home.iterdir()) == ["testfile.txt"]
+
+
 class TestResidencyEnforcement:
     """Tests for residency enforcement functions."""
 

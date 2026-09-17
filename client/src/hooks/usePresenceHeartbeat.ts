@@ -33,10 +33,18 @@ interface UsePresenceHeartbeatOptions {
   enabled?: boolean;
 }
 
+function createClientId(): string {
+  if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  // randomUUID only exists in a secure context; the web UI is also served over
+  // plain HTTP on the LAN IP (#453). getRandomValues is not secure-context-gated.
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
 function getClientId(): string {
   let id = sessionStorage.getItem(CLIENT_ID_KEY);
   if (!id) {
-    id = crypto.randomUUID();
+    id = createClientId();
     sessionStorage.setItem(CLIENT_ID_KEY, id);
   }
   return id;
