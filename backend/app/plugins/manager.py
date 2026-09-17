@@ -514,6 +514,8 @@ class PluginManager:
             else:
                 logger.debug(f"Skipping background tasks for {name} (secondary worker)")
 
+            self._mirror_into_smart_device_registry(plugin)
+
             self._enabled.add(name)
             logger.info(f"Enabled plugin: {name}")
             return True
@@ -568,6 +570,40 @@ class PluginManager:
         logger.info("Enabled external (sandboxed) plugin: %s", name)
         return True
 
+    @staticmethod
+    def _mirror_into_smart_device_registry(plugin: PluginBase) -> None:
+        """Register a smart-device plugin with the SmartDeviceManager.
+
+        ``SmartDeviceManager._plugins`` is what decides whether
+        ``/api/smart-devices/…`` can reach a device, so it has to follow
+        enablement instead of keeping its own view of it (#459). Doing it here
+        means every path that enables a plugin - startup, the toggle endpoint
+        and the per-worker reconcile - agrees by construction.
+
+        A no-op for plugins that are not smart-device plugins: the registry is
+        iterated by ``get_all_device_types()``, which would break on one.
+        """
+        from app.plugins.smart_device.base import SmartDevicePlugin
+
+        if not isinstance(plugin, SmartDevicePlugin):
+            return
+
+        from app.plugins.smart_device.manager import SmartDeviceManager
+
+        SmartDeviceManager.get_instance().register_plugin(plugin)
+
+    @staticmethod
+    def _drop_from_smart_device_registry(name: str) -> None:
+        """Counterpart of :meth:`_mirror_into_smart_device_registry`.
+
+        Unconditional and by name: a plugin left in the registry after being
+        disabled stays commandable, and ``/api/smart-devices/…`` is a core
+        route that ``PluginGateMiddleware`` does not cover.
+        """
+        from app.plugins.smart_device.manager import SmartDeviceManager
+
+        SmartDeviceManager.get_instance().unregister_plugin(name)
+
     async def disable_plugin(self, name: str) -> bool:
         """Disable a plugin.
 
@@ -577,6 +613,10 @@ class PluginManager:
         Returns:
             True if plugin was disabled successfully
         """
+        # Before any early return below: the registry must never outlive
+        # enablement, whatever kind of plugin this is (#459).
+        self._drop_from_smart_device_registry(name)
+
         if name in self._sandboxes:
             supervisor = self._sandboxes[name]
             try:

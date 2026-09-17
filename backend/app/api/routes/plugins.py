@@ -358,11 +358,9 @@ async def toggle_plugin(
                 detail="Failed to enable plugin",
             )
 
-        # If this is a SmartDevicePlugin, register with SmartDeviceManager
-        from app.plugins.smart_device.base import SmartDevicePlugin
-        if isinstance(plugin, SmartDevicePlugin):
-            from app.plugins.smart_device.manager import SmartDeviceManager
-            SmartDeviceManager.get_instance().register_plugin(plugin)
+        # SmartDeviceManager registration happens inside
+        # PluginManager.enable_plugin() so that startup, this endpoint and the
+        # per-worker reconcile cannot drift apart (#459).
 
         invalidate_plugin_cache(name)
         logger.info("Plugin %s enabled by %s", name, current_user.username)
@@ -374,13 +372,8 @@ async def toggle_plugin(
 
     else:
         # Disabling plugin
-        # If this is a SmartDevicePlugin, unregister from SmartDeviceManager
-        from app.plugins.smart_device.base import SmartDevicePlugin
-        if isinstance(plugin, SmartDevicePlugin):
-            from app.plugins.smart_device.manager import SmartDeviceManager
-            mgr = SmartDeviceManager.get_instance()
-            mgr._plugins.pop(name, None)
-
+        # The SmartDeviceManager unregistration happens inside
+        # disable_plugin() — see the enable branch above (#459).
         success = await plugin_manager.disable_plugin(name)
 
         plugin_service.disable_plugin_record(db, name)

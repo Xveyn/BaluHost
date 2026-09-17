@@ -53,7 +53,6 @@ IS_PRIMARY_WORKER = False  # Determined in _lifespan() after fork
 _discovery_service = None
 _plugin_manager = None
 _websocket_manager = None
-_smart_device_manager = None
 
 # Long-running tasks this module starts itself. The event loop only keeps a
 # weak reference to a task, so anything not held here may be garbage-collected
@@ -496,7 +495,7 @@ def _start_concurrency_probe() -> "asyncio.Task | None":
 
 async def _startup(app: FastAPI) -> None:
     """Run all startup initialization steps."""
-    global _discovery_service, _websocket_manager, _plugin_manager, IS_PRIMARY_WORKER, _smart_device_manager
+    global _discovery_service, _websocket_manager, _plugin_manager, IS_PRIMARY_WORKER
 
     from app.services.files.storage_permissions import STORAGE_UMASK
     old_umask = os.umask(STORAGE_UMASK)
@@ -716,20 +715,10 @@ async def _startup(app: FastAPI) -> None:
     except Exception as e:
         logger.warning(f"Plugin system could not initialize: {e}")
 
-    # Initialize SmartDeviceManager and register any loaded smart_device plugins
-    try:
-        from app.plugins.smart_device.manager import SmartDeviceManager
-        from app.plugins.smart_device.base import SmartDevicePlugin
-
-        _smart_device_manager = SmartDeviceManager.get_instance()
-        if _plugin_manager is not None:
-            for plugin_name in list(_plugin_manager._enabled):
-                plugin_obj = _plugin_manager.get_plugin(plugin_name)
-                if isinstance(plugin_obj, SmartDevicePlugin):
-                    _smart_device_manager.register_plugin(plugin_obj)
-        logger.info("SmartDeviceManager initialized")
-    except Exception as e:
-        logger.warning(f"SmartDeviceManager could not initialize: {e}")
+    # No SmartDeviceManager registration pass here: load_enabled_plugins() above
+    # routes every plugin through PluginManager.enable_plugin(), which mirrors
+    # smart-device plugins into the registry itself (#459). A second pass would
+    # be a fourth place that has to agree about the same thing.
 
     # Concurrency-Probe (S1/#300): läuft auf JEDEM Worker, nicht nur dem
     # primären — der gesuchte Effekt (blockierter Event-Loop, Pool-Auslastung)
