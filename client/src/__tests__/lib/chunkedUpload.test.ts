@@ -232,22 +232,92 @@ describe('abort', () => {
     expect(chunkCalls).toHaveLength(1); // not 4
   });
 
-  it('CHARACTERISATION: an abort DURING a chunk leaves the server session behind', async () => {
-    // Documents today's behaviour, it is not an endorsement. The abort path is
-    // asymmetric: between chunks the loop breaks and _abortServer() runs, but a
-    // mid-flight AbortError is rethrown straight out of upload() and skips the
-    // DELETE, so the server keeps the partial session until it expires on its
-    // own. If that is ever fixed, this test flips to expecting the DELETE.
+  it('stops DURING a chunk and frees the server session as well', async () => {
+    // The path a real cancel almost always takes: chunks are large and the gap
+    // between two of them is a blink, so the click lands while one is in
+    // flight. This used to rethrow the AbortError straight out of upload() and
+    // skip the DELETE, leaving the transferred gigabytes on the array until the
+    // janitor's 24h timeout collected them (#506).
     const uploader = new ChunkedUploader(makeFile(10), '/t', vi.fn());
     fetchMock
       .mockResolvedValueOnce(ok({ upload_id: 'u1', chunk_size: 5 }))
       .mockImplementationOnce(async () => {
         uploader.abort();
         throw Object.assign(new Error('aborted'), { name: 'AbortError' });
+      })
+      .mockResolvedValueOnce(ok({}));
+
+    await expect(uploader.upload()).rejects.toThrow('Upload aborted');
+
+    const last = fetchMock.mock.calls.at(-1)!;
+    expect(methodOf(last)).toBe('DELETE');
+    expect(urlOf(last)).toContain('/api/files/upload/chunked/u1');
+  });
+
+  it('does not retry the chunk it was aborted in', async () => {
+    // An abort is not a transient failure - the three-attempt backoff must not
+    // keep pushing bytes at a session that is being torn down.
+    const uploader = new ChunkedUploader(makeFile(10), '/t', vi.fn());
+    fetchMock
+      .mockResolvedValueOnce(ok({ upload_id: 'u1', chunk_size: 5 }))
+      .mockImplementationOnce(async () => {
+        uploader.abort();
+        throw Object.assign(new Error('aborted'), { name: 'AbortError' });
+      })
+      .mockResolvedValue(ok({}));
+
+    await expect(uploader.upload()).rejects.toThrow('Upload aborted');
+
+    const chunkCalls = fetchMock.mock.calls.filter((c) => urlOf(c).includes('/chunk?'));
+    expect(chunkCalls).toHaveLength(1); // the aborted attempt, and nothing after it
+  });
+
+  it('treats a cancel during the retry backoff as an abort, not as the failure it was retrying', async () => {
+    // The third abort path, and the easiest one to miss: nothing is in flight,
+    // the retry loop is simply asleep between two attempts. Reporting the
+    // transient error that triggered the backoff would tell the user their
+    // upload "failed: connection reset" when in fact they cancelled it.
+    vi.useFakeTimers();
+    const uploader = new ChunkedUploader(makeFile(10), '/t', vi.fn());
+    fetchMock
+      .mockResolvedValueOnce(ok({ upload_id: 'u1', chunk_size: 5 }))
+      .mockResolvedValueOnce(fail(503, 'connection reset'))
+      .mockResolvedValue(ok({}));
+
+    const settled = expect(uploader.upload()).rejects.toMatchObject({
+      name: 'AbortError',
+      message: 'Upload aborted',
+    });
+    setTimeout(() => uploader.abort(), 500); // half-way into the 1s backoff
+    await vi.advanceTimersByTimeAsync(5000);
+    await settled;
+
+    const last = fetchMock.mock.calls.at(-1)!;
+    expect(methodOf(last)).toBe('DELETE');
+    expect(urlOf(last)).toContain('/api/files/upload/chunked/u1');
+  });
+
+  it('names every abort AbortError, so the UI knows not to shout about them', async () => {
+    // UploadContext suppresses the "upload failed" toast on name ===
+    // 'AbortError'. A cancel the user asked for is not an error to report, and
+    // the two abort paths have to agree on that - otherwise whether the user
+    // gets an error toast depends on how quickly they clicked.
+    for (const abortDuringChunk of [false, true]) {
+      fetchMock.mockReset();
+      const uploader = new ChunkedUploader(makeFile(10), '/t', vi.fn());
+      fetchMock
+        .mockResolvedValueOnce(ok({ upload_id: 'u1', chunk_size: 5 }))
+        .mockImplementationOnce(async () => {
+          uploader.abort();
+          if (abortDuringChunk) throw Object.assign(new Error('aborted'), { name: 'AbortError' });
+          return ok({ received_bytes: 5 });
+        })
+        .mockResolvedValue(ok({}));
+
+      await expect(uploader.upload()).rejects.toMatchObject({
+        name: 'AbortError',
+        message: 'Upload aborted',
       });
-
-    await expect(uploader.upload()).rejects.toThrow();
-
-    expect(fetchMock.mock.calls.some((c) => methodOf(c) === 'DELETE')).toBe(false);
+    }
   });
 });
