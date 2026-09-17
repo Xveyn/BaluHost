@@ -45,6 +45,12 @@ jobs:
 
     steps:
       - name: Run deploy script
+        # DEPLOY_ACTOR is an AUDIT field only — it ends up in `deployed_by` of
+        # .deploy-state and nowhere else. It is deliberately not an identity the
+        # box acts on: the Linux service user is read from `User=` of
+        # baluhost-backend.service by the scripts that need it, because that is
+        # the only place it is actually true. Do not derive OS identities from
+        # github.actor (#581).
         env:
           INSTALL_DIR: ${{ vars.DEPLOY_FORK_INSTALL_DIR || '/opt/baluhost' }}
           DEPLOY_ACTOR: ${{ github.actor }}

@@ -20,7 +20,12 @@
 
 set -euo pipefail
 
-TEMPLATE="${TEMPLATE:-/opt/baluhost/deploy/install/templates/baluhost-hardware-sudoers}"
+# Where this script lives, the repo lives. Pinning /opt/baluhost here left this
+# script unable to find its own template on a box installed elsewhere — the
+# other half of #581, and invisible because it only ever produced a WARN line.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+INSTALL_DIR="${INSTALL_DIR:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
+TEMPLATE="${TEMPLATE:-$INSTALL_DIR/deploy/install/templates/baluhost-hardware-sudoers}"
 TARGET="/etc/sudoers.d/baluhost-hardware"
 SERVICE="${SERVICE:-baluhost-backend.service}"
 
@@ -31,7 +36,7 @@ fi
 
 if [[ ! -f "$TEMPLATE" ]]; then
     echo "ERROR: template not found: $TEMPLATE" >&2
-    echo "Did you 'git pull' /opt/baluhost first?" >&2
+    echo "Did you 'git pull' $INSTALL_DIR first?" >&2
     exit 1
 fi
 

@@ -81,7 +81,7 @@ Default-Permissions auf Debian 13 sind:
 -rw-r--r-- 1 root root /sys/class/drm/card0/device/gpu_od/fan_ctrl/fan_minimum_pwm
 ```
 
-→ Nur `root` kann schreiben. Der BaluHost-Backend-Service läuft aber als **`sven`** (oder dem bei der Installation gewählten User), nicht als root. Daraus folgt der `Permission denied`-Fehler.
+→ Nur `root` kann schreiben. Der BaluHost-Backend-Service läuft aber als der bei der Installation gewählte User (`User=` in `baluhost-backend.service`), nicht als root. Daraus folgt der `Permission denied`-Fehler.
 
 ## Lösung: udev-Regel + `video`-Gruppe
 
@@ -109,7 +109,16 @@ Auf dem Server, **als root**:
 
 ```bash
 cd /opt/baluhost
-sudo BALUHOST_USER=sven bash deploy/scripts/install-amd-gpu-permissions.sh
+sudo bash deploy/scripts/install-amd-gpu-permissions.sh
+```
+
+Das Skript liest den Dienstbenutzer aus `User=` von `baluhost-backend.service`
+und bricht ab, wenn das nicht geht — es rät nie einen Login (#581). Nur
+überschreiben, wenn die Unit nachweislich nicht die richtige Quelle ist, und
+dann mit `env`: `sudo` verwirft blosse `VAR=wert`-Zuweisungen ohne `SETENV`.
+
+```bash
+sudo env BALUHOST_USER=<user> bash deploy/scripts/install-amd-gpu-permissions.sh
 ```
 
 Sofortiger Effekt; restartet das Backend automatisch.
@@ -124,8 +133,16 @@ Ab dem Branch mit der `SYNC_PERMISSIONS`-Variable:
    ```bash
    cd /opt/baluhost
    git pull
-   sudo BALUHOST_USER=sven bash deploy/scripts/install-deploy-sudoers.sh
+   sudo bash deploy/scripts/install-deploy-sudoers.sh
    ```
+
+   Diese Datei ist die eine, deren Fehlrender dem Deploy-Benutzer jedes
+   NOPASSWD-Recht nimmt. Das Skript löst den Benutzer deshalb aus `User=` von
+   `baluhost-backend.service` auf und bricht ab, statt zu raten; von der
+   bisherigen Datei legt es eine Sicherung mit Zeitstempel an. Einen Namen nur
+   im Notfall explizit mitgeben — und mit `env`, weil `sudo` blosse
+   `VAR=wert`-Zuweisungen verwirft:
+   `sudo env BALUHOST_USER=<user> bash deploy/scripts/install-deploy-sudoers.sh`
 
    Danach ist `bash /opt/baluhost/deploy/scripts/install-amd-gpu-permissions.sh`
    für den Deploy-User in der Sudoers-Whitelist.
@@ -148,7 +165,7 @@ udev-Rule und fügt den User automatisch zur `video`-Gruppe hinzu.
 Der Script:
 
 1. Schreibt `/etc/udev/rules.d/70-baluhost-amd-gpu.rules`
-2. Fügt `sven` (oder den durch `BALUHOST_USER` festgelegten User) zur `video`-Gruppe hinzu, falls noch nicht
+2. Fügt den Dienstbenutzer (aus `User=`, oder den durch `BALUHOST_USER` festgelegten) zur `video`-Gruppe hinzu, falls noch nicht
 3. Reloadet udev und triggert das DRM-Subsystem neu
 4. Restartet `baluhost-backend.service`, damit der Prozess die neue Gruppenmitgliedschaft übernimmt
 
@@ -178,7 +195,7 @@ gegriffen hat.
 **2. Backend-User in `video`-Gruppe:**
 
 ```bash
-groups sven
+groups "$(systemctl show -p User --value baluhost-backend.service)"
 # Erwartet: ... video ...
 ```
 

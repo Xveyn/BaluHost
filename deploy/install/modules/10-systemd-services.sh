@@ -76,7 +76,8 @@ DEPLOY_SUDOERS_OUTPUT="/etc/sudoers.d/baluhost-deploy"
 
 if [[ -f "$DEPLOY_SUDOERS_TEMPLATE" ]]; then
     process_template "$DEPLOY_SUDOERS_TEMPLATE" "$DEPLOY_SUDOERS_OUTPUT" \
-        "BALUHOST_USER=$BALUHOST_USER"
+        "BALUHOST_USER=$BALUHOST_USER" \
+        "INSTALL_DIR=$INSTALL_DIR"
     chmod 440 "$DEPLOY_SUDOERS_OUTPUT"
     log_info "Installed deploy sudoers rule: $DEPLOY_SUDOERS_OUTPUT"
 
