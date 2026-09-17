@@ -346,7 +346,11 @@ async def toggle_plugin(
             api_scopes=api_scopes,
         )
 
-        # Enable in plugin manager
+        # Enable in plugin manager.
+        # No start_background_tasks argument on purpose: the primary-worker
+        # gate lives inside _start_background_tasks(), so this request cannot
+        # start a poller on whichever worker happens to answer it (#465).
+        # Repeating the gate here would be a second place that has to agree.
         success = await plugin_manager.enable_plugin(
             name, permissions_to_grant, db
         )
