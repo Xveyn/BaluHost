@@ -80,6 +80,7 @@ def list_device_types(
     request: Request,
     response: Response,
     current_user: User = Depends(deps.get_current_user),
+    _reconciled: None = Depends(deps.reconciled_plugin_state),
 ) -> List[DeviceTypeResponse]:
     """Return all device types offered by loaded smart_device plugins.
 
@@ -141,6 +142,7 @@ async def discover_devices(
     response: Response,
     plugin_name: str,
     current_user: User = Depends(deps.get_current_admin),
+    _reconciled: None = Depends(deps.reconciled_plugin_state),
 ):
     """Ask a smart device plugin to scan the local network for compatible devices.
 
@@ -219,6 +221,7 @@ def create_device(
     data: SmartDeviceCreate,
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_admin),
+    _reconciled: None = Depends(deps.reconciled_plugin_state),
 ) -> SmartDeviceResponse:
     """Register a new smart device.
 
@@ -388,6 +391,7 @@ async def execute_command(
     cmd: DeviceCommandRequest,
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_admin),
+    _reconciled: None = Depends(deps.reconciled_plugin_state),
 ) -> DeviceCommandResponse:
     """Send a control command to a smart device (switch on/off, dim, colour).
 
@@ -513,6 +517,7 @@ async def import_device_history(
     payload: ImportHistoryRequest,
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_admin),
+    _reconciled: None = Depends(deps.reconciled_plugin_state),
 ) -> ImportHistoryResponse:
     """Trigger a manual import of historical energy data from the device.
 

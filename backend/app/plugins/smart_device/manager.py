@@ -69,6 +69,15 @@ class SmartDeviceManager:
         self._plugins[name] = plugin
         logger.debug("SmartDeviceManager: registered plugin '%s'", name)
 
+    def unregister_plugin(self, plugin_name: str) -> None:
+        """Drop a plugin from the registry (no-op if it was never registered).
+
+        Called when the plugin is disabled. A plugin left behind here stays
+        commandable through ``/api/smart-devices/…`` (#459).
+        """
+        if self._plugins.pop(plugin_name, None) is not None:
+            logger.debug("SmartDeviceManager: unregistered plugin '%s'", plugin_name)
+
     def get_plugin(self, plugin_name: str) -> Optional[SmartDevicePlugin]:
         """Return a loaded plugin by name, or None."""
         return self._plugins.get(plugin_name)
@@ -494,43 +503,16 @@ class SmartDeviceManager:
 def get_smart_device_manager() -> SmartDeviceManager:
     """Return the process-level SmartDeviceManager singleton.
 
-    Performs a lazy sync: if the DB has enabled smart_device plugins that this
-    worker doesn't know about (e.g. plugin toggled on via a different Uvicorn
-    worker), the plugin is loaded and registered here on demand.
+    Plain accessor - no database work. The registry is maintained by
+    ``PluginManager.enable_plugin()`` / ``disable_plugin()``, so a plugin
+    toggled on another Uvicorn worker arrives here through the per-request
+    reconcile (``services/plugin_enablement.reconcile_worker``, declared by the
+    enablement-dependent routes as ``Depends(deps.reconciled_plugin_state)``).
+
+    This used to run its own synchronous ``SessionLocal()`` read that only ever
+    added plugins and never removed them (#459): three of its callers are
+    ``async def`` handlers, where that read blocked the event loop, and a
+    disabled plugin stayed commandable on every worker that had not handled
+    the toggle.
     """
-    mgr = SmartDeviceManager.get_instance()
-
-    # Lazy-sync: load + register missing smart_device plugins from DB
-    try:
-        from app.plugins.manager import PluginManager
-        from app.plugins.smart_device.base import SmartDevicePlugin as _SDP
-        from app.models.plugin import InstalledPlugin
-        from app.core.database import SessionLocal
-
-        pm = PluginManager.get_instance()
-
-        with SessionLocal() as db:
-            enabled_records = (
-                db.query(InstalledPlugin)
-                .filter(InstalledPlugin.is_enabled == True)
-                .all()
-            )
-
-        for record in enabled_records:
-            if record.name in mgr._plugins:
-                continue
-
-            # Load plugin instance (sync, no async needed)
-            plugin = pm.get_plugin(record.name)
-            if plugin is None:
-                try:
-                    plugin = pm.load_plugin(record.name)
-                except Exception:
-                    continue
-
-            if isinstance(plugin, _SDP):
-                mgr.register_plugin(plugin)
-    except Exception:
-        pass
-
-    return mgr
+    return SmartDeviceManager.get_instance()

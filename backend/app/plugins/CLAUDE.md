@@ -105,7 +105,11 @@ Two plugin trust tiers with different isolation:
    `get_statusbar_config` and `get_statusbar_state`. The Dashboard plugin panel
    (`GET /api/dashboard/plugin-panel`) is one of them as well
    (`api/routes/dashboard.py`), so it catches up on the same request like the
-   other five.
+   other five. The five enablement-dependent smart-device routes declare it too
+   (`api/routes/smart_devices.py`: `list_device_types`, `discover_devices`,
+   `create_device`, `execute_command`, `import_device_history`) — see the
+   SmartDevice section below. The remaining smart-device routes deliberately do
+   not: they read rows and SHM only and never consult the plugin registry.
    **One exception:** plugin HTTP routes are mounted once at startup
    (`core/lifespan.py`), so a plugin that ships its own router still needs a
    `baluhost-backend` restart before its endpoints exist. Its
@@ -176,3 +180,26 @@ Base class for hardware device plugins (e.g., Tapo smart plugs). Provides:
 - `SmartDeviceManager` for device registration and aggregated status
 - `SmartDevicePoller` for periodic device state collection (runs in monitoring worker)
 - Capability system (`capabilities.py`) for feature detection
+
+**The registry follows enablement — one place only (#459).**
+`SmartDeviceManager._plugins` is what decides whether `/api/smart-devices/…`
+can reach a device, and `/api/smart-devices/…` is a **core** route that
+`PluginGateMiddleware` does not cover. So the registry is written in exactly one
+place: `PluginManager.enable_plugin()` mirrors a `SmartDevicePlugin` into it,
+`disable_plugin()` drops it again (unconditionally, before every early return).
+Startup, the toggle endpoint and the per-worker reconcile all route through
+those two methods and therefore agree by construction — **do not add a second
+registration pass anywhere.** Four parallel ones is what left a disabled
+`tapo_smart_plug` switchable on the three workers that had not handled the
+toggle.
+
+Consequently `get_smart_device_manager()` is a plain singleton accessor and
+does **no** database work; it used to run its own synchronous `SessionLocal()`
+read on the request path (three of its callers are `async def`) that only ever
+added plugins, never removed them, and skipped `on_startup()` for what it
+registered. Cross-worker catch-up is the reconcile's job, declared by the five
+routes listed in the Operator note above.
+
+The poller in the monitoring worker is a separate process with its own
+registry, loaded from the DB in `poller.py:_load_plugins()` — unaffected by all
+of the above.
