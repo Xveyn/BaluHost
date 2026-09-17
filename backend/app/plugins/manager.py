@@ -669,9 +669,30 @@ class PluginManager:
     async def _start_background_tasks(
         self, name: str, plugin: PluginBase
     ) -> None:
-        """Start background tasks for a plugin."""
+        """Start background tasks for a plugin — primary worker only.
+
+        The primary check is a **floor under every caller**, not a second copy
+        of their decision: `start_background_tasks` stays a veto the caller can
+        exercise, but no caller can start a plugin's tasks on a secondary
+        worker by forgetting to pass it (#465). The enable endpoint did exactly
+        that, so toggling a plugin in the UI ran its poller twice — once on
+        whichever worker answered, once on the primary via the reconcile — and
+        duplicate notifications followed, because the cooldown cache is
+        process-local.
+
+        Read as a module attribute: `lifespan` sets `IS_PRIMARY_WORKER` after
+        the fork, so a from-import would freeze the pre-fork `False` forever.
+        """
+        from app.core import lifespan
+
         task_specs = plugin.get_background_tasks()
         if not task_specs:
+            return
+
+        if not lifespan.IS_PRIMARY_WORKER:
+            logger.debug(
+                "Not starting background tasks for %s: not the primary worker", name
+            )
             return
 
         tasks = []

@@ -172,6 +172,22 @@ Two plugin trust tiers with different isolation:
    one language (like the core events), so they are plain templates, not
    `resolvePluginString` keys. Background tasks run **primary-only** (#448), so a
    poller needs no cross-worker guard.
+   That is **enforced in one place**: `PluginManager._start_background_tasks()`
+   returns early unless `lifespan.IS_PRIMARY_WORKER` (#465). The
+   `start_background_tasks` parameter stays a veto a caller can exercise, but
+   it is no longer what makes primary-only true — the enable endpoint never
+   passed it, so a UI toggle started the poller a second time on whichever
+   worker answered the request, and the duplicate notifications followed from
+   the cooldown cache being process-local. **Do not re-add the gate at a call
+   site**; two places that must agree is how this broke.
+   Consequence of the gate: when a secondary worker handles the toggle (three
+   times out of four), only the primary can start the task. It does so on its
+   next reconcile, which no longer depends on request traffic — the primary
+   runs `_reconcile_plugin_enablement()` every
+   `_PLUGIN_RECONCILE_INTERVAL_SECONDS` (15s, `core/lifespan.py`), so the wait
+   is bounded even with no browser tab open. Before that loop existed, the
+   catch-up rode on the reconcile-wired routes the frontend polls, and those
+   stop polling while the tab is hidden.
 
 ## SmartDevice Framework (`smart_device/`)
 

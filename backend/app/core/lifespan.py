@@ -197,6 +197,38 @@ async def _write_service_heartbeats() -> None:
         await asyncio.sleep(_HEARTBEAT_INTERVAL_SECONDS)
 
 
+_PLUGIN_RECONCILE_INTERVAL_SECONDS = 15
+
+
+async def _reconcile_plugin_enablement() -> None:
+    """Keep the primary worker's loaded plugins aligned with the DB (primary only).
+
+    The per-request reconcile (#448) already covers display state on every
+    worker, but one thing only the primary can do: start a plugin's background
+    tasks (#465). If a toggle is handled by one of the three secondaries — the
+    likely case — the poller stays unstarted until the *primary* reconciles,
+    and on the request path that depends on UI traffic: the status strip polls
+    every 10s, but not while the browser tab is hidden. "Enable the plugin,
+    then close the browser" could leave it unstarted indefinitely.
+
+    This timer bounds that wait by the interval above instead of leaving it to
+    whoever happens to open the UI next. Runs on the primary only: on a
+    secondary it would do the same DB read to reach the same conclusion it
+    already reaches per request, and could not start a task anyway.
+
+    A failed reconcile must never end the loop — nothing restarts it, and a
+    dead loop is indistinguishable from an idle one.
+    """
+    while True:
+        try:
+            from app.services import plugin_enablement
+
+            await plugin_enablement.reconcile_worker()
+        except Exception as e:  # CancelledError is a BaseException — not caught here
+            logger.warning("Plugin enablement reconcile failed: %s", e)
+        await asyncio.sleep(_PLUGIN_RECONCILE_INTERVAL_SECONDS)
+
+
 _SMART_DEVICE_BRIDGE_INTERVAL_SECONDS = 1.0
 
 
@@ -734,6 +766,11 @@ async def _startup(app: FastAPI) -> None:
     # Start SmartDevice WebSocket bridge (primary worker only)
     if IS_PRIMARY_WORKER:
         _spawn_background(_smart_device_ws_bridge(), "smart_device_ws_bridge")
+
+        # Deliberately spawned here and not in the earlier primary-only block:
+        # its first tick is immediate, and before load_enabled_plugins() above
+        # it would race that call over the same plugins (#465).
+        _spawn_background(_reconcile_plugin_enablement(), "plugin_enablement_reconcile")
 
         # Start Dashboard panel WS bridge (primary worker only)
         from app.services.dashboard_panel_bridge import dashboard_panel_ws_bridge
