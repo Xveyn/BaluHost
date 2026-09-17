@@ -104,6 +104,11 @@ export class ChunkedUploader {
     let uploadedBytes = 0;
     const startTime = Date.now();
 
+    // Set when a chunk request is cut off mid-flight. `_aborted` covers the
+    // click that lands between two chunks; this covers the one that lands
+    // inside one, so both leave the loop through the same cleanup below.
+    let abortedInFlight = false;
+
     for (let i = 0; i < totalChunks; i++) {
       if (this._aborted) break;
 
@@ -151,8 +156,14 @@ export class ChunkedUploader {
           this._currentController = null;
           break;
         } catch (e: unknown) {
-          // If aborted, do not retry
-          if ((e instanceof Error && e.name === 'AbortError') || this._aborted) throw e;
+          // An abort is not a transient failure, so it must not be retried -
+          // but it must not be rethrown either: that would jump straight out of
+          // upload() and skip the DELETE below, leaving the half-written
+          // session on the server until the janitor's 24h timeout (#506).
+          if ((e instanceof Error && e.name === 'AbortError') || this._aborted) {
+            abortedInFlight = true;
+            break;
+          }
           lastError = e instanceof Error ? e : new Error('Chunk upload failed');
           // Wait before retry (exponential backoff)
           if (attempt < this.maxRetries - 1) {
@@ -160,6 +171,11 @@ export class ChunkedUploader {
           }
         }
       }
+
+      // `_aborted` also covers the cancel that lands while the retry loop is
+      // asleep in its backoff: without this, the loop below would report the
+      // transient error it was retrying rather than the abort that ended it.
+      if (abortedInFlight || this._aborted) break;
 
       if (!success) {
         // All retries exhausted — abort the server session
@@ -185,9 +201,12 @@ export class ChunkedUploader {
       });
     }
 
-    if (this._aborted) {
+    if (this._aborted || abortedInFlight) {
       await this._abortServer(token, upload_id);
-      throw new Error('Upload aborted');
+      // Named like the DOM abort the caller would otherwise have seen: the
+      // upload queue keys its "do not toast this" decision off the name, and a
+      // cancel the user asked for is not an error to report at them.
+      throw Object.assign(new Error('Upload aborted'), { name: 'AbortError' });
     }
 
     // 3. Complete
