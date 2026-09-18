@@ -153,8 +153,10 @@ export function useAdminDatabaseBrowse() {
           if (!isMountedRef.current) return
           const status = (err as { response?: { status?: number } })?.response?.status
           if (status && status !== 422) {
+            // Return, not break: the post-loop fallback would overwrite the
+            // status code with the generic message (#415).
             setOwnerLoadInfo({ status: 'failed', error: `HTTP ${status}` })
-            break
+            return
           }
           setOwnerLoadInfo({ status: 'loading', page_size: sz })
         }
