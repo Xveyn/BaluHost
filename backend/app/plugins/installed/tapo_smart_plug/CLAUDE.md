@@ -121,7 +121,8 @@ check the other.
 ## Tests
 
 - `backend/tests/plugins/tapo_smart_plug/` — `test_history_fetcher.py`,
-  `test_history_mock.py`, `test_import_service.py`, `test_plugin_import_history.py`
+  `test_history_mock.py`, `test_import_service.py`, `test_plugin_import_history.py`,
+  `test_dashboard_config.py` (panel_devices via `get_config()`, #522)
 - `backend/tests/plugins/test_tapo_plugin_config.py`
 - Framework-level coverage that exercises this plugin:
   `test_smart_device_{base,manager,poller,retention,routes,schemas}.py`

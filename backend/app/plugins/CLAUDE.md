@@ -201,10 +201,14 @@ worker's poller instances (same trap as #448/#459/#465).
 A plugin reads its config with `self.get_config(db)` when it needs it. That is
 the **only** read path (`app/plugins/config.py`): it validates the stored row,
 fills fields missing from older rows with their defaults, and falls back to
-`get_default_config()` on a missing, empty or invalid row. The `GET` route
-serves the same value, so the settings form shows what the plugin actually uses.
-**Do not read `InstalledPlugin.config` directly** — that is how `optical_drive`
-ended up ignoring saved values while `tapo_smart_plug` honoured them.
+`get_default_config()` on a missing, empty or invalid row. Both
+`GET /api/plugins/{name}` (the details route the settings form actually uses)
+and `GET /api/plugins/{name}/config` serve `get_config(db)`, so the settings
+form shows what the plugin actually uses. **Do not read `InstalledPlugin.config`
+directly** — that is how `optical_drive` ended up ignoring saved values while
+`tapo_smart_plug` honoured them. The one documented exception is the details
+route's external-plugin branch, which has no in-process instance to call
+`get_config()` on and so still serves the raw stored row (#522).
 
 External (sandboxed) plugins have no config channel at all: `get_plugin()`
 only knows bundled plugins, so the route 404s for them, and the sandbox has no

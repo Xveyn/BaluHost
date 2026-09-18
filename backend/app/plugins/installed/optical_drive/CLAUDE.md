@@ -11,7 +11,7 @@ this file only covers what is specific to this plugin.
 
 | File | Lines | Contents |
 |---|---|---|
-| `__init__.py` | 429 | `OpticalDrivePlugin`, and the **entire** router (built inside `get_router()`) |
+| `__init__.py` | 443 | `OpticalDrivePlugin`, and the **entire** router (built inside `get_router()`) |
 | `service.py` | 614 | `OpticalDriveService`: drive detection, validation, dev-mode simulation, job bookkeeping |
 | `reading.py` | 278 | `ReadingMixin` — ISO copy (`dd`), audio rip (`cdparanoia`) |
 | `burning.py` | 330 | `BurningMixin` — burn ISO / audio (`wodim`), blank, `dvd+rw-mediainfo` |
