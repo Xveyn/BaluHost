@@ -1,15 +1,20 @@
 /**
  * Generic Dashboard Plugin Panel
  *
- * Fetches the active plugin's panel spec+data via REST, subscribes to
- * WebSocket updates, and renders the appropriate panel renderer.
- * Falls back to REST polling (10s) if WS disconnects.
+ * Fetches the active plugin's panel spec+data via REST, polls it every 10s,
+ * and additionally subscribes to WebSocket updates for faster refreshes.
+ *
+ * The poll is the floor, the socket only an accelerator: panel updates are
+ * broadcast by the primary Uvicorn worker alone, and a broadcast reaches only
+ * sockets in that process (#306). A socket that lands on another worker
+ * connects fine and then stays silent - so the poll must not stop on onopen.
  */
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { buildApiUrl, apiClient } from '../../lib/api';
+import { apiClient } from '../../lib/api';
+import { getWebSocketUrl, getWsToken } from '../../api/notifications';
 import * as LucideIcons from 'lucide-react';
 import { GaugePanel } from './panels/GaugePanel';
 import { StatPanel } from './panels/StatPanel';
@@ -29,7 +34,7 @@ interface PanelSpec {
   translations?: PluginTranslations;
 }
 
-const REST_POLL_INTERVAL = 10_000; // 10s fallback when WS is down
+const REST_POLL_INTERVAL = 10_000; // 10s, runs whether or not the socket is open
 
 // Plugin name → navigation target when panel is clicked
 const PANEL_CLICK_TARGETS: Record<string, string> = {
@@ -41,8 +46,6 @@ export const PluginDashboardPanel: React.FC = () => {
   const navigate = useNavigate();
   const [panel, setPanel] = useState<PanelSpec | null>(null);
   const [loaded, setLoaded] = useState(false);
-  const wsRef = useRef<WebSocket | null>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Fetch panel data via REST
   const fetchPanel = useCallback(async () => {
@@ -61,93 +64,86 @@ export const PluginDashboardPanel: React.FC = () => {
     fetchPanel();
   }, [fetchPanel]);
 
-  // WebSocket subscription for live updates
+  // REST polling - always on while signed in, socket or not (see header, #306)
   useEffect(() => {
     if (!token) return;
+    const poll = setInterval(fetchPanel, REST_POLL_INTERVAL);
+    return () => clearInterval(poll);
+  }, [token, fetchPanel]);
+
+  // Only the plugin NAME drives the socket - data updates must not reopen it.
+  const activePlugin = panel?.plugin_name ?? null;
+
+  // WebSocket subscription for faster updates
+  useEffect(() => {
+    // No active panel, no socket: every update would be dropped (see the
+    // !prev guard below), and each socket takes one of the per-user,
+    // per-worker connection slots the notification socket needs too.
+    if (!token || !activePlugin) return;
     // Tauri Companion: the Rust HTTP→UDS proxy can't relay WebSocket
     // upgrades yet, and `window.location.host` resolves to `tauri.localhost`
     // which produces a malformed WS URL that crashes the constructor.
-    // Fall through to REST polling (started below) instead.
-    if (typeof window !== 'undefined' && window.__BALU_API_BASE__) {
-      pollRef.current = setInterval(fetchPanel, REST_POLL_INTERVAL);
-      return () => {
-        if (pollRef.current) {
-          clearInterval(pollRef.current);
-          pollRef.current = null;
-        }
-      };
-    }
+    // The REST poll above covers it.
+    if (typeof window !== 'undefined' && window.__BALU_API_BASE__) return;
 
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = window.location.host;
-    const wsUrl = `${protocol}//${host}${buildApiUrl('/api/notifications/ws')}?token=${token}`;
+    // The token fetch is async: an unmount (or a StrictMode re-run) that
+    // happens before it resolves must not open a socket nobody closes.
+    let cancelled = false;
+    let ws: WebSocket | null = null;
 
-    let ws: WebSocket;
-    try {
-      ws = new WebSocket(wsUrl);
-    } catch {
-      // Constructor can throw (malformed URL, insecure context). Degrade
-      // to REST polling instead of bubbling to the ErrorBoundary.
-      pollRef.current = setInterval(fetchPanel, REST_POLL_INTERVAL);
-      return () => {
-        if (pollRef.current) {
-          clearInterval(pollRef.current);
-          pollRef.current = null;
-        }
-      };
-    }
-    wsRef.current = ws;
-
-    ws.onmessage = (event) => {
+    void (async () => {
+      let wsToken: string;
       try {
-        const msg = JSON.parse(event.data as string) as {
-          type: string;
-          payload?: unknown;
-        };
+        // The endpoint accepts only a short-lived, scoped ws token. The access
+        // token is rejected fail-closed - in the ?token= query it would end up
+        // in proxy logs (#618). No socket without one; the poll covers it.
+        wsToken = await getWsToken();
+      } catch {
+        return;
+      }
+      if (cancelled) return;
 
-        if (msg.type === 'dashboard_panel_update' && msg.payload) {
-          const payload = msg.payload as {
-            panel_type: string;
-            plugin_name: string;
-            data: Record<string, unknown>;
+      try {
+        // Same URL builder as useNotificationSocket - one place to change.
+        ws = new WebSocket(getWebSocketUrl(wsToken));
+      } catch {
+        // Constructor can throw (malformed URL, insecure context). Stay on
+        // the REST poll instead of bubbling to the ErrorBoundary.
+        return;
+      }
+
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data as string) as {
+            type: string;
+            payload?: unknown;
           };
 
-          setPanel((prev) => {
-            if (!prev) return prev;
-            // Only update data if it's for the same plugin
-            if (prev.plugin_name !== payload.plugin_name) return prev;
-            return { ...prev, data: payload.data };
-          });
+          if (msg.type === 'dashboard_panel_update' && msg.payload) {
+            const payload = msg.payload as {
+              panel_type: string;
+              plugin_name: string;
+              data: Record<string, unknown>;
+            };
+
+            setPanel((prev) => {
+              if (!prev) return prev;
+              // Only update data if it's for the same plugin
+              if (prev.plugin_name !== payload.plugin_name) return prev;
+              return { ...prev, data: payload.data };
+            });
+          }
+        } catch {
+          // Ignore malformed messages
         }
-      } catch {
-        // Ignore malformed messages
-      }
-    };
-
-    ws.onopen = () => {
-      // WS connected — stop REST polling fallback
-      if (pollRef.current) {
-        clearInterval(pollRef.current);
-        pollRef.current = null;
-      }
-    };
-
-    ws.onclose = () => {
-      // WS disconnected — start REST polling fallback
-      if (!pollRef.current) {
-        pollRef.current = setInterval(fetchPanel, REST_POLL_INTERVAL);
-      }
-    };
+      };
+    })();
 
     return () => {
-      ws.close();
-      wsRef.current = null;
-      if (pollRef.current) {
-        clearInterval(pollRef.current);
-        pollRef.current = null;
-      }
+      cancelled = true;
+      ws?.close();
     };
-  }, [token, fetchPanel]);
+  }, [token, activePlugin]);
 
   if (!loaded) {
     return (
