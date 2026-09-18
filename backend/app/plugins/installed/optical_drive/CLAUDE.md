@@ -90,14 +90,14 @@ that as its own change with its own test, not a drive-by edit.
   `POST /jobs/{id}/cancel` on the wrong worker returns 400.
 - Everything is lost on restart; a burn in flight is orphaned, not resumed.
 
-**The stored config never reaches the service.** `get_config_schema()` exposes
-`OpticalDriveConfig` to the settings form, but both `on_startup()` and the route
-dependency call `get_optical_drive_service()` **without arguments**, so the
-singleton is built from `OpticalDriveConfig()` defaults and an admin's saved
-values are silently ignored. Only `auto_eject_after_operation` is read at all
-(after every job); `max_concurrent_jobs`, `scan_interval_seconds`,
-`default_output_dir` and `default_burn_speed` have no consumer anywhere in the
-codebase.
+**The stored config is re-read per request (#522).** The route dependency
+`get_service()` calls `service_with_current_config(db)`, which applies
+`self.get_config(db)` to the per-worker singleton, so every worker follows the
+database. Only `auto_eject_after_operation` has a consumer (read at the end of
+every job); `max_concurrent_jobs`, `scan_interval_seconds`,
+`default_output_dir` and `default_burn_speed` are shown in the settings form
+but still read nowhere. `on_startup()` builds the singleton with defaults —
+harmless, the first request overwrites them.
 
 Progress comes from parsing tool stdout/stderr line by line (`wodim`'s
 `N of M MB written`, `cdparanoia`'s `N of M sectors`, `7z`'s `N%`). Blanking has

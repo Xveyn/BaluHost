@@ -9,7 +9,7 @@ Provides functionality for:
 - Blanking rewritable media
 - Eject/load control
 """
-from typing import Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
 from fastapi import APIRouter
 
@@ -22,6 +22,9 @@ from app.plugins.base import (
 
 from .models import OpticalDriveConfig
 from .service import OpticalDriveService, get_optical_drive_service
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
 
 
 class OpticalDrivePlugin(PluginBase):
@@ -59,7 +62,8 @@ class OpticalDrivePlugin(PluginBase):
 
         # Import dependencies here to avoid circular imports at module load time
         from fastapi import Depends, HTTPException, status
-        from app.api.deps import get_current_user
+        from sqlalchemy.orm import Session
+        from app.api.deps import get_current_user, get_db
 
         from .models import (
             BlankDiscRequest,
@@ -83,9 +87,9 @@ class OpticalDrivePlugin(PluginBase):
 
         router = APIRouter()
 
-        def get_service() -> OpticalDriveService:
-            """Dependency to get the optical drive service."""
-            return get_optical_drive_service()
+        def get_service(db: Session = Depends(get_db)) -> OpticalDriveService:
+            """Dependency: the service with the currently saved config."""
+            return self.service_with_current_config(db)
 
         # === Drive Management Endpoints ===
 
@@ -405,6 +409,16 @@ class OpticalDrivePlugin(PluginBase):
         """Cleanup on shutdown."""
         if self._service:
             await self._service.cleanup()
+
+    def service_with_current_config(self, db: "Session") -> OpticalDriveService:
+        """Return the service singleton with the admin's saved config applied.
+
+        Re-read per request (#522): the singleton lives once per worker, and a
+        saved config reaches every worker only through the database.
+        """
+        service = get_optical_drive_service()
+        service.config = OpticalDriveConfig(**self.get_config(db))
+        return service
 
     def get_ui_manifest(self) -> PluginUIManifest:
         return PluginUIManifest(
