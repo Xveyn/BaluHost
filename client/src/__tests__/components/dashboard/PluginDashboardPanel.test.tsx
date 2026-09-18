@@ -76,6 +76,22 @@ describe('socket authentication', () => {
     expect(url).not.toContain('test-token');
   });
 
+  it('opens no socket while no plugin panel is active', async () => {
+    // Each socket takes one of the per-user, per-worker connection slots
+    // (MAX_CONNECTIONS_PER_USER) that the notification socket needs as well -
+    // and with no panel every update would be dropped anyway.
+    renderWithProviders(<PluginDashboardPanel />, {
+      auth: { username: 'sven' },
+      api: {
+        [PANEL_ROUTE]: null,
+        [WS_TOKEN_ROUTE]: { token: 'ws-abc' },
+      },
+    });
+    await tick(100);
+
+    expect(FakeWebSocket.instances).toHaveLength(0);
+  });
+
   it('opens no socket when the token exchange fails, and keeps polling', async () => {
     const { api } = await mount({ wsTokenFails: true });
     const before = api.callsTo(PANEL_ROUTE).length;

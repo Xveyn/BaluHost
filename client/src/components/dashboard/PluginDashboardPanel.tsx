@@ -13,8 +13,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { buildApiUrl, apiClient } from '../../lib/api';
-import { getWsToken } from '../../api/notifications';
+import { apiClient } from '../../lib/api';
+import { getWebSocketUrl, getWsToken } from '../../api/notifications';
 import * as LucideIcons from 'lucide-react';
 import { GaugePanel } from './panels/GaugePanel';
 import { StatPanel } from './panels/StatPanel';
@@ -71,9 +71,15 @@ export const PluginDashboardPanel: React.FC = () => {
     return () => clearInterval(poll);
   }, [token, fetchPanel]);
 
+  // Only the plugin NAME drives the socket - data updates must not reopen it.
+  const activePlugin = panel?.plugin_name ?? null;
+
   // WebSocket subscription for faster updates
   useEffect(() => {
-    if (!token) return;
+    // No active panel, no socket: every update would be dropped (see the
+    // !prev guard below), and each socket takes one of the per-user,
+    // per-worker connection slots the notification socket needs too.
+    if (!token || !activePlugin) return;
     // Tauri Companion: the Rust HTTP→UDS proxy can't relay WebSocket
     // upgrades yet, and `window.location.host` resolves to `tauri.localhost`
     // which produces a malformed WS URL that crashes the constructor.
@@ -97,12 +103,9 @@ export const PluginDashboardPanel: React.FC = () => {
       }
       if (cancelled) return;
 
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const host = window.location.host;
-      const wsUrl = `${protocol}//${host}${buildApiUrl('/api/notifications/ws')}?token=${encodeURIComponent(wsToken)}`;
-
       try {
-        ws = new WebSocket(wsUrl);
+        // Same URL builder as useNotificationSocket - one place to change.
+        ws = new WebSocket(getWebSocketUrl(wsToken));
       } catch {
         // Constructor can throw (malformed URL, insecure context). Stay on
         // the REST poll instead of bubbling to the ErrorBoundary.
@@ -140,7 +143,7 @@ export const PluginDashboardPanel: React.FC = () => {
       cancelled = true;
       ws?.close();
     };
-  }, [token]);
+  }, [token, activePlugin]);
 
   if (!loaded) {
     return (
