@@ -613,8 +613,7 @@ async def get_plugin_config(
             detail="Plugin not found",
         )
 
-    db_record = plugin_service.get_installed_plugin(db, name)
-    config = (db_record.config or {}) if db_record else (plugin.get_default_config() or {})
+    config = plugin.get_config(db)
 
     # Get schema if available
     schema = None
