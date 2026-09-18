@@ -7,6 +7,7 @@ Extensible plugin architecture for adding features without modifying core code. 
 ```
 plugins/
 ├── base.py              # PluginBase ABC, PluginMetadata, PluginUIManifest, DashboardPanelSpec
+├── config.py            # resolve_plugin_config() — the one read path for InstalledPlugin.config (#522)
 ├── manager.py           # PluginManager singleton — discovery, loading, lifecycle, route mounting
 ├── hooks.py             # Pluggy hook specs (on_system_startup, on_system_shutdown, etc.)
 ├── events.py            # Async event bus (EventManager) for inter-plugin communication
@@ -188,6 +189,26 @@ Two plugin trust tiers with different isolation:
    is bounded even with no browser tab open. Before that loop existed, the
    catch-up rode on the reconcile-wired routes the frontend polls, and those
    stop polling while the tab is hidden.
+
+## Plugin Configuration (#522)
+
+`PUT /api/plugins/{name}/config` validates against `get_config_schema()` and
+stores the result in `InstalledPlugin.config`. **Nothing is pushed into the
+plugin on save**, deliberately: a hook called from the route would reach only
+the worker that answered the request, not the other three nor the monitoring
+worker's poller instances (same trap as #448/#459/#465).
+
+A plugin reads its config with `self.get_config(db)` when it needs it. That is
+the **only** read path (`app/plugins/config.py`): it validates the stored row,
+fills fields missing from older rows with their defaults, and falls back to
+`get_default_config()` on a missing, empty or invalid row. The `GET` route
+serves the same value, so the settings form shows what the plugin actually uses.
+**Do not read `InstalledPlugin.config` directly** — that is how `optical_drive`
+ended up ignoring saved values while `tapo_smart_plug` honoured them.
+
+External (sandboxed) plugins have no config channel at all: `get_plugin()`
+only knows bundled plugins, so the route 404s for them, and the sandbox has no
+DB access and no config scope.
 
 ## SmartDevice Framework (`smart_device/`)
 
