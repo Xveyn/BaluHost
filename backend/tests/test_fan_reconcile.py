@@ -336,11 +336,25 @@ def test_own_chip_sensor_of_a_gpu_is_not_mapped_to_a_dead_hwmon_source():
     db = _single_row_db("hwmon1_pwm1", "amdgpu PWM1", "hwmon1_temp1")
     sensor_map = dict(SENSOR_MAP)
     sensor_map["hwmon2_temp1"] = "hwmon:amdgpu-pci-0300:temp1"
-    reconcile_fan_identities(db, chips=CHIPS, sensor_map=sensor_map,
-                             cpu_sensor_id=CPU_DEFAULT)
+    report = reconcile_fan_identities(db, chips=CHIPS, sensor_map=sensor_map,
+                                      cpu_sensor_id=CPU_DEFAULT)
     db.commit()
 
     assert _sensor_of(db, "amdgpu-pci-0300:pwm1") == CPU_DEFAULT
+    assert "hwmon1_temp1" in report.unresolved_sensors
+
+
+def test_foreign_chip_sensor_without_cpu_sensor_is_reported():
+    """Kein CPU-Sensor gefunden: Rueckfall ist None, und der Verlust der
+    urspruenglichen Zuordnung muss im Report stehen -- auch wenn die heutige
+    Uebersetzung zufaellig ebenfalls nichts ergibt."""
+    db = _single_row_db("hwmon7_pwm1", "nct6798 PWM1", "hwmon4_temp1")
+    report = reconcile_fan_identities(db, chips=CHIPS, sensor_map=SENSOR_MAP,
+                                      cpu_sensor_id=None)
+    db.commit()
+
+    assert _sensor_of(db, "nct6798-isa-0290:pwm1") is None
+    assert "hwmon4_temp1" in report.unresolved_sensors
 
 
 def test_already_renamed_winner_takes_its_anchor_from_legacy_fan_id():
