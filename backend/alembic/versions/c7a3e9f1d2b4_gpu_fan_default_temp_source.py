@@ -9,6 +9,11 @@ ein GPU-Luefter. Der Code-Fix wirkt nur bei der Erstanlage; _load_fan_configs
 fasst bestehende Zeilen bewusst nie an. Diese Migration holt den Bestand
 genau einmal nach.
 
+Ziel ist gpu:edge, nicht gpu:junction: emergency_temp_celsius und die
+Kurve der Zeile bleiben unberuehrt und sind auf CPU-/Board-Werte
+zugeschnitten (85 Grad Notfall). Die Junction-Temperatur erreicht das beim
+Spielen routinemaessig und loeste Notfall-Modus und Push-Alarme aus.
+
 Erfasst werden nur Zeilen, deren Quelle aus der Default-Welt stammt (leer,
 hwmon:-Kennung oder nackte Alt-ID). gpu:, mix: und disk: waren nie ein
 Default, also eine bewusste Wahl -- die bleiben. Einen bewusst gesetzten
@@ -37,7 +42,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 # Als Literal, nicht aus fan_sources importiert: die Migration muss auch
 # laufen, wenn sich der Anwendungscode spaeter aendert.
-_GPU_SOURCE = "gpu:junction"
+_GPU_SOURCE = "gpu:edge"
 _USER_CHOSEN_PREFIXES = ("gpu:", "mix:", "disk:")
 
 
@@ -71,7 +76,7 @@ def retarget_gpu_fans(bind) -> int:
 
 
 def upgrade() -> None:
-    """Stellt AMD-GPU-Luefter mit Default-Quelle auf gpu:junction um."""
+    """Stellt AMD-GPU-Luefter mit Default-Quelle auf gpu:edge um."""
     retarget_gpu_fans(op.get_bind())
 
 

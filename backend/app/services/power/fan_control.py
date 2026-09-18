@@ -797,7 +797,7 @@ class FanControlService:
         """Load fan configurations from database.
 
         For new fans (first discovery), assigns a default temp_sensor_id via
-        default_temp_sensor_id(): gpu:junction for AMD GPU fans (#606), else
+        default_temp_sensor_id(): gpu:edge for AMD GPU fans (#606), else
         the best available CPU sensor. Existing configs are NOT modified —
         user-chosen sensors (including composite sensors) survive service restarts.
         """

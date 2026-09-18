@@ -28,18 +28,18 @@ CPU = "k10temp-pci-00c3:temp1"
 
 # --- Auswahlregel -------------------------------------------------------------
 
-def test_amd_gpu_fan_gets_junction_even_with_cpu_sensor():
+def test_amd_gpu_fan_gets_edge_even_with_cpu_sensor():
     assert default_temp_sensor_id(
         is_gpu_fan=True, gpu_vendor="amd", cpu_sensor_id=CPU,
         scan_sensor_id=CPU,
-    ) == "gpu:junction"
+    ) == "gpu:edge"
 
 
-def test_amd_gpu_fan_gets_junction_without_any_sensor():
+def test_amd_gpu_fan_gets_edge_without_any_sensor():
     assert default_temp_sensor_id(
         is_gpu_fan=True, gpu_vendor="amd", cpu_sensor_id=None,
         scan_sensor_id=None,
-    ) == "gpu:junction"
+    ) == "gpu:edge"
 
 
 def test_nvidia_gpu_fan_keeps_cpu_default():
@@ -136,7 +136,7 @@ async def test_scanned_amdgpu_fan_gets_gpu_source_on_creation(monkeypatch):
         if isinstance(call.args[0], FanConfig)
     }
     assert created == {
-        "amdgpu-pci-0300:pwm1": "gpu:junction",
+        "amdgpu-pci-0300:pwm1": "gpu:edge",
         "nct6798-isa-0290:pwm1": f"hwmon:{CPU}",
     }
 
@@ -188,7 +188,7 @@ def test_migration_retargets_only_defaulted_amdgpu_rows():
          "temp_sensor_id": None},
         # bewusste Wahl -- nie ein Default gewesen, bleibt
         {"fan_id": "amdgpu-pci-0500:pwm1", "name": "amdgpu PWM1",
-         "temp_sensor_id": "gpu:edge"},
+         "temp_sensor_id": "gpu:mem"},
         {"fan_id": "amdgpu-pci-0600:pwm1", "name": "amdgpu PWM1",
          "temp_sensor_id": "mix:gpu-und-cpu"},
         {"fan_id": "amdgpu-pci-0700:pwm1", "name": "amdgpu PWM1",
@@ -202,10 +202,10 @@ def test_migration_retargets_only_defaulted_amdgpu_rows():
     ])
 
     assert result == {
-        "amdgpu-pci-0300:pwm1": "gpu:junction",
-        "hwmon1_pwm1": "gpu:junction",
-        "amdgpu-pci-0400:pwm1": "gpu:junction",
-        "amdgpu-pci-0500:pwm1": "gpu:edge",
+        "amdgpu-pci-0300:pwm1": "gpu:edge",
+        "hwmon1_pwm1": "gpu:edge",
+        "amdgpu-pci-0400:pwm1": "gpu:edge",
+        "amdgpu-pci-0500:pwm1": "gpu:mem",
         "amdgpu-pci-0600:pwm1": "mix:gpu-und-cpu",
         "amdgpu-pci-0700:pwm1": "disk:nvme0n1",
         "nct6798-isa-0290:pwm1": "hwmon:nct6798-isa-0290:temp1",

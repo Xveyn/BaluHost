@@ -218,12 +218,16 @@ class MixTempSource:
         return None
 
 
-# Default-Quelle fuer einen AMD-GPU-Luefter (#606). junction ist bei AMD die
-# fuer die Lueftersteuerung massgebliche Groesse. Die Datenmigration
-# c7a3e9f1d2b4 schreibt denselben Wert fest -- bewusst als Literal kopiert,
-# nicht importiert: eine Migration muss auch dann noch laufen, wenn sich
-# dieser Modul-Code spaeter aendert.
-AMD_GPU_FAN_DEFAULT_SOURCE = "gpu:junction"
+# Default-Quelle fuer einen AMD-GPU-Luefter (#606). Bewusst edge, nicht
+# junction: die Standardschwellen (emergency_temp_celsius 85, Warnung ab 75)
+# und die Standardkurve sind auf CPU-/Board-Temperaturen zugeschnitten. Die
+# Junction-Temperatur liegt beim Spielen routinemaessig bei 80-95 Grad und
+# loeste damit in jeder Sitzung Notfall-Modus und Push-Alarme aus; die
+# Kantentemperatur liegt im selben Bereich wie die Werte, fuer die diese
+# Defaults gedacht sind. Die Datenmigration c7a3e9f1d2b4 schreibt denselben
+# Wert fest -- bewusst als Literal kopiert, nicht importiert: eine Migration
+# muss auch dann noch laufen, wenn sich dieser Modul-Code spaeter aendert.
+AMD_GPU_FAN_DEFAULT_SOURCE = "gpu:edge"
 
 
 def default_temp_sensor_id(
@@ -235,7 +239,8 @@ def default_temp_sensor_id(
 ) -> Optional[str]:
     """Temperaturquelle fuer einen Luefter, dessen Config neu angelegt wird.
 
-    AMD-GPU-Luefter bekommen die GPU-Junction-Quelle aus dem Monitoring-SHM.
+    AMD-GPU-Luefter bekommen die GPU-Kantentemperatur aus dem Monitoring-SHM
+    (warum edge statt junction: siehe AMD_GPU_FAN_DEFAULT_SOURCE).
     Ob sie gerade einen Wert liefert, wird bewusst NICHT geprueft: beim
     Dienststart kann das SHM noch fehlen, und ein voruebergehend leerer Wert
     schriebe sonst dauerhaft den CPU-Sensor fest. Liefert die Quelle spaeter
