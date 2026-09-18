@@ -152,12 +152,24 @@ describe('useAdminDatabaseBrowse — loadOwners', () => {
     await act(async () => { await result.current.loadOwners() })
 
     expect(result.current.ownerLoadInfo.status).toBe('failed')
-    // Pre-existing quirk (preserved verbatim from the original): the non-422
-    // branch briefly sets `HTTP 500` then breaks, but because `successful` is
-    // still false the post-loop guard overwrites it with the generic message.
-    expect(result.current.ownerLoadInfo.error).toBe('no successful response')
-    // stopped after the first attempt (broke out of the size ladder)
+    // The status code survives: the post-loop fallback used to overwrite it
+    // with the generic message (#415).
+    expect(result.current.ownerLoadInfo.error).toBe('HTTP 500')
+    // stopped after the first attempt (left the size ladder)
     expect(api.getAdminTableRows).toHaveBeenCalledTimes(1)
+  })
+
+  it('reports the generic failure when every page size fails without an HTTP status', async () => {
+    // e.g. network error: no `response`, so the ladder keeps shrinking
+    api.getAdminTableRows.mockRejectedValue(new Error('Network Error'))
+    const { result } = setup()
+    await waitFor(() => expect(result.current.tables).toContain('users'))
+
+    await act(async () => { await result.current.loadOwners() })
+
+    expect(result.current.ownerLoadInfo.status).toBe('failed')
+    expect(result.current.ownerLoadInfo.error).toBe('no successful response')
+    expect(api.getAdminTableRows).toHaveBeenCalledTimes(6)
   })
 
   it('fails fast when the users table is not available', async () => {
