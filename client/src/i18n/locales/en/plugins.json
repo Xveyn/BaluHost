@@ -1,6 +1,11 @@
 {
   "title": "Plugins",
   "description": "Manage installed plugins and extensions",
+  "page": {
+    "noOwnPageTitle": "No page of its own",
+    "noOwnPageDesc": "\"{{name}}\" is enabled, but it has no page of its own. It is used from the top bar or the system menu.",
+    "goToDashboard": "Go to dashboard"
+  },
   "tabs": {
     "installed": "Installed",
     "marketplace": "Marketplace",

@@ -74,6 +74,8 @@ export interface PluginUIInfo {
   translations?: PluginTranslations;
   granted_api_scopes: string[];
   min_runtime_abi?: number;
+  /** Whether the plugin's UI bundle exists (#454). Absent = older backend → treated as true. */
+  has_page?: boolean;
 }
 
 export interface PluginUIManifest {

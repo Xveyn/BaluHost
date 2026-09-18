@@ -189,6 +189,16 @@ Two plugin trust tiers with different isolation:
    is bounded even with no browser tab open. Before that loop existed, the
    catch-up rode on the reconcile-wired routes the frontend polls, and those
    stop polling while the tab is hidden.
+9. A plugin that only contributes a topbar control, a status pill or a menu
+   action still overrides `get_ui_manifest()` (`PluginUIManifest(enabled=True)`,
+   no `nav_items`) — without a manifest the frontend treats it as disabled and
+   nothing renders. It needs **no** `ui/` directory. `GET /api/plugins/ui/manifest`
+   reports `has_page` per plugin, and `/plugins/<name>` only frames the sandbox
+   host when it is true (#454). `has_page` comes from
+   `PluginManager.has_ui_page()`, which checks the bundle the `host.html`
+   bootstrap would actually load (`ui_bundle_name()`: `plugin.json` `ui.bundle`,
+   else `bundle.js`) — `PluginUIManifest.bundle_path` is not what the
+   bootstrap reads, so do not rely on it to decide whether a page exists.
 
 ## Plugin Configuration (#522)
 

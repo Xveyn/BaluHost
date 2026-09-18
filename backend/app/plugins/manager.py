@@ -893,6 +893,7 @@ class PluginManager:
                         "styles_path": ui_manifest.styles_path,
                         "dashboard_widgets": ui_manifest.dashboard_widgets,
                         "translations": plugin.get_translations() or None,
+                        "has_page": self.has_ui_page(name),
                     })
                 continue
 
@@ -915,9 +916,39 @@ class PluginManager:
                     "styles_path": ui.styles,
                     "dashboard_widgets": ui.dashboard_widgets,
                     "translations": None,  # external plugins ship UI strings inside their bundle
+                    "has_page": self.has_ui_page(name),
                 })
 
         return manifest
+
+    def ui_bundle_name(self, name: str) -> str:
+        """The bundle the sandbox host loads for *name*, relative to its ``ui/`` dir.
+
+        Read from ``plugin.json`` (``ui.bundle``, leading ``ui/`` stripped),
+        falling back to ``bundle.js``. This is the one resolution shared by the
+        ``host.html`` bootstrap and ``has_ui_page()``, so the page the frontend
+        offers and the bundle the iframe loads cannot disagree (#454).
+        ``PluginUIManifest.bundle_path`` is deliberately not consulted: the
+        bootstrap never read it, and bundled plugins spell it inconsistently.
+        """
+        try:
+            manifest = load_manifest(self.plugins_dir / name)
+        except Exception:
+            return "bundle.js"
+        ui = getattr(manifest, "ui", None)
+        if ui is not None and ui.bundle:
+            return ui.bundle.removeprefix("ui/")
+        return "bundle.js"
+
+    def has_ui_page(self, name: str) -> bool:
+        """Whether *name* brings its own page, i.e. its UI bundle really exists.
+
+        Plugins that only contribute a topbar control, a status pill or a menu
+        action still publish a UI manifest (without one the frontend treats
+        them as disabled), but have no ``ui/`` directory. Without this check
+        ``/plugins/<name>`` framed a sandbox host around a bundle that 404s.
+        """
+        return (self.plugins_dir / name / "ui" / self.ui_bundle_name(name)).is_file()
 
     def get_plugin(self, name: str) -> Optional[PluginBase]:
         """Get a loaded plugin by name.

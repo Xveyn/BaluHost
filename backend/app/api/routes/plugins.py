@@ -709,20 +709,9 @@ async def serve_plugin_asset(
 
     # Sandbox bootstrap document — generated, not read from disk.
     if file_path == "host.html":
-        # Resolve the plugin's UI bundle name from its manifest (fall back to bundle.js).
-        # The manifest stores the bundle path relative to the plugin dir (e.g. "ui/bundle.js"),
-        # but the /ui/{file_path} route already includes the "ui/" prefix, so we strip it.
-        bundle_path = "bundle.js"
-        try:
-            manifest = load_manifest(plugin_manager.plugins_dir / name)
-            if manifest.ui and manifest.ui.bundle:
-                raw_bundle = manifest.ui.bundle
-                # Strip leading "ui/" so the URL resolves correctly via this route
-                if raw_bundle.startswith("ui/"):
-                    raw_bundle = raw_bundle[len("ui/"):]
-                bundle_path = raw_bundle
-        except Exception:
-            pass
+        # Same resolution the UI manifest uses for has_page (#454), relative to
+        # ui/ because this route already carries that prefix.
+        bundle_path = plugin_manager.ui_bundle_name(name)
         # Escape values flowing into the HTML attribute. `name` is a user-supplied
         # path parameter and `bundle_path` derives from the plugin manifest; both are
         # quoted into content="..." so escape them to neutralise attribute breakout / XSS.

@@ -49,6 +49,9 @@ class PluginUIInfo(BaseModel):
     translations: Optional[Dict[str, Dict[str, str]]] = None
     granted_api_scopes: List[str] = []
     min_runtime_abi: Optional[int] = None
+    # Whether the UI bundle the sandbox host would load exists (#454). True by
+    # default so a producer that predates the field keeps the old behaviour.
+    has_page: bool = True
 
 
 class PluginUIManifestResponse(BaseModel):
