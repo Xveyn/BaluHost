@@ -51,7 +51,7 @@ These `pages/*` files still exist and are still rendered — just as a tab body 
 
 All four `SystemControlPage` tabs above sit behind that page's own `isAdmin` route guard (`App.tsx:188`), so they're still effectively admin-only even though the tab body itself doesn't re-check the role.
 
-Access via `/devices?tab=mobile` and `/devices?tab=desktop` (the targets of the legacy `/mobile-devices` and `/sync-prototype` redirects, `App.tsx:208-209`) does **not** reach `MobileDevicesPage.tsx` or a "desktop" tab — `DeviceManagement.tsx`'s tab parser only recognizes `devices`/`register`/`schedules` and silently falls back to `devices` for any other value (`DeviceManagement.tsx:11-16`). Those two redirects are effectively stale; flagged here for triage, not fixed (docs-only change).
+The legacy `/mobile-devices` and `/sync-prototype` redirects (`App.tsx:214-215`) point at plain `/devices`, no `?tab=` (#419). The default `devices` tab of `DeviceManagement.tsx` already shows both the mobile section and the desktop/BaluDesk section with the pairing button, so that is the right landing spot. They used to send `?tab=mobile` / `?tab=desktop`, values `DeviceManagement.tsx`'s tab parser does not know — it only recognizes `devices`/`register`/`schedules` and silently falls back to `devices` for anything else (`DeviceManagement.tsx:11-16`). Neither redirect reaches `MobileDevicesPage.tsx` (dead, see below). When adding a redirect with `?tab=`, use a value the destination page's tab list actually contains.
 
 ## Dead Files (present in `pages/`, not routed or mounted anywhere)
 
