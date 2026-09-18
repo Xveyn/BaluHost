@@ -12,11 +12,17 @@ der die anderen drei installiert werden. Neue Zeilen der Vorlage erreichen eine
 bereits installierte Box deshalb nie, und der Fehlschlag sah aus wie ein
 beliebiger Fehler statt wie eine fehlende Provisionierung.
 
-Geprueft wird das Skript textlich: es laeuft nur auf der Maschine, aber die
-Zusicherungen unten wuerden jede Ruecknahme der Diagnose bemerken.
+Geprueft wird zweifach: textlich (jede Ruecknahme der Diagnose faellt auf) und
+seit #588 im Verhalten -- der Helfer laeuft wirklich in bash, gegen ein
+nachgebautes sudo. Die rein textliche Fassung hatte bestaetigt, dass die alte
+Vorabpruefung im Skript steht, nicht dass sie das Richtige misst.
 """
 import re
+import shutil
+import subprocess
 from pathlib import Path
+
+import pytest
 
 CI_DEPLOY = Path(__file__).resolve().parents[2] / "deploy" / "scripts" / "ci-deploy.sh"
 DEPLOY_SUDOERS = (
@@ -39,7 +45,7 @@ def test_das_deploy_skript_ist_ueberhaupt_lesbar():
 def test_jedes_permission_skript_laeuft_ueber_den_helfer():
     """Kein direkter `sudo bash` mehr auf eines der drei Skripte.
 
-    Der Helfer traegt die Vorabpruefung; ein Aufruf daran vorbei haette sie
+    Der Helfer traegt die Diagnose; ein Aufruf daran vorbei haette sie
     nicht. Geprueft wird deshalb die Abwesenheit des alten Musters, nicht nur
     die Anwesenheit des neuen."""
     text = _text()
@@ -53,19 +59,24 @@ def test_jedes_permission_skript_laeuft_ueber_den_helfer():
     for skript in ("install-amd-gpu-permissions.sh", "install-hardware-sudoers.sh",
                    "install-power-sudoers.sh"):
         assert any(skript in a for a in aufrufe), f"{skript} laeuft nicht ueber den Helfer"
-    # Der Helfer ist die einzige Stelle, die eines dieser Skripte ausfuehrt.
-    assert text.count('sudo bash "$script"') == 1
+    # Der Helfer ist die einzige Stelle, die eines dieser Skripte ausfuehrt --
+    # und er tut es nie ohne -n (#588).
+    assert text.count('sudo -n bash "$script"') == 1
+    assert 'sudo bash "$script"' not in text
     assert 'sudo bash "$POWER_SUDOERS_SCRIPT"' not in text
     assert 'sudo bash "$HARDWARE_SUDOERS_SCRIPT"' not in text
     assert 'sudo bash "$AMD_GPU_SCRIPT"' not in text
 
 
-def test_der_helfer_prueft_vorher_ob_der_aufruf_erlaubt_waere():
-    """`sudo -n -l` fragt, ob der Aufruf erlaubt WAERE, ohne ihn auszufuehren.
-    Ohne diese Vorabpruefung landete die Ursache als 'a password is required'
-    im Log und die Zusammenfassung sagte nur 'failed'."""
-    text = _text()
-    assert 'sudo -n -l bash "$script"' in text
+def test_der_helfer_fragt_nicht_mehr_nach_der_erlaubnis():
+    """`sudo -n -l <cmd>` endet mit 0, sobald der Aufruf ueberhaupt erlaubt
+    waere -- auch MIT Passwort. Fuer ein Mitglied der sudo-Gruppe ist das jeder
+    Befehl, die Vorabpruefung winkte also alles durch (#588, Deploy-Lauf
+    34236194380). Gemessen wird jetzt die Wirkung, siehe die Verhaltenstests
+    unten; die alte Pruefung darf nicht zurueckkommen. Kommentare duerfen sie
+    nennen -- sie erklaeren, warum sie weg ist."""
+    code = [z for z in _text().splitlines() if not z.lstrip().startswith("#")]
+    assert not [z for z in code if "sudo -n -l" in z]
 
 
 def test_die_meldung_nennt_den_befehl_der_es_behebt():
@@ -114,3 +125,114 @@ def test_die_vorlage_erlaubt_den_power_aufruf_ueberhaupt():
     # Zeile erfuellt und koennte den Verlust der ersten nicht bemerken.
     pfade = {re.search(r"NOPASSWD:\s+(\S+)", z).group(1) for z in treffer}
     assert pfade == {"/bin/bash", "/usr/bin/bash"}
+
+
+# ---------------------------------------------------------------------------
+# Verhalten (#588): die echte Funktion aus ci-deploy.sh, mit nachgebautem sudo.
+#
+# Die Textpruefungen oben haben #577 nicht vor genau diesem Fehler bewahrt --
+# sie bestaetigten, dass `sudo -n -l` im Skript steht, nicht dass es das
+# Richtige misst. Deshalb laeuft der Helfer hier wirklich, unter denselben
+# Shell-Optionen wie im Deploy (`set -euo pipefail`).
+# ---------------------------------------------------------------------------
+
+BASH = shutil.which("bash")
+
+# sudo als Shell-Funktion ueberschattet das Programm. Nachgebildet ist das
+# echte Verhalten fuer den Deploy-Benutzer auf BaluNode, der in der
+# sudo-Gruppe ist:
+#   - `sudo -n -l <cmd>` endet IMMER mit 0 (erlaubt -- notfalls mit Passwort).
+#     Genau das hat die alte Vorabpruefung getaeuscht.
+#   - fehlt die NOPASSWD-Regel (Modus "password"), scheitert jede Ausfuehrung:
+#     mit -n sofort, ohne -n am fehlenden Terminal.
+# Die erste Zeile protokolliert den Aufruf, damit -n und LC_ALL=C pruefbar sind.
+_FAKE_SUDO = r'''
+sudo() {
+    if [[ "${1:-}" == "-n" && "${2:-}" == "-l" ]]; then
+        echo "/usr/bin/bash ${*:3}"; return 0
+    fi
+    echo "FAKE-SUDO args=[$*] lc_all=[${LC_ALL:-}]"
+    case "$FAKE_MODE" in
+        password)
+            if [[ "${1:-}" != "-n" ]]; then
+                echo "sudo: a terminal is required to read the password" >&2
+            fi
+            echo "sudo: a password is required" >&2; return 1 ;;
+        scriptfail) echo "boom from the script" >&2; return 3 ;;
+        ok) echo "installed"; return 0 ;;
+    esac
+}
+'''
+
+
+def _helper_source() -> str:
+    lines = _text().splitlines()
+    start = next(i for i, z in enumerate(lines) if z.startswith("run_permission_script() {"))
+    end = next(i for i in range(start + 1, len(lines)) if lines[i].startswith("}"))
+    return "\n".join(lines[start:end + 1])
+
+
+def _run_helper(tmp_path: Path, mode: str) -> subprocess.CompletedProcess:
+    if BASH is None:
+        pytest.skip("bash nicht verfuegbar")
+    script = tmp_path / "install-power-sudoers.sh"
+    script.write_text("#!/bin/bash\n", encoding="utf-8")
+    harness = "\n".join([
+        "set -euo pipefail",
+        'log_info() { echo "[INFO] $*"; }',
+        'log_warn() { echo "[WARN] $*"; }',
+        "INSTALL_DIR=/opt/baluhost",
+        _FAKE_SUDO,
+        _helper_source(),
+        f'run_permission_script "Power sudoers" "{script.as_posix()}"',
+        # Beweist, dass ein gescheiterter Sync den Deploy nicht abbricht.
+        'echo "DEPLOY-CONTINUES"',
+    ])
+    return subprocess.run(
+        [BASH, "-c", harness], capture_output=True, text=True,
+        env={"FAKE_MODE": mode, "PATH": "/usr/bin:/bin"}, timeout=30,
+    )
+
+
+def test_fehlendes_nopasswd_wird_als_not_permitted_mit_anleitung_gemeldet(tmp_path):
+    """Genau der Fall aus Lauf 34236194380: die Regel fehlt, sudo -n verlangt
+    ein Passwort. Frueher stand hier nur 'sync failed'."""
+    result = _run_helper(tmp_path, "password")
+
+    assert result.returncode == 0, result.stderr
+    assert "NOT PERMITTED" in result.stdout
+    assert "install-deploy-sudoers.sh" in result.stdout
+    assert "sync failed" not in result.stdout
+    assert "DEPLOY-CONTINUES" in result.stdout
+
+
+def test_ein_scheiterndes_skript_bleibt_sync_failed(tmp_path):
+    """Die Unterscheidung darf nicht jeden Fehlschlag zur Provisionierungsfrage
+    machen: faellt das Skript selbst durch, ist die Anleitung falsch."""
+    result = _run_helper(tmp_path, "scriptfail")
+
+    assert result.returncode == 0, result.stderr
+    assert "sync failed (non-fatal" in result.stdout
+    assert "NOT PERMITTED" not in result.stdout
+    assert "boom from the script" in result.stderr, "stderr des Skripts muss im Log landen"
+    assert "DEPLOY-CONTINUES" in result.stdout
+
+
+def test_erfolg_meldet_sync_ok(tmp_path):
+    result = _run_helper(tmp_path, "ok")
+
+    assert result.returncode == 0, result.stderr
+    assert "Power sudoers sync OK." in result.stdout
+    assert "installed" in result.stdout
+    assert "DEPLOY-CONTINUES" in result.stdout
+
+
+def test_sudo_wird_nie_ohne_n_und_mit_englischer_meldung_aufgerufen(tmp_path):
+    """-n: nie ein Prompt, auch nicht im CI ohne Terminal. LC_ALL=C: die Box
+    spricht deutsch ('Ein Passwort ist notwendig'), erkannt wird aber die
+    englische Meldung."""
+    result = _run_helper(tmp_path, "ok")
+
+    aufruf = next(z for z in result.stdout.splitlines() if z.startswith("FAKE-SUDO"))
+    assert "args=[-n bash " in aufruf
+    assert "lc_all=[C]" in aufruf

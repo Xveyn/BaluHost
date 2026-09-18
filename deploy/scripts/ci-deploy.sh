@@ -436,29 +436,41 @@ log_info "Backend dependencies updated."
 #   - GitHub: workflow_dispatch input "sync_permissions" = true
 #   - Manual: SYNC_PERMISSIONS=1 ./ci-deploy.sh
 
-# Fuehrt eines der Permission-Skripte als root aus -- mit Vorabpruefung, ob der
-# Aufruf ueberhaupt erlaubt ist (#570).
+# Fuehrt eines der Permission-Skripte als root aus und benennt eine fehlende
+# NOPASSWD-Regel als solche (#570, #588).
 #
-# Der Grund fuer die Pruefung: /etc/sudoers.d/baluhost-deploy ist die einzige
-# der vier sudoers-Dateien, die dieser Deploy nicht neu rendern kann -- sie
-# enthaelt genau die Erlaubnis, mit der die anderen drei installiert werden.
-# Neue Zeilen der Vorlage erreichen eine bereits installierte Box deshalb nie,
-# und der Aufruf scheiterte dann mit "sudo: a password is required" hinter
-# einer nichtssagenden WARN-Zeile.
+# Der Grund: /etc/sudoers.d/baluhost-deploy ist die einzige der vier
+# sudoers-Dateien, die dieser Deploy nicht neu rendern kann -- sie enthaelt
+# genau die Erlaubnis, mit der die anderen drei installiert werden. Neue Zeilen
+# der Vorlage erreichen eine bereits installierte Box deshalb nie, und der
+# Aufruf scheiterte dann hinter einer nichtssagenden WARN-Zeile.
 #
-# `sudo -n -l <cmd>` endet mit 0 genau dann, wenn der Aufruf erlaubt waere --
-# ohne ihn auszufuehren. Es laeuft passwortlos, solange listpw auf Debians
-# Standard "any" steht und der Benutzer mindestens einen NOPASSWD-Eintrag hat
-# (beides gilt hier). Bei listpw=all waere die Pruefung falsch negativ und der
-# Sync uebersprungen.
+# Gemessen wird die WIRKUNG, nicht die Erlaubnis. Die erste Fassung fragte
+# vorab `sudo -n -l bash <script>` -- das endet mit 0, sobald der Aufruf
+# ueberhaupt erlaubt waere, auch MIT Passwort. Der Deploy-Benutzer ist in der
+# sudo-Gruppe, also war jeder Aufruf "erlaubt", und die Diagnose erschien nie
+# (#588, Deploy-Lauf 34236194380). Jetzt:
+#   - `-n` fragt nie nach einem Passwort: fehlt die NOPASSWD-Regel, scheitert
+#     der Aufruf sofort. Die Skripte sind idempotent, ein Fehlversuch schadet
+#     nicht.
+#   - `LC_ALL=C` haelt sudos eigene Meldung englisch (die Box spricht deutsch),
+#     damit "a password is required" erkennbar ist.
+#   - Alles andere ist ein Fehlschlag des Skripts selbst und bleibt
+#     "sync failed" -- dort waere die Reparaturanleitung falsch.
+# Die `if`-Form ist Pflicht: unter `set -e` braeche ein gescheiterter Sync
+# sonst den ganzen Deploy ab, statt nur zu warnen.
 run_permission_script() {
-    local label="$1" script="$2"
+    local label="$1" script="$2" err_file
     if [[ ! -f "$script" ]]; then
         log_warn "$label script not found at $script (skipping)."
         return 0
     fi
     log_info "Re-applying $label..."
-    if ! sudo -n -l bash "$script" >/dev/null 2>&1; then
+    err_file="$(mktemp)"
+    if LC_ALL=C sudo -n bash "$script" 2>"$err_file"; then
+        cat "$err_file" >&2
+        log_info "$label sync OK."
+    elif grep -q '^sudo: a password is required' "$err_file"; then
         log_warn "$label sync NOT PERMITTED: /etc/sudoers.d/baluhost-deploy on this box"
         log_warn "  predates the entry for $(basename "$script"). One-time fix:"
         # Der Benutzername wird HIER eingesetzt, nicht als $USER ausgegeben:
@@ -469,13 +481,11 @@ run_permission_script() {
         # weil sudo Zuweisungen in der Kommandozeile ohne SETENV ablehnt.
         log_warn "    sudo env BALUHOST_USER=$(id -un) bash $INSTALL_DIR/deploy/scripts/install-deploy-sudoers.sh"
         log_warn "  Until then $label stays at its installed state."
-        return 0
-    fi
-    if sudo bash "$script"; then
-        log_info "$label sync OK."
     else
+        cat "$err_file" >&2
         log_warn "$label sync failed (non-fatal - deploy continues)."
     fi
+    rm -f "$err_file"
 }
 
 if [[ "${SYNC_PERMISSIONS:-0}" == "1" || "${SYNC_PERMISSIONS,,}" == "true" ]]; then
