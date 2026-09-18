@@ -255,22 +255,133 @@ def test_unresolvable_sensor_falls_back_to_cpu_default(db):
     assert "hwmon4_temp1" in report.unresolved_sensors
 
 
+# --- #658: Sensor-Uebersetzung nur, wo sie belegbar ist -----------------------
+#
+# Eine Alt-Sensor-ID wurde unter der hwmon-Nummerierung ihres Schreib-Boots
+# gespeichert, sensor_map bildet aber die Nummerierung des Abgleich-Boots ab.
+# Belegbar ist nur der Sensor auf dem Chip des Luefters selbst: dessen Nummer
+# steht in der Alt-fan_id derselben Zeile.
+
+def _single_row_db(fan_id, name, sensor):
+    engine = create_engine("sqlite://")
+    Base.metadata.create_all(engine)
+    session = sessionmaker(bind=engine)()
+    session.add(FanConfig(fan_id=fan_id, name=name, mode="auto",
+                          temp_sensor_id=sensor, is_active=True,
+                          updated_at=_dt("2026-08-01T00:00:00")))
+    session.commit()
+    return session
+
+
+def _sensor_of(db, fan_id):
+    return db.execute(select(FanConfig).where(
+        FanConfig.fan_id == fan_id)).scalar_one().temp_sensor_id
+
+
+def test_gpu_row_with_foreign_chip_sensor_gets_cpu_default_not_board(db):
+    """Der prod-Fall aus #658: die amdgpu-Zeile wurde in einem Boot mit
+    hwmon3=k10temp angelegt, zum Abgleich ist hwmon3 der nct6798. Frueher
+    wurde daraus SYSTIN -- jetzt der CPU-Default, und der Tausch steht im
+    Report, weil die heutige Nummerierung etwas anderes ergeben haette."""
+    report = reconcile_fan_identities(db, chips=CHIPS, sensor_map=SENSOR_MAP,
+                                      cpu_sensor_id=CPU_DEFAULT)
+    db.commit()
+
+    assert _sensor_of(db, "amdgpu-pci-0300:pwm1") == CPU_DEFAULT
+    assert "hwmon3_temp1" in report.unresolved_sensors
+
+
+def test_foreign_chip_sensor_that_maps_to_cpu_anyway_is_silent(db):
+    """hwmon3_pwm* (nct) mit hwmon4_temp1: fremder Chip, die heutige
+    Uebersetzung ist aber ohnehin der CPU-Sensor -- gleiches Ergebnis, kein
+    Fehlalarm im Audit."""
+    report = reconcile_fan_identities(db, chips=CHIPS, sensor_map=SENSOR_MAP,
+                                      cpu_sensor_id=CPU_DEFAULT)
+    db.commit()
+
+    assert _sensor_of(db, "nct6798-isa-0290:pwm1") == CPU_DEFAULT
+    assert "hwmon4_temp1" not in report.unresolved_sensors
+
+
+def test_own_chip_sensor_is_mapped_via_chip_identity_not_todays_numbering():
+    """hwmon7_temp2 auf einer hwmon7_pwm1-Zeile gehoerte beim Schreiben zum
+    Chip des Luefters. Heute ist hwmon7 ein anderer Chip -- uebersetzt wird
+    trotzdem auf den nct6798, ueber dessen Kennung."""
+    db = _single_row_db("hwmon7_pwm1", "nct6798 PWM1", "hwmon7_temp2")
+    sensor_map = {
+        "hwmon7_temp2": "hwmon:k10temp-pci-00c3:temp2",     # heute ein anderer Chip
+        "hwmon3_temp2": "hwmon:nct6798-isa-0290:temp2",
+    }
+    report = reconcile_fan_identities(db, chips=CHIPS, sensor_map=sensor_map,
+                                      cpu_sensor_id=CPU_DEFAULT)
+    db.commit()
+
+    assert _sensor_of(db, "nct6798-isa-0290:pwm1") == "hwmon:nct6798-isa-0290:temp2"
+    assert report.unresolved_sensors == []
+
+
+def test_own_chip_sensor_that_no_longer_exists_falls_back_and_is_reported():
+    db = _single_row_db("hwmon7_pwm1", "nct6798 PWM1", "hwmon7_temp9")
+    report = reconcile_fan_identities(db, chips=CHIPS, sensor_map=SENSOR_MAP,
+                                      cpu_sensor_id=CPU_DEFAULT)
+    db.commit()
+
+    assert _sensor_of(db, "nct6798-isa-0290:pwm1") == CPU_DEFAULT
+    assert "hwmon7_temp9" in report.unresolved_sensors
+
+
+def test_own_chip_sensor_of_a_gpu_is_not_mapped_to_a_dead_hwmon_source():
+    """amdgpu/nouveau-hwmon-Sensoren registriert die Registry nicht (die
+    gpu:*-Quellen sind kanonisch) -- eine hwmon:amdgpu-...-Quelle waere tot."""
+    db = _single_row_db("hwmon1_pwm1", "amdgpu PWM1", "hwmon1_temp1")
+    sensor_map = dict(SENSOR_MAP)
+    sensor_map["hwmon2_temp1"] = "hwmon:amdgpu-pci-0300:temp1"
+    reconcile_fan_identities(db, chips=CHIPS, sensor_map=sensor_map,
+                             cpu_sensor_id=CPU_DEFAULT)
+    db.commit()
+
+    assert _sensor_of(db, "amdgpu-pci-0300:pwm1") == CPU_DEFAULT
+
+
+def test_already_renamed_winner_takes_its_anchor_from_legacy_fan_id():
+    """Ein Gewinner, der schon in der Neuform vorliegt (Wiederaufnahme nach
+    Abbruch), traegt seine Schreib-Nummerierung in legacy_fan_id."""
+    db = _single_row_db("nct6798-isa-0290:pwm1", "nct6798 PWM1", "hwmon7_temp2")
+    row = db.execute(select(FanConfig)).scalar_one()
+    row.legacy_fan_id = "hwmon7_pwm1"
+    db.add(FanConfig(fan_id="hwmon7_pwm1", name="nct6798 PWM1", mode="auto",
+                     temp_sensor_id="hwmon7_temp2", is_active=True,
+                     updated_at=_dt("2026-01-01T00:00:00")))
+    db.commit()
+    sensor_map = {"hwmon3_temp2": "hwmon:nct6798-isa-0290:temp2"}
+
+    reconcile_fan_identities(db, chips=CHIPS, sensor_map=sensor_map,
+                             cpu_sensor_id=CPU_DEFAULT)
+    db.commit()
+
+    assert _sensor_of(db, "nct6798-isa-0290:pwm1") == "hwmon:nct6798-isa-0290:temp2"
+
+
 def test_sensor_label_is_rekeyed_and_keeps_provenance(db):
     """I-1: real gespeicherte Label-sensor_id traegt IMMER das 'hwmon:'-Praefix
     (die Route persistiert die Registry-Kennung, siehe HwmonTempSource.id).
     Ohne Praefix-Abstreifen vor dem Regex-Test traf die Migration keine
-    einzige echte Zeile."""
+    einzige echte Zeile.
+
+    #658: die Uebersetzung laeuft ueber die heutige Nummerierung und ist nicht
+    belegbar -- sie landet deshalb in unverified_sensors."""
     db.add(TempSensorLabel(sensor_id="hwmon:hwmon4_temp1", custom_label="RAID-Platten"))
     db.commit()
 
-    reconcile_fan_identities(db, chips=CHIPS, sensor_map=SENSOR_MAP,
-                             cpu_sensor_id=CPU_DEFAULT)
+    report = reconcile_fan_identities(db, chips=CHIPS, sensor_map=SENSOR_MAP,
+                                      cpu_sensor_id=CPU_DEFAULT)
     db.commit()
 
     labels = {row.sensor_id: row for row in db.query(TempSensorLabel).all()}
     assert "hwmon:k10temp-pci-00c3:temp1" in labels
     assert labels["hwmon:k10temp-pci-00c3:temp1"].custom_label == "RAID-Platten"
     assert labels["hwmon:k10temp-pci-00c3:temp1"].legacy_sensor_id == "hwmon:hwmon4_temp1"
+    assert ("hwmon:hwmon4_temp1", "hwmon:k10temp-pci-00c3:temp1") in report.unverified_sensors
 
 
 def test_sensor_label_collision_keeps_older_row_under_its_own_key(db):
@@ -307,8 +418,8 @@ def test_composite_sources_are_rewritten(db):
     ))
     db.commit()
 
-    reconcile_fan_identities(db, chips=CHIPS, sensor_map=SENSOR_MAP,
-                             cpu_sensor_id=CPU_DEFAULT)
+    report = reconcile_fan_identities(db, chips=CHIPS, sensor_map=SENSOR_MAP,
+                                      cpu_sensor_id=CPU_DEFAULT)
     db.commit()
 
     composite = db.query(CompositeTempSensor).one()
@@ -316,6 +427,9 @@ def test_composite_sources_are_rewritten(db):
         "hwmon:k10temp-pci-00c3:temp1",
         "hwmon:nct6798-isa-0290:temp1",
     ]
+    # #658: nicht belegbar -> im Report, damit der Admin sie pruefen kann
+    assert ("hwmon:hwmon4_temp1", "hwmon:k10temp-pci-00c3:temp1") in report.unverified_sensors
+    assert ("hwmon3_temp1", "hwmon:nct6798-isa-0290:temp1") in report.unverified_sensors
 
 
 def test_unmappable_composite_source_is_left_alone(db):

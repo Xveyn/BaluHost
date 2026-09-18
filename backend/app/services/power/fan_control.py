@@ -870,7 +870,8 @@ class FanControlService:
                     db.commit()
                     if (report.renamed or report.deactivated
                             or report.unresolved_sensors or report.readopted
-                            or report.orphaned_inactive):
+                            or report.orphaned_inactive
+                            or report.unverified_sensors):
                         try:
                             # Eigene Session (db=None): AuditLoggerDB.log_event
                             # committet die uebergebene Session selbst. Mit
@@ -896,6 +897,12 @@ class FanControlService:
                                     # besonders, weil ihn sonst nichts nennt.
                                     "readopted": report.readopted,
                                     "orphaned_inactive": report.orphaned_inactive,
+                                    # #658: Label- und Composite-Quellen, die
+                                    # ueber die heutige hwmon-Nummerierung
+                                    # uebersetzt wurden -- plausibel, aber nicht
+                                    # belegbar. Die Liste sagt dem Admin, was er
+                                    # pruefen sollte.
+                                    "unverified_sensors": report.unverified_sensors,
                                 },
                                 db=None,
                             )

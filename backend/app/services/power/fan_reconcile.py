@@ -67,6 +67,17 @@ class ReconcileReport:
     unresolved_sensors: List[str] = field(default_factory=list)
     readopted: List[Tuple[str, str]] = field(default_factory=list)
     orphaned_inactive: List[str] = field(default_factory=list)
+    # #658: Label- und Composite-Quellen, die ueber die HEUTIGE Nummerierung
+    # uebersetzt wurden. Das Ergebnis ist plausibel, aber nicht belegbar --
+    # die Nummerierung beim Speichern kennt niemand. Der Admin sieht im Audit,
+    # was er pruefen sollte, falls sich die hwmon-Indizes verschoben haben.
+    unverified_sensors: List[Tuple[str, str]] = field(default_factory=list)
+
+
+# Deren hwmon-Sensoren registriert die TempSourceRegistry nicht (die gpu:*-
+# Quellen sind kanonisch, fan_control._rebuild_registry). Eine
+# hwmon:amdgpu-...-Quelle waere tot.
+_GPU_DRIVERS = frozenset({"amdgpu", "nouveau"})
 
 
 def _chip_from_name(name: Optional[str]) -> Optional[str]:
@@ -83,10 +94,25 @@ def _chip_from_name(name: Optional[str]) -> Optional[str]:
     return name[:index]
 
 
+@dataclass(frozen=True)
+class SensorAnchor:
+    """Was ueber den Schreib-Boot einer Luefterzeile belegbar ist (#658).
+
+    Eine Altzeile wurde immer unter der fan_id der damals aktuellen
+    Nummerierung angelegt und bearbeitet. Als ihr temp_sensor_id geschrieben
+    wurde, war der Chip des Luefters also hwmon<node> -- und nur fuer diesen
+    einen Knoten ist die Bedeutung einer Alt-Sensor-ID gesichert.
+    """
+    node: str                                          # "7" aus hwmon7_pwm1
+    chip: str                                          # "nct6798" (aus name)
+    chip_key: str                                      # "nct6798-isa-0290"
+
+
 def _map_sensor(sensor_id: Optional[str], sensor_map: Dict[str, str],
                 cpu_sensor_id: Optional[str],
-                report: ReconcileReport) -> Optional[str]:
-    """Bildet eine Alt-Sensor-ID ueber sensor_map auf die stabile Form ab.
+                report: ReconcileReport,
+                anchor: Optional[SensorAnchor] = None) -> Optional[str]:
+    """Bildet eine Alt-Sensor-ID einer Luefterzeile auf die stabile Form ab.
 
     Regel R2: nur die nackte Alt-Form (nach optionalem "hwmon:"-Praefix)
     im Muster "hwmonX_tempY" ist ueberhaupt ein Abbildungskandidat. Ohne
@@ -94,21 +120,63 @@ def _map_sensor(sensor_id: Optional[str], sensor_map: Dict[str, str],
     (z. B. "hwmon:k10temp-pci-00c3:temp1") erneut durch die Map schicken,
     dort nicht finden und faelschlich als unaufloesbar melden -- bei
     jedem Dienststart eine WARNING, obwohl nichts falsch ist.
+
+    #658: sensor_map spiegelt die Nummerierung des Abgleich-Boots, die Alt-ID
+    wurde aber unter der ihres Schreib-Boots gespeichert. Verschoben sich die
+    Indizes dazwischen, landete die Uebersetzung auf einem fremden Chip --
+    und galt trotzdem als aufgeloest (prod: GPU-Luefter an Mainboard-SYSTIN).
+    Deshalb:
+
+    - Sensor auf dem Chip des Luefters (gleiche Knotennummer wie in der
+      Alt-fan_id): belegbar. Uebersetzt wird ueber die Chip-Kennung, nicht
+      ueber die heutige Nummerierung -- sofern der Sensor heute existiert
+      und der Chip keine GPU ist (siehe _GPU_DRIVERS).
+    - Alles andere: nicht belegbar, also der heutige CPU-Default. Das trifft
+      in der Regel sogar die urspruengliche Absicht, denn ein chip-fremder
+      Sensor war praktisch immer der damalige CPU-Default. Gemeldet wird nur,
+      wenn die heutige Nummerierung etwas ANDERES ergeben haette -- sonst ist
+      das Ergebnis identisch und ein Audit-Eintrag waere ein Fehlalarm.
     """
     if not sensor_id:
         return cpu_sensor_id
     bare = sensor_id[len("hwmon:"):] if sensor_id.startswith("hwmon:") else sensor_id
-    if not _LEGACY_SENSOR_ID.match(bare):
+    match = _LEGACY_SENSOR_ID.match(bare)
+    if not match:
         return sensor_id                               # bereits stabil oder unbekanntes Format
-    mapped = sensor_map.get(bare)
-    if mapped:
-        return mapped
-    report.unresolved_sensors.append(bare)
-    logger.warning(
-        "Sensor %s nicht aufloesbar, Rueckfall auf den CPU-Default %s",
-        sensor_id, cpu_sensor_id,
-    )
+
+    node, temp_num = match.groups()
+    if anchor is not None and node == anchor.node and anchor.chip not in _GPU_DRIVERS:
+        own = f"hwmon:{anchor.chip_key}:temp{temp_num}"
+        if own in set(sensor_map.values()):
+            return own
+        report.unresolved_sensors.append(bare)
+        logger.warning(
+            "Sensor %s: %s gibt es nicht mehr, Rueckfall auf den CPU-Default %s",
+            sensor_id, own, cpu_sensor_id,
+        )
+        return cpu_sensor_id
+
+    today = sensor_map.get(bare)
+    if today is None or today != cpu_sensor_id:
+        report.unresolved_sensors.append(bare)
+        logger.warning(
+            "Sensor %s nicht belegbar (heute: %s), Rueckfall auf den CPU-Default %s",
+            sensor_id, today, cpu_sensor_id,
+        )
     return cpu_sensor_id
+
+
+def _anchor_for(winner: FanConfig, chip: str, chip_key: str) -> Optional[SensorAnchor]:
+    """Knotennummer aus der Alt-fan_id des Gewinners; VOR dem Umbenennen rufen.
+
+    Liegt der Gewinner schon in der Neuform vor (Wiederaufnahme nach einem
+    Abbruch), steht seine Herkunft in legacy_fan_id.
+    """
+    for candidate in (winner.fan_id, winner.legacy_fan_id):
+        match = _LEGACY_FAN_ID.match(candidate or "")
+        if match:
+            return SensorAnchor(node=match.group(1), chip=chip, chip_key=chip_key)
+    return None
 
 
 def reconcile_fan_identities(
@@ -127,6 +195,7 @@ def reconcile_fan_identities(
     order = {row.id: row.updated_at for row in rows}
 
     candidates: Dict[str, List[FanConfig]] = {}
+    chip_of: Dict[str, Tuple[str, str]] = {}          # new_id -> (Chipname, Kennung)
     for row in rows:
         match = _LEGACY_FAN_ID.match(row.fan_id or "")
         if not match:
@@ -154,7 +223,9 @@ def reconcile_fan_identities(
             row.is_active = False                      # Chip da, Kanal weg
             report.deactivated.append(row.fan_id)
             continue
-        candidates.setdefault(f"{facts.key}:pwm{channel}", []).append(row)
+        new_id = f"{facts.key}:pwm{channel}"
+        candidates.setdefault(new_id, []).append(row)
+        chip_of[new_id] = (chip, facts.key)
 
     # Bereits in Neuform vorliegende Zeilen treten mit an, sonst laeuft ein
     # nach einem Abbruch wiederholter Lauf in den Unique-Index.
@@ -173,6 +244,8 @@ def reconcile_fan_identities(
         # id ist die zuletzt angelegte Zeile und bildet die aktuellere
         # Hardware-Sicht ab.
         winner = max(group, key=lambda r: (order.get(r.id) or _EPOCH, r.id or 0))
+        # Vor dem Umbenennen: danach traegt fan_id schon die Neuform.
+        anchor = _anchor_for(winner, *chip_of[new_id])
         for row in group:
             if row is winner:
                 continue
@@ -213,11 +286,11 @@ def reconcile_fan_identities(
             _rewrite_references(db, old_id, new_id)
 
         winner.temp_sensor_id = _map_sensor(
-            winner.temp_sensor_id, sensor_map, cpu_sensor_id, report
+            winner.temp_sensor_id, sensor_map, cpu_sensor_id, report, anchor
         )
 
     _reconcile_sensor_labels(db, sensor_map, report)
-    _reconcile_composites(db, sensor_map)
+    _reconcile_composites(db, sensor_map, report)
 
     logger.info(
         "Identitaets-Abgleich: %d uebernommen, %d deaktiviert, %d ohne Chip",
@@ -493,11 +566,19 @@ def _reconcile_sensor_labels(db: Session, sensor_map: Dict[str, str],
     for new_id, row in claimed.items():
         row.legacy_sensor_id = row.sensor_id
         row.sensor_id = new_id
+        # #658: ein Label haengt an keiner Luefterzeile, es gibt also keinen
+        # Anker fuer die Schreib-Nummerierung -- uebersetzt, aber gemeldet.
+        report.unverified_sensors.append((row.legacy_sensor_id, new_id))
         logger.info("Sensor-Label: %s -> %s", row.legacy_sensor_id, new_id)
 
 
-def _reconcile_composites(db: Session, sensor_map: Dict[str, str]) -> None:
-    """Quell-IDs in composite_temp_sensors mit derselben Abbildung umschreiben."""
+def _reconcile_composites(db: Session, sensor_map: Dict[str, str],
+                          report: ReconcileReport) -> None:
+    """Quell-IDs in composite_temp_sensors mit derselben Abbildung umschreiben.
+
+    #658: wie bei den Labels ohne Anker fuer die Schreib-Nummerierung --
+    jede Uebersetzung landet in report.unverified_sensors.
+    """
     for composite in db.execute(select(CompositeTempSensor)).scalars():
         try:
             sources = json.loads(composite.source_ids_json)
@@ -514,6 +595,7 @@ def _reconcile_composites(db: Session, sensor_map: Dict[str, str]) -> None:
             mapped = sensor_map.get(bare) if isinstance(bare, str) else None
             if mapped:
                 rewritten.append(mapped)
+                report.unverified_sensors.append((source, mapped))
                 changed = True
             else:
                 rewritten.append(source)
