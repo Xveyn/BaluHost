@@ -52,6 +52,7 @@ from app.services.power.fan_reconcile import (
 )
 from app.services.power.fan_sources import (
     TempSourceRegistry, HwmonTempSource, GpuTempSource, DiskTempSource, MixTempSource,
+    default_temp_sensor_id,
 )
 from app.services.power.fan_curve_eval import evaluate_curve
 from app.services.power.fan_gpu_acoustics import (
@@ -795,8 +796,9 @@ class FanControlService:
     async def _load_fan_configs(self):
         """Load fan configurations from database.
 
-        For new fans (first discovery), assigns the best available CPU sensor
-        as the default temp_sensor_id. Existing configs are NOT modified —
+        For new fans (first discovery), assigns a default temp_sensor_id via
+        default_temp_sensor_id(): gpu:edge for AMD GPU fans (#606), else
+        the best available CPU sensor. Existing configs are NOT modified —
         user-chosen sensors (including composite sensors) survive service restarts.
         """
         if not self._backend:
@@ -970,7 +972,8 @@ class FanControlService:
                 ).scalar_one_or_none()
 
                 if not existing:
-                    # Create new config with CPU sensor if available
+                    # Neue Config: GPU-Quelle fuer AMD-GPU-Luefter (#606),
+                    # sonst CPU-Sensor, sonst der Sensor aus dem Scan.
                     config = FanConfig(
                         fan_id=fan.fan_id,
                         name=fan.name,
@@ -979,9 +982,12 @@ class FanControlService:
                         min_pwm_percent=fan.min_pwm_percent,
                         max_pwm_percent=fan.max_pwm_percent,
                         emergency_temp_celsius=fan.emergency_temp_celsius,
-                        temp_sensor_id=TempSourceRegistry._normalize_id(
-                            cpu_sensor_id or fan.temp_sensor_id
-                        ) if (cpu_sensor_id or fan.temp_sensor_id) else None,
+                        temp_sensor_id=default_temp_sensor_id(
+                            is_gpu_fan=fan.is_gpu_fan,
+                            gpu_vendor=fan.gpu_vendor,
+                            cpu_sensor_id=cpu_sensor_id,
+                            scan_sensor_id=fan.temp_sensor_id,
+                        ),
                         is_active=True,
                         pwm_enable_restore=observations.get(fan.fan_id),
                     )

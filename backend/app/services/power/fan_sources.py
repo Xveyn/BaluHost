@@ -216,3 +216,44 @@ class MixTempSource:
         if self.function == "avg":
             return sum(values) / len(values)
         return None
+
+
+# Default-Quelle fuer einen AMD-GPU-Luefter (#606). Bewusst edge, nicht
+# junction: die Standardschwellen (emergency_temp_celsius 85, Warnung ab 75)
+# und die Standardkurve sind auf CPU-/Board-Temperaturen zugeschnitten. Die
+# Junction-Temperatur liegt beim Spielen routinemaessig bei 80-95 Grad und
+# loeste damit in jeder Sitzung Notfall-Modus und Push-Alarme aus; die
+# Kantentemperatur liegt im selben Bereich wie die Werte, fuer die diese
+# Defaults gedacht sind. Die Datenmigration c7a3e9f1d2b4 schreibt denselben
+# Wert fest -- bewusst als Literal kopiert, nicht importiert: eine Migration
+# muss auch dann noch laufen, wenn sich dieser Modul-Code spaeter aendert.
+AMD_GPU_FAN_DEFAULT_SOURCE = "gpu:edge"
+
+
+def default_temp_sensor_id(
+    *,
+    is_gpu_fan: bool,
+    gpu_vendor: Optional[str],
+    cpu_sensor_id: Optional[str],
+    scan_sensor_id: Optional[str],
+) -> Optional[str]:
+    """Temperaturquelle fuer einen Luefter, dessen Config neu angelegt wird.
+
+    AMD-GPU-Luefter bekommen die GPU-Kantentemperatur aus dem Monitoring-SHM
+    (warum edge statt junction: siehe AMD_GPU_FAN_DEFAULT_SOURCE).
+    Ob sie gerade einen Wert liefert, wird bewusst NICHT geprueft: beim
+    Dienststart kann das SHM noch fehlen, und ein voruebergehend leerer Wert
+    schriebe sonst dauerhaft den CPU-Sensor fest. Liefert die Quelle spaeter
+    nichts, haelt die Regelschleife den aktuellen PWM-Wert.
+
+    nouveau-Luefter bleiben beim bisherigen Default: gpu:* kommt fuer NVIDIA
+    aus nvidia-smi, das neben nouveau nicht laeuft -- die Quelle waere dort
+    praktisch immer tot.
+
+    Alle anderen: CPU-Sensor, sonst der Sensor aus dem Scan, jeweils in die
+    hwmon:-Form gebracht.
+    """
+    if is_gpu_fan and gpu_vendor == "amd":
+        return AMD_GPU_FAN_DEFAULT_SOURCE
+    chosen = cpu_sensor_id or scan_sensor_id
+    return TempSourceRegistry._normalize_id(chosen) if chosen else None
