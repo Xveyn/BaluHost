@@ -211,8 +211,8 @@ export function AppRoutes() {
         {isDesktop && <Route path="/power" element={<Navigate to="/admin/system-control?tab=energy" replace />} />}
         {isDesktop && <Route path="/fan-control" element={<Navigate to="/admin/system-control?tab=fan" replace />} />}
         {isDesktop && <Route path="/logging" element={<Navigate to="/system?tab=logs" replace />} />}
-        {isDesktop && <Route path="/sync-prototype" element={<Navigate to="/devices?tab=desktop" replace />} />}
-        {isDesktop && <Route path="/mobile-devices" element={<Navigate to="/devices?tab=mobile" replace />} />}
+        {isDesktop && <Route path="/sync-prototype" element={<Navigate to="/devices" replace />} />}
+        {isDesktop && <Route path="/mobile-devices" element={<Navigate to="/devices" replace />} />}
         {isDesktop && <Route path="/admin/backup" element={<Navigate to="/admin/system-control?tab=backup" replace />} />}
         {isDesktop && <Route path="/admin/vpn" element={<Navigate to="/admin/system-control?tab=vpn" replace />} />}
         {isDesktop && <Route path="/backups" element={<Navigate to="/admin/system-control?tab=backup" replace />} />}
