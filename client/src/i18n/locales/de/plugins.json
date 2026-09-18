@@ -71,7 +71,7 @@
   },
   "empty": {
     "noPlugins": "Keine Plugins installiert",
-    "noPluginsDesc": "Platzieren Sie Plugin-Verzeichnisse im Ordner backend/app/plugins/installed/",
+    "noPluginsDesc": "Mitgelieferte Plugins sind in BaluHost enthalten. Weitere Plugins lassen sich über den Marketplace-Tab installieren.",
     "selectPlugin": "Wählen Sie ein Plugin aus, um Details anzuzeigen"
   },
   "modal": {

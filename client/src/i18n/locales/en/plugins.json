@@ -71,7 +71,7 @@
   },
   "empty": {
     "noPlugins": "No plugins installed",
-    "noPluginsDesc": "Place plugin directories in the backend/app/plugins/installed/ folder",
+    "noPluginsDesc": "Bundled plugins ship with BaluHost. Additional plugins can be installed from the Marketplace tab.",
     "selectPlugin": "Select a plugin to view details"
   },
   "modal": {
