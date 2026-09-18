@@ -74,7 +74,8 @@ The dashboard panel (`gauge`) does **not** poll — it reads the SHM snapshot
 joins it against active+online `SmartDevice` rows. `progress` is against a
 hard-coded `max_power = 150.0 W`. Returns `None` (panel hidden) when no device
 reported a non-zero reading. `TapoPluginConfig.panel_devices` narrows which
-devices count; it is read straight off `InstalledPlugin.config`.
+devices count; it is read through `self.get_config(db)` (#522), as is
+`retention_days` in the poller's sample cleanup.
 
 ## History import
 

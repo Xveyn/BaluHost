@@ -118,11 +118,13 @@ def test_unlimited_keeps_everything(db_session, device):
 
 
 def test_retention_days_for_plugin_reads_config(db_session):
-    """Poller resolves retention from InstalledPlugin.config, default 30."""
+    """Poller resolves retention via the plugin's get_config(), default 30."""
+    from app.plugins.installed.tapo_smart_plug import TapoSmartPlugPlugin
     from app.plugins.smart_device.poller import SmartDevicePoller
     from app.services import plugin_service
 
     poller = SmartDevicePoller()
+    poller._plugins["tapo_smart_plug"] = TapoSmartPlugPlugin()
 
     # No config row -> default 30
     assert poller._retention_days_for_plugin(db_session, "tapo_smart_plug") == 30
@@ -138,3 +140,24 @@ def test_retention_days_for_plugin_reads_config(db_session):
         db_session, name="tapo_smart_plug", validated_config={"retention_days": 0}
     )
     assert poller._retention_days_for_plugin(db_session, "tapo_smart_plug") == 0
+
+
+def test_retention_days_invalid_row_does_not_disable_cleanup(db_session):
+    """A corrupt negative value used to reach cleanup as 'unlimited' (<= 0)."""
+    from app.plugins.installed.tapo_smart_plug import TapoSmartPlugPlugin
+    from app.plugins.smart_device.poller import SmartDevicePoller
+    from app.services import plugin_service
+
+    poller = SmartDevicePoller()
+    poller._plugins["tapo_smart_plug"] = TapoSmartPlugPlugin()
+    plugin_service.update_config(
+        db_session, name="tapo_smart_plug", validated_config={"retention_days": -5}
+    )
+
+    assert poller._retention_days_for_plugin(db_session, "tapo_smart_plug") == 30
+
+
+def test_retention_days_unknown_plugin_uses_default(db_session):
+    from app.plugins.smart_device.poller import SmartDevicePoller
+
+    assert SmartDevicePoller()._retention_days_for_plugin(db_session, "nope") == 30
