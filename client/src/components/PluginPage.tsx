@@ -7,7 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { usePlugins } from '../contexts/PluginContext';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, PanelTop } from 'lucide-react';
 import { PluginBadge } from './ui/PluginBadge';
 import PluginSandboxHost from './plugins/PluginSandboxHost';
 
@@ -48,6 +48,30 @@ export default function PluginPage() {
   }
 
   const displayName = pluginInfo?.display_name ?? pluginName ?? '';
+
+  // Enabled, but only contributes a topbar control, pill or menu action — no
+  // bundle to frame (#454). `undefined` (older backend) keeps the iframe.
+  if (pluginInfo?.has_page === false) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 gap-4">
+        <div className="p-4 rounded-full bg-slate-800/60">
+          <PanelTop className="h-8 w-8 text-slate-400" />
+        </div>
+        <div className="text-center">
+          <h3 className="text-lg font-medium text-white mb-1">{t('page.noOwnPageTitle')}</h3>
+          <p className="text-sm text-slate-400 max-w-md">
+            {t('page.noOwnPageDesc', { name: displayName })}
+          </p>
+        </div>
+        <button
+          onClick={() => navigate('/')}
+          className="px-4 py-2 text-sm font-medium rounded-lg border border-slate-700 text-slate-300 hover:border-sky-500/50"
+        >
+          {t('page.goToDashboard')}
+        </button>
+      </div>
+    );
+  }
 
   // Render the plugin in a sandboxed iframe via PluginSandboxHost
   return (
