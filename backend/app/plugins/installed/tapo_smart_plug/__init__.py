@@ -199,20 +199,9 @@ class TapoSmartPlugPlugin(SmartDevicePlugin):
         - progress: percentage of assumed max power (default 150W)
         - delta + delta_tone: "live" (trend from SHM)
         """
-        from app.models.plugin import InstalledPlugin
         from app.models.smart_device import SmartDevice
 
-        # Read plugin config for panel_devices filter
-        panel_device_ids: list[int] = []
-        try:
-            record = db.query(InstalledPlugin).filter(
-                InstalledPlugin.name == "tapo_smart_plug"
-            ).first()
-            if record and record.config:
-                cfg = record.config if isinstance(record.config, dict) else json.loads(record.config)
-                panel_device_ids = cfg.get("panel_devices", [])
-        except Exception:
-            pass
+        panel_device_ids: list[int] = self.get_config(db).get("panel_devices", [])
 
         shm_data = read_shm(SMART_DEVICES_FILE, max_age_seconds=30.0)
         devices_shm: Dict[str, Any] = {}

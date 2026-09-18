@@ -293,8 +293,9 @@ class PluginBase(ABC):
     def get_config_schema(self) -> Optional[type]:
         """Get the Pydantic model for plugin configuration.
 
-        Override to provide a configuration schema.
-        The model will be used to validate config from the database.
+        Override to provide a configuration schema. It drives the settings
+        form, validates ``PUT /api/plugins/{name}/config`` and fills defaults
+        in ``get_config()``.
 
         Returns:
             Pydantic BaseModel subclass or None
@@ -451,6 +452,17 @@ class PluginBase(ABC):
             validated = schema(**config)
             return validated.model_dump()
         return config
+
+    def get_config(self, db: "Session") -> Dict[str, Any]:
+        """Return this plugin's effective, validated configuration.
+
+        The only way a plugin should read what an admin saved via
+        ``PUT /api/plugins/{name}/config``. Read it when you need it - there is
+        no push on save, see ``app/plugins/config.py`` for why.
+        """
+        from app.plugins.config import resolve_plugin_config
+
+        return resolve_plugin_config(self, db)
 
     def __repr__(self) -> str:
         meta = self.metadata

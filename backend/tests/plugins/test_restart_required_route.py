@@ -33,6 +33,7 @@ def _plugin(has_router: bool) -> MagicMock:
     plugin.get_translations.return_value = None
     plugin.get_config_schema.return_value = None
     plugin.get_default_config.return_value = {}
+    plugin.get_config.return_value = {}
     return plugin
 
 

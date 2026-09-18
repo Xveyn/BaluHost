@@ -420,3 +420,42 @@ class TestModels:
         )
         assert info.media_type == "DVD-R"
         assert len(info.write_speeds) == 3
+
+
+# === Stored config reaches the service (#522) ===
+
+
+@pytest.fixture
+def fresh_singleton(monkeypatch):
+    from app.plugins.installed.optical_drive import service as service_mod
+
+    monkeypatch.setattr(service_mod, "_service_instance", None)
+
+
+def test_service_uses_saved_config(db_session, fresh_singleton):
+    from app.plugins.installed.optical_drive import OpticalDrivePlugin
+    from app.services import plugin_service
+
+    plugin_service.update_config(
+        db_session, name="optical_drive",
+        validated_config={"auto_eject_after_operation": False},
+    )
+
+    svc = OpticalDrivePlugin().service_with_current_config(db_session)
+
+    assert svc.config.auto_eject_after_operation is False
+
+
+def test_service_follows_config_change(db_session, fresh_singleton):
+    from app.plugins.installed.optical_drive import OpticalDrivePlugin
+    from app.services import plugin_service
+
+    plugin = OpticalDrivePlugin()
+    assert plugin.service_with_current_config(db_session).config.auto_eject_after_operation is True
+
+    plugin_service.update_config(
+        db_session, name="optical_drive",
+        validated_config={"auto_eject_after_operation": False},
+    )
+
+    assert plugin.service_with_current_config(db_session).config.auto_eject_after_operation is False

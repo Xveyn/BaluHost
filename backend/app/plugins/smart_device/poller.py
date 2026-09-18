@@ -501,14 +501,18 @@ class SmartDevicePoller:
     def _retention_days_for_plugin(self, db, plugin_name: str) -> int:
         """Resolve a plugin's configured sample retention (days).
 
-        Falls back to SMART_DEVICE_SAMPLE_RETENTION_DAYS when the plugin has no
-        config row or an unreadable value.
+        Reads through the plugin's get_config() (#522), so an invalid stored
+        value falls back to the schema default instead of reaching cleanup.
+        Falls back to SMART_DEVICE_SAMPLE_RETENTION_DAYS when the plugin is not
+        loaded here or declares no retention_days field.
         """
         from app.plugins.smart_device.retention import SMART_DEVICE_SAMPLE_RETENTION_DAYS
-        from app.services import plugin_service
+
+        plugin = self._plugins.get(plugin_name)
+        if plugin is None:
+            return SMART_DEVICE_SAMPLE_RETENTION_DAYS
         try:
-            record = plugin_service.get_installed_plugin(db, plugin_name)
-            cfg = (record.config or {}) if record else {}
+            cfg = plugin.get_config(db)
             return int(cfg.get("retention_days", SMART_DEVICE_SAMPLE_RETENTION_DAYS))
         except (TypeError, ValueError):
             return SMART_DEVICE_SAMPLE_RETENTION_DAYS
