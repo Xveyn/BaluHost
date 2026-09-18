@@ -39,6 +39,13 @@ class _NoSchemaPlugin(PluginBase):
         return {"a": 1}
 
 
+class _Bare(_SchemaPlugin):
+    """A plugin with a schema but no get_default_config() override."""
+
+    def get_default_config(self) -> Dict[str, Any]:
+        return {}
+
+
 def _store(db, name: str, config) -> None:
     plugin_service.update_config(db, name=name, validated_config=config)
 
@@ -84,9 +91,14 @@ def test_plugin_without_schema_and_row_returns_defaults(db_session):
 
 
 def test_schema_without_default_override_gets_schema_defaults(db_session):
-    class _Bare(_SchemaPlugin):
-        def get_default_config(self) -> Dict[str, Any]:
-            return {}
+    assert _Bare().get_config(db_session) == {"interval": 10, "label": "default"}
+
+
+def test_invalid_row_fallback_validates_bare_default(db_session):
+    """A plugin with a schema but no get_default_config() override must still
+    get the schema's own defaults for an invalid stored row, not {} (#522).
+    """
+    _store(db_session, "cfg_plugin", {"interval": 0})  # violates ge=1
 
     assert _Bare().get_config(db_session) == {"interval": 10, "label": "default"}
 

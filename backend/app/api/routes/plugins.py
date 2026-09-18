@@ -210,6 +210,8 @@ async def get_plugin_details(
             dashboard_widgets=[],
             installed_at=db_record.installed_at if db_record else None,
             enabled_at=db_record.enabled_at if db_record else None,
+            # External plugins have no in-process instance to call get_config()
+            # on, so this intentionally stays the raw stored row (#522).
             config=(db_record.config or {}) if db_record else {},
             config_schema=None,
             translations=None,
@@ -274,7 +276,7 @@ async def get_plugin_details(
         dashboard_widgets=ui_manifest.dashboard_widgets if ui_manifest else [],
         installed_at=db_record.installed_at if db_record else None,
         enabled_at=db_record.enabled_at if db_record else None,
-        config=(db_record.config or {}) if db_record else (plugin.get_default_config() or {}),
+        config=plugin.get_config(db),
         config_schema=config_schema,
         translations=plugin.get_translations() or None,
     )

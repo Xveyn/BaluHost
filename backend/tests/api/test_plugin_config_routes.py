@@ -37,6 +37,17 @@ class _FakeManager:
     def get_plugin(self, name: str):
         return self._plugin if name == self._plugin.metadata.name else None
 
+    def get_discovered(self, name: str):
+        # No external-plugin manifest -> get_plugin_details takes the
+        # bundled-plugin branch.
+        return None
+
+    def is_enabled(self, name: str) -> bool:
+        return True
+
+    def router_restart_required(self, name: str) -> bool:
+        return False
+
 
 @pytest.fixture
 def fake_manager():
@@ -61,6 +72,18 @@ def test_get_invalid_row_shows_defaults(client, admin_headers, db_session, fake_
 
     assert r.status_code == 200
     assert r.json()["config"] == {"interval": 10, "label": "default"}
+
+
+def test_get_plugin_details_fills_partial_row_with_defaults(client, admin_headers, db_session, fake_manager):
+    """GET /api/plugins/{name} (the details route the settings form uses) must
+    serve the same effective config as GET /{name}/config, not the raw row (#522).
+    """
+    plugin_service.update_config(db_session, name="cfg_plugin", validated_config={"interval": 5})
+
+    r = client.get("/api/plugins/cfg_plugin", headers=admin_headers)
+
+    assert r.status_code == 200
+    assert r.json()["config"] == {"interval": 5, "label": "default"}
 
 
 def test_put_then_get_round_trips(client, admin_headers, fake_manager):

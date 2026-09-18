@@ -53,4 +53,7 @@ def resolve_plugin_config(plugin: "PluginBase", db: "Session") -> Dict[str, Any]
             "Stored config for plugin %s is invalid (%s); using defaults",
             name, type(exc).__name__,
         )
-        return dict(plugin.get_default_config())
+        try:
+            return dict(plugin.validate_config(dict(plugin.get_default_config())))
+        except (ValueError, TypeError):
+            return dict(plugin.get_default_config())
