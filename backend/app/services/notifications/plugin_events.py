@@ -93,7 +93,14 @@ async def emit_plugin_event(
     must not take down its caller.
     """
     public_id = f"{_PREFIX}{plugin_name}:{event_id}"
-    entry = lookup_plugin_event(public_id)
+    # The lookup calls into the plugin's own get_notification_events(), so it
+    # needs the same guard as the delivery below - otherwise a raise there
+    # breaks the "never raises" promise and skips the caller's next event (#467).
+    try:
+        entry = lookup_plugin_event(public_id)
+    except Exception:
+        logger.exception("emit_plugin_event: registry lookup for %s failed", public_id)
+        return
     if entry is None:
         logger.warning("emit_plugin_event: unknown event %s", public_id)
         return
