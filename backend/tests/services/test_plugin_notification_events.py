@@ -233,6 +233,27 @@ class TestEmitPluginEvent:
 
         emitter.emit_for_admins.assert_not_awaited()
 
+    async def test_a_plugin_raising_in_its_event_registry_does_not_raise(self, caplog):
+        """The docstring promises 'Never raises' (#467). The registry lookup
+        calls into the plugin's own get_notification_events(); a raise there
+        escaped the guard, so the steam poller's second event of a tick (X->Y
+        game switch) was never even attempted."""
+        from app.services.notifications import plugin_events
+
+        plugin = MagicMock()
+        plugin.get_notification_events.side_effect = RuntimeError("broken registry")
+        emitter = MagicMock()
+        emitter.emit_for_admins = AsyncMock()
+        with patch.object(plugin_events, "_iter_enabled_plugins",
+                          return_value=[("steam_gaming", plugin)]), \
+             patch.object(plugin_events, "get_event_emitter", return_value=emitter), \
+             caplog.at_level("ERROR", logger=plugin_events.__name__):
+            await plugin_events.emit_plugin_event("steam_gaming", "session_started", game="Metro")
+
+        emitter.emit_for_admins.assert_not_awaited()
+        assert "plugin:steam_gaming:session_started" in caplog.text
+        assert "broken registry" in caplog.text
+
     async def test_the_helper_enforces_the_cooldown(self):
         """The async emit path has no cooldown machinery (only emit_sync does);
         the helper must enforce it itself, or a declared cooldown is dead."""
