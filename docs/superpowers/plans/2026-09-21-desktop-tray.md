@@ -2699,9 +2699,18 @@ from baluhost_tray.state import IconState, TrayState
 from baluhost_tray.watch import Watcher, backoff_delays
 
 
-def test_backoff_grows_and_caps():
+def test_backoff_stays_in_its_jitter_window():
+    """Jeder Wert liegt im Fenster seines gedeckelten Exponentials.
+
+    Bewusst keine Monotonie-Zusage: sobald der Deckel greift, stammen die
+    letzten Werte aus demselben Intervall und sind nur zufaellig aufsteigend —
+    ein Monotonie-Test waere in rund der Haelfte der Laeufe rot.
+    """
     delays = backoff_delays(8, base=1.0, cap=60.0)
-    assert all(b >= a for a, b in zip(delays, delays[1:]))
+    assert len(delays) == 8
+    for attempt, delay in enumerate(delays):
+        ceiling = min(60.0, 1.0 * (2 ** attempt))
+        assert ceiling * 0.5 <= delay <= ceiling, f"attempt {attempt}: {delay}"
     assert max(delays) <= 60.0
 
 
