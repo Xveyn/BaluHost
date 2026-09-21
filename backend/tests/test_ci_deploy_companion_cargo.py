@@ -94,9 +94,12 @@ def _harness(install_dir: Path, *, mit_abschluss: bool = True) -> str:
 def _run(tmp_path: Path, *, env: dict, install_dir: Path) -> subprocess.CompletedProcess:
     if BASH is None:
         pytest.skip("bash nicht verfuegbar")
+    # encoding explizit: die extrahierte Funktion enthaelt einen Geviertstrich,
+    # und im CI-Container ist kein Locale gesetzt. Ohne diese Angabe haengt die
+    # Kodierung der Kommandozeile am Locale des Elternprozesses.
     return subprocess.run(
         [BASH, "-c", _harness(install_dir)],
-        capture_output=True, text=True, env=env, timeout=60,
+        capture_output=True, text=True, encoding="utf-8", env=env, timeout=60,
     )
 
 
