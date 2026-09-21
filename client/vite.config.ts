@@ -35,6 +35,11 @@ export default defineConfig(({ mode }) => {
   // "pi" mode produces a stripped-down build for the BaluPi companion device
   const deviceMode = mode === 'pi' ? 'pi' : 'desktop';
 
+  // Dev-proxy target. Override with VITE_DEV_API_TARGET to run a dev backend
+  // on its own port alongside an instance that already holds :8000 (e.g. a
+  // deployment on the same machine). Without the variable nothing changes.
+  const devApiTarget = process.env.VITE_DEV_API_TARGET || 'http://localhost:8000';
+
   return {
   plugins: [react()],
   define: {
@@ -106,7 +111,7 @@ export default defineConfig(({ mode }) => {
     })(),
     proxy: {
       '/api': {
-        target: 'http://localhost:8000',  // Backend runs on HTTP in dev mode
+        target: devApiTarget,  // Backend runs on HTTP in dev mode
         changeOrigin: true,
         secure: false,
         ws: true,
@@ -124,7 +129,7 @@ export default defineConfig(({ mode }) => {
         },
       },
       '/openapi.json': {
-        target: 'http://localhost:8000',
+        target: devApiTarget,
         changeOrigin: true,
         secure: false,
       },
