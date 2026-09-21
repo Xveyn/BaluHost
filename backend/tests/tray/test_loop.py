@@ -381,3 +381,47 @@ async def test_healthy_cycle_hands_back_the_refresh(monkeypatch):
     await asyncio.wait_for(run_loop(ctx), timeout=5)
 
     assert ctx.session.refresh_access.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_unexpected_refresh_failure_backs_off_instead_of_dying(monkeypatch):
+    """Ein Serverfehler beim Refresh ist keine verlorene Kopplung.
+
+    Ohne den dritten except-Zweig laeuft der KeyError aus refresh_access() an
+    beiden bekannten Klassen vorbei und aus run_loop heraus — der stille Tod
+    des Threads, den die Docstring ausschliesst.
+    """
+    clock = FakeClock()
+    ctx, seen = _loop_ctx(clock)
+    ctx.session.refresh_access.side_effect = KeyError("access_token")
+    script = [
+        (0.0, AuthExpired("401")),
+        (0.0, AuthExpired("401")),
+        (0.0, PairingLost("stop")),     # beendet den Test
+    ]
+    cycle = _scripted_cycle(clock, script)
+    monkeypatch.setattr(loop_module, "run_cycle", cycle)
+
+    await asyncio.wait_for(run_loop(ctx), timeout=5)
+
+    assert len(cycle.calls) == 3, "die Schleife muss weitergelaufen sein"
+    assert ctx.sleep.await_count == 2, "jeder Fehlschlag muss einen Backoff kosten"
+    # Token wegwerfen waere hier die teure Fehlreaktion: forget() kommt erst
+    # durch das abschliessende PairingLost, nie wegen des Refresh-Fehlers.
+    assert all(c["forget_calls"] == 0 for c in cycle.calls)
+
+
+@pytest.mark.asyncio
+async def test_cancellation_still_gets_through(monkeypatch):
+    """Der Auffang-Zweig darf CancelledError nicht schlucken."""
+    clock = FakeClock()
+    ctx, seen = _loop_ctx(clock)
+    ctx.session.refresh_access.side_effect = asyncio.CancelledError()
+    monkeypatch.setattr(
+        loop_module, "run_cycle", _scripted_cycle(clock, [(0.0, AuthExpired("401"))])
+    )
+
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(run_loop(ctx), timeout=5)
+
+    ctx.session.forget.assert_not_called()

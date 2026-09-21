@@ -229,6 +229,20 @@ async def run_loop(ctx: LoopContext) -> None:
                     return
                 except TemporaryFailure as exc:
                     logger.info("refresh temporarily unavailable: %s", exc)
+                except Exception:
+                    # Not one of the known classes: broken JSON, a response
+                    # without access_token, anything the server was never
+                    # supposed to send. Backing off is the right answer —
+                    # a surprise here is not a revoked device, and throwing
+                    # the tokens away would be the expensive wrong reaction.
+                    # Logged loudly because this is not a normal operating
+                    # state, it means the other side sent something nobody
+                    # planned for.
+                    #
+                    # Exception, not BaseException: CancelledError has to keep
+                    # propagating, otherwise the worker can no longer be shut
+                    # down.
+                    logger.exception("unexpected failure while refreshing the access token")
         except PairingLost:
             await _give_up_pairing(ctx)
             return
