@@ -3165,7 +3165,11 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Test: `backend/tests/tray/test_icons.py`
 
 **Interfaces:**
-- Consumes: `client/src-tauri/icons/icon.png` (1024×1024 RGBA) als Quelle.
+- Consumes: `client/src/assets/baluhost-logo.png` (256×256) als Quelle.
+  **Nicht** `client/src-tauri/icons/icon.png` — die Datei ist trotz ihrer
+  1024×1024 RGBA ein Tauri-Platzhalter, ein einfarbig blaues Quadrat ohne
+  jedes Motiv. Zwei Reviews haben ihre Abmessungen bestätigt; niemand hat sie
+  angesehen.
 - Produces: `def icon_path(state: IconState, size: int = 22) -> Path`,
   `SIZES: tuple[int, ...]`
 
@@ -3221,29 +3225,48 @@ Expected: FAIL mit `ModuleNotFoundError: No module named 'baluhost_tray.icons'`
 
 ImageMagick liegt auf der Box; andernfalls von Hand in einem Bildeditor.
 
-```bash
-cd backend/baluhost_tray/icons
-magick ../../../client/src-tauri/icons/icon.png \
-  -fuzz 12% -fill none -draw "alpha 0,0 floodfill" base-1024.png
+**Die Dateien liegen bereits im Repo** — sie wurden erzeugt und bei 22 px
+angesehen, bevor dieser Task übergeben wurde. Der Weg dorthin, zur
+Nachvollziehbarkeit:
 
+```bash
+# 1. Hintergrundquadrat wegschneiden und zuschneiden
+magick client/src/assets/baluhost-logo.png \
+  -fuzz 15% -fill none -draw "alpha 0,0 floodfill" cut.png
+magick cut.png -trim +repage trim.png
+
+# 2. Den duennen hellen Bogen loswerden. Er haengt mit der Katze zusammen
+#    (eine einzige Komponente), laesst sich also nicht per Komponentenanalyse
+#    trennen — aber er ist duenn: ein morphologisches Oeffnen toetet ihn und
+#    stellt den Koerper wieder her.
+magick trim.png -alpha extract -threshold 50% mask.png
+magick mask.png -morphology Open Disk:3 shape.png
+magick shape.png -trim +repage shape.png
+
+# 3. Vollton-Silhouette in Markenblau. Die farbige Variante wurde verworfen:
+#    ihre Innendetails werden bei 22 px zu Matsch, die Silhouette bleibt klar.
+magick -size 192x210 xc:'#3274FF' shape.png \
+  -alpha off -compose CopyOpacity -composite -strip silhouette.png
+
+# 4. Vier Groessen, vier Zustaende
 for s in 22 24 32 48; do
-  magick base-1024.png -resize ${s}x${s} baluhost-tray-ok-${s}.png
-  magick baluhost-tray-ok-${s}.png -colorspace Gray -alpha on \
-    baluhost-tray-offline-${s}.png
-  d=$(( s / 3 ))
+  inner=$(( s * 90 / 100 ))
+  magick silhouette.png -resize ${inner}x${inner} -background none \
+    -gravity center -extent ${s}x${s} -strip baluhost-tray-ok-${s}.png
+  magick baluhost-tray-ok-${s}.png -modulate 100,0,100 -alpha on \
+    -channel A -evaluate multiply 0.6 +channel -strip baluhost-tray-offline-${s}.png
+  d=$(( s / 3 )); r=$(( d / 2 )); cx=$(( s - r - 1 )); cy=$(( s - r - 1 ))
   magick baluhost-tray-ok-${s}.png -fill '#F5A623' -stroke none \
-    -draw "circle $((s-d/2-1)),$((s-d/2-1)) $((s-d/2-1)),$((s-1))" \
-    baluhost-tray-warning-${s}.png
+    -draw "circle ${cx},${cy} ${cx},$(( cy + r ))" -strip baluhost-tray-warning-${s}.png
   magick baluhost-tray-ok-${s}.png -fill '#D0021B' -stroke none \
-    -draw "circle $((s-d/2-1)),$((s-d/2-1)) $((s-d/2-1)),$((s-1))" \
-    baluhost-tray-critical-${s}.png
+    -draw "circle ${cx},${cy} ${cx},$(( cy + r ))" -strip baluhost-tray-critical-${s}.png
 done
-rm base-1024.png
 ```
 
-**Jede Datei bei 22 px im Panel ansehen, bevor es weitergeht.** Ist die Katze
-dort nur ein Fleck, muss die Silhouette von Hand vereinfacht werden — das ist
-der wahrscheinliche Fall und kein Grund, den Schritt zu überspringen.
+**Zwei Fallen dabei, beide erlebt:** Die Größenangabe per Kommandosubstitution
+(`$(magick identify -format %wx%h ...)`) kippt die Farbe ins Graustufenbild —
+Maße explizit hinschreiben. Und `+append` verhält sich in dieser
+ImageMagick-Version eigenwillig; für Vergleichsbilder `montage` benutzen.
 
 `backend/baluhost_tray/icons/README.md`:
 
