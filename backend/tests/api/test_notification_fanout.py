@@ -37,6 +37,16 @@ def _patches(ws_manager: MagicMock, service: MagicMock):
 
 @pytest.mark.asyncio
 async def test_sends_state_then_count(ws_manager: MagicMock):
+    """The name promises an order, so prove the order.
+
+    `send_notification_state` and `send_unread_count` are assigned directly
+    onto `ws_manager`, which makes `ws_manager` itself the common parent mock:
+    Mock's attribute-set logic auto-attaches child mocks so their calls are
+    recorded on the parent's `mock_calls`, in call order. Two
+    `assert_awaited_once_with` checks alone would stay green if the two
+    `await`s inside `fanout_state` were swapped; comparing `mock_calls`
+    catches that.
+    """
     service = _service(3)
     p1, p2 = _patches(ws_manager, service)
     with p1, p2:
@@ -44,6 +54,11 @@ async def test_sends_state_then_count(ws_manager: MagicMock):
 
     ws_manager.send_notification_state.assert_awaited_once_with(1, [7], "read")
     ws_manager.send_unread_count.assert_awaited_once_with(1, 3)
+    relevant = {"send_notification_state", "send_unread_count"}
+    assert [c[0] for c in ws_manager.mock_calls if c[0] in relevant] == [
+        "send_notification_state",
+        "send_unread_count",
+    ]
 
 
 @pytest.mark.asyncio
@@ -91,7 +106,22 @@ async def test_send_failure_does_not_propagate(ws_manager: MagicMock):
 
 
 @pytest.mark.asyncio
-async def test_unknown_action_rejected(ws_manager: MagicMock):
+async def test_unread_count_failure_does_not_propagate(ws_manager: MagicMock):
+    """The DB-gone case: both awaits share one try/except, so a raising
+    `get_unread_count` must be swallowed exactly like a dead socket is.
+    `send_unread_count` must then never even be attempted."""
+    service = _service(0)
+    service.get_unread_count.side_effect = RuntimeError("db gone")
+    p1, p2 = _patches(ws_manager, service)
+    with p1, p2:
+        await fanout_state(MagicMock(), 1, [7], "read", is_admin=False)
+
+    ws_manager.send_notification_state.assert_awaited_once_with(1, [7], "read")
+    ws_manager.send_unread_count.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_unknown_action_rejected():
     with pytest.raises(ValueError):
         await fanout_state(MagicMock(), 1, [7], "exploded", is_admin=False)
 
