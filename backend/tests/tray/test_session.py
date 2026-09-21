@@ -2,6 +2,7 @@
 
 from unittest.mock import MagicMock
 
+import httpx
 import pytest
 
 from baluhost_tray import config as tray_config
@@ -26,6 +27,18 @@ def _session(response: MagicMock) -> Session:
     session = Session("http://localhost:8000")
     session._client = MagicMock()
     session._client.post.return_value = response
+    return session
+
+
+def _session_with_transport_error() -> Session:
+    """A session whose client raises a real httpx transport error on post().
+
+    Not a status code — the request never got a response at all (backend
+    restarting, connection refused, DNS gone, timeout).
+    """
+    session = Session("http://localhost:8000")
+    session._client = MagicMock()
+    session._client.post.side_effect = httpx.ConnectError("connection refused")
     return session
 
 
@@ -61,6 +74,12 @@ def test_ws_token_500_is_temporary():
         _session(_response(503)).ws_token()
 
 
+def test_ws_token_network_error_is_temporary():
+    """A transport error (no response at all) must not escape as httpx.HTTPError."""
+    with pytest.raises(TemporaryFailure):
+        _session_with_transport_error().ws_token()
+
+
 def test_refresh_updates_access_and_keeps_refresh():
     """Der Server rotiert das Refresh-Token nicht — es muss erhalten bleiben."""
     session = _session(_response(200, {"access_token": "new", "token_type": "bearer"}))
@@ -83,6 +102,23 @@ def test_refresh_429_keeps_the_pairing():
     with pytest.raises(TemporaryFailure):
         session.refresh_access()
     assert tray_config.load_tokens() is not None
+
+
+def test_refresh_network_error_is_temporary_and_keeps_tokens():
+    """A network outage must not cost the pairing any more than a 429 does."""
+    session = _session_with_transport_error()
+    with pytest.raises(TemporaryFailure):
+        session.refresh_access()
+    assert tray_config.load_tokens() is not None
+    assert tray_config.load_tokens().refresh == "rt"
+
+
+def test_refresh_without_tokens_raises_pairing_lost():
+    tray_config.clear_tokens()
+    session = Session("http://localhost:8000")
+    session._client = MagicMock()
+    with pytest.raises(PairingLost):
+        session.refresh_access()
 
 
 def test_forget_clears_tokens():

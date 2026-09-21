@@ -7,6 +7,8 @@ half a minute and the tray would sign itself out.
 
 from __future__ import annotations
 
+import httpx
+
 from baluhost_tray import config as tray_config
 from baluhost_tui.client import BackendClient
 
@@ -53,7 +55,10 @@ class Session:
         Fetched per connection attempt rather than cached — caching a token
         that lives one minute only produces a stale one after every outage.
         """
-        response = self._client.post(WS_TOKEN_PATH)
+        try:
+            response = self._client.post(WS_TOKEN_PATH)
+        except httpx.HTTPError as exc:
+            raise TemporaryFailure(f"ws-token unavailable: {exc}") from exc
         code = response.status_code
         if code == 200:
             return response.json()["token"]
@@ -74,9 +79,12 @@ class Session:
         if not tokens:
             raise PairingLost("no tokens stored")
 
-        response = self._client.post(
-            REFRESH_PATH, json={"refresh_token": tokens.refresh}
-        )
+        try:
+            response = self._client.post(
+                REFRESH_PATH, json={"refresh_token": tokens.refresh}
+            )
+        except httpx.HTTPError as exc:
+            raise TemporaryFailure(f"refresh unavailable: {exc}") from exc
         code = response.status_code
 
         if code == 429 or code >= 500:
