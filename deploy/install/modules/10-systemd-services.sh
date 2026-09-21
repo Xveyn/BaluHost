@@ -225,6 +225,52 @@ log_step "Reloading Systemd"
 systemctl daemon-reload
 log_info "systemd daemon reloaded."
 
+# --- Desktop tray user unit (KDE Plasma) ---
+# Als Funktion, damit der Sonderfall "kein Desktop-Benutzer" an einer Stelle
+# endet statt als verschachtelter Block zwischen den System-Units zu stehen.
+install_tray_user_unit() {
+    # BALUHOST_USER ist das Dienstkonto, nicht zwingend der Mensch an der
+    # Tastatur. Eine User-Unit im Home des Dienstkontos startet in keiner
+    # Desktop-Sitzung, deshalb wird der Desktop-Benutzer getrennt bestimmt.
+    local target_user="${TRAY_DESKTOP_USER:-${SUDO_USER:-}}"
+    if [ -z "$target_user" ]; then
+        log_warn "Kein Desktop-Benutzer bekannt — Tray-Unit nicht installiert."
+        log_warn "Nachtraeglich: TRAY_DESKTOP_USER=<name> erneut ausfuehren."
+        return 0
+    fi
+
+    local user_home
+    # `|| true`, weil getent fuer einen unbekannten Benutzer 2 liefert. Ohne
+    # das risse die Zuweisung unter `set -euo pipefail` den ganzen Installer
+    # ab, statt die Warnung eine Zeile weiter unten zu erreichen.
+    user_home="$(getent passwd "$target_user" | cut -d: -f6 || true)"
+    if [ -z "$user_home" ] || [ ! -d "$user_home" ]; then
+        log_warn "Kein Home fuer $target_user — Tray-Unit uebersprungen."
+        return 0
+    fi
+
+    local unit_dir="$user_home/.config/systemd/user"
+    install -d -o "$target_user" -g "$target_user" "$unit_dir"
+    process_template \
+        "$TEMPLATE_DIR/baluhost-tray.service" \
+        "$unit_dir/baluhost-tray.service" \
+        "INSTALL_DIR=$INSTALL_DIR" \
+        "WEB_URL=${TRAY_WEB_URL:-https://baluhost.local}"
+    chown "$target_user:$target_user" "$unit_dir/baluhost-tray.service"
+
+    local uid runtime
+    uid="$(id -u "$target_user")"
+    runtime="/run/user/$uid"
+    if [ -d "$runtime" ] && sudo -u "$target_user" \
+        XDG_RUNTIME_DIR="$runtime" systemctl --user daemon-reload 2>/dev/null; then
+        sudo -u "$target_user" XDG_RUNTIME_DIR="$runtime" \
+            systemctl --user enable baluhost-tray.service
+        log_info "Tray-Unit installiert und aktiviert fuer $target_user"
+    else
+        log_info "Tray-Unit fuer $target_user abgelegt — beim naechsten Login aktiv"
+    fi
+}
+
 # --- Enable services ---
 log_step "Enabling Services"
 
@@ -236,6 +282,11 @@ for service in "${SERVICES[@]}"; do
         log_info "$service enabled."
     fi
 done
+
+# --- Desktop Tray ---
+log_step "Desktop Tray Unit"
+
+install_tray_user_unit
 
 # --- Verify ---
 log_step "Service Verification"

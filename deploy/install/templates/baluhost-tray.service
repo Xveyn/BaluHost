@@ -1,0 +1,19 @@
+[Unit]
+Description=BaluHost Desktop Tray (KDE Plasma)
+PartOf=graphical-session.target
+After=graphical-session.target
+# Ohne Kopplung gibt es nichts zu zeigen. Ohne diese Bedingung wuerde die
+# Unit starten, sich sofort beenden und von Restart=on-failure im
+# Zehnsekundentakt wiederbelebt, bis das Startlimit greift.
+ConditionPathExists=%h/.baluhost/tray-tokens.json
+
+[Service]
+Type=simple
+ExecStart=@@INSTALL_DIR@@/backend/.venv/bin/baluhost-tray --web-url @@WEB_URL@@
+Restart=on-failure
+RestartSec=10s
+# Kein root, keine Rechteerweiterung: das Tray liest nur.
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=graphical-session.target
