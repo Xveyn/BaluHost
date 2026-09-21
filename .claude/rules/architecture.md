@@ -110,7 +110,7 @@ All API routes are prefixed with `/api`:
 - `/api/plugins/audio_control/*` - Audiosteuerung (Pegel, Ausgabegerät, Per-App-Mixer)
 - `/api/plugins/display_output/*` - Displaysteuerung (Ausgangswahl, Video-Modus)
 - `/api/plugins/bluetooth/*` - Bluetooth (Geräte, Scan, Kopplung mit Code im Web-UI; Koppeln nur aus privaten Netzen)
-- `/api/plugins/steam_gaming/*` - Steam-Spielstart (Spieleliste, Start; Starten nur aus privaten Netzen, Recht `can_launch_games`)
+- `/api/plugins/steam_gaming/*` - Steam-Spielstart (Spieleliste, Start; Starten nur aus privaten Netzen, Recht `can_launch_games`) sowie `GET /session-state` für das Desktop-Tray — auch das nur aus privaten Netzen, siehe `security-agent.md`
 - `/api/pihole/*` - Pi-hole DNS management
 - `/api/updates/*` - Self-hosted update mechanism
 - `/api/sleep/*` - Sleep mode management
