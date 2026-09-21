@@ -39,6 +39,22 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   const notificationsRef = useRef(notifications);
   notificationsRef.current = notifications;
 
+  // Ein Zustandswechsel anderswo betrifft die ganze Liste, und bei den
+  // Sammelaktionen kennen wir den Kategoriefilter des Absenders nicht. Also
+  // neu laden statt raten. Entprellt, weil der Fan-out auch auf die eigene
+  // Verbindung zurueckkommt: wer 15 Meldungen durchklickt, wuerde sonst 15
+  // Nachladevorgaenge gegen ein 30/min-Limit ausloesen.
+  //
+  // scheduleRefetch selbst ist erst nach fetchNotifications deklariert (unten),
+  // deshalb ruft der Hook-Callback hier ueber ein Ref auf, statt die
+  // Deklarationen umzusortieren.
+  const scheduleRefetchRef = useRef<() => void>(() => {});
+  const refetchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => {
+    if (refetchTimer.current) clearTimeout(refetchTimer.current);
+  }, []);
+
   const { isConnected } = useNotificationSocket({
     enabled: !!token && !isPi,
     onNotification: (notification) => {
@@ -60,6 +76,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     onUnreadCountChange: (count) => {
       setUnreadCount(count);
     },
+    onNotificationState: () => { scheduleRefetchRef.current(); },
   });
 
   const fetchNotifications = useCallback(async () => {
@@ -79,6 +96,13 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       setLoading(false);
     }
   }, [token]);
+
+  const scheduleRefetch = useCallback(() => {
+    if (refetchTimer.current) clearTimeout(refetchTimer.current);
+    refetchTimer.current = setTimeout(() => { fetchNotifications(); }, 400);
+  }, [fetchNotifications]);
+
+  useEffect(() => { scheduleRefetchRef.current = scheduleRefetch; }, [scheduleRefetch]);
 
   // Fetch on mount / token change
   useEffect(() => {

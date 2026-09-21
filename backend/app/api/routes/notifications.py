@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
 from app.api import deps
+from app.api.routes._notification_fanout import fanout_state
 from app.core.rate_limiter import user_limiter, get_limit
 from app.core.database import get_db
 from app.models.mobile import MobileDevice
@@ -164,6 +165,11 @@ async def mark_notification_as_read(
             detail="Notification not found",
         )
 
+    await fanout_state(
+        db, current_user.id, [notification.id], "read",
+        is_admin=is_privileged(current_user),
+    )
+
     return NotificationResponse.from_db(notification)
 
 
@@ -184,6 +190,12 @@ async def mark_all_as_read(
 
     count = service.mark_all_as_read(db, current_user.id, category=category, is_admin=is_privileged(current_user))
 
+    if count:
+        await fanout_state(
+            db, current_user.id, [], "read_all",
+            is_admin=is_privileged(current_user),
+        )
+
     return MarkReadResponse(success=True, count=count)
 
 
@@ -202,6 +214,13 @@ async def dismiss_all_notifications(
     """
     service = get_notification_service()
     count = service.dismiss_all(db, current_user.id, is_admin=is_privileged(current_user))
+
+    if count:
+        await fanout_state(
+            db, current_user.id, [], "dismissed_all",
+            is_admin=is_privileged(current_user),
+        )
+
     return MarkReadResponse(success=True, count=count)
 
 
@@ -227,6 +246,11 @@ async def dismiss_notification(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Notification not found",
         )
+
+    await fanout_state(
+        db, current_user.id, [notification.id], "dismissed",
+        is_admin=is_privileged(current_user),
+    )
 
     return NotificationResponse.from_db(notification)
 
@@ -254,6 +278,11 @@ async def snooze_notification(
             detail="Notification not found",
         )
 
+    await fanout_state(
+        db, current_user.id, [notification.id], "snoozed",
+        is_admin=is_privileged(current_user),
+    )
+
     return NotificationResponse.from_db(notification)
 
 
@@ -277,6 +306,11 @@ async def restore_notification(
             detail="Notification not found",
         )
 
+    await fanout_state(
+        db, current_user.id, [notification.id], "restored",
+        is_admin=is_privileged(current_user),
+    )
+
     return NotificationResponse.from_db(notification)
 
 
@@ -292,6 +326,13 @@ async def empty_trash(
     count = service.empty_trash(
         db, current_user.id, is_admin=is_privileged(current_user)
     )
+
+    if count:
+        await fanout_state(
+            db, current_user.id, [], "deleted_all",
+            is_admin=is_privileged(current_user),
+        )
+
     return {"count": count}
 
 
@@ -314,6 +355,11 @@ async def delete_notification(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Notification not found",
         )
+
+    await fanout_state(
+        db, current_user.id, [notification_id], "deleted",
+        is_admin=is_privileged(current_user),
+    )
 
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -645,11 +691,10 @@ async def notification_websocket(
                         db = SessionLocal()
                         try:
                             service.mark_as_read(db, notification_id, user_id, is_admin=is_admin)
-                            unread_count = service.get_unread_count(db, user_id, is_admin=is_admin)
-                            await websocket.send_json({
-                                "type": "unread_count",
-                                "payload": {"count": unread_count},
-                            })
+                            await fanout_state(
+                                db, user_id, [notification_id], "read",
+                                is_admin=is_admin,
+                            )
                         except Exception as e:
                             logger.error(f"WebSocket: Failed to mark_read - {e}")
                         finally:

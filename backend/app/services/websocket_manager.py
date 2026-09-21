@@ -280,6 +280,50 @@ class WebSocketManager:
 
         return sent_count
 
+    async def send_notification_state(
+        self, user_id: int, ids: list[int], action: str
+    ) -> int:
+        """Tell a user's connections that notification state changed elsewhere.
+
+        Counterpart to send_unread_count: that one carries the number, this
+        one carries which notifications changed and how, so an open client can
+        update its list. broadcast_to_user() cannot be used here — it
+        hardcodes "type": "notification".
+
+        Args:
+            user_id: Target user ID
+            ids: Affected notification IDs; empty for the bulk actions, where
+                "all" is exactly what the empty list means
+            action: read | dismissed | snoozed | deleted | restored |
+                read_all | dismissed_all | deleted_all
+
+        Returns:
+            Number of connections the message was sent to
+        """
+        sent_count = 0
+        async with self._lock:
+            connections = self._user_connections.get(user_id, [])
+            disconnected = []
+
+            for conn in connections:
+                try:
+                    await conn.websocket.send_json({
+                        "type": "notification_state",
+                        "payload": {"ids": ids, "action": action},
+                    })
+                    sent_count += 1
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to send notification state to user {user_id}: {e}"
+                    )
+                    disconnected.append(conn)
+
+            for conn in disconnected:
+                if conn in connections:
+                    connections.remove(conn)
+
+        return sent_count
+
     def get_connected_user_ids(self) -> list[int]:
         """Get list of all connected user IDs.
 

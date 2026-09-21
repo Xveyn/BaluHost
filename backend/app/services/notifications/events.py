@@ -4,11 +4,14 @@ Provides a centralized event system that other services can use to emit
 events that trigger notifications.
 """
 
+import asyncio
 import logging
 import time as _time
 from typing import Optional, Any, Callable, Awaitable
 from dataclasses import dataclass
 from enum import Enum
+
+from app.services.websocket_manager import get_websocket_manager
 
 logger = logging.getLogger(__name__)
 
@@ -494,6 +497,10 @@ class EventEmitter:
         """Initialize the event emitter."""
         self._handlers: dict[str, list[Callable[..., Awaitable[None]]]] = {}
         self._db_session_factory = None
+        # Set once at startup from the app's event loop (see lifespan). The
+        # sync emit path runs on worker threads and needs a loop to hand its
+        # broadcast to; same idiom as LogBufferHandler.
+        self._loop: Optional[asyncio.AbstractEventLoop] = None
 
     def set_db_session_factory(self, factory: Callable) -> None:
         """Set the database session factory.
@@ -600,6 +607,51 @@ class EventEmitter:
                 except Exception as e:
                     logger.error(f"Event handler error for {event_type}: {e}")
 
+    def set_event_loop(self, loop: asyncio.AbstractEventLoop) -> None:
+        """Remember the app loop so emit_sync can broadcast from a thread."""
+        self._loop = loop
+
+    def _broadcast_sync(self, notification) -> None:
+        """Hand the notification to the websocket from synchronous code.
+
+        emit_sync runs on worker threads (monitoring, fan control, SMART
+        polling). Without this the whole sync path was invisible to every
+        connected client: the row was written, Firebase was told, and an open
+        web UI learned nothing until it reloaded.
+
+        Fire and forget on purpose. The row is already committed when we get
+        here, so a dead socket must not propagate back into the caller.
+        """
+        loop = self._loop
+        if loop is None or not loop.is_running():
+            logger.debug("No app loop bound — skipping websocket broadcast")
+            return
+
+        try:
+            payload = notification.to_dict()
+            user_id = notification.user_id
+        except Exception as exc:
+            logger.warning("Cannot serialise notification for broadcast: %s", exc)
+            return
+
+        async def _send() -> None:
+            # No local import here: it would rebind the name and defeat the
+            # tests' patch of this module's get_websocket_manager. There is
+            # no cycle to avoid — websocket_manager imports nothing from app.
+            manager = get_websocket_manager()
+            try:
+                if user_id is None:
+                    await manager.broadcast_to_admins(payload)
+                else:
+                    await manager.broadcast_to_user(user_id, payload)
+            except Exception as exc:
+                logger.warning("Websocket broadcast from emit_sync failed: %s", exc)
+
+        try:
+            asyncio.run_coroutine_threadsafe(_send(), loop)
+        except Exception as exc:
+            logger.warning("Could not schedule broadcast: %s", exc)
+
     def emit_sync(
         self,
         event_type: str,
@@ -696,6 +748,8 @@ class EventEmitter:
                 _set_cooldown(event_type, cooldown_entity)
                 logger.info(f"Created notification (sync): id={notification.id}, type={event_type}")
 
+                self._broadcast_sync(notification)
+
                 # Send push notifications to mobile devices
                 self._send_push_sync(
                     db,
@@ -716,6 +770,7 @@ class EventEmitter:
                     from app.services.notifications.service import get_notification_service
                     svc = get_notification_service()
                     routed_ids = get_routed_user_ids(db, config.category)
+                    user_copies = []
                     for uid in routed_ids:
                         prefs = svc.get_user_preferences(db, uid)
                         if prefs:
@@ -732,7 +787,10 @@ class EventEmitter:
                             priority=config.priority,
                         )
                         db.add(user_copy)
+                        user_copies.append(user_copy)
                     db.commit()
+                    for user_copy in user_copies:
+                        self._broadcast_sync(user_copy)
             except Exception as e:
                 db.rollback()
                 logger.error(f"Failed to create notification for {event_type}: {e}")

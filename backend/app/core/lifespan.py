@@ -543,13 +543,14 @@ async def _startup(app: FastAPI) -> None:
     from app.services.network_discovery import NetworkDiscoveryService
     from app.services.notifications.firebase import FirebaseService
     from app.services.websocket_manager import init_websocket_manager
-    from app.services.notifications.events import init_event_emitter
+    from app.services.notifications.events import get_event_emitter, init_event_emitter
     from app.services.update.api import register_update_service, finalize_pending_updates
     from app.plugins.manager import PluginManager
 
     # Wire the log buffer handler to the running event loop for SSE streaming
     from app.services.log_buffer import get_log_buffer_handler
     get_log_buffer_handler().set_event_loop(asyncio.get_running_loop())
+    get_event_emitter().set_event_loop(asyncio.get_running_loop())
 
     # Initialize database tables
     init_db()
