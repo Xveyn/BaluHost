@@ -2,8 +2,8 @@
 
 **Datum:** 2026-09-21
 **Status:** Überarbeitet nach kritischem Review (2 vorbestehende Backend-Defekte, 6 Entwurfsfehler)
-**Branch:** `feat/desktop-tray`
-**Basis:** `main` @ `e143b21f`
+**Branch:** `feat/desktop-tray-app` (Phase A in `main`, PR #682)
+**Basis:** `main` @ `0f144661`
 
 ## Problem
 

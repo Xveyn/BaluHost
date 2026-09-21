@@ -21,7 +21,9 @@ React/TypeScript mit Vitest im Frontend.
 
 ## Global Constraints
 
-- **Branch:** `feat/desktop-tray`, Basis `main` @ `e143b21f`.
+- **Branch:** `feat/desktop-tray-app`, Basis `main` @ `0f144661`.
+  Phase A (Tasks 1-6) ist bereits in `main` gemergt (PR #682); dieser Branch
+  fuehrt Phase B, also Tasks 7-20.
 - **Keine `from __future__ import annotations` in Plugin-Routen.** Hinter dem
   `@user_limiter.limit`-Wrapper von slowapi werden zurückgestellte Annotationen
   zu ForwardRefs, die FastAPI nicht mehr auflöst — jeder Request wird 422.
