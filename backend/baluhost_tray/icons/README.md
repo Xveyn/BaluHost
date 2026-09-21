@@ -12,8 +12,13 @@ beim nächsten Mal wieder danach.
 `client/public/baluhost-logo.svg` ist ebenfalls **nicht** die Quelle: 1,2 MB,
 ein nachgezeichnetes Bitmap mit tausenden Pfadpunkten.
 
-Zustände: `ok` (Katze pur) · `warning` (gelber Punkt unten rechts) ·
-`critical` (roter Punkt) · `offline` (entsättigt). Der Zustand steckt im
+Zustände: `ok` (grüner Punkt unten rechts) · `warning` (gelber Punkt) ·
+`critical` (roter Punkt) · `offline` (entsättigt, ohne Punkt).
+
+Auch der ruhige Zustand trägt einen Punkt. Ohne Badge ließe sich „alles in
+Ordnung" nicht von „Icon nicht geladen" oder „Zustand unbekannt"
+unterscheiden. Bei `offline` trägt die Entsättigung die Aussage, dort wäre
+ein Punkt irreführend — wir wissen ja gerade nichts. Der Zustand steckt im
 Badge, nicht in der Färbung der Katze — eine rote Katze liest sich als
 anderes Logo, nicht als Alarm.
 

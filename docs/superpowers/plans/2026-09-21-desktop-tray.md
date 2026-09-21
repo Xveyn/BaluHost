@@ -3282,8 +3282,13 @@ Zwei Dateien, die **nicht** taugen:
 - `client/public/baluhost-logo.svg` — 1,2 MB, ein nachgezeichnetes Bitmap mit
   tausenden Pfadpunkten, kein echtes Vektor-Logo.
 
-Zustände: `ok` (Katze pur) · `warning` (gelber Punkt unten rechts) ·
-`critical` (roter Punkt) · `offline` (entsättigt). Der Zustand steckt im
+Zustände: `ok` (grüner Punkt unten rechts) · `warning` (gelber Punkt) ·
+`critical` (roter Punkt) · `offline` (entsättigt, ohne Punkt).
+
+Der ruhige Zustand trägt bewusst **auch** einen Punkt: Ohne Badge ließe sich
+„alles in Ordnung" nicht von „Icon nicht geladen" oder „Zustand unbekannt"
+unterscheiden. Nur `offline` bleibt ohne — dort trägt die Entsättigung die
+Aussage. Der Zustand steckt im
 Badge, nicht in der Färbung der Katze — eine rote Katze liest sich als
 anderes Logo, nicht als Alarm.
 
