@@ -10,11 +10,38 @@ If you try one of these actions from the Web UI on a remote browser, the button 
 
 ## Install
 
+### Option A — `.deb` from the Releases page
+
 1. Download the `.deb` from the BaluHost Releases page (matching your BaluHost version).
 2. Install: `sudo apt install ./baluhost-companion_*.deb`
 3. Add your interactive user to the `baluhost` group: `sudo usermod -aG baluhost $USER`
 4. **Log out and back in** for group membership to take effect.
 5. Launch from the application menu (KDE: search for "BaluHost Companion") or from the terminal: `baluhost-companion`.
+
+### Option B — build & install during a production deploy
+
+On the BaluNode itself the deploy can do steps 1–2 for you. Start
+`deploy-production.yml` via **workflow_dispatch** and tick **"Build the Tauri
+Companion app from source on BaluNode and install it system-wide (.deb)"**
+(input `install_companion`). Manual equivalent on the box:
+`INSTALL_COMPANION=1 /opt/baluhost/deploy/scripts/ci-deploy.sh`.
+
+After — and only after — the backend deploy and its health check have
+succeeded, `ci-deploy.sh` builds the `.deb` from source, stages it at
+`<install-dir>/.companion/baluhost-companion.deb`, and installs it through the
+pinned-path sudoers entry for `install-companion.sh`.
+
+Requirements on the host: Rust, plus the Tauri OS build dependencies
+(`libwebkit2gtk-4.1-dev`, `libayatana-appindicator3-dev`, `libxdo-dev`,
+`libssl-dev`, `librsvg2-dev`, `build-essential`). A rustup installation under
+`~/.cargo` is found automatically — a deploy step reads neither `~/.profile`
+nor `~/.bashrc`, so the script looks the toolchain up itself; set `CARGO_HOME`
+if Rust lives under a different account.
+
+Routine push-to-`main` deploys never do this: the input defaults to off and a
+cold Rust build takes several minutes. Every failure path is non-fatal — a
+companion problem only logs a `WARN` and never rolls back a healthy backend
+deploy. Steps 3–5 above (group membership, first launch) still apply.
 
 ## First-time setup
 
