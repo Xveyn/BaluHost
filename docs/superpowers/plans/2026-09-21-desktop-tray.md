@@ -1759,8 +1759,9 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Consumes: nichts.
 - Produces:
   - `@dataclass(frozen=True) class PendingPopup: notification_id: int; title: str; message: str`
-  - `class PopupQueue` mit `hold(popup)`, `release() -> list[PendingPopup]`,
-    `summary() -> tuple[str, str] | None`, `is_empty() -> bool`
+  - `class PopupQueue` mit `hold(popup)`, `is_empty() -> bool` und
+    `release() -> tuple[list[PendingPopup], tuple[str, str] | None]` — gibt die
+    zurueckgehaltenen Popups **und** die Sammelmeldung in einem Zug zurueck
   - `SUMMARY_THRESHOLD = 4`
 
 - [ ] **Step 1: Den fehlschlagenden Test schreiben**
@@ -3780,8 +3781,7 @@ async def deliver(
 
     pending = list(popups)
     if not queue.is_empty():
-        summary = queue.summary()
-        released = queue.release()
+        released, summary = queue.release()
         if summary:
             try:
                 await notifier.show_summary(*summary)
