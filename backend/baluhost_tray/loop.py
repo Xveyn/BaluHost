@@ -230,6 +230,10 @@ async def _give_up_pairing(ctx: LoopContext) -> None:
         # tray that simply stopped.
         logger.exception("could not clear the stored tokens")
     ctx.state.set_connected(False)
+    # Grau allein sagt nur "keine Verbindung". Der Grund gehoert in den
+    # Zustand, weil der Tooltip die einzige dauerhafte Erklaerung ist: die
+    # Desktop-Meldung unten ist nach Sekunden weg, das graue Icon bleibt.
+    ctx.state.set_paired(False)
     _publish(ctx)
     try:
         await ctx.notifier.show_summary(

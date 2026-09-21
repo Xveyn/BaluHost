@@ -19,13 +19,28 @@ class IconState(str, Enum):
 
 @dataclass
 class TrayState:
-    """Unread notifications by id, plus whether we can reach the backend."""
+    """Unread notifications by id, plus why the icon is grey.
+
+    Grey has two causes and they need different reactions from the user:
+    the backend is unreachable (wait), or the pairing is gone (re-pair). The
+    desktop notification that says so disappears after a few seconds; the
+    tooltip is the only lasting explanation, so it has to tell them apart.
+    """
 
     connected: bool = False
+    paired: bool = True
     unread: dict[int, str] = field(default_factory=dict)
 
     def set_connected(self, connected: bool) -> None:
         self.connected = connected
+
+    def set_paired(self, paired: bool) -> None:
+        """Remember that the device was revoked.
+
+        One way only in practice: nothing re-pairs at runtime, that needs
+        `baluhost-tray --pair` and a restart of the service.
+        """
+        self.paired = paired
 
     def apply_snapshot(self, items: list[tuple[int, str]]) -> None:
         """Replace the whole set. The REST snapshot is the truth, not a merge.
@@ -51,8 +66,13 @@ class TrayState:
 
         An unknown type counts as harmless: a new NotificationType in the
         backend must not make the panel guess red.
+
+        Unpaired is grey too — the same colour as unreachable, on purpose.
+        Only the tooltip separates the two; a fifth icon state would say
+        nothing a colour can carry. The explicit `not self.paired` keeps that
+        true even if a caller ever forgets the matching set_connected(False).
         """
-        if not self.connected:
+        if not self.connected or not self.paired:
             return IconState.OFFLINE
         types = set(self.unread.values())
         if "critical" in types:
@@ -67,7 +87,13 @@ class TrayState:
         Green means "nothing unread", not "the box is healthy": reading a
         notification clears the colour while the degraded array stays
         degraded. Saying so here keeps the icon honest.
+
+        Grey says which kind of grey it is. "Nicht erreichbar" means wait;
+        "nicht gekoppelt" means act, and names the command that does it —
+        the popup that said so is long gone by the time anyone hovers.
         """
+        if not self.paired:
+            return "BaluHost — nicht gekoppelt: baluhost-tray --pair"
         if not self.connected:
             return "BaluHost — nicht erreichbar"
         count = self.unread_count()

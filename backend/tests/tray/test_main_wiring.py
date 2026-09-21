@@ -56,8 +56,37 @@ def test_no_session_bus_exits_with_hint(capsys):
          patch("baluhost_tray.main.start_qt_app",
                side_effect=NotifierUnavailable("no bus")):
         code = tray_main.run(argv=[])
-    assert code == 3
+    assert code == tray_main.EXIT_TRANSIENT
+    assert code != 0, "sonst startet systemd nach einem zu fruehen Start nicht neu"
     assert "Plasma" in capsys.readouterr().out
+
+
+def test_unexpected_worker_failure_is_treated_as_transient(capsys):
+    """Unbekannte Ursache heisst: koennte voruebergehend sein.
+
+    run_tray reicht den Fehler des Workers durch, statt app.exec() mit 0
+    enden zu lassen — sonst waere ein Tray, das sich beim Anmelden zu frueh
+    gestartet hat, fuer systemd sauber beendet.
+    """
+    with patch("baluhost_tray.main.single_instance.acquire"), \
+         patch("baluhost_tray.main.tray_config.load_tokens", return_value=object()), \
+         patch("baluhost_tray.main.start_qt_app",
+               side_effect=RuntimeError("bus went away")):
+        code = tray_main.run(argv=[])
+    assert code == tray_main.EXIT_TRANSIENT
+    out = capsys.readouterr().out
+    assert "RuntimeError" in out and "bus went away" in out
+
+
+def test_a_missing_extra_is_permanent_not_transient(capsys):
+    """PyQt6 installiert sich nicht durch Warten — kein Neustart-Karussell."""
+    with patch("baluhost_tray.main.single_instance.acquire"), \
+         patch("baluhost_tray.main.tray_config.load_tokens", return_value=object()), \
+         patch("baluhost_tray.main.start_qt_app",
+               side_effect=ModuleNotFoundError("No module named 'PyQt6'")):
+        code = tray_main.run(argv=[])
+    assert code == tray_main.EXIT_DONE
+    assert "pip install" in capsys.readouterr().out
 
 
 def test_pairing_runs_before_the_token_check():
@@ -159,8 +188,9 @@ def test_tray_imports_names_that_exist():
 
 
 # Alles, was im asyncio-Thread laeuft: der Worker selbst und die Rueckrufe,
-# die der Worker aufruft.
-WORKER_FUNCTIONS = ("_main", "_sink", "_fatal_from_worker")
+# die er aufruft. `_fatal` steht bewusst nicht hier — es haengt am Signal und
+# laeuft damit im GUI-Thread.
+WORKER_FUNCTIONS = ("_main", "_sink")
 # Qt-Aufrufe, die den GUI-Thread brauchen.
 FORBIDDEN_IN_WORKER = {"setIcon", "setToolTip", "show", "setChecked", "exec", "quit"}
 
@@ -191,6 +221,41 @@ def test_the_worker_never_touches_qt_directly():
             if node.func.attr == "emit":
                 emits += 1
     assert emits, "der Worker meldet gar nichts an den GUI-Thread"
+
+
+def test_every_worker_failure_survives_the_thread_boundary():
+    """Der Grund darf nicht im Worker-Thread bleiben.
+
+    Ohne diese Kette endet der Prozess nach app.quit() mit 0, und systemd
+    sieht einen sauberen Abschluss statt eines Fehlschlags. Laufen kann das
+    hier niemand — PyQt6 fehlt —, also prueft der Syntaxbaum die Kette:
+    jeder Fehlerzweig im Worker legt die Ursache ab *und* meldet sie, und
+    run_tray wirft die abgelegte Ursache am Ende weiter.
+    """
+    tree = _tray_module_ast()
+    worker = next(
+        node for node in ast.walk(tree)
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "_main"
+    )
+    handlers = [n for n in ast.walk(worker) if isinstance(n, ast.ExceptHandler)]
+    assert handlers, "_main faengt gar nichts ab"
+    for handler in handlers:
+        calls = {
+            node.func.attr for node in ast.walk(handler)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+        }
+        assert "append" in calls, "Fehlerzweig legt die Ursache nicht ab"
+        assert "emit" in calls, "Fehlerzweig meldet dem GUI-Thread nichts"
+
+    run_fn = next(
+        node for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef) and node.name == "run_tray"
+    )
+    reraises = [
+        node for node in ast.walk(run_fn)
+        if isinstance(node, ast.Raise) and isinstance(node.exc, ast.Subscript)
+    ]
+    assert reraises, "run_tray reicht die abgelegte Ursache nicht weiter"
 
 
 def _pyproject() -> dict:

@@ -304,6 +304,10 @@ async def test_pairing_lost_stops_the_loop_visibly(monkeypatch):
     assert seen[-1] is IconState.OFFLINE
     assert ctx.notifier.show_summary.await_count == 1
     ctx.sleep.assert_not_awaited()          # kein Backoff mehr noetig
+    # Die Meldung ist nach Sekunden weg, das graue Icon bleibt. Der Grund
+    # muss deshalb im Zustand stehen, nicht nur im Popup.
+    assert ctx.state.paired is False
+    assert "gekoppelt" in ctx.state.tooltip()
 
 
 @pytest.mark.asyncio

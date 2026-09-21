@@ -94,6 +94,44 @@ def test_tooltip_says_offline_when_disconnected():
     assert "erreichbar" in state.tooltip()
 
 
+def test_tooltip_tells_the_two_greys_apart():
+    """Grau hat zwei Ursachen und zwei verschiedene Handlungen: warten oder
+    neu koppeln. Die Desktop-Meldung ist nach Sekunden weg, der Tooltip ist
+    die einzige dauerhafte Erklaerung — also muss er den Unterschied sagen."""
+    unreachable = TrayState()
+    unreachable.set_connected(False)
+
+    revoked = TrayState()
+    revoked.set_connected(False)
+    revoked.set_paired(False)
+
+    assert unreachable.tooltip() != revoked.tooltip()
+    assert "nicht erreichbar" in unreachable.tooltip()
+    assert "gekoppelt" in revoked.tooltip()
+    assert "--pair" in revoked.tooltip(), "der Tooltip muss die Handlung nennen"
+
+
+def test_unpaired_is_grey_like_unreachable():
+    """Nur der Text unterscheidet sich, die Farbe nicht — ein fuenfter
+    Icon-Zustand traegt keine Information, die eine Farbe halten kann."""
+    state = TrayState()
+    state.set_connected(False)
+    state.set_paired(False)
+    assert state.icon_state() == IconState.OFFLINE
+
+    # Auch wenn ein Aufrufer das passende set_connected(False) vergisst.
+    stale = TrayState()
+    stale.set_connected(True)
+    stale.set_paired(False)
+    stale.apply_snapshot([(1, "critical")])
+    assert stale.icon_state() == IconState.OFFLINE
+
+
+def test_a_fresh_state_counts_as_paired():
+    """Der Tray startet nur mit Token — ohne sie kommt main gar nicht hierher."""
+    assert TrayState().paired is True
+
+
 from baluhost_tray.state import PendingPopup, PopupQueue
 
 

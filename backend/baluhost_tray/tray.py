@@ -145,10 +145,15 @@ def run_tray(base_url: str, web_url: str) -> int:
         bridge.state_changed.emit(icon_state.value)
         bridge.tooltip_changed.emit(state.tooltip())
 
+    # Die Ursache eines Worker-Abbruchs, damit run_tray sie weiterreichen
+    # kann. Der Worker legt sie ab, *bevor* er das Signal schickt; die
+    # QueuedConnection ist die Synchronisation zwischen beiden Threads.
+    worker_failure: list[BaseException] = []
+
     def _fatal(message: str) -> None:
-        # Ohne diesen Weg stirbt der Worker still und das Tray steht fuer
-        # immer auf grau, ohne dass jemand erfaehrt warum.
-        print(message)
+        # Laeuft im GUI-Thread. Ohne diesen Weg stirbt der Worker still und
+        # das Tray steht fuer immer auf grau, ohne dass jemand erfaehrt warum.
+        logger.warning("tray worker stopped: %s", message)
         app.quit()
 
     bridge.fatal.connect(_fatal)
@@ -157,6 +162,7 @@ def run_tray(base_url: str, web_url: str) -> int:
         try:
             await notifier.connect()
         except NotifierUnavailable as exc:
+            worker_failure.append(exc)
             bridge.fatal.emit(
                 f"Keine Desktop-Benachrichtigungen verfügbar: {exc}"
             )
@@ -180,7 +186,17 @@ def run_tray(base_url: str, web_url: str) -> int:
             # schreiben und den Thread beenden; das Icon bliebe grau ohne
             # Erklaerung. Der Weg nach draussen geht ueber das Signal.
             logger.exception("tray worker stopped unexpectedly")
+            worker_failure.append(exc)
             bridge.fatal.emit(f"Tray-Hintergrund beendet: {exc}")
 
     threading.Thread(target=lambda: asyncio.run(_main()), daemon=True).start()
-    return app.exec()
+    code = app.exec()
+
+    if worker_failure:
+        # Weiterreichen statt hier in einen Exit-Code uebersetzen: was
+        # "dauerhaft" und was "voruebergehend" heisst, entscheidet main.py.
+        # Ohne dieses raise liefert app.exec() nach app.quit() eine 0, und
+        # ein Tray, das sich beim Anmelden zu frueh gestartet hat, waere fuer
+        # systemd sauber beendet — kein Neustart, leeres Panel.
+        raise worker_failure[0]
+    return code

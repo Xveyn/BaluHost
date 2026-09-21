@@ -20,6 +20,21 @@ DEFAULT_WEB_URL = "https://baluhost.local"
 TRAY_LOCK = "baluhost-tray"
 PAIR_LOCK = "baluhost-tray-pair"
 
+# Zwei Klassen von Fehlschlag, zwei Exit-Codes — der Unterschied ist, ob ein
+# Neustart helfen *kann*:
+#
+#   EXIT_DONE (0)      dauerhaft. Fehlende Kopplung behebt kein Neustart, das
+#                      braucht einen Menschen. Mit Restart=on-failure wuerde
+#                      ein Code ungleich null das alle zehn Sekunden
+#                      wiederholen, bis die Unit auf failed steht.
+#   EXIT_TRANSIENT (3) moeglicherweise voruebergehend. Beim Anmelden kann das
+#                      Tray vor Plasma oder vor dem Session-Bus dran sein;
+#                      dann hilft ein Neustart wirklich. Ist es doch
+#                      dauerhaft, beendet das Startlimit der Unit die
+#                      Versuche von selbst.
+EXIT_DONE = 0
+EXIT_TRANSIENT = 3
+
 
 def start_qt_app(base_url: str, web_url: str) -> int:
     """Import Qt lazily so --pair and the tests work without PyQt6."""
@@ -51,31 +66,45 @@ def run(argv: list[str] | None = None) -> int:
     try:
         single_instance.acquire(lock_name)
     except single_instance.AlreadyRunning:
+        # Dauerhaft, solange die erste Instanz laeuft — und die tut ja genau
+        # das Richtige. Nichts neu zu starten.
         print("BaluHost Tray läuft bereits in dieser Sitzung.")
-        return 0
+        return EXIT_DONE
 
     # Vor der Token-Pruefung: wer koppeln will, hat per Definition noch keine.
     if args.pair:
         return run_pairing(args.base_url)
 
     if tray_config.load_tokens() is None:
-        # Exit 0 on purpose: with Restart=on-failure a non-zero code would
-        # have systemd restart this every ten seconds until the unit fails.
+        # Der dauerhafte Fall: ohne Kopplung gibt es nichts zu zeigen, und
+        # kein Neustart aendert daran etwas. Deshalb 0, siehe oben.
         print("Nicht gekoppelt. Einmalig ausführen: baluhost-tray --pair")
-        return 0
+        return EXIT_DONE
 
     try:
         return start_qt_app(args.base_url, args.web_url)
     except NotifierUnavailable as exc:
+        # Kein Session-Bus oder kein SNI-Host. Beim Anmelden kann das schlicht
+        # zu frueh sein, also der voruebergehende Code — ein Neustart hat hier
+        # eine echte Chance.
         print("Keine Desktop-Sitzung gefunden — das Tray braucht ein "
               f"laufendes Plasma mit D-Bus. ({exc})")
-        return 3
+        return EXIT_TRANSIENT
     except ImportError as exc:
         # Das Extra 'tray' fehlt. Ohne diesen Zweig steht im Journal ein
-        # Traceback ueber PyQt6, statt zu sagen, was zu tun ist.
+        # Traceback ueber PyQt6, statt zu sagen, was zu tun ist. Dauerhaft —
+        # ein Paket installiert sich nicht durch Warten.
         print("PyQt6 fehlt — installieren mit: pip install "
               f"'baluhost-backend[tray]' ({exc})")
-        return 3
+        return EXIT_DONE
+    except Exception as exc:
+        # Der Auffang-Zweig fuer alles, was der Worker durchgereicht hat.
+        # Unbekannte Ursache heisst: koennte voruebergehend sein, also darf
+        # systemd es noch einmal versuchen. Der Traceback steht ueber
+        # logger.exception in tray.py bereits im Journal; hier nur die Zeile,
+        # die ein Mensch liest.
+        print(f"Das Tray hat sich unerwartet beendet: {type(exc).__name__}: {exc}")
+        return EXIT_TRANSIENT
 
 
 def cli() -> None:
