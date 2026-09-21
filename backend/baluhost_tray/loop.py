@@ -11,9 +11,10 @@ import asyncio
 import json
 import logging
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Callable
 
+from baluhost_tray.announce import ConnectionAnnouncer, QuietMode
 from baluhost_tray.session import AuthExpired, PairingLost, TemporaryFailure
 from baluhost_tray.state import IconState, PendingPopup, PopupQueue, TrayState
 from baluhost_tray.watch import Watcher, backoff_delays
@@ -95,6 +96,8 @@ class LoopContext:
     connect: Callable[[str], Any]
     sleep: Callable[..., Any] = asyncio.sleep
     now: Callable[[], float] = time.monotonic
+    announcer: ConnectionAnnouncer = field(default_factory=ConnectionAnnouncer)
+    quiet: QuietMode = field(default_factory=QuietMode)
 
     # When the current cycle's connection actually stood, or None if it never
     # got that far. run_cycle writes it, run_loop clears it before each round
@@ -140,6 +143,17 @@ def _parse_frame(raw: str) -> dict | None:
     return frame
 
 
+async def _should_hold(ctx: LoopContext) -> bool:
+    """Two reasons, one answer: a game on screen or an active quiet hour.
+
+    Quiet mode is checked first and short-circuits the probe: while muted,
+    the HTTP round trip to the gaming plugin never happens.
+    """
+    if ctx.quiet.is_muted(ctx.now()):
+        return True
+    return await asyncio.to_thread(ctx.hold_probe)
+
+
 async def run_cycle(ctx: LoopContext) -> None:
     """One connect-consume cycle. Returning or raising means: reconnect.
 
@@ -160,6 +174,12 @@ async def run_cycle(ctx: LoopContext) -> None:
         # From here on the connection demonstrably stands. Only time spent past
         # this point counts as healthy — see run_loop.
         ctx.connected_at = ctx.now()
+        back = ctx.announcer.came_online(ctx.now())
+        if back:
+            try:
+                await ctx.notifier.show_summary(*back)
+            except Exception as exc:
+                logger.debug("reconnect notice failed: %s", exc)
         _publish(ctx)
 
         last_snapshot = ctx.now()
@@ -187,7 +207,7 @@ async def run_cycle(ctx: LoopContext) -> None:
                     last_snapshot = ctx.now()
 
             if popups or not ctx.queue.is_empty():
-                hold = await asyncio.to_thread(ctx.hold_probe)
+                hold = await _should_hold(ctx)
                 await deliver(popups, ctx.queue, ctx.notifier, hold)
 
             _publish(ctx)
@@ -293,6 +313,12 @@ async def run_loop(ctx: LoopContext) -> None:
             refreshed = False
 
         ctx.state.set_connected(False)
+        gone = ctx.announcer.went_offline(ctx.now())
+        if gone:
+            try:
+                await ctx.notifier.show_summary(*gone)
+            except Exception as exc:
+                logger.debug("offline notice failed: %s", exc)
         _publish(ctx)
         delay = backoff_delays(attempt + 1)[-1]
         await ctx.sleep(delay)

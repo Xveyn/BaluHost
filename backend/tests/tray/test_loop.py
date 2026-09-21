@@ -461,8 +461,10 @@ async def test_failing_sink_does_not_kill_the_loop(monkeypatch):
 
     assert len(cycle.calls) == 3, "die Schleife muss weitergelaufen sein"
     assert ctx.sleep.await_count == 2
-    # Auch der Schlusspfad ueberlebt den kaputten Sink.
-    assert ctx.notifier.show_summary.await_count == 1
+    # Auch der Schlusspfad ueberlebt den kaputten Sink: eine Meldung fuer den
+    # ersten Verbindungsverlust (die zweite Runde schweigt, siehe
+    # ConnectionAnnouncer) und eine fuer die aufgehobene Kopplung am Ende.
+    assert ctx.notifier.show_summary.await_count == 2
 
 
 @pytest.mark.asyncio
