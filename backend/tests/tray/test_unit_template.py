@@ -150,7 +150,7 @@ def test_uses_the_repo_placeholder_convention(text: str, unit: ConfigParser):
     """
     for placeholder in PLACEHOLDER_VALUES:
         assert placeholder in text
-    assert "__INSTALL_DIR__" not in text
+    assert "@@INSTALL_DIR@@" not in text
     assert unit["Service"]["ExecStart"].startswith("@@VENV_BIN@@/baluhost-tray")
 
 
