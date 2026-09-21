@@ -1,7 +1,7 @@
 # Desktop-Tray für KDE Plasma — Design
 
 **Datum:** 2026-09-21
-**Status:** Entwurf zur Durchsicht
+**Status:** Überarbeitet nach kritischem Review (2 vorbestehende Backend-Defekte, 6 Entwurfsfehler)
 **Branch:** `feat/desktop-tray`
 **Basis:** `main` @ `e143b21f`
 
@@ -18,6 +18,15 @@ Zustellkanäle sind heute `in_app` (WebSocket in einem offenen Browser-Tab) und
 `org.freedesktop.Notifications` oder `notify-send`. Degradiert nachts ein RAID,
 erfährt man es auf dem Telefon oder beim nächsten Öffnen der Web-UI — nicht auf
 dem Rechner, an dem man gerade sitzt.
+
+**Beim Entwurf kam heraus, dass es noch schlechter steht.** `emit_sync`
+(`services/notifications/events.py:603`) schreibt die Notification und ruft
+danach nur `_send_push_sync()` — nie `create()`, nie `dispatch()`, also nie
+einen Broadcast. Genau die kritischen Hardware-Ereignisse laufen über diesen
+Pfad: `emit_raid_degraded_sync`, `emit_smart_failure_sync`,
+`emit_temperature_critical_sync`, `emit_disk_space_critical_sync`. Auch die
+offene Web-UI erfährt davon heute nichts. Das ist kein Tray-Problem, aber ohne
+Behebung wäre das Tray bei genau diesen Ereignissen blind.
 
 ## Ziel
 
@@ -71,6 +80,13 @@ Das hat drei Konsequenzen, die alle in die gewünschte Richtung zeigen:
 - Es entsteht keine zweite Wahrheit über den Systemzustand, die von der Web-UI
   abweichen könnte.
 
+**Was grün nicht heißt.** Es heißt „nichts Ungelesenes", nicht „Anlage gesund".
+`mark_as_read` setzt nur `is_read`; wer eine RAID-Meldung liest, während das
+Array degradiert bleibt, sieht ein grünes Icon. Der Tooltip benennt deshalb
+Ungelesenes und verspricht keinen Gesundheitszustand. Wer eine echte
+Zustandsachse will, braucht eine zweite Quelle — das ist bewusst nicht Teil
+dieser Runde.
+
 Vier Zustände:
 
 | Zustand | Bedingung |
@@ -109,8 +125,10 @@ vorhandenen `baluhost-tui` in derselben `pyproject.toml`.
 |---|---|
 | `pairing.py` | Device-Code-Flow: Code anzeigen, pollen, Token ablegen |
 | `session.py` | Token laden und erneuern, `BackendClient` stellen, ws-token besorgen |
-| `watch.py` | WebSocket verbinden, Backoff, Ereignisse normalisieren |
-| `state.py` | Ungelesene Meldungen halten, Icon-Zustand ableiten, Gaming-Warteschlange |
+| `watch.py` | Snapshot laden, Ereignisse normalisieren, Backoff berechnen |
+| `loop.py` | Wiederanlauf, Takt, Gaming-Gate, Zustellung — alles Entscheidbare |
+| `announce.py` | Verbindungsmeldungen, Stummschaltung |
+| `state.py` | Ungelesene Meldungen halten, Icon-Zustand ableiten, Warteschlange |
 | `notify.py` | `org.freedesktop.Notifications` über `dbus-next` |
 | `tray.py` | `QSystemTrayIcon`, Menü, Icon-Darstellung |
 | `config.py` | Erweiterung des TUI-Configs um refresh-Token und Einstellungen |
@@ -128,8 +146,12 @@ Qt-Signale. Bewusst ohne Zusatzabhängigkeit wie `qasync`.
 Darstellung, die gesamte Logik sitzt in `state.py`. Das ist der Grund für die
 Trennung — so ist alles Prüfbare ohne Qt prüfbar (siehe Tests).
 
-**Menü, bewusst schmal:** BaluHost öffnen · letzte Meldungen (Klick markiert
-gelesen) · eine Stunde stumm · Beenden.
+**Menü, bewusst schmal:** BaluHost öffnen · eine Stunde stumm · neu koppeln ·
+Beenden. Keine Meldungsliste (siehe Nicht-Ziele) und keine Service-Steuerung —
+letztere bleibt bei Companion-App und Web-UI.
+
+Weil die Liste entfällt, hat das Tray **keinen ausgehenden Pfad**: Es markiert
+nichts als gelesen. Das ist Absicht — es zeigt und meldet, es bedient nicht.
 
 ## Authentifizierung
 
@@ -137,14 +159,29 @@ Wiederverwendung des vorhandenen **Device-Code-Flows** aus
 `app/api/routes/desktop_pairing.py`, der für BaluDesk gebaut wurde und
 `platform: linux` bereits kennt.
 
-`baluhost-tray --pair` → `POST /api/desktop/device-code` mit `device_id` aus der
-machine-id, Hostname als `device_name` → der 6-stellige Code erscheint als
-Desktop-Meldung und im Menü → Polling gemäß dem gelieferten `interval` → bei
-`approved` landen `access_token` und `refresh_token` in `~/.baluhost/` mit
+`baluhost-tray --pair` → `POST /api/desktop-pairing/device-code` mit `device_id`
+aus der machine-id, Hostname als `device_name` → der 6-stellige Code erscheint
+auf der Konsole → Polling gemäß dem gelieferten `interval` → bei `approved`
+landen `access_token` und `refresh_token` in `~/.baluhost/tray-tokens.json` mit
 `0600`.
 
+Der Router trägt `prefix="/desktop-pairing"`; `/api/desktop/…` ist nicht
+gebunden. Die Poll-Route ist auf 12 Anfragen pro Minute begrenzt, deshalb
+schläft der Flow `interval + 1`.
+
 Gewählt gegenüber einem API-Key, weil nichts abzutippen ist und die Kopplung
-pro Gerät widerrufbar bleibt. Gewählt gegenüber dem Unix-Socket
+pro Gerät widerrufbar wird — *wird*, nicht *ist*: Heute verwirft
+`poll_device_code` den jti des Refresh-Tokens und hinterlegt es nie, weshalb
+`/auth/refresh` es als widerrufen ablehnt und `revoke_device_tokens()` nichts
+zu widerrufen hat. Die Kopplung stirbt mit dem Access-Token. Das wird im Plan
+als eigener Task behoben und betrifft BaluDesk ebenso.
+
+**Zum Umfang des Tokens:** Die Kopplung gibt ein vollwertiges Nutzer-Token
+heraus, nicht ein auf Benachrichtigungen beschränktes. Das Tray hält damit mehr
+Rechte, als es braucht. Die Zusage „fasst nichts Privilegiertes an" bezieht sich
+auf Betriebssystemrechte, nicht auf die API. Ein scoped Token wäre die bessere
+Lösung — das Muster existiert (`create_ws_token`, `create_sse_token`) — und ist
+hier bewusst zurückgestellt. Gewählt gegenüber dem Unix-Socket
 (`/run/baluhost/local.sock`), weil dieser Kanal konzeptionell der Companion-App
 gehört, aktuell `disabled`/`inactive` ist und das Tray fest an eine Maschine
 binden würde.
@@ -160,8 +197,12 @@ binden würde.
      Icon-Farbe
    - `unread_count` → Zähler
    - `notification_state` (**neu**, siehe unten) → Zustandsänderung von anderswo
-4. **Ausgehend:** Klick auf eine Meldung im Tray →
-   `POST /api/notifications/{id}/read` → Fan-out → Web und Android ziehen nach.
+4. **Alle 10 Minuten ein Neuabgleich per REST.** Keine Notlösung, sondern die
+   Korrekturinstanz für drei Dinge, die ein Ereignisstrom nicht leisten kann:
+   abgelaufene Snoozes (siehe unten), in der Verbindungslücke verpasste Frames
+   und Drift des Zählers.
+5. **Ausgehend: nichts.** Ohne Meldungsliste markiert das Tray nichts als
+   gelesen. Der Fan-out nützt ihm, er wird von ihm nicht ausgelöst.
 
 ## Backend-Anteil: Fan-out der Zustandsänderungen
 
@@ -189,8 +230,16 @@ Ein Tray steht tagelang offen; dort wäre die Lücke dauerhaft sichtbar — als
 Piepen über Erledigtes.
 
 **Änderung:** Nach `mark_as_read`, `dismiss`, `snooze`, `delete_permanently`,
-`mark_all_as_read` und `dismiss_all` ein Fan-out an alle Verbindungen des
-Nutzers:
+`mark_all_as_read`, `dismiss_all`, `restore` und `empty_trash` — **acht**
+Routen, nicht sechs — ein Fan-out an alle Verbindungen des Nutzers. `restore`
+und `empty_trash` ändern den Zähler zwar nicht (Papierkorb-Zeilen sind nie
+ungelesen, weil `dismiss` immer `is_read=True` mitsetzt), wohl aber die Liste
+in Web-UI und BaluApp — und zugesagt ist Bestandsgleichheit, nicht
+Zählergleichheit.
+
+Die Sammelaktionen tragen **keine IDs**: `mark_all_as_read` kennt einen
+optionalen Kategoriefilter, „alles gelesen" wäre bei gesetzter Kategorie
+falsch. Sie bedeuten „neu laden"; der Client rät nicht, er fragt.
 
 - `send_unread_count()` (existiert, ungenutzt)
 - ein neues Ereignis `notification_state` mit
@@ -210,6 +259,21 @@ gemeinsamer Helfer gerufen, damit die sechs Stellen nicht auseinanderlaufen.
 Dazu `NotificationContext.tsx` um den neuen Ereignistyp erweitern, damit die
 offene Web-UI live nachzieht.
 
+## Snooze — warum der Neuabgleich nötig ist
+
+`NotificationService.snooze()` setzt nur `snoozed_until` und lässt
+`is_read=False`. `get_unread_count()` und `get_user_notifications()` filtern
+gesnoozte Zeilen heraus, solange die Frist läuft. **Einen Job, der den Ablauf
+bemerkt, gibt es nicht** — `notifications/scheduler.py` kennt nur
+`check_and_send_warnings` und `_run_trash_cleanup`. Die Zeile taucht einfach
+wieder in Abfragen auf, sobald jemand fragt.
+
+Behandelte das Tray `snoozed` wie „gelesen" und verließe sich auf Ereignisse,
+wäre eine Snooze faktisch ein „für immer weg": Icon grün bis zum nächsten
+Neustart, obwohl das RAID weiter degradiert ist. Der Zehn-Minuten-Neuabgleich
+ist der einzige Weg zurück auf rot — deshalb steht er im Datenfluss und nicht
+in einer Fußnote.
+
 ## Gaming-Gate
 
 Der Rechner ist zugleich Gaming-Rig. Meldungen würden über Vollbildspielen
@@ -220,11 +284,23 @@ also greifen Plasmas eigene „Nicht stören"- und Vollbild-Regeln automatisch.
 Dafür ist nichts zu bauen.
 
 **2. BaluHost-eigener Gaming-Zustand.** Gaming läuft über das Plugin
-`steam_gaming`. `gaming_state.is_active()` prüft eine Markerdatei unter
-`<nas_storage>/.system/…/gaming_mode_active`; `power/gaming_presence.py`
-kombiniert sie mit „ein Display ist an" zu `gaming_mode_on_screen()`. Letzteres
-ist der richtige Begriff für das Tray, weil ein verwaister Marker aus einer
-abgebrochenen Sitzung die Meldungen sonst dauerhaft stummschalten würde.
+`steam_gaming`. Die naheliegende Quelle `gaming_mode_on_screen()` ist die
+**falsche**: Ihr Marker bedeutet laut `steam_gaming/CLAUDE.md:30` „Marker file
+recording that *we* started gaming mode" und wird nur von
+`launch.start_gaming_mode()` gesetzt. Ein Spiel, das direkt in Steam
+angeklickt wird, setzt ihn nicht — der Normalfall also. Ein Gate darauf wäre
+fast immer offen.
+
+Richtig ist `game_is_running()` (`gaming_presence.py:80`), dieselbe Quelle, die
+Pill, Ledger und Panel benutzen, mit dem Marker als zweitem Pfad für Big
+Picture:
+
+```
+(game_is_running() or marker gesetzt) and displays_on()
+```
+
+Die Display-Bedingung bleibt: Sie ist es, die einen verwaisten Marker aus einer
+abgebrochenen Sitzung von selbst verfallen lässt.
 
 **Neuer Endpunkt**, in den Routen des Plugins (Plugin-Router hängen unter
 `{api_prefix}/plugins/{name}`):
@@ -256,11 +332,14 @@ Popup wird also gezeigt. Lieber eine Meldung zu viel als eine verschluckte.
    gepufferte WS-Ereignisse anwenden. Andersherum entsteht ein Rennen — der
    Socket meldet „gelesen" für eine Meldung, die der Snapshot gleich darauf
    wieder als ungelesen bringt, und das Icon flackert zurück auf rot.
-3. **ws-Token abgelaufen** (60 s): wird pro Verbindungsaufbau frisch geholt.
-   Scheitert das mit 401 → access-Token per refresh erneuern.
-4. **Kopplung verloren** (refresh schlägt fehl, Gerät widerrufen): lokale Token
-   löschen, Icon grau, Menüeintrag „Neu koppeln". Kein stilles Weiterprobieren
-   im Sekundentakt gegen ein Backend, das uns nicht mehr kennt.
+3. **Drei Fehlerklassen, nicht eine.** Ein 401 kostet einen Refresh und einen
+   neuen Versuch. Ein 429 oder 5xx kostet einen Backoff — und *nur* das: Die
+   ws-Token-Route ist auf 30 Anfragen pro Minute begrenzt, und ein Backoff, der
+   bei einer Sekunde beginnt, brennt das Kontingent in einer halben Minute
+   durch. Ein Ratelimit darf niemals eine Entkopplung auslösen.
+4. **Kopplung verloren** (Refresh mit 401 abgelehnt, Gerät widerrufen): lokale
+   Token löschen, Icon grau, eine Meldung, Menüeintrag „Neu koppeln". Die
+   Schleife endet sichtbar, statt den Worker-Thread still sterben zu lassen.
 5. **Keine D-Bus-Sitzung oder kein SNI-Host** (Start außerhalb von Plasma): mit
    klarer Meldung beenden statt abstürzen.
 6. **Doppelstart:** Einzelinstanz über eine Lock-Datei in `$XDG_RUNTIME_DIR` —
@@ -275,6 +354,13 @@ Popup wird also gezeigt. Lieber eine Meldung zu viel als eine verschluckte.
 - **PyQt6 als `optional-dependencies`-Extra `tray`**, damit der Server die
   GUI-Abhängigkeit nicht mitschleppt. Auf dem Zielrechner liegen Qt6 und PyQt6
   bereits systemweit (KDE Plasma).
+- **`packages.find` und `package-data` müssen erweitert werden.** Heute sammelt
+  `pyproject.toml` nur `["app*", "baluhost_tui*"]`; ohne `baluhost_tray*` wäre
+  das Konsolenskript installiert, das Modul nicht, und die Unit begänne mit
+  `ModuleNotFoundError`. Ohne `package-data` fehlten die Icons im Wheel.
+- **`ConditionPathExists` auf die Token-Datei.** Ohne Kopplung soll die Unit gar
+  nicht starten — sonst startet `Restart=on-failure` sie im Zehnsekundentakt neu,
+  bis sie auf `failed` steht.
 - Unit-Vorlage unter `deploy/install/templates/` wie die übrigen Units,
   Installationsschritt im vorhandenen Install-Modul.
 
@@ -294,6 +380,21 @@ Popup wird also gezeigt. Lieber eine Meldung zu viel als eine verschluckte.
 - **Kein GUI-Test.** `tray.py` bleibt dünn; die Logik in `state.py` ist ohne Qt
   prüfbar.
 
+## Zwei Vorbedingungen aus dem Review
+
+Beim kritischen Review des Entwurfs kamen zwei vorbestehende Defekte heraus,
+ohne die das Tray nicht funktionieren *kann*. Beide gehören in dieselbe Runde,
+haben aber eigenständigen Wert:
+
+1. **`emit_sync` broadcastet nicht** (siehe Problem). Ohne Behebung bliebe das
+   Icon bei RAID-Degradation, SMART-Ausfall, kritischer Temperatur und voller
+   Platte grün — also bei allem, wofür es gebaut wird.
+2. **Das Refresh-Token der Gerätekopplung wird nie hinterlegt** (siehe
+   Authentifizierung). Ohne Behebung entkoppelt sich das Tray nach Ablauf des
+   Access-Tokens selbst.
+
+Beide nützen Web-App und BaluApp unabhängig vom Tray.
+
 ## Annahmen und offene Punkte
 
 - **Nutzt BaluApp den WebSocket?** Liegt im Repo `Xveyn/BaluApp`, hier nicht
@@ -309,3 +410,19 @@ Popup wird also gezeigt. Lieber eine Meldung zu viel als eine verschluckte.
   stören" zu verlassen — dann entfällt auch der neue Endpunkt.
 - **Freigestelltes Icon-Material** muss erstellt werden; ein reiner
   Automatismus aus dem 1,2-MB-SVG wird bei 22 px nicht überzeugen.
+- **Wer ist der Desktop-Benutzer?** Der Installer kennt `BALUHOST_USER` — das
+  angelegte Dienstkonto, nicht zwingend der Mensch, der sich in Plasma anmeldet.
+  Eine User-Unit im Home des Dienstkontos startet in keiner Desktop-Sitzung. Der
+  Zielbenutzer wird deshalb getrennt bestimmt und im Zweifel erfragt, statt
+  geraten.
+- **Es gibt keinen periodischen RAID-Health-Poll.** `emit_raid_degraded_sync`
+  wird nur aus `degrade()` gerufen, also wenn BaluHost selbst ein Device
+  ausfallen lässt. Eine spontan degradierende Platte erzeugt heute also
+  überhaupt keine Meldung — weder im Tray noch auf dem Handy. Das ist ein
+  eigener Backend-Befund, der über diese Runde hinausgeht, und der Grund, warum
+  die manuelle Abnahme mit `simulate_failure` oder einer manuell erzeugten
+  Meldung arbeiten muss.
+- **Systemmeldungen und mehrere Admins.** `is_read` ist eine einzige Spalte, und
+  `_user_filter(is_admin=True)` schließt `user_id IS NULL` ein. Liest Admin A
+  eine Systemmeldung, sinkt der Zähler von Admin B, ohne dass B etwas erfährt —
+  der Fan-out adressiert nur eine `user_id`. Im Ein-Admin-Betrieb folgenlos.
