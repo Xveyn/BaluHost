@@ -222,3 +222,30 @@ def test_frame_with_non_dict_payload_is_ignored():
     outcome = watcher.handle_frame({"type": "notification", "payload": [1, 2]})
     assert outcome.popups == []
     assert state.unread_count() == 0
+
+
+def test_frame_without_id_is_ignored_like_a_broken_one():
+    """Fehlendes und kaputtes id-Feld werden gleich behandelt.
+
+    Vorher wurde bei fehlendem Feld stillschweigend Meldung 0 angewandt,
+    waehrend "id": null den ganzen Frame verwarf — dieselbe Luecke, zwei
+    verschiedene Ausgaenge.
+    """
+    watcher, state, _ = _watcher([])
+    outcome = watcher.handle_frame({
+        "type": "notification",
+        "payload": {"notification_type": "critical", "title": "x", "message": "y"},
+    })
+    assert outcome.popups == []
+    assert state.unread_count() == 0
+
+
+def test_frame_with_null_id_is_ignored():
+    watcher, state, _ = _watcher([])
+    outcome = watcher.handle_frame({
+        "type": "notification",
+        "payload": {"id": None, "notification_type": "critical",
+                    "title": "x", "message": "y"},
+    })
+    assert outcome.popups == []
+    assert state.unread_count() == 0

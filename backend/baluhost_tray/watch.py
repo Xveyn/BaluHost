@@ -125,7 +125,10 @@ class Watcher:
 
         if kind == "notification":
             ntype = str(payload.get("notification_type", ""))
-            nid = _as_int(payload.get("id", 0))
+            # No default: a missing id is exactly as unusable as a broken one.
+            # `payload.get("id", 0)` would quietly apply notification 0 when
+            # the field is absent, while "id": null threw the frame away.
+            nid = _as_int(payload.get("id"))
             if nid is None:
                 logger.warning("notification frame without a usable id, ignored")
                 return FrameOutcome()

@@ -266,12 +266,18 @@ def _scripted_cycle(clock: FakeClock, script: list[tuple[float, Exception]]):
         if not script:
             # Notbremse: ein Test darf nie endlos laufen.
             raise PairingLost("script exhausted")
-        duration, exc = script.pop(0)
+        entry = script.pop(0)
+        duration, exc = entry[0], entry[1]
+        # Drittes Feld: stand in dieser Runde jemals eine Verbindung? Fehlt es,
+        # heisst das nein — der Zyklus ist vor set_connected(True) gescheitert.
+        connected = entry[2] if len(entry) > 2 else False
         calls.append({
             "forget_calls": ctx.session.forget.call_count,
             "refresh_calls": ctx.session.refresh_access.call_count,
             "sleeps": ctx.sleep.await_count,
         })
+        if connected:
+            ctx.connected_at = clock()
         clock.advance(duration)
         raise exc
 
@@ -348,7 +354,8 @@ async def test_healthy_cycle_resets_the_backoff(monkeypatch):
     ctx, seen = _loop_ctx(clock)
     script = (
         [(0.0, ConnectionError("drop"))] * 5           # Backoff hochtreiben
-        + [(TICK_SECONDS + 1.0, ConnectionError("drop"))]   # gesunde Runde
+        # gesunde Runde: Verbindung stand und hielt einen vollen Takt
+        + [(TICK_SECONDS + 1.0, ConnectionError("drop"), True)]
         + [(0.0, PairingLost("stop"))]
     )
     monkeypatch.setattr(loop_module, "run_cycle", _scripted_cycle(clock, script))
@@ -372,7 +379,7 @@ async def test_healthy_cycle_hands_back_the_refresh(monkeypatch):
     script = [
         (0.0, AuthExpired("401")),                  # Refresh 1, dann continue
         (0.0, AuthExpired("401")),                  # gebremst -> Backoff
-        (TICK_SECONDS + 1.0, ConnectionError("drop")),   # gesunde Runde
+        (TICK_SECONDS + 1.0, ConnectionError("drop"), True),   # gesunde Runde
         (0.0, AuthExpired("401")),                  # Refresh 2 ist wieder erlaubt
         (0.0, PairingLost("stop")),
     ]
@@ -476,3 +483,128 @@ async def test_failing_forget_still_reports_the_lost_pairing(monkeypatch):
 
     assert seen[-1] is IconState.OFFLINE
     assert ctx.notifier.show_summary.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_slow_failure_before_the_connection_stands_does_not_reset(monkeypatch):
+    """Das schweigende Backend: nimmt die TCP-Verbindung an und antwortet nie.
+
+    ws_token() laeuft dann in BackendClients Timeout von 30 s -- exakt
+    TICK_SECONDS -- und wirft TemporaryFailure. Wuerde die Zyklusdauer ab dem
+    Start gemessen, saehe *jeder* dieser Versuche gesund aus und der Backoff
+    wuchse nie, ausgerechnet in dem Szenario, fuer das es ihn gibt.
+    """
+    clock = FakeClock()
+    ctx, _ = _loop_ctx(clock)
+    script = (
+        # Lang, aber nie verbunden (drittes Feld fehlt = False).
+        [(TICK_SECONDS + 1.0, TemporaryFailure("read timeout"))] * 5
+        + [(0.0, PairingLost("stop"))]
+    )
+    monkeypatch.setattr(loop_module, "run_cycle", _scripted_cycle(clock, script))
+
+    await asyncio.wait_for(run_loop(ctx), timeout=5)
+
+    delays = _delays(ctx)
+    assert len(delays) == 5
+    # Gewachsen statt bei jedem Versuch zurueckgesetzt: der fuenfte Backoff
+    # liegt im Fenster von 2**4 = 16 s, nicht im Fenster des ersten Versuchs.
+    assert delays[-1] > 1.0, delays
+
+
+@pytest.mark.asyncio
+async def test_recv_is_bounded_by_the_tick(monkeypatch):
+    """Bewacht die erste Haelfte der Zusage: gewartet wird *mit Zeitlimit*.
+
+    recv() kehrt hier nie von selbst zurueck. Ohne asyncio.wait_for haengt
+    run_cycle, und der Takt -- und mit ihm die Zustellung -- faende nie statt.
+    """
+    monkeypatch.setattr(loop_module, "TICK_SECONDS", 0.01)
+
+    class SilentSocket:
+        """Eine Leitung, die offen ist und schweigt."""
+
+        def __init__(self) -> None:
+            self.attempts = 0
+
+        async def recv(self) -> str:
+            self.attempts += 1
+            if self.attempts > 3:
+                raise ConnectionError("closed")
+            await asyncio.Event().wait()        # kehrt nie zurueck
+            raise AssertionError("unreachable")
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+    ctx = _ctx(frames=[])
+    socket = SilentSocket()
+    ctx.connect = lambda url: socket
+    ctx.queue.hold(_popup(3))                   # wartet auf einen Takt
+
+    with pytest.raises(ConnectionError):
+        await asyncio.wait_for(run_cycle(ctx), timeout=5)
+
+    assert socket.attempts == 4, "jeder Takt muss recv() neu versucht haben"
+    ctx.notifier.show.assert_awaited_once()
+
+
+class TickingSocket:
+    """Stille Leitung, die bei jedem Leerlauf-Takt die Uhr weiterstellt."""
+
+    def __init__(self, clock: FakeClock, step: float, ticks: int) -> None:
+        self._clock, self._step, self._left = clock, step, ticks
+
+    async def recv(self) -> str:
+        if self._left <= 0:
+            raise ConnectionError("closed")
+        self._left -= 1
+        self._clock.advance(self._step)
+        raise asyncio.TimeoutError
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+
+def _snapshot_calls(ctx: LoopContext) -> int:
+    return ctx.session.client.return_value.get.call_count
+
+
+@pytest.mark.asyncio
+async def test_resnapshot_fires_after_the_interval():
+    """Der Zehn-Minuten-Neuabgleich, der abgelaufene Snoozes einfaengt.
+
+    Serverseitig gibt es dafuer keinen Job: die Meldung taucht einfach wieder
+    in den Abfragen auf, und ohne diesen Takt saehe das Tray sie nie.
+    """
+    clock = FakeClock()
+    ctx = _ctx(frames=[])
+    ctx.now = clock
+    ctx.connect = lambda url: TickingSocket(clock, step=300.0, ticks=3)
+
+    with pytest.raises(ConnectionError):
+        await run_cycle(ctx)
+
+    # 1x beim Verbinden + 1x nach 600 s. Der dritte Takt (900 s) liegt erst
+    # 300 s nach dem Neuabgleich und zaehlt noch nicht.
+    assert _snapshot_calls(ctx) == 2
+
+
+@pytest.mark.asyncio
+async def test_no_resnapshot_before_the_interval():
+    """Kein Neuabgleich auf Verdacht — sonst waere der Takt eine Dauerabfrage."""
+    clock = FakeClock()
+    ctx = _ctx(frames=[])
+    ctx.now = clock
+    ctx.connect = lambda url: TickingSocket(clock, step=60.0, ticks=5)
+
+    with pytest.raises(ConnectionError):
+        await run_cycle(ctx)
+
+    assert _snapshot_calls(ctx) == 1        # nur der beim Verbinden

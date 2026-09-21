@@ -96,6 +96,12 @@ class LoopContext:
     sleep: Callable[..., Any] = asyncio.sleep
     now: Callable[[], float] = time.monotonic
 
+    # When the current cycle's connection actually stood, or None if it never
+    # got that far. run_cycle writes it, run_loop clears it before each round
+    # and uses it to decide whether the cycle counts as healthy. It is not an
+    # input — callers leave it alone.
+    connected_at: float | None = None
+
 
 def _publish(ctx: LoopContext) -> None:
     """Hand the current icon state to the UI, and survive a UI that cannot take it.
@@ -151,6 +157,9 @@ async def run_cycle(ctx: LoopContext) -> None:
             raise TemporaryFailure("snapshot refused")
 
         ctx.state.set_connected(True)
+        # From here on the connection demonstrably stands. Only time spent past
+        # this point counts as healthy — see run_loop.
+        ctx.connected_at = ctx.now()
         _publish(ctx)
 
         last_snapshot = ctx.now()
@@ -224,11 +233,17 @@ async def run_loop(ctx: LoopContext) -> None:
     while True:
         # run_cycle never returns normally — its inner loop has no break and
         # no return, so every exit is an exception. The attempt counter
-        # therefore cannot be reset "on success"; how long the cycle held is
-        # the only evidence of health we get. Surviving a full idle tick means
-        # the socket was open and quiet, which is exactly what a healthy
-        # connection looks like.
-        started = ctx.now()
+        # therefore cannot be reset "on success"; how long the connection held
+        # is the only evidence of health we get.
+        #
+        # Measured from set_connected(True), not from the top of the cycle.
+        # Everything before it — fetching the ws token, connecting, the
+        # snapshot — runs against BackendClient's 30 s timeout, which is
+        # exactly TICK_SECONDS. A backend that accepts the TCP connection and
+        # then says nothing would burn a full tick in ws_token() and look
+        # "healthy" on every single attempt, so the backoff would never grow —
+        # in precisely the scenario it exists for.
+        ctx.connected_at = None
 
         try:
             await run_cycle(ctx)
@@ -268,11 +283,12 @@ async def run_loop(ctx: LoopContext) -> None:
         except Exception as exc:
             logger.info("connection lost: %s", exc)
 
-        if ctx.now() - started >= TICK_SECONDS:
-            # Held long enough to count as healthy: start the backoff over,
-            # and hand back the refresh this round was allowed. Without this
-            # a tray that runs for days ends up permanently at the cap and
-            # waits a minute before every reconnect.
+        held = ctx.connected_at is not None and ctx.now() - ctx.connected_at >= TICK_SECONDS
+        if held:
+            # The connection stood for a full idle tick: start the backoff
+            # over, and hand back the refresh this round was allowed. Without
+            # this a tray that runs for days ends up permanently at the cap
+            # and waits a minute before every reconnect.
             attempt = 0
             refreshed = False
 
