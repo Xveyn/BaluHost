@@ -6,6 +6,7 @@ Firebase and told no connected client anything.
 """
 
 import asyncio
+import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -82,9 +83,17 @@ def test_without_a_loop_it_stays_silent_instead_of_raising():
 
 
 @pytest.mark.asyncio
-async def test_broadcast_failure_does_not_break_the_caller():
+async def test_broadcast_failure_does_not_break_the_caller(caplog):
     """Ein kaputter Socket darf emit_sync nicht mitreissen — die Zeile steht
-    zu diesem Zeitpunkt bereits in der Datenbank."""
+    zu diesem Zeitpunkt bereits in der Datenbank.
+
+    Beweist den Fehlerpfad, statt nur "wirft nicht synchron" zu zeigen:
+    _broadcast_sync fragt das Future von run_coroutine_threadsafe nie ab, ein
+    fehlendes try/except um den await liesse den Test sonst genauso gruen
+    durchlaufen. assert_awaited_once() belegt, dass der Aufruf ueberhaupt
+    stattfand; die caplog-Pruefung belegt, dass die RuntimeError im except
+    gefangen und geloggt wurde statt zu verschwinden.
+    """
     emitter = EventEmitter()
     emitter.set_event_loop(asyncio.get_running_loop())
 
@@ -99,6 +108,13 @@ async def test_broadcast_failure_does_not_break_the_caller():
         "app.services.notifications.events.get_websocket_manager",
         return_value=manager,
     ):
-        emitter._broadcast_sync(notification)
-        await asyncio.sleep(0)
-        await asyncio.sleep(0)
+        with caplog.at_level(logging.WARNING, logger="app.services.notifications.events"):
+            emitter._broadcast_sync(notification)
+            await asyncio.sleep(0)
+            await asyncio.sleep(0)
+
+    manager.broadcast_to_admins.assert_awaited_once()
+    assert any(
+        "Websocket broadcast from emit_sync failed" in record.message
+        for record in caplog.records
+    ), "erwartete Warnung fehlt — wurde die Exception im except geloggt?"
