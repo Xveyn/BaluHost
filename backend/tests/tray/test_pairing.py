@@ -82,8 +82,35 @@ def test_server_error_keeps_waiting():
     assert pairing.poll_once(_client({}, status_code=503), "dc") is None
 
 
-def test_device_identity_is_stable():
+def test_device_identity_is_stable_when_machine_id_is_readable():
+    """Runs against the real filesystem: on this host /etc/machine-id is
+    readable, so this only exercises that path, never the fallback below."""
     first = pairing.device_identity()
     second = pairing.device_identity()
     assert first == second
     assert first[0] and first[1]
+
+
+def test_device_identity_fallback_is_persisted_across_restarts(monkeypatch, tmp_path):
+    """When neither machine-id file is readable, the generated id must
+    survive a tray restart instead of being re-rolled on every call --
+    otherwise every restart looks like a new device, the device list fills
+    with dead entries, and per-device revocation becomes meaningless.
+    """
+    missing_path = tmp_path / "no-such-machine-id"
+    monkeypatch.setattr(pairing, "_MACHINE_ID_PATHS", (missing_path, missing_path))
+    fallback_dir = tmp_path / "baluhost"
+    monkeypatch.setattr(pairing, "TOKEN_DIR", fallback_dir)
+
+    first_id, _ = pairing.device_identity()
+    second_id, _ = pairing.device_identity()
+    assert first_id == second_id
+
+    # device_identity() keeps no in-memory cache, so calling it again is
+    # equivalent to a fresh process reading the persisted file from disk.
+    third_id, _ = pairing.device_identity()
+    assert third_id == first_id
+
+    device_id_file = fallback_dir / "device-id"
+    assert device_id_file.read_text().strip() == first_id
+    assert (device_id_file.stat().st_mode & 0o777) == 0o600

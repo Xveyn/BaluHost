@@ -7,18 +7,20 @@ because Task 2 stores the refresh token's jti).
 
 from __future__ import annotations
 
+import os
 import socket
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
-from baluhost_tray.config import Tokens
+from baluhost_tray.config import TOKEN_DIR, Tokens
 
 # The router carries prefix="/desktop-pairing"; "/api/desktop/..." is not bound.
 DEVICE_CODE_PATH = "/api/desktop-pairing/device-code"
 POLL_PATH = "/api/desktop-pairing/poll"
 
 _MACHINE_ID_PATHS = (Path("/etc/machine-id"), Path("/var/lib/dbus/machine-id"))
+_DEVICE_ID_FILENAME = "device-id"
 
 
 class PairingDenied(Exception):
@@ -41,20 +43,62 @@ class PendingPairing:
 def device_identity() -> tuple[str, str]:
     """A stable id for this machine plus a human readable name.
 
-    Falls back to a random uuid only if no machine-id is readable; pairing
-    still works, the device just shows up as a new one after a reinstall.
+    Prefers the system machine-id. Where neither machine-id file is
+    readable, a fallback id is generated once and persisted to
+    ~/.baluhost/device-id (config.TOKEN_DIR, the same directory the token
+    store uses), so a tray restart still presents the same device instead
+    of registering as a new one each time -- which would otherwise fill the
+    device list with dead entries and make per-device revocation pointless.
+    Only if that file can neither be read nor written does this fall back
+    further, to a uuid that is volatile for just this one call.
     """
-    device_id = ""
+    device_id = _read_machine_id()
+    if not device_id:
+        device_id = _persistent_fallback_id()
+    return device_id, f"BaluHost Tray auf {socket.gethostname()}"
+
+
+def _read_machine_id() -> str:
     for path in _MACHINE_ID_PATHS:
         try:
-            device_id = path.read_text().strip()
+            value = path.read_text().strip()
         except OSError:
             continue
-        if device_id:
-            break
-    if not device_id:
-        device_id = str(uuid.uuid4())
-    return device_id, f"BaluHost Tray auf {socket.gethostname()}"
+        if value:
+            return value
+    return ""
+
+
+def _persistent_fallback_id() -> str:
+    """Reuse a previously generated id, or generate and persist a new one.
+
+    Mirrors config.save_tokens()'s handling of permissions: directory
+    0o700, file 0o600, mode set in the open() call itself so the file is
+    never briefly world-readable in between.
+    """
+    device_id_file = TOKEN_DIR / _DEVICE_ID_FILENAME
+
+    try:
+        existing = device_id_file.read_text().strip()
+        if existing:
+            return existing
+    except OSError:
+        pass
+
+    new_id = str(uuid.uuid4())
+    try:
+        TOKEN_DIR.mkdir(parents=True, exist_ok=True)
+        os.chmod(TOKEN_DIR, 0o700)
+        fd = os.open(device_id_file, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        try:
+            os.write(fd, new_id.encode("utf-8"))
+        finally:
+            os.close(fd)
+        os.chmod(device_id_file, 0o600)
+    except OSError:
+        pass  # Persistence failed -- this id is volatile for this call only.
+
+    return new_id
 
 
 def start_pairing(client) -> PendingPairing:
