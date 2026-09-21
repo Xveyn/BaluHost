@@ -45,6 +45,11 @@ das Tray nicht erneut melden.
   lokal im Tray.
 - **Laufende Vorgänge anzeigen** (Backup läuft, Update läuft, Scrub läuft).
   Nur Kritisches, damit eine Meldung eine Meldung bleibt.
+- **Eine Meldungsliste im Menü.** Ursprünglich vorgesehen, beim Planen
+  verworfen: Eine Liste zu rendern und Klicks darauf zu behandeln macht aus
+  `tray.py` eine kleine Anwendung und hebelt den Schnitt aus, der die Logik
+  ohne Qt prüfbar hält. Ein Klick auf das Icon öffnet die Web-UI, die diese
+  Liste bereits hat.
 - **Mehrere Zielrechner.** Das Tray wird auf dem Deployment-Host installiert —
   also auf der Maschine, die zugleich als PC dient. Technisch hindert nichts
   einen zweiten Rechner (siehe Abschnitt Authentifizierung), aber
@@ -183,13 +188,24 @@ Bei einem Browser-Tab fällt das kaum auf, weil man ihn schließt und neu öffne
 Ein Tray steht tagelang offen; dort wäre die Lücke dauerhaft sichtbar — als
 Piepen über Erledigtes.
 
-**Änderung:** Nach `mark_as_read`, `dismiss`, `snooze`, `delete`,
+**Änderung:** Nach `mark_as_read`, `dismiss`, `snooze`, `delete_permanently`,
 `mark_all_as_read` und `dismiss_all` ein Fan-out an alle Verbindungen des
 Nutzers:
 
 - `send_unread_count()` (existiert, ungenutzt)
-- ein neues `broadcast_typed`-Ereignis `notification_state` mit
+- ein neues Ereignis `notification_state` mit
   `{"ids": [...], "action": "read" | "dismissed" | "snoozed" | "deleted"}`
+
+**Ort des Fan-outs: die Route-Ebene, nicht der Service.** Die Zustandsmethoden
+des `NotificationService` sind synchron (`def` mit `Session`), der Versand ist
+`async`. Ein Fan-out im Service müsste aus synchronem Code heraus einen Task
+auf einer fremden Eventloop starten — fragil und schwer testbar. Die
+Route-Handler sind bereits `async`; dort wird nach dem Service-Aufruf ein
+gemeinsamer Helfer gerufen, damit die sechs Stellen nicht auseinanderlaufen.
+
+`broadcast_to_user()` ist für diesen Zweck **nicht** verwendbar: Es setzt
+`"type": "notification"` fest. Für den Fan-out kommt eine eigene Methode
+`send_notification_state()` dazu, symmetrisch zu `send_unread_count()`.
 
 Dazu `NotificationContext.tsx` um den neuen Ereignistyp erweitern, damit die
 offene Web-UI live nachzieht.
