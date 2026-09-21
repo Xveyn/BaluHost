@@ -219,3 +219,41 @@ async def test_connect_caps_connections_per_user():
     await mgr.connect(_FakeWS(), user_id=8)
     assert mgr.get_connection_count(7) == MAX_CONNECTIONS_PER_USER
     assert mgr.get_connection_count(8) == 1
+
+
+@pytest.mark.asyncio
+class TestSendNotificationState:
+    async def test_sends_to_all_connections_of_user(self, manager: WebSocketManager):
+        ws1, ws2 = _make_ws(), _make_ws()
+        await manager.connect(ws1, user_id=1)
+        await manager.connect(ws2, user_id=1)
+
+        sent = await manager.send_notification_state(1, [7, 8], "read")
+
+        assert sent == 2
+        frame = ws1.send_json.call_args[0][0]
+        assert frame == {
+            "type": "notification_state",
+            "payload": {"ids": [7, 8], "action": "read"},
+        }
+
+    async def test_other_users_untouched(self, manager: WebSocketManager):
+        mine, theirs = _make_ws(), _make_ws()
+        await manager.connect(mine, user_id=1)
+        await manager.connect(theirs, user_id=2)
+
+        await manager.send_notification_state(1, [7], "dismissed")
+
+        assert theirs.send_json.call_count == 0
+
+    async def test_no_connections_is_zero(self, manager: WebSocketManager):
+        assert await manager.send_notification_state(99, [1], "read") == 0
+
+    async def test_drops_broken_connection(self, manager: WebSocketManager):
+        ws = _make_ws(send_json_side_effect=RuntimeError("gone"))
+        await manager.connect(ws, user_id=1)
+
+        sent = await manager.send_notification_state(1, [1], "read")
+
+        assert sent == 0
+        assert manager.get_connection_count(1) == 0
