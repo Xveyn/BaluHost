@@ -5,7 +5,10 @@ topbar status pill, books play sessions into the database, sends notifications o
 the session edges, shows the last five sessions as a dashboard panel, and offers a
 "Gaming Mode" toggle in the system/power menu. It also lets holders of
 `can_launch_games` list installed games and launch one (`GET /games`,
-`POST /games/{app_id}/launch`), mainly for BaluApp.
+`POST /games/{app_id}/launch`), mainly for BaluApp. `GET /session-state`
+reports whether a gaming session is on screen right now — behind plain
+`get_current_user`, not the launch right, since it is the gate the desktop
+tray polls before every popup.
 
 **One router, no `plugin.json`.** Pill, menu, panel, notifications and the
 background task come from `PluginBase` method overrides and take effect within
@@ -32,7 +35,7 @@ Trust tier, lifecycle and the `PluginBase` contract are in `../../CLAUDE.md`.
 | `library.py` | Launchable games: `appmanifest_<id>.acf` present, name readable, not a tool; 30 s per-worker list cache; `LibraryUnavailable` when no steamapps dir exists |
 | `launch.py` | `start_gaming_mode()` — the displays → unlock → Big Picture → marker sequence shared by the menu action and the launch route; re-exports `launch_game` |
 | `models.py` | Pydantic models of the routes; field names are the API contract |
-| `routes.py` | `GET /games`, `POST /games/{app_id}/launch`; right, LAN gate, audit |
+| `routes.py` | `GET /games`, `POST /games/{app_id}/launch` (right, LAN gate, audit); `GET /session-state` (gaming session on screen — gate for the tray) |
 | `ledger.py` | Observations → `SteamSession` rows; returns what is worth announcing |
 | `poller.py` | Background task: detect → book → announce |
 
