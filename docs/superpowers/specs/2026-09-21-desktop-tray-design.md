@@ -3,7 +3,7 @@
 **Datum:** 2026-09-21
 **Status:** Entwurf zur Durchsicht
 **Branch:** `feat/desktop-tray`
-**Basis:** `main` @ `2ed58e59`
+**Basis:** `main` @ `e143b21f`
 
 ## Problem
 
