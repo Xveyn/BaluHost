@@ -94,3 +94,30 @@ async def test_send_failure_does_not_propagate(ws_manager: MagicMock):
 async def test_unknown_action_rejected(ws_manager: MagicMock):
     with pytest.raises(ValueError):
         await fanout_state(MagicMock(), 1, [7], "exploded", is_admin=False)
+
+
+@pytest.mark.asyncio
+async def test_socket_mark_read_reaches_the_other_connections():
+    """Der Socket-Zweig darf nicht nur dem Aufrufer antworten."""
+    from app.services.websocket_manager import WebSocketManager
+
+    manager = WebSocketManager()
+    caller, other = MagicMock(), MagicMock()
+    caller.send_json = AsyncMock()
+    other.send_json = AsyncMock()
+    await manager.connect(caller, user_id=1)
+    await manager.connect(other, user_id=1)
+
+    service = _service(2)
+    with patch(
+        "app.api.routes._notification_fanout.get_websocket_manager",
+        return_value=manager,
+    ), patch(
+        "app.api.routes._notification_fanout.get_notification_service",
+        return_value=service,
+    ):
+        await fanout_state(MagicMock(), 1, [5], "read", is_admin=False)
+
+    types_seen = [c[0][0]["type"] for c in other.send_json.call_args_list]
+    assert "notification_state" in types_seen
+    assert "unread_count" in types_seen

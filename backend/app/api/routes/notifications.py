@@ -691,11 +691,10 @@ async def notification_websocket(
                         db = SessionLocal()
                         try:
                             service.mark_as_read(db, notification_id, user_id, is_admin=is_admin)
-                            unread_count = service.get_unread_count(db, user_id, is_admin=is_admin)
-                            await websocket.send_json({
-                                "type": "unread_count",
-                                "payload": {"count": unread_count},
-                            })
+                            await fanout_state(
+                                db, user_id, [notification_id], "read",
+                                is_admin=is_admin,
+                            )
                         except Exception as e:
                             logger.error(f"WebSocket: Failed to mark_read - {e}")
                         finally:
