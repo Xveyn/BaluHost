@@ -168,18 +168,27 @@ def run_tray(base_url: str, web_url: str) -> int:
             )
             return
 
-        ctx = LoopContext(
-            session=session,
-            watcher=Watcher(session, state),
-            state=state,
-            queue=queue,
-            notifier=notifier,
-            sink=_sink,
-            hold_probe=lambda: is_gaming_active(session.client()),
-            connect=websockets.connect,
-            quiet=quiet,
-        )
+        # Die Zuweisung steht mit *im* try, nicht davor. Sie kann scheitern:
+        # ein umbenanntes LoopContext-Feld (TypeError), ein Fehler in
+        # Watcher(session, state), ein AttributeError auf websockets.connect.
+        # Draussen wuerde so ein Fehlschlag den Worker-Thread still beenden —
+        # worker_failure bliebe leer, bridge.fatal feuerte nie, app.exec()
+        # liefe weiter, das Icon bliebe fuer immer grau und der Prozess endete
+        # spaeter mit 0, was systemd als sauberen Abschluss liest. Jede
+        # Anweisung nach notifier.connect() braucht einen Zweig, der ablegt
+        # *und* meldet.
         try:
+            ctx = LoopContext(
+                session=session,
+                watcher=Watcher(session, state),
+                state=state,
+                queue=queue,
+                notifier=notifier,
+                sink=_sink,
+                hold_probe=lambda: is_gaming_active(session.client()),
+                connect=websockets.connect,
+                quiet=quiet,
+            )
             await run_loop(ctx)
         except Exception as exc:
             # asyncio.run() in einem Thread wuerde den Traceback nach stderr
