@@ -156,3 +156,69 @@ def test_unknown_frame_type_ignored():
     watcher, _, _ = _watcher([])
     outcome = watcher.handle_frame({"type": "pong", "payload": {}})
     assert outcome.popups == [] and outcome.reload_needed is False
+
+
+def test_frame_with_unusable_id_is_ignored_not_raised():
+    """Ein kaputtes Feld darf keinen Reconnect kosten.
+
+    Vorher warf int("abc") aus handle_frame heraus, run_cycle brach ab und
+    run_loop baute die Verbindung neu auf — fuer ein einzelnes Feld.
+    """
+    watcher, state, _ = _watcher([])
+    outcome = watcher.handle_frame({
+        "type": "notification",
+        "payload": {"id": "abc", "notification_type": "critical",
+                    "title": "SMART", "message": "Fehler"},
+    })
+    assert outcome.popups == []
+    assert outcome.reload_needed is False
+    assert state.unread_count() == 0
+
+
+def test_numeric_string_id_still_counts():
+    """Eine Ziffernfolge als String ist brauchbar — nur Unsinn nicht."""
+    watcher, state, _ = _watcher([])
+    outcome = watcher.handle_frame({
+        "type": "notification",
+        "payload": {"id": "5", "notification_type": "critical",
+                    "title": "SMART", "message": "Fehler"},
+    })
+    assert [p.notification_id for p in outcome.popups] == [5]
+    assert state.icon_state() == IconState.CRITICAL
+
+
+def test_state_frame_applies_the_usable_ids_and_drops_the_rest():
+    """Was verstanden wurde, stimmt weiterhin — nur der Unsinn faellt weg."""
+    watcher, state, _ = _watcher([
+        {"id": 1, "notification_type": "critical", "is_read": False,
+         "title": "x", "message": "y"},
+        {"id": 2, "notification_type": "critical", "is_read": False,
+         "title": "x", "message": "y"},
+    ])
+    watcher.load_snapshot()
+    watcher.handle_frame({
+        "type": "notification_state",
+        "payload": {"ids": [1, "kaputt"], "action": "read"},
+    })
+    assert state.unread_count() == 1        # 1 ist weg, 2 bleibt
+
+
+def test_state_frame_with_unusable_ids_container_is_ignored():
+    watcher, state, _ = _watcher([
+        {"id": 1, "notification_type": "critical", "is_read": False,
+         "title": "x", "message": "y"},
+    ])
+    watcher.load_snapshot()
+    outcome = watcher.handle_frame({
+        "type": "notification_state",
+        "payload": {"ids": "1", "action": "read"},
+    })
+    assert outcome.reload_needed is False
+    assert state.unread_count() == 1        # unveraendert, nichts geraten
+
+
+def test_frame_with_non_dict_payload_is_ignored():
+    watcher, state, _ = _watcher([])
+    outcome = watcher.handle_frame({"type": "notification", "payload": [1, 2]})
+    assert outcome.popups == []
+    assert state.unread_count() == 0

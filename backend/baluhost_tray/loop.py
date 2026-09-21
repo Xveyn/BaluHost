@@ -98,7 +98,19 @@ class LoopContext:
 
 
 def _publish(ctx: LoopContext) -> None:
-    ctx.sink(ctx.state.icon_state())
+    """Hand the current icon state to the UI, and survive a UI that cannot take it.
+
+    The sink comes from the Qt layer: a deleted object or a call from the wrong
+    thread raises, and an unguarded call would end the worker. That is the wrong
+    order of priorities — the tray can stop *showing* its state and still keep
+    watching and notifying, but a dead worker shows nothing and notifies nobody.
+
+    Exception, not BaseException: CancelledError has to keep propagating.
+    """
+    try:
+        ctx.sink(ctx.state.icon_state())
+    except Exception as exc:
+        logger.warning("icon update failed, carrying on: %s", exc)
 
 
 def _parse_frame(raw: str) -> dict | None:
@@ -180,7 +192,14 @@ async def _give_up_pairing(ctx: LoopContext) -> None:
     store, so forgetting happens here rather than only in refresh_access().
     """
     logger.warning("pairing lost — tray goes idle until re-paired")
-    await asyncio.to_thread(ctx.session.forget)
+    try:
+        await asyncio.to_thread(ctx.session.forget)
+    except Exception:
+        # A read-only store or a permission problem must not swallow the
+        # notice: going grey and saying so is what tells the user to re-pair.
+        # Disappearing silently at exactly this moment leaves them with a
+        # tray that simply stopped.
+        logger.exception("could not clear the stored tokens")
     ctx.state.set_connected(False)
     _publish(ctx)
     try:

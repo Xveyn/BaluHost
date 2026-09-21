@@ -425,3 +425,54 @@ async def test_cancellation_still_gets_through(monkeypatch):
         await asyncio.wait_for(run_loop(ctx), timeout=5)
 
     ctx.session.forget.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_failing_sink_does_not_kill_the_loop(monkeypatch):
+    """Wenn die Anzeige klemmt, soll das Tray weiter beobachten und melden.
+
+    ctx.sink kommt aus der Qt-Oberflaeche. Ein geloeschtes Qt-Objekt oder ein
+    Aufruf aus dem falschen Thread wirft — ungeschuetzt verlaesst das die
+    Schleife. Der Worker stirbt dann daran, dass die *Anzeige* kaputt ist.
+    """
+    clock = FakeClock()
+    ctx, _ = _loop_ctx(clock)
+
+    def _broken_sink(_state) -> None:
+        raise RuntimeError("Qt object deleted")
+
+    ctx.sink = _broken_sink
+    script = [
+        (0.0, ConnectionError("drop")),
+        (0.0, ConnectionError("drop")),
+        (0.0, PairingLost("stop")),
+    ]
+    cycle = _scripted_cycle(clock, script)
+    monkeypatch.setattr(loop_module, "run_cycle", cycle)
+
+    await asyncio.wait_for(run_loop(ctx), timeout=5)
+
+    assert len(cycle.calls) == 3, "die Schleife muss weitergelaufen sein"
+    assert ctx.sleep.await_count == 2
+    # Auch der Schlusspfad ueberlebt den kaputten Sink.
+    assert ctx.notifier.show_summary.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_failing_forget_still_reports_the_lost_pairing(monkeypatch):
+    """Grau werden und sich melden, auch wenn die Token nicht zu loeschen sind.
+
+    Im Stillen verschwinden hiesse: der Nutzer sieht ein Tray, das einfach
+    aufgehoert hat, und erfaehrt nie, dass er neu koppeln muss.
+    """
+    clock = FakeClock()
+    ctx, seen = _loop_ctx(clock)
+    ctx.session.forget.side_effect = OSError("read-only file system")
+    monkeypatch.setattr(
+        loop_module, "run_cycle", _scripted_cycle(clock, [(0.0, PairingLost("revoked"))])
+    )
+
+    await asyncio.wait_for(run_loop(ctx), timeout=5)
+
+    assert seen[-1] is IconState.OFFLINE
+    assert ctx.notifier.show_summary.await_count == 1

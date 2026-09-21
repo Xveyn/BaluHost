@@ -36,6 +36,18 @@ def backoff_delays(attempts: int, base: float = 1.0, cap: float = 60.0) -> list[
     ]
 
 
+def _as_int(value) -> int | None:
+    """int() that reports failure instead of raising.
+
+    Ids arrive as whatever the server put on the wire; a string of digits is
+    fine, "abc" or None is not, and neither is worth a reconnect.
+    """
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 @dataclass
 class FrameOutcome:
     popups: list[PendingPopup] = field(default_factory=list)
@@ -99,13 +111,24 @@ class Watcher:
         return True
 
     def handle_frame(self, frame: dict) -> FrameOutcome:
-        """Apply one frame."""
+        """Apply one frame.
+
+        An unusable frame is treated like an unknown type: empty outcome, and
+        the caller's round carries on. Raising would cost a full reconnect over
+        a single broken field — exactly the reaction run_cycle's _parse_frame()
+        drops one level up, so raising here would put it back.
+        """
         kind = frame.get("type")
-        payload = frame.get("payload") or {}
+        payload = frame.get("payload")
+        if not isinstance(payload, dict):
+            payload = {}
 
         if kind == "notification":
             ntype = str(payload.get("notification_type", ""))
-            nid = int(payload.get("id", 0))
+            nid = _as_int(payload.get("id", 0))
+            if nid is None:
+                logger.warning("notification frame without a usable id, ignored")
+                return FrameOutcome()
             if ntype in COLOURING_TYPES:
                 self._state.add(nid, ntype)
             if ntype in POPUP_TYPES:
@@ -122,7 +145,19 @@ class Watcher:
                 # The bulk actions carry no ids because mark_all_as_read may
                 # have been scoped to a category. Clearing would be a guess.
                 return FrameOutcome(reload_needed=True)
-            self._state.remove([int(i) for i in payload.get("ids", [])])
+            raw_ids = payload.get("ids", [])
+            if not isinstance(raw_ids, (list, tuple)):
+                logger.warning("state frame with unusable ids, ignored")
+                return FrameOutcome()
+            ids = [nid for nid in (_as_int(i) for i in raw_ids) if nid is not None]
+            if len(ids) != len(raw_ids):
+                # Apply what is usable rather than dropping the whole frame:
+                # the ids we understood are still true.
+                logger.warning(
+                    "state frame carried %d unusable id(s), applying the rest",
+                    len(raw_ids) - len(ids),
+                )
+            self._state.remove(ids)
             return FrameOutcome()
 
         return FrameOutcome()
