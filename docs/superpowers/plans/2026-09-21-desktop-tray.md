@@ -141,6 +141,10 @@ async def test_broadcast_sync_reaches_admins_for_system_notifications():
         await asyncio.sleep(0)
 
     manager.broadcast_to_admins.assert_awaited_once()
+    # Roh, nicht eingewickelt: broadcast_to_admins baut den Rahmen selbst.
+    assert manager.broadcast_to_admins.await_args[0][0] == {
+        "id": 1, "notification_type": "critical",
+    }
     manager.broadcast_to_user.assert_not_awaited()
 
 
@@ -167,6 +171,9 @@ async def test_user_scoped_notification_goes_to_that_user():
 
     manager.broadcast_to_user.assert_awaited_once()
     assert manager.broadcast_to_user.await_args[0][0] == 7
+    assert manager.broadcast_to_user.await_args[0][1] == {
+        "id": 2, "notification_type": "warning",
+    }
     manager.broadcast_to_admins.assert_not_awaited()
 
 
@@ -216,11 +223,13 @@ In `backend/app/services/notifications/events.py` oben ergänzen:
 import asyncio
 from typing import Optional
 
-from app.services.websocket_manager import get_websocket_manager  # noqa: F401
+from app.services.websocket_manager import get_websocket_manager
 ```
 
-Der Top-Level-Import dient als Patch-Ziel der Tests; `_send()` importiert
-zusätzlich lokal, damit beim Modulimport keine Zyklen entstehen.
+Der Import steht auf Modulebene und wird auch von dort benutzt — er ist
+zugleich das Patch-Ziel der Tests. Ein zusätzlicher lokaler Import in `_send()`
+würde den Namen neu binden und den Patch aushebeln; einen Zyklus gibt es nicht,
+`websocket_manager` importiert nichts aus `app`.
 
 In `EventEmitter.__init__`:
 
@@ -262,14 +271,13 @@ Zwei neue Methoden auf der Klasse:
             return
 
         async def _send() -> None:
-            from app.services.websocket_manager import get_websocket_manager
-
+            # No local import here: it would rebind the name and defeat the
+            # tests' patch of this module's get_websocket_manager. There is
+            # no cycle to avoid — websocket_manager imports nothing from app.
             manager = get_websocket_manager()
             try:
                 if user_id is None:
-                    await manager.broadcast_to_admins(
-                        {"type": "notification", "payload": payload}
-                    )
+                    await manager.broadcast_to_admins(payload)
                 else:
                     await manager.broadcast_to_user(user_id, payload)
             except Exception as exc:
@@ -281,12 +289,16 @@ Zwei neue Methoden auf der Klasse:
             logger.warning("Could not schedule broadcast: %s", exc)
 ```
 
-**Achtung auf die zwei Signaturen.** `broadcast_to_user(user_id, message)`
-wickelt selbst in `{"type": "notification", "payload": message}` ein
-(`websocket_manager.py:133`), `broadcast_to_admins(message)` nicht — deshalb
-trägt nur die Admin-Variante den Umschlag. Vor dem Schreiben beide
-Methodenrümpfe gegenlesen und die Einwicklung danach setzen; ein doppelt
-eingewickelter Frame ist genau der Fehler aus #511.
+**Beide Methoden wickeln selbst ein — nichts mitgeben.**
+`broadcast_to_user` (`websocket_manager.py:132-135`) und `broadcast_to_admins`
+(`:170-173`) senden beide `{"type": "notification", "payload": message}`. Wer
+hier `{"type": ..., "payload": ...}` übergibt, erzeugt einen doppelten Rahmen —
+genau der Fehler aus #511. Im Frontend liefe das in `case 'notification'` →
+`data.payload as Notification` → `title` ist `undefined` → `NotificationContext`
+verwirft die Meldung still, und das Icon bliebe grün.
+
+Die Produktivreferenz ist eindeutig: `services/notifications/service.py:184`
+ruft `broadcast_to_admins(notification.to_dict())` — roh, ohne Umschlag.
 
 Dann in `emit_sync` direkt nach `db.commit()` (Zeile 695) und **vor**
 `_send_push_sync`:
@@ -294,6 +306,20 @@ Dann in `emit_sync` direkt nach `db.commit()` (Zeile 695) und **vor**
 ```python
             self._broadcast_sync(notification)
 ```
+
+**Die gerouteten Nutzerkopien nicht vergessen.** `emit_sync` legt ab Zeile 718
+zusätzlich Pro-User-Kopien für geroutete Nicht-Admins an, mit eigenem
+`db.commit()` in Zeile 735. Der async-Pfad verteilt die mit
+(`service.py:_broadcast_to_recipients` bedient Admins *und*
+`get_routed_user_ids`). Ohne dieselbe Zeile in der Kopien-Schleife repariert
+dieser Task die Lücke nur für Admins:
+
+```python
+                self._broadcast_sync(user_copy)
+```
+
+Vor dem Schreiben den Rumpf ab Zeile 718 gegenlesen und die Zeile an die
+Stelle nach dem dortigen `db.commit()` setzen.
 
 - [ ] **Step 4: Loop beim Start binden**
 
@@ -304,8 +330,16 @@ In `backend/app/core/lifespan.py` neben Zeile 552:
     get_event_emitter().set_event_loop(asyncio.get_running_loop())
 ```
 
-**Vor dem Schreiben prüfen**, wie die Emitter-Instanz aus `events.py` bezogen
-wird — Fabrikfunktion oder Modulvariable — und den echten Namen einsetzen.
+Der Import gehört dazu; `lifespan.py:546` holt bisher nur `init_event_emitter`:
+
+```python
+from app.services.notifications.events import get_event_emitter
+```
+
+Die Fabrik heißt `get_event_emitter()` (`events.py:936`, Singleton `_event_emitter`
+in Z. 933). Dass der frühe Aufruf bei Z. 552 den Singleton anlegt, bevor
+`init_event_emitter(SessionLocal)` in Z. 671 ihn mit der DB-Factory versorgt,
+ist unkritisch — es ist dasselbe Objekt.
 
 - [ ] **Step 5: Tests laufen lassen**
 
@@ -413,13 +447,21 @@ def test_pairing_stores_the_refresh_token_jti():
     assert stored.get("jti") == "jti-123"
     assert stored.get("user_id") == 5
     assert stored.get("device_id") == "dev-1"
+    # Pflichtfelder der echten Signatur — ohne sie wirft die Produktion einen
+    # TypeError, waehrend ein kwargs-Stub gruen bleibt. Genau der Fehlertyp,
+    # den ein TDD-Plan nicht durchlassen darf.
+    assert stored.get("token") == "rt"
+    assert stored.get("expires_at") is not None
 ```
 
 **Vor dem Schreiben prüfen:** ob sich `poll_device_code` sinnvoll um einen
 Helfer `_issue_tokens(db, user, device_id)` herum aufteilen lässt oder ob der
-Test direkt gegen `poll_device_code` geführt werden muss. Maßgeblich für die
-Parameternamen ist die echte Signatur von `store_refresh_token`
-(`token_service.py:23`) — den Test daran ausrichten, nicht umgekehrt.
+Test direkt gegen `poll_device_code` geführt werden muss.
+
+**Besser als der kwargs-Stub:** ein Test, der `poll_device_code` mit einer
+echten Test-Session laufen lässt und danach die `RefreshToken`-Zeile abfragt.
+Dann kann kein Signaturfehler durchrutschen. Der Stub oben ist das Minimum,
+nicht das Ziel.
 
 - [ ] **Step 2: Test laufen lassen, Fehlschlag bestätigen**
 
@@ -428,30 +470,44 @@ Expected: FAIL — der jti wird nie weitergereicht
 
 - [ ] **Step 3: Minimal implementieren**
 
-In `backend/app/services/desktop_pairing.py` ergänzen:
+In `backend/app/services/desktop_pairing.py` ergänzen — **die Instanz, nicht
+das Modul**. `store_refresh_token` ist eine `@staticmethod` auf `TokenService`;
+benutzbar ist sie über das Singleton `token_service = TokenService()` am
+Dateiende (`token_service.py:295`). `from app.services import token_service`
+holte das Modulobjekt, das kein solches Attribut hat:
 
 ```python
-from app.services import token_service
+from app.core.config import settings
+from app.services.token_service import token_service
 ```
 
-Und an der Ausgabestelle (Zeile 122-123):
+`datetime`, `timedelta` und `timezone` sind bereits importiert (Zeile 5);
+`settings` ist es **nicht**.
+
+Und an der Ausgabestelle (Zeile 122-123). Die echte Signatur verlangt `token`
+und `expires_at` als Pflichtfelder (`token_service.py:23-31`):
 
 ```python
         access_token = create_access_token(user)
-        refresh_token, jti = create_refresh_token(user)
+        expires_delta = timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+        refresh_token, jti = create_refresh_token(user, expires_delta=expires_delta)
         # Without this row /auth/refresh rejects the token: is_token_revoked()
         # treats an unknown jti as revoked. A paired device would lose its
         # session when the access token expires and could never recover.
         token_service.store_refresh_token(
-            db,
+            db=db,
             jti=jti,
             user_id=user.id,
+            token=refresh_token,
+            expires_at=datetime.now(timezone.utc) + expires_delta,
             device_id=pairing.device_id,
         )
 ```
 
-Die tatsächlichen Parameternamen und weitere Pflichtfelder (Ablaufdatum,
-Gerätename, IP) aus `token_service.store_refresh_token` übernehmen.
+Vorbild ist der einzige vorhandene Produktivaufrufer, `mobile.py:287-295` — er
+koppelt Ablaufdatum und Token-TTL auf genau diese Weise. `pairing` steht an
+dieser Stelle zur Verfügung (das Objekt lebt ab Zeile 86, `db.delete(pairing)`
+folgt erst in Zeile 142).
 
 - [ ] **Step 4: Tests laufen lassen**
 
@@ -2566,7 +2622,7 @@ class Session:
 - [ ] **Step 4: Tests laufen lassen**
 
 Run: `cd backend && .venv/bin/pytest tests/tray/test_session.py -v`
-Expected: PASS (12 Tests)
+Expected: PASS (11 Tests — 3 davon aus der Parametrisierung von `test_ws_url`)
 
 - [ ] **Step 5: Committen**
 
@@ -3437,6 +3493,13 @@ serverseitig keinen Job gibt), verpasste Frames und Zählerdrift.
 Direkt aus `async def` gerufen blockieren sie den Socket-Read und damit die
 Zustellung.
 
+**Die Reihenfolge im Zyklus ist kein Zufall:** `ws_token()` läuft vor
+`load_snapshot()`. Ein abgelaufenes Access-Token schlägt deshalb dort zu und
+wird als `AuthExpired` behandelt. `load_snapshot()` fängt selbst alles ab und
+meldet nur `False`, woraus ein `TemporaryFailure` wird — ein 401 käme hier also
+nie als solcher an. Das ist in dieser Reihenfolge harmlos; wer sie später
+„aufräumt", muss den Fall neu bedenken.
+
 - [ ] **Step 1: Den fehlschlagenden Test schreiben**
 
 `backend/tests/tray/test_loop.py`:
@@ -3588,7 +3651,6 @@ def _ctx(frames, snapshot=None, gaming=False, then_idle=0) -> LoopContext:
         hold_probe=lambda: gaming,
         connect=lambda url: FakeSocket(frames, then_idle=then_idle),
         sleep=AsyncMock(),
-        seen=seen,
     )
 
 
@@ -3608,7 +3670,11 @@ async def test_cycle_loads_snapshot_before_reading_frames():
 @pytest.mark.asyncio
 async def test_idle_tick_drains_the_queue_without_any_frame():
     """Der Fall, der ohne Takt ewig haengt: nichts kommt mehr rein, das Spiel
-    ist vorbei, die zurueckgehaltene Meldung muss trotzdem raus."""
+    ist vorbei, die zurueckgehaltene Meldung muss trotzdem raus.
+
+    Das Flag kippt ueber hold_probe, nicht ueber sleep: run_cycle ruft sleep
+    nie -- das tut nur run_loop vor dem Backoff.
+    """
     ctx = _ctx(
         frames=[{"type": "notification",
                  "payload": {"id": 9, "notification_type": "critical",
@@ -3616,17 +3682,20 @@ async def test_idle_tick_drains_the_queue_without_any_frame():
         then_idle=2,
         gaming=True,
     )
-    holds = {"value": True}
-    ctx.hold_probe = lambda: holds["value"]
+    calls = {"n": 0}
 
-    async def _flip(*_args, **_kwargs):
-        holds["value"] = False
+    def _probe() -> bool:
+        calls["n"] += 1
+        return calls["n"] <= 1      # erster Aufruf: Spiel laeuft noch
 
-    ctx.sleep = _flip
+    ctx.hold_probe = _probe
+
     with pytest.raises(ConnectionError):
         await run_cycle(ctx)
 
+    # Ohne den Idle-Tick waere hier nie zugestellt worden.
     ctx.notifier.show.assert_awaited()
+    assert calls["n"] >= 2, "der Tick muss erneut gefragt haben"
 ```
 
 **Vor dem Schreiben:** Die Testhilfen oben setzen voraus, dass `LoopContext`
@@ -3742,7 +3811,6 @@ class LoopContext:
     connect: Callable[[str], Any]
     sleep: Callable[..., Any] = asyncio.sleep
     now: Callable[[], float] = time.monotonic
-    seen: list = field(default_factory=list)
 
 
 def _publish(ctx: LoopContext) -> None:
@@ -3801,6 +3869,25 @@ async def run_cycle(ctx: LoopContext) -> None:
             _publish(ctx)
 
 
+async def _give_up_pairing(ctx: LoopContext) -> None:
+    """Stop cleanly and say so.
+
+    The credentials go too: a device that was revoked must not keep a token
+    on disk. ws_token() can raise PairingLost without ever touching the
+    store, so forgetting happens here rather than only in refresh_access().
+    """
+    logger.warning("pairing lost — tray goes idle until re-paired")
+    await asyncio.to_thread(ctx.session.forget)
+    ctx.state.set_connected(False)
+    _publish(ctx)
+    try:
+        await ctx.notifier.show_summary(
+            "BaluHost", "Kopplung aufgehoben — bitte neu koppeln"
+        )
+    except Exception as exc:
+        logger.debug("pairing notice failed: %s", exc)
+
+
 async def run_loop(ctx: LoopContext) -> None:
     """Reconnect forever, with the failure classes kept apart.
 
@@ -3818,16 +3905,12 @@ async def run_loop(ctx: LoopContext) -> None:
                 await asyncio.to_thread(ctx.session.refresh_access)
                 continue
             except PairingLost:
-                logger.warning("pairing lost — tray goes idle until re-paired")
-                ctx.state.set_connected(False)
-                _publish(ctx)
+                await _give_up_pairing(ctx)
                 return
             except TemporaryFailure as exc:
                 logger.info("refresh temporarily unavailable: %s", exc)
         except PairingLost:
-            logger.warning("pairing lost — tray goes idle until re-paired")
-            ctx.state.set_connected(False)
-            _publish(ctx)
+            await _give_up_pairing(ctx)
             return
         except Exception as exc:
             logger.info("connection lost: %s", exc)
@@ -4072,9 +4155,21 @@ async def _should_hold(ctx: LoopContext) -> bool:
     return await asyncio.to_thread(ctx.hold_probe)
 ```
 
-und die drei Aufrufstellen in `run_cycle` darauf umstellen. Der
-`hold_probe`-Aufruf entfällt damit, solange stumm geschaltet ist — das spart
-zugleich die HTTP-Abfrage.
+`run_cycle` hat **genau eine** `hold_probe`-Stelle — die Zeile
+`hold = await asyncio.to_thread(ctx.hold_probe)` in der Frame-Schleife. Sie
+wird zu:
+
+```python
+                hold = await _should_hold(ctx)
+```
+
+Sonst gibt es keine. Solange stumm geschaltet ist, entfällt damit auch die
+HTTP-Abfrage ans Plugin.
+
+In `run_loop` gibt es **drei** `ctx.state.set_connected(False)`-Stellen: zwei in
+den `PairingLost`-Zweigen und eine vor dem Backoff. Das `went_offline` gehört
+**nur** an die vor dem Backoff — eine verlorene Kopplung ist kein
+Verbindungsabbruch und bekommt ihre eigene Meldung (siehe unten).
 
 - [ ] **Step 5: Tests laufen lassen**
 
@@ -4210,19 +4305,24 @@ from baluhost_tray import single_instance
 from baluhost_tray.notify import NotifierUnavailable
 
 DEFAULT_BASE_URL = "http://localhost:8000"
+# Die API liegt auf dem FastAPI-Port, die Web-UI hinter nginx. Wer :8000 im
+# Browser oeffnet, sieht die API. Deshalb zwei getrennte Adressen.
+DEFAULT_WEB_URL = "https://baluhost.local"
 TRAY_LOCK = "baluhost-tray"
 PAIR_LOCK = "baluhost-tray-pair"
 
 
-def start_qt_app(base_url: str) -> int:
+def start_qt_app(base_url: str, web_url: str) -> int:
     """Import Qt lazily so --pair and the tests work without PyQt6."""
     from baluhost_tray.tray import run_tray
 
-    return run_tray(base_url)
+    return run_tray(base_url, web_url)
 
 
 def run_pairing(base_url: str) -> int:
-    from baluhost_tray.tray import run_pairing_flow
+    # Aus pairing_cli, nicht aus tray: tray.py importiert PyQt6 auf
+    # Modulebene, und --pair soll ohne das Extra 'tray' funktionieren.
+    from baluhost_tray.pairing_cli import run_pairing_flow
 
     return run_pairing_flow(base_url)
 
@@ -4231,7 +4331,10 @@ def run(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="baluhost-tray")
     parser.add_argument("--pair", action="store_true",
                         help="Dieses Gerät mit BaluHost koppeln")
-    parser.add_argument("--base-url", default=DEFAULT_BASE_URL)
+    parser.add_argument("--base-url", default=DEFAULT_BASE_URL,
+                        help="API-Adresse des Backends")
+    parser.add_argument("--web-url", default=DEFAULT_WEB_URL,
+                        help="Adresse der Web-UI für Menü und Icon-Klick")
     args = parser.parse_args(argv)
 
     # Pairing takes its own lock so it works while the service is running.
@@ -4252,7 +4355,7 @@ def run(argv: list[str] | None = None) -> int:
         return 0
 
     try:
-        return start_qt_app(args.base_url)
+        return start_qt_app(args.base_url, args.web_url)
     except NotifierUnavailable:
         print("Keine Desktop-Sitzung gefunden — das Tray braucht ein "
               "laufendes Plasma mit D-Bus.")
@@ -4293,7 +4396,10 @@ from baluhost_tray.state import IconState, PopupQueue, TrayState
 
 MENU_OPEN = "BaluHost öffnen"
 MENU_QUIET = "Eine Stunde stumm"
-MENU_REPAIR = "Neu koppeln"
+# Bewusst nicht "Neu koppeln": der Menuepunkt kann die Kopplung nicht selbst
+# wiederherstellen — dafuer braucht es `baluhost-tray --pair` auf der Konsole.
+# Er oeffnet die Geraeteseite, und der Name sagt genau das.
+MENU_DEVICES = "Geräte in der Web-UI"
 MENU_QUIT = "Beenden"
 QUIET_SECONDS = 3600.0
 
@@ -4307,6 +4413,7 @@ class _Bridge(QObject):
 
     state_changed = pyqtSignal(str)   # IconState.value
     tooltip_changed = pyqtSignal(str)
+    fatal = pyqtSignal(str)           # Worker kann nicht weitermachen
 
 
 def _build_icons() -> dict[IconState, QIcon]:
@@ -4324,8 +4431,14 @@ def _build_icons() -> dict[IconState, QIcon]:
     return icons
 
 
-def run_tray(base_url: str) -> int:
-    """Start the Qt loop with the asyncio work on a worker thread."""
+def run_tray(base_url: str, web_url: str) -> int:
+    """Start the Qt loop with the asyncio work on a worker thread.
+
+    base_url is the API (FastAPI port), web_url is what a human should see —
+    behind nginx those are different, and opening :8000 in a browser shows
+    the API, not the UI.
+    """
+    from baluhost_tray.notify import NotifierUnavailable
     from baluhost_tray.announce import QuietMode
     from baluhost_tray.loop import LoopContext, is_gaming_active, run_loop
     from baluhost_tray.notify import Notifier
@@ -4334,6 +4447,11 @@ def run_tray(base_url: str) -> int:
 
     app = QApplication([])
     app.setQuitOnLastWindowClosed(False)
+
+    # Spec-Fehlerfall 5, zweite Haelfte: kein SNI-Host. Synchron pruefbar,
+    # anders als der Bus — deshalb hier und nicht im Worker.
+    if not QSystemTrayIcon.isSystemTrayAvailable():
+        raise NotifierUnavailable("no system tray in this session")
 
     icons = _build_icons()
     state = TrayState()
@@ -4349,22 +4467,36 @@ def run_tray(base_url: str) -> int:
     )
     bridge.tooltip_changed.connect(tray_icon.setToolTip)
 
+    def _open_web() -> None:
+        QDesktopServices.openUrl(QUrl(web_url))
+
     menu = QMenu()
-    open_action = menu.addAction(MENU_OPEN)
-    open_action.triggered.connect(
-        lambda: QDesktopServices.openUrl(QUrl(base_url))
-    )
+    menu.addAction(MENU_OPEN).triggered.connect(_open_web)
+
     quiet_action = menu.addAction(MENU_QUIET)
-    quiet_action.triggered.connect(
-        lambda: quiet.mute_for(QUIET_SECONDS, time.monotonic())
-    )
-    repair_action = menu.addAction(MENU_REPAIR)
-    repair_action.triggered.connect(
-        lambda: QDesktopServices.openUrl(QUrl(f"{base_url}/devices?pair=1"))
+    quiet_action.setCheckable(True)
+
+    def _toggle_quiet(checked: bool) -> None:
+        if checked:
+            quiet.mute_for(QUIET_SECONDS, time.monotonic())
+        else:
+            quiet.clear()
+
+    quiet_action.toggled.connect(_toggle_quiet)
+
+    menu.addAction(MENU_DEVICES).triggered.connect(
+        lambda: QDesktopServices.openUrl(QUrl(f"{web_url}/devices"))
     )
     menu.addSeparator()
     menu.addAction(MENU_QUIT).triggered.connect(app.quit)
     tray_icon.setContextMenu(menu)
+
+    # Spec, Nicht-Ziele: "Ein Klick auf das Icon oeffnet die Web-UI."
+    tray_icon.activated.connect(
+        lambda reason: _open_web()
+        if reason == QSystemTrayIcon.ActivationReason.Trigger
+        else None
+    )
     tray_icon.show()
 
     session = Session(base_url)
@@ -4374,10 +4506,24 @@ def run_tray(base_url: str) -> int:
         bridge.state_changed.emit(icon_state.value)
         bridge.tooltip_changed.emit(state.tooltip())
 
+    def _fatal(message: str) -> None:
+        # Ohne diesen Weg stirbt der Worker still und das Tray steht fuer
+        # immer auf grau, ohne dass jemand erfaehrt warum.
+        print(message)
+        app.quit()
+
+    bridge.fatal.connect(_fatal)
+
     async def _main() -> None:
         import websockets
 
-        await notifier.connect()
+        try:
+            await notifier.connect()
+        except NotifierUnavailable as exc:
+            bridge.fatal.emit(
+                f"Keine Desktop-Benachrichtigungen verfügbar: {exc}"
+            )
+            return
         ctx = LoopContext(
             session=session,
             watcher=Watcher(session, state),
@@ -4395,14 +4541,36 @@ def run_tray(base_url: str) -> int:
     return app.exec()
 
 
-def run_pairing_flow(base_url: str) -> int:
-    """Console pairing: print the code, poll until approved."""
-    from baluhost_tray import pairing
-    from baluhost_tray.config import save_tokens
-    from baluhost_tui.client import BackendClient
+```
 
+Und `backend/baluhost_tray/pairing_cli.py` — **eigene Datei, ohne Qt**, damit
+`--pair` ohne das Extra `tray` läuft:
+
+```python
+"""Console pairing flow.
+
+Separate from tray.py because that module imports PyQt6 at module level and
+`--pair` has to work on a box where the tray extra was never installed.
+"""
+
+from __future__ import annotations
+
+import time
+
+from baluhost_tray import pairing
+from baluhost_tray.config import save_tokens
+from baluhost_tui.client import BackendClient
+
+
+def run_pairing_flow(base_url: str) -> int:
+    """Print the code, poll until approved. Never a traceback."""
     client = BackendClient(server=base_url)
-    pending = pairing.start_pairing(client)
+    try:
+        pending = pairing.start_pairing(client)
+    except Exception as exc:
+        print(f"Kopplung konnte nicht gestartet werden: {exc}")
+        return 4
+
     print(f"Code: {pending.user_code}")
     print(f"Freigeben unter: {pending.verification_url}")
     print("Hinweis: zeigt der Link auf den Backend-Port, stattdessen die "
@@ -4410,7 +4578,14 @@ def run_pairing_flow(base_url: str) -> int:
 
     deadline = time.monotonic() + pending.expires_in
     while time.monotonic() < deadline:
-        tokens = pairing.poll_once(client, pending.device_code)
+        try:
+            tokens = pairing.poll_once(client, pending.device_code)
+        except pairing.PairingDenied:
+            print("Freigabe abgelehnt.")
+            return 4
+        except pairing.PairingExpired:
+            print("Code abgelaufen oder ungültig — bitte erneut versuchen.")
+            return 4
         if tokens:
             save_tokens(tokens)
             print("Gekoppelt.")
@@ -4433,13 +4608,23 @@ durchreicht.
 
 In `backend/pyproject.toml`:
 
+Die Sektion trägt bereits ein `exclude` — beim Ersetzen mitführen, sonst
+landen die Tests im Wheel:
+
 ```toml
 [tool.setuptools.packages.find]
 include = ["app*", "baluhost_tui*", "baluhost_tray*"]
+exclude = ["storage*", "tmp*", "tests*"]
 
 [tool.setuptools.package-data]
-baluhost_tray = ["icons/*.png"]
+"baluhost_tray.icons" = ["*.png"]
 ```
+
+Der punktierte Schlüssel ist der robustere: `baluhost_tray.icons` ist durch
+Task 15 ein eigenes Paket (`icons/__init__.py`), kein bloßes Unterverzeichnis.
+
+In den **vorhandenen** Abschnitt `[project.optional-dependencies]` ergänzen
+(nicht die Sektion ersetzen — dort stehen `dev`, `scheduler` und `cloud`):
 
 ```toml
 tray = [
@@ -4447,6 +4632,9 @@ tray = [
   "websockets>=12.0,<16.0"
 ]
 ```
+
+In den vorhandenen `[project.scripts]` ergänzen, neben `baluhost-backend`,
+`baluhost-tui` und `baluhost-sdk`:
 
 ```toml
 baluhost-tray = "baluhost_tray.main:cli"
@@ -4490,7 +4678,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 **Files:**
 - Create: `deploy/install/templates/baluhost-tray.service`
 - Modify: `deploy/install/modules/10-systemd-services.sh`
-- Create: `docs/features/desktop-tray.md`
+- Create: `docs/features/desktop-tray.de.md`, `docs/features/desktop-tray.en.md`
 - Test: `backend/tests/tray/test_unit_template.py`
 
 **Interfaces:**
@@ -4558,7 +4746,13 @@ def test_never_asks_for_root(text: str):
 def test_uses_the_repo_placeholder_convention(text: str):
     """@@KEY@@ plus process_template, nicht rohes sed."""
     assert "@@INSTALL_DIR@@" in text
+    assert "@@WEB_URL@@" in text
     assert "__INSTALL_DIR__" not in text
+
+
+def test_opens_the_web_ui_not_the_api_port(text: str):
+    """Die Unit startet ohne Argumente sonst immer mit dem Default."""
+    assert "--web-url" in text
 
 
 def test_does_not_thrash_when_unpaired(text: str):
@@ -4587,7 +4781,7 @@ ConditionPathExists=%h/.baluhost/tray-tokens.json
 
 [Service]
 Type=simple
-ExecStart=@@INSTALL_DIR@@/backend/.venv/bin/baluhost-tray
+ExecStart=@@INSTALL_DIR@@/backend/.venv/bin/baluhost-tray --web-url @@WEB_URL@@
 Restart=on-failure
 RestartSec=10s
 # Kein root, keine Rechteerweiterung: das Tray liest nur.
@@ -4632,7 +4826,8 @@ install_tray_user_unit() {
     process_template \
         "$TEMPLATE_DIR/baluhost-tray.service" \
         "$unit_dir/baluhost-tray.service" \
-        "INSTALL_DIR=$INSTALL_DIR"
+        "INSTALL_DIR=$INSTALL_DIR" \
+        "WEB_URL=${TRAY_WEB_URL:-https://baluhost.local}"
     chown "$target_user:$target_user" "$unit_dir/baluhost-tray.service"
 
     local uid runtime
@@ -4657,7 +4852,8 @@ Feature-Subskripte exportiert.
 
 - [ ] **Step 6: Dokumentation schreiben**
 
-`docs/features/desktop-tray.md` mit:
+`docs/features/desktop-tray.de.md` und `.en.md` — das Verzeichnis führt
+ausschließlich Sprachpaare, eine einzelne `.md` bräche die Konvention. Inhalt:
 
 - Was das Icon zeigt: vier Zustände, und ausdrücklich, dass **grün „nichts
   Ungelesenes" heißt und keine Gesundheitsaussage ist** — wer eine Meldung
@@ -4708,7 +4904,7 @@ Kein CI-Ersatz — diese Schritte muss ein Mensch sehen:
 - [ ] **Step 8: Committen**
 
 ```bash
-git add deploy/install/templates/baluhost-tray.service deploy/install/modules/10-systemd-services.sh docs/features/desktop-tray.md backend/tests/tray/test_unit_template.py
+git add deploy/install/templates/baluhost-tray.service deploy/install/modules/10-systemd-services.sh docs/features/desktop-tray.de.md docs/features/desktop-tray.en.md backend/tests/tray/test_unit_template.py
 git commit -m "feat(tray): Autostart als systemd-user-Unit, Installation und Doku
 
 Bewusst eine User-Unit an graphical-session.target: das Tray gehoert zur

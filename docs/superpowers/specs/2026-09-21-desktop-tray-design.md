@@ -131,12 +131,22 @@ vorhandenen `baluhost-tui` in derselben `pyproject.toml`.
 | `state.py` | Ungelesene Meldungen halten, Icon-Zustand ableiten, Warteschlange |
 | `notify.py` | `org.freedesktop.Notifications` über `dbus-next` |
 | `tray.py` | `QSystemTrayIcon`, Menü, Icon-Darstellung |
-| `config.py` | Erweiterung des TUI-Configs um refresh-Token und Einstellungen |
+| `config.py` | Eigener Token-Speicher (`~/.baluhost/tray-tokens.json`, `0600`) |
+| `pairing_cli.py` | Konsolen-Kopplung, bewusst ohne Qt |
 
 **Unverändert übernommen:** `baluhost_tui.client.BackendClient` (httpx,
-Bearer-Token, get/post/put/delete) und `baluhost_tui.config` (Token-Datei unter
-`~/.baluhost/` mit `0600`). Der Token-Speicher wird um das refresh-Token
-erweitert; heute hält `save_token()` nur einen einzelnen String.
+Bearer-Token, get/post/put/delete) — aufgerufen mit `server=`, nicht
+`base_url=`, sonst fällt `resolve_transport()` auf den Companion-Unix-Socket
+zurück.
+
+**Eigener Token-Speicher statt Erweiterung des TUI-Configs.** Dort hält
+`save_token()` einen einzelnen String; der Device-Code-Flow liefert access
+*und* refresh. Zwei Programme auf derselben Datei würden sich überschreiben,
+deshalb `~/.baluhost/tray-tokens.json`.
+
+**Adressen:** API und Web-UI sind nicht dasselbe — die API liegt auf dem
+FastAPI-Port, die Web-UI hinter nginx. Das Tray kennt beide getrennt
+(`--base-url`, `--web-url`); Menü und Icon-Klick öffnen die Web-UI.
 
 **Prozessmodell:** ein Prozess. Qt-Eventloop im Hauptthread, asyncio für
 WebSocket und D-Bus in einem Worker-Thread, Übergabe an die GUI über
@@ -188,8 +198,9 @@ binden würde.
 
 ## Datenfluss im Betrieb
 
-1. **Start:** Token laden, `GET /api/notifications` und
-   `GET /api/notifications/unread-count` → Anfangszustand → Icon.
+1. **Start:** Token laden, `GET /api/notifications?unread_only=true` →
+   Anfangszustand → Icon. Eine eigene Abfrage von `/unread-count` ist nicht
+   nötig: `NotificationListResponse` trägt `unread_count` bereits mit.
 2. **Live-Kanal:** `POST /api/notifications/ws-token` (60 s gültig, scoped) →
    WS `/api/notifications/ws?token=…`.
 3. **Eingehende Ereignisse:**
