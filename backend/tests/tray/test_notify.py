@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from baluhost_tray.notify import Notifier, NotifierUnavailable
+from baluhost_tray.notify import _APP_NAME, _TIMEOUT_MS, Notifier, NotifierUnavailable
 from baluhost_tray.state import PendingPopup
 
 
@@ -24,8 +24,9 @@ async def test_show_passes_title_and_message():
     )
 
     assert result == 42
-    args = notifier._iface.call_notify.await_args[0]
-    assert "RAID" in args and "degradiert" in args
+    assert notifier._iface.call_notify.await_args[0] == (
+        _APP_NAME, 0, "baluhost", "RAID", "degradiert", [], {}, _TIMEOUT_MS,
+    )
 
 
 @pytest.mark.asyncio
