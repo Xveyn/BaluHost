@@ -101,6 +101,27 @@ def _publish(ctx: LoopContext) -> None:
     ctx.sink(ctx.state.icon_state())
 
 
+def _parse_frame(raw: str) -> dict | None:
+    """Turn one raw frame into a dict, or None if it is unusable.
+
+    None means "carry on as if nothing arrived". The caller must not skip the
+    rest of the round over it: the resnapshot check, the queue drain and the
+    icon update all still have to happen. A `continue` here would skip all
+    three, and a stream of broken frames would starve the ten-minute cadence
+    and strand a held popup indefinitely.
+    """
+    try:
+        frame = json.loads(raw)
+    except ValueError as exc:
+        logger.warning("unparsable frame ignored: %s", exc)
+        return None
+    if not isinstance(frame, dict):
+        # Valid JSON of the wrong shape — handle_frame() would raise on .get().
+        logger.warning("frame is not an object, ignored: %s", type(frame).__name__)
+        return None
+    return frame
+
+
 async def run_cycle(ctx: LoopContext) -> None:
     """One connect-consume cycle. Returning or raising means: reconnect.
 
@@ -132,12 +153,10 @@ async def run_cycle(ctx: LoopContext) -> None:
             popups: list[PendingPopup] = []
 
             if raw is not None:
-                try:
-                    frame = json.loads(raw)
-                except ValueError:
-                    continue
-                result = ctx.watcher.handle_frame(frame)
-                popups, reload_needed = result.popups, result.reload_needed
+                frame = _parse_frame(raw)
+                if frame is not None:
+                    result = ctx.watcher.handle_frame(frame)
+                    popups, reload_needed = result.popups, result.reload_needed
 
             due = ctx.now() - last_snapshot >= RESNAPSHOT_SECONDS
             if reload_needed or due:
@@ -175,29 +194,54 @@ async def _give_up_pairing(ctx: LoopContext) -> None:
 async def run_loop(ctx: LoopContext) -> None:
     """Reconnect forever, with the failure classes kept apart.
 
-    A 401 is worth one refresh and another try. A rate limit or a server
-    error is worth a backoff. Only a lost pairing stops the loop — and even
-    then it stops by going grey, not by killing the thread silently.
+    A 401 is worth one refresh and another try — one, counted, not "every
+    time round". A rate limit or a server error is worth a backoff. Only a
+    lost pairing stops the loop — and even then it stops by going grey, not
+    by killing the thread silently.
     """
     attempt = 0
+    refreshed = False
+
     while True:
+        # run_cycle never returns normally — its inner loop has no break and
+        # no return, so every exit is an exception. The attempt counter
+        # therefore cannot be reset "on success"; how long the cycle held is
+        # the only evidence of health we get. Surviving a full idle tick means
+        # the socket was open and quiet, which is exactly what a healthy
+        # connection looks like.
+        started = ctx.now()
+
         try:
             await run_cycle(ctx)
-            attempt = 0
         except AuthExpired:
-            try:
-                await asyncio.to_thread(ctx.session.refresh_access)
-                continue
-            except PairingLost:
-                await _give_up_pairing(ctx)
-                return
-            except TemporaryFailure as exc:
-                logger.info("refresh temporarily unavailable: %s", exc)
+            if refreshed:
+                # Already spent this round's refresh and the token is still
+                # refused. Trying again would spin without ever sleeping and
+                # burn the ws-token rate limit the pairing depends on.
+                logger.info("access refused again after a refresh — backing off")
+            else:
+                try:
+                    await asyncio.to_thread(ctx.session.refresh_access)
+                    refreshed = True
+                    continue
+                except PairingLost:
+                    await _give_up_pairing(ctx)
+                    return
+                except TemporaryFailure as exc:
+                    logger.info("refresh temporarily unavailable: %s", exc)
         except PairingLost:
             await _give_up_pairing(ctx)
             return
         except Exception as exc:
             logger.info("connection lost: %s", exc)
+
+        if ctx.now() - started >= TICK_SECONDS:
+            # Held long enough to count as healthy: start the backoff over,
+            # and hand back the refresh this round was allowed. Without this
+            # a tray that runs for days ends up permanently at the cap and
+            # waits a minute before every reconnect.
+            attempt = 0
+            refreshed = False
 
         ctx.state.set_connected(False)
         _publish(ctx)
