@@ -69,13 +69,24 @@ class Watcher:
             logger.warning("snapshot refused: %s", response.status_code)
             return False
 
-        body = response.json()
-        items = [
-            (int(raw["id"]), str(raw.get("notification_type", "")))
-            for raw in body.get("notifications", [])
-            if not raw.get("is_read")
-        ]
-        self._state.apply_snapshot(items)
+        try:
+            body = response.json()
+            items = [
+                (int(raw["id"]), str(raw.get("notification_type", "")))
+                for raw in body.get("notifications", [])
+                if not raw.get("is_read")
+            ]
+            self._state.apply_snapshot(items)
+        except (ValueError, KeyError, TypeError) as exc:
+            # A 200 with broken JSON or a row missing "id" is still not a
+            # success -- the -> bool contract covers parsing, not just the
+            # transport. Kept as its own except (and its own log line, not
+            # the "refused" one above) so the two failure modes stay
+            # distinguishable in the log. A bare programming mistake
+            # (AttributeError from a typo) is deliberately not caught here
+            # and keeps propagating.
+            logger.warning("snapshot body unusable: %s", exc)
+            return False
 
         reported = body.get("unread_count")
         if isinstance(reported, int) and reported != len(items):

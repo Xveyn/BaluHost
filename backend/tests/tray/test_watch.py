@@ -2,8 +2,6 @@
 
 from unittest.mock import MagicMock
 
-import pytest
-
 from baluhost_tray.state import IconState, TrayState
 from baluhost_tray.watch import Watcher, backoff_delays
 
@@ -63,6 +61,28 @@ def test_snapshot_fills_state():
 def test_snapshot_failure_is_reported_not_swallowed():
     """429 darf nicht als 'verbunden, alles gut' durchgehen."""
     watcher, _, _ = _watcher([], status=429)
+    assert watcher.load_snapshot() is False
+
+
+def test_snapshot_transport_error_is_reported_not_raised():
+    """Ein Transportfehler beim GET muss load_snapshot() nicht verlassen."""
+    session = MagicMock()
+    session.client.return_value.get.side_effect = OSError("connection refused")
+    state = TrayState()
+    state.set_connected(True)
+    watcher = Watcher(session, state)
+    assert watcher.load_snapshot() is False
+
+
+def test_snapshot_malformed_body_is_reported_not_raised():
+    """Eine 200-Antwort mit kaputtem Inhalt ist ein Fehlschlag, kein Absturz.
+
+    Hier fehlt das 'id'-Feld -- derselbe Schutz deckt auch json(), das
+    einen Fehler wirft."""
+    watcher, _, _ = _watcher([
+        {"notification_type": "critical", "is_read": False,
+         "title": "x", "message": "y"},
+    ])
     assert watcher.load_snapshot() is False
 
 
