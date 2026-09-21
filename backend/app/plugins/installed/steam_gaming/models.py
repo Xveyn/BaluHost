@@ -4,7 +4,7 @@ NB: no ``from __future__ import annotations`` - see routes.py.
 """
 from typing import List, Literal, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class LaunchableGame(BaseModel):
@@ -28,3 +28,11 @@ class LaunchResponse(BaseModel):
     status: Literal["requested"]
     # Read after the sequence; None when logind cannot tell.
     session_locked: Optional[bool]
+
+
+class SessionStateResponse(BaseModel):
+    """Whether a gaming session is on screen right now."""
+
+    gaming_active: bool = Field(
+        ..., description="A game is running or gaming mode is up, and a display is lit"
+    )

@@ -12,6 +12,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Request, Response, status
 from sqlalchemy.orm import Session
 
+from app.api import deps
 from app.api.deps import require_power_launch_games
 from app.core.database import get_db
 from app.core.exceptions import (
@@ -29,6 +30,7 @@ from app.plugins.installed.steam_gaming.models import (
     LaunchableGame,
     LaunchResponse,
     RunningGame,
+    SessionStateResponse,
 )
 from app.schemas.user import UserPublic
 from app.services.audit.logger_db import get_audit_logger_db
@@ -172,3 +174,39 @@ async def launch_installed_game(
         {"app_id": game.app_id, "failed_step": None}, client_host,
     )
     return LaunchResponse(status="requested", session_locked=await current_lock_state())
+
+
+@router.get("/session-state", response_model=SessionStateResponse)
+@user_limiter.limit(_READ_LIMIT)
+async def session_state(
+    request: Request,
+    response: Response,
+    current_user=Depends(deps.get_current_user),
+) -> SessionStateResponse:
+    """Whether a gaming session is on screen - the tray gates popups on this.
+
+    Not gaming_mode_on_screen(): its marker means "*we* started gaming mode"
+    (see CLAUDE.md), so a game launched straight from Steam would not count -
+    which is the common case. game_is_running() is the real source, the marker
+    stays as a second path for Big Picture, and the lit-display requirement is
+    what lets an abandoned session expire on its own.
+
+    Behind get_current_user, not require_power_launch_games: this returns a
+    single boolean the tray polls before every popup, and gating it on the
+    launch right would hand the tray the ability to start games.
+
+    Reads a marker file and sysfs, so it runs off the event loop. Any read
+    error counts as "not gaming": rather one notification too many than a
+    swallowed alarm.
+    """
+    from app.services.power import gaming_presence
+
+    def _probe() -> bool:
+        active = gaming_presence.game_is_running() or gaming_presence._marker_is_active()
+        return bool(active and gaming_presence.displays_on())
+
+    try:
+        active = await asyncio.to_thread(_probe)
+    except Exception:
+        active = False
+    return SessionStateResponse(gaming_active=active)
