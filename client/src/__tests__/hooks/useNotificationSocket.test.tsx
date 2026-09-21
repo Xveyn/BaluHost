@@ -268,3 +268,55 @@ describe('sending', () => {
     expect(FakeWebSocket.last!.sent).toHaveLength(0);
   });
 });
+
+describe('notification_state frames', () => {
+  it('reicht einen notification_state-Frame an den Handler weiter', async () => {
+    const onNotificationState = vi.fn();
+    await mount({ onNotificationState });
+
+    await act(async () => {
+      FakeWebSocket.last!.serverAccept();
+    });
+    await act(async () => {
+      FakeWebSocket.last!.serverSend({
+        type: 'notification_state',
+        payload: { ids: [7, 8], action: 'read' },
+      });
+    });
+
+    expect(onNotificationState).toHaveBeenCalledWith([7, 8], 'read');
+  });
+
+  it('uebersteht einen notification_state-Frame ohne Handler', async () => {
+    await mount({});
+
+    await act(async () => {
+      FakeWebSocket.last!.serverAccept();
+    });
+    await act(async () => {
+      FakeWebSocket.last!.serverSend({
+        type: 'notification_state',
+        payload: { ids: [1], action: 'deleted' },
+      });
+    });
+
+    expect(screen.getByTestId('connected').textContent).toBe('verbunden');
+  });
+
+  it('nimmt eine Sammelaktion ohne ids entgegen', async () => {
+    const onNotificationState = vi.fn();
+    await mount({ onNotificationState });
+
+    await act(async () => {
+      FakeWebSocket.last!.serverAccept();
+    });
+    await act(async () => {
+      FakeWebSocket.last!.serverSend({
+        type: 'notification_state',
+        payload: { ids: [], action: 'read_all' },
+      });
+    });
+
+    expect(onNotificationState).toHaveBeenCalledWith([], 'read_all');
+  });
+});

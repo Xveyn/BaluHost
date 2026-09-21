@@ -17,6 +17,7 @@ export interface UseNotificationSocketOptions {
   enabled?: boolean;
   onNotification?: (notification: Notification) => void;
   onUnreadCountChange?: (count: number) => void;
+  onNotificationState?: (ids: number[], action: string) => void;
   reconnectDelay?: number;
   maxReconnectAttempts?: number;
 }
@@ -26,6 +27,7 @@ export function useNotificationSocket(options: UseNotificationSocketOptions = {}
     enabled = true,
     onNotification,
     onUnreadCountChange,
+    onNotificationState,
     reconnectDelay = 3000,
     maxReconnectAttempts = 5,
   } = options;
@@ -51,6 +53,7 @@ export function useNotificationSocket(options: UseNotificationSocketOptions = {}
   const maxReconnectAttemptsRef = useRef(maxReconnectAttempts);
   const onNotificationRef = useRef(onNotification);
   const onUnreadCountChangeRef = useRef(onUnreadCountChange);
+  const onNotificationStateRef = useRef(onNotificationState);
 
   // Sync refs on every render
   useEffect(() => { tokenRef.current = token; }, [token]);
@@ -59,6 +62,7 @@ export function useNotificationSocket(options: UseNotificationSocketOptions = {}
   useEffect(() => { maxReconnectAttemptsRef.current = maxReconnectAttempts; }, [maxReconnectAttempts]);
   useEffect(() => { onNotificationRef.current = onNotification; }, [onNotification]);
   useEffect(() => { onUnreadCountChangeRef.current = onUnreadCountChange; }, [onUnreadCountChange]);
+  useEffect(() => { onNotificationStateRef.current = onNotificationState; }, [onNotificationState]);
 
   const connect = useCallback(async () => {
     if (!enabledRef.current || !tokenRef.current) return;
@@ -125,6 +129,13 @@ export function useNotificationSocket(options: UseNotificationSocketOptions = {}
                 unreadCount: count,
               }));
               onUnreadCountChangeRef.current?.(count);
+              break;
+            }
+
+            case 'notification_state': {
+              const ids = (data.payload?.ids ?? []) as number[];
+              const action = data.payload?.action as string;
+              onNotificationStateRef.current?.(ids, action);
               break;
             }
 
