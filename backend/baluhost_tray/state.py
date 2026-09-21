@@ -104,13 +104,19 @@ class PopupQueue:
     def is_empty(self) -> bool:
         return not self._held
 
-    def release(self) -> list[PendingPopup]:
-        """Return everything held and forget it."""
+    def release(self) -> tuple[list[PendingPopup], tuple[str, str] | None]:
+        """Return everything held plus the summary, and forget it.
+
+        Summary and content come back together on purpose: computing the
+        summary after clearing would always yield None, and a caller that got
+        the order wrong would silently lose it.
+        """
+        summary = self._compute_summary()
         items = list(self._held.values())
         self._held.clear()
-        return items
+        return items, summary
 
-    def summary(self) -> tuple[str, str] | None:
+    def _compute_summary(self) -> tuple[str, str] | None:
         """One line instead of a burst, once it would be a burst."""
         if len(self._held) < SUMMARY_THRESHOLD:
             return None

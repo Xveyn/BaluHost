@@ -109,7 +109,7 @@ def test_release_returns_and_clears():
     queue = PopupQueue()
     queue.hold(_popup(1))
     queue.hold(_popup(2))
-    released = queue.release()
+    released, summary = queue.release()
     assert [p.notification_id for p in released] == [1, 2]
     assert queue.is_empty()
 
@@ -118,14 +118,17 @@ def test_below_threshold_no_summary():
     queue = PopupQueue()
     for n in (1, 2, 3):
         queue.hold(_popup(n))
-    assert queue.summary() is None
+    released, summary = queue.release()
+    assert summary is None
 
 
 def test_at_threshold_summarises():
     queue = PopupQueue()
     for n in (1, 2, 3, 4):
         queue.hold(_popup(n))
-    title, message = queue.summary()
+    released, summary = queue.release()
+    assert summary is not None
+    title, message = summary
     assert "4" in title or "4" in message
 
 
@@ -134,4 +137,27 @@ def test_same_notification_held_once():
     queue = PopupQueue()
     queue.hold(_popup(1))
     queue.hold(_popup(1))
-    assert len(queue.release()) == 1
+    released, _ = queue.release()
+    assert len(released) == 1
+
+
+def test_deduplication_keeps_first_entry():
+    """Bei Entdopplung wird der erste Eintrag behalten, nicht der letzte."""
+    queue = PopupQueue()
+    first = PendingPopup(notification_id=1, title="Erster", message="Text 1")
+    second = PendingPopup(notification_id=1, title="Zweiter", message="Text 2")
+    queue.hold(first)
+    queue.hold(second)
+    released, _ = queue.release()
+    assert len(released) == 1
+    assert released[0].title == "Erster"
+
+
+def test_second_release_empty():
+    """Ein zweites release() direkt danach liefert leere Liste und None."""
+    queue = PopupQueue()
+    queue.hold(_popup(1))
+    queue.release()
+    released, summary = queue.release()
+    assert released == []
+    assert summary is None
