@@ -3273,11 +3273,14 @@ ImageMagick-Version eigenwillig; für Vergleichsbilder `montage` benutzen.
 ```markdown
 # Tray-Icons
 
-Abgeleitet aus `client/src-tauri/icons/icon.png` (1024²). Das dunkle
+Abgeleitet aus `client/src/assets/baluhost-logo.png` (256²). Das dunkle
 Hintergrundquadrat ist entfernt, sonst säße die Katze im Panel in einem Kasten.
 
-`client/public/baluhost-logo.svg` ist **nicht** die Quelle: 1,2 MB, ein
-nachgezeichnetes Bitmap mit tausenden Pfadpunkten.
+Zwei Dateien, die **nicht** taugen:
+- `client/src-tauri/icons/icon.png` — trotz 1024×1024 RGBA ein
+  Tauri-Platzhalter: genau eine Farbe, ein blaues Quadrat ohne Motiv.
+- `client/public/baluhost-logo.svg` — 1,2 MB, ein nachgezeichnetes Bitmap mit
+  tausenden Pfadpunkten, kein echtes Vektor-Logo.
 
 Zustände: `ok` (Katze pur) · `warning` (gelber Punkt unten rechts) ·
 `critical` (roter Punkt) · `offline` (entsättigt). Der Zustand steckt im
