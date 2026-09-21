@@ -2967,7 +2967,7 @@ Expected: PASS (11 Tests)
 
 ```bash
 git add backend/baluhost_tray/watch.py backend/tests/tray/test_watch.py
-git commit -m "feat(tray): WebSocket-Beobachter mit Snapshot, Puffer und Backoff
+git commit -m "feat(tray): WebSocket-Beobachter mit Snapshot und Backoff
 
 Der Snapshot fragt unread_only an -- sonst liefert die Route alles
 neueste zuerst, bei 100 gedeckelt, und eine aeltere ungelesene Meldung
