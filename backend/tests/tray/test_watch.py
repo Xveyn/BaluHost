@@ -1,5 +1,6 @@
 """Tests for the tray's websocket watcher — ordering, snapshot, backoff."""
 
+import logging
 from unittest.mock import MagicMock
 
 from baluhost_tray.state import IconState, TrayState
@@ -249,3 +250,47 @@ def test_frame_with_null_id_is_ignored():
     })
     assert outcome.popups == []
     assert state.unread_count() == 0
+
+
+def test_bulk_actions_match_the_server_side_set():
+    """Zwei Listen derselben Wahrheit, ohne Kopplung — hier ist die Kopplung.
+
+    Kaeme serverseitig eine neue Sammelaktion dazu, behandelte das Tray sie
+    still als Einzelaktion mit leerer ID-Liste: kein Reload, veraltete Farbe,
+    und nichts faellt auf. Die Fehlermeldung sagt deshalb, welche Aktion auf
+    welcher Seite fehlt.
+    """
+    from app.api.routes._notification_fanout import BULK_ACTIONS as SERVER_SIDE
+    from baluhost_tray.watch import BULK_ACTIONS as TRAY_SIDE
+
+    assert TRAY_SIDE == SERVER_SIDE, (
+        f"nur im Server: {sorted(SERVER_SIDE - TRAY_SIDE)}; "
+        f"nur im Tray: {sorted(TRAY_SIDE - SERVER_SIDE)}"
+    )
+
+
+def test_a_page_that_does_not_hold_all_unread_is_reported(caplog):
+    """Die Seite fasst 100 Zeilen, der Server zaehlt mehr.
+
+    Dann steht im Zustand weniger, als offen ist — das Symbol kann gruen
+    werden, waehrend der Server Ungelesenes hat. Die Zahl des Servers ist
+    seine eigene Antwort und damit die Wahrheit ueber unsere Seite; die
+    Abweichung gehoert deshalb ins Log, statt unbemerkt zu bleiben.
+    """
+    session = MagicMock()
+    response = MagicMock()
+    response.status_code = 200
+    response.json.return_value = {
+        "notifications": [
+            {"id": 1, "notification_type": "critical", "is_read": False},
+        ],
+        "unread_count": 150,
+    }
+    session.client.return_value.get.return_value = response
+    watcher = Watcher(session, TrayState())
+
+    with caplog.at_level(logging.INFO, logger="baluhost_tray.watch"):
+        assert watcher.load_snapshot() is True
+
+    messages = [record.getMessage() for record in caplog.records]
+    assert any("150" in message for message in messages), messages

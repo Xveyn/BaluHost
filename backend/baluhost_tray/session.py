@@ -64,16 +64,27 @@ class Session:
             return response.json()["token"]
         if code == 401:
             raise AuthExpired("ws-token rejected the access token")
-        if code == 429 or code >= 500:
-            raise TemporaryFailure(f"ws-token unavailable: {code}")
-        raise PairingLost(f"ws-token refused: {code}")
+        if code == 403:
+            # The only answer that actually says "you may not": 403 is what a
+            # revoked device gets. Everything else is backed off, never
+            # unpaired — see refresh_access() for why that asymmetry matters.
+            raise PairingLost(f"ws-token refused: {code}")
+        raise TemporaryFailure(f"ws-token unavailable: {code}")
 
     def refresh_access(self) -> None:
         """Exchange the refresh token for a fresh access token.
 
         The server does not rotate the refresh token (see TokenResponse), so
-        the stored one is kept. Only a 401 means the pairing is gone; a rate
-        limit must not delete credentials.
+        the stored one is kept. Only 401 and 403 mean the pairing is gone;
+        everything else is temporary and must not delete credentials.
+
+        The old `if code != 200: forget()` was far wider than the spec ("a
+        refresh rejected with 401"): a 404 from a proxy that does not pass the
+        path through, or a 422 after a schema change, wiped
+        ~/.baluhost/tray-tokens.json. That same file is the unit's
+        ConditionPathExists, so the next start reports "condition failed" and
+        it looks as though the tray had never been set up — recoverable only
+        by a human running --pair again.
         """
         tokens = tray_config.load_tokens()
         if not tokens:
@@ -87,11 +98,11 @@ class Session:
             raise TemporaryFailure(f"refresh unavailable: {exc}") from exc
         code = response.status_code
 
-        if code == 429 or code >= 500:
-            raise TemporaryFailure(f"refresh unavailable: {code}")
-        if code != 200:
+        if code in (401, 403):
             self.forget()
             raise PairingLost(f"refresh refused: {code}")
+        if code != 200:
+            raise TemporaryFailure(f"refresh unavailable: {code}")
 
         data = response.json()
         new_tokens = tray_config.Tokens(

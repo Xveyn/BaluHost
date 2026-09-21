@@ -88,6 +88,18 @@ def test_tooltip_counts_unread_without_promising_health():
     assert state.tooltip() == "BaluHost — nichts Ungelesenes"
 
 
+def test_tooltip_uses_the_singular_for_exactly_one():
+    """Eine einzelne Meldung ist der haeufigste Fall und war ungedeckt.
+
+    Der Plural-Zweig stand unter Test, der Singular-Zweig nicht — "1
+    ungelesene Meldungen" waere niemandem aufgefallen.
+    """
+    state = TrayState()
+    state.set_connected(True)
+    state.apply_snapshot([(1, "critical")])
+    assert state.tooltip() == "BaluHost — 1 ungelesene Meldung"
+
+
 def test_tooltip_says_offline_when_disconnected():
     state = TrayState()
     state.set_connected(False)

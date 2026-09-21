@@ -23,7 +23,15 @@ logger = logging.getLogger(__name__)
 
 GAMING_PATH = "/api/plugins/steam_gaming/session-state"
 TICK_SECONDS = 30.0
+# Wie oft das Gaming-Gate hoechstens gefragt wird. Zahlengleich mit
+# TICK_SECONDS, aber eine eigene Groesse: der Takt bestimmt, wie lange auf
+# einen Frame gewartet wird, diese Zahl, wie alt eine Antwort sein darf.
+GAMING_PROBE_SECONDS = 30.0
 RESNAPSHOT_SECONDS = 600.0
+# Wie lange nach einem Refresh kein zweiter versucht wird. Die Bremse
+# verhindert das Kreisen ohne sleep(); dass sie wieder aufgeht, verhindert den
+# Zustand ohne Ausweg — siehe run_loop.
+REFRESH_COOLDOWN_SECONDS = 300.0
 
 
 def is_gaming_active(client) -> bool:
@@ -32,10 +40,27 @@ def is_gaming_active(client) -> bool:
     Anything other than a clear yes counts as "not gaming": the plugin can be
     disabled, in which case the route is simply absent. Rather one
     notification too many than a swallowed alarm.
+
+    "Not gaming" is the right answer for 404 and the wrong one for 401, 403
+    and 429 — those do not mean "no game", they mean "I was not allowed to
+    ask". The consequence is precisely what the gate exists to prevent
+    (popups over a fullscreen game), so those get a line loud enough to find
+    in the journal. 403 is in that set because the route now refuses requests
+    from outside the LAN: a tray reaching the backend over a non-local address
+    would otherwise disable its own gate in complete silence. A missing plugin
+    stays at debug: that is a normal state, and a warning per tick would be
+    permanent noise.
     """
     try:
         response = client.get(GAMING_PATH)
-        if response.status_code != 200:
+        code = response.status_code
+        if code != 200:
+            if code in (401, 403, 429):
+                logger.warning(
+                    "gaming probe refused with %s — popups are no longer gated", code
+                )
+            else:
+                logger.debug("gaming probe answered %s, treating as not gaming", code)
             return False
         return bool(response.json().get("gaming_active", False))
     except Exception as exc:
@@ -70,7 +95,12 @@ async def deliver(
                 await notifier.show_summary(*summary)
             except Exception as exc:
                 logger.warning("summary delivery failed: %s", exc)
-                for popup in released:
+                # `pending` gehoert hier genauso zurueck wie `released`: die
+                # neu eingetroffenen Popups sind nie gezeigt worden, und die
+                # Zusage der Docstring gilt fuer alles, was diese Runde in der
+                # Hand hatte. Nur `released` zurueckzulegen loeschte genau die
+                # Meldung, die gerade erst entstanden ist.
+                for popup in released + pending:
                     queue.hold(popup)
                 return
         else:
@@ -104,6 +134,13 @@ class LoopContext:
     # and uses it to decide whether the cycle counts as healthy. It is not an
     # input — callers leave it alone.
     connected_at: float | None = None
+
+    # Last gaming probe and its answer. _should_hold writes both; like
+    # connected_at they are bookkeeping, not inputs. Kept on the context
+    # rather than in a module global so two trays in one process (the tests)
+    # cannot throttle each other.
+    probed_at: float | None = None
+    probe_held: bool = False
 
 
 def _publish(ctx: LoopContext) -> None:
@@ -148,10 +185,25 @@ async def _should_hold(ctx: LoopContext) -> bool:
 
     Quiet mode is checked first and short-circuits the probe: while muted,
     the HTTP round trip to the gaming plugin never happens.
+
+    The probe itself is asked at most every GAMING_PROBE_SECONDS, because the
+    caller sits in the frame loop: while anything is queued during a gaming
+    session, *every* incoming frame would otherwise cost an HTTP round trip,
+    including the uninteresting unread_count and notification_state ones. A
+    burst — someone clearing 30 notifications one by one in the web UI, about
+    60 frames — would blow the steam_games_read limit (60/min, per user,
+    shared with GET /games, which BaluApp uses). Between two probes the last
+    answer stands: at worst a popup waits half a minute longer, which is the
+    cadence the design promises anyway.
     """
-    if ctx.quiet.is_muted(ctx.now()):
+    now = ctx.now()
+    if ctx.quiet.is_muted(now):
         return True
-    return await asyncio.to_thread(ctx.hold_probe)
+    if ctx.probed_at is not None and now - ctx.probed_at < GAMING_PROBE_SECONDS:
+        return ctx.probe_held
+    ctx.probed_at = now
+    ctx.probe_held = await asyncio.to_thread(ctx.hold_probe)
+    return ctx.probe_held
 
 
 async def run_cycle(ctx: LoopContext) -> None:
@@ -250,9 +302,15 @@ async def run_loop(ctx: LoopContext) -> None:
     time round". A rate limit or a server error is worth a backoff. Only a
     lost pairing stops the loop — and even then it stops by going grey, not
     by killing the thread silently.
+
+    The refresh brake reopens after REFRESH_COOLDOWN_SECONDS. A healthy cycle
+    hands it back too, but a tray whose refreshed access token keeps getting
+    refused never *has* a healthy cycle: it would sit in the sixty-second
+    backoff forever and never ask for a fresh token again — the one thing
+    that could save it. Time, not health, is what has to reopen that door.
     """
     attempt = 0
-    refreshed = False
+    refreshed_at: float | None = None
 
     while True:
         # run_cycle never returns normally — its inner loop has no break and
@@ -272,15 +330,20 @@ async def run_loop(ctx: LoopContext) -> None:
         try:
             await run_cycle(ctx)
         except AuthExpired:
-            if refreshed:
+            spent = (
+                refreshed_at is not None
+                and ctx.now() - refreshed_at < REFRESH_COOLDOWN_SECONDS
+            )
+            if spent:
                 # Already spent this round's refresh and the token is still
-                # refused. Trying again would spin without ever sleeping and
-                # burn the ws-token rate limit the pairing depends on.
+                # refused. Trying again right away would spin without ever
+                # sleeping and burn the ws-token rate limit the pairing
+                # depends on — but only right away: the cooldown expires.
                 logger.info("access refused again after a refresh — backing off")
             else:
                 try:
                     await asyncio.to_thread(ctx.session.refresh_access)
-                    refreshed = True
+                    refreshed_at = ctx.now()
                     continue
                 except PairingLost:
                     await _give_up_pairing(ctx)
@@ -314,7 +377,7 @@ async def run_loop(ctx: LoopContext) -> None:
             # this a tray that runs for days ends up permanently at the cap
             # and waits a minute before every reconnect.
             attempt = 0
-            refreshed = False
+            refreshed_at = None
 
         ctx.state.set_connected(False)
         gone = ctx.announcer.went_offline(ctx.now())

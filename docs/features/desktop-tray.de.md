@@ -194,6 +194,22 @@ sudo TRAY_DESKTOP_USER=sven TRAY_WEB_URL=https://baluhost.local ./install.sh
 Steht kein Desktop-Benutzer fest, meldet der Installer das und ueberspringt
 den Schritt, statt die Unit in ein falsches Home zu schreiben.
 
+> **Der Autostart kann fehlen, obwohl die Unit da ist.** Aktivieren laesst
+> sich eine User-Unit nur aus einer laufenden Sitzung des Zielbenutzers
+> heraus. Bei einer Erstinstallation per SSH als root gibt es die nicht —
+> das ist der Normalfall, nicht die Ausnahme. Die Unit liegt dann zwar in
+> `~/.config/systemd/user/`, aber `systemctl --user enable` ist nie gelaufen,
+> es gibt keinen Symlink in `graphical-session.target.wants/`, und
+> `WantedBy=` bleibt wirkungslos. Der Installer sagt das als **Warnung**.
+> Einmal nachholen, angemeldet als der Zielbenutzer:
+>
+> ```bash
+> systemctl --user enable baluhost-tray.service
+> ```
+>
+> Ob es noetig ist, beantwortet `systemctl --user status baluhost-tray` —
+> Punkt 15 der Abnahme unten prueft genau das.
+
 ### Einmalig: das Extra `[tray]` nachinstallieren
 
 Das venv der Installation enthaelt das Extra **nicht**. Das ist Absicht: Qt

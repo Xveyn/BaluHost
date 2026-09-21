@@ -74,6 +74,24 @@ def test_ws_token_500_is_temporary():
         _session(_response(503)).ws_token()
 
 
+def test_ws_token_403_loses_the_pairing():
+    """Ein ausdrueckliches Verbot ist der eine Fall, der die Kopplung kostet."""
+    with pytest.raises(PairingLost):
+        _session(_response(403)).ws_token()
+
+
+@pytest.mark.parametrize("code", [400, 404, 422])
+def test_ws_token_unexpected_codes_are_temporary(code):
+    """Falsche --base-url, ein Proxy ohne diesen Pfad, ein Schema-Wechsel.
+
+    Alles davon sah frueher aus wie ein Widerruf und loeschte die Token —
+    danach meldet die Unit wegen `ConditionPathExists` nur noch
+    "condition failed", und es braucht einen Menschen.
+    """
+    with pytest.raises(TemporaryFailure):
+        _session(_response(code)).ws_token()
+
+
 def test_ws_token_network_error_is_temporary():
     """A transport error (no response at all) must not escape as httpx.HTTPError."""
     with pytest.raises(TemporaryFailure):
@@ -95,6 +113,28 @@ def test_refresh_401_forgets_pairing():
     with pytest.raises(PairingLost):
         session.refresh_access()
     assert tray_config.load_tokens() is None
+
+
+def test_refresh_403_forgets_pairing():
+    session = _session(_response(403))
+    with pytest.raises(PairingLost):
+        session.refresh_access()
+    assert tray_config.load_tokens() is None
+
+
+@pytest.mark.parametrize("code", [400, 404, 422])
+def test_refresh_unexpected_codes_keep_the_tokens(code):
+    """Eine umbenannte Route oder ein geaendertes Schema ist kein Widerruf.
+
+    `if code != 200: self.forget()` machte aus jedem 404 und jedem 422 eine
+    aufgehobene Kopplung — der teuerste denkbare Fehlschluss, weil nur ein
+    Mensch mit `--pair` wieder herauskommt.
+    """
+    session = _session(_response(code))
+    with pytest.raises(TemporaryFailure):
+        session.refresh_access()
+    assert tray_config.load_tokens() is not None
+    assert tray_config.load_tokens().refresh == "rt"
 
 
 def test_refresh_429_keeps_the_pairing():

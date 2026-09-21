@@ -49,12 +49,24 @@ def _client_host(request: Request) -> Optional[str]:
 
 
 def _audit(
-    action: str, user: UserPublic, success: bool, details: dict, client_host: Optional[str]
+    action: str,
+    user: UserPublic,
+    success: bool,
+    details: dict,
+    client_host: Optional[str],
+    *,
+    delegated: bool = True,
 ) -> None:
     """Audit launches and refused attempts - never the game name, never a detail.
 
     The name comes from a manifest the desktop user can write; details carry
     subprocess and kscreen-doctor output.
+
+    ``delegated=False`` skips the second, security-typed entry: that one
+    records the exercise of the delegated *power* right and names
+    ``launch_games`` as its resource. A read route behind plain
+    ``get_current_user`` exercises no such right, so claiming it would put a
+    falsehood into the security trail.
     """
     audit_logger = get_audit_logger_db()
     audit_logger.log_event(
@@ -66,7 +78,7 @@ def _audit(
         details=details,
         ip_address=client_host,
     )
-    if getattr(user, "role", None) != "admin":
+    if delegated and getattr(user, "role", None) != "admin":
         audit_logger.log_security_event(
             action="delegated_power_action",
             user=user.username,
@@ -195,10 +207,26 @@ async def session_state(
     single boolean the tray polls before every popup, and gating it on the
     launch right would hand the tray the ability to start games.
 
+    But behind the same LAN gate as launch: the boolean is a presence oracle -
+    "is somebody physically at the machine right now" - and that is an
+    answer about the owner, not about the NAS. The tray runs on the desktop
+    session by design, so the gate costs it nothing. Refusals are audited with
+    the IP for the same reason the neighbouring route audits them; successes
+    are not, because the tray asks every 30 seconds and an entry per probe
+    would bury the trail rather than be one.
+
     Reads a marker file and sysfs, so it runs off the event loop. Any read
     error counts as "not gaming": rather one notification too many than a
     swallowed alarm.
     """
+    client_host = _client_host(request)
+    if not is_private_or_local_ip(client_host):
+        _audit(
+            "steam_session_state_denied", current_user, False,
+            {"reason": "not_local"}, client_host, delegated=False,
+        )
+        raise ForbiddenError("Session state is only available from the local network")
+
     from app.services.power import gaming_presence
 
     def _probe() -> bool:

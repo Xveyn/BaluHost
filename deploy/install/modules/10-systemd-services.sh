@@ -309,7 +309,16 @@ install_tray_user_unit() {
         }
         log_info "Tray-Unit installiert und aktiviert fuer $target_user"
     else
-        log_info "Tray-Unit fuer $target_user abgelegt — beim naechsten Login aktiv"
+        # Hier hat der Zielbenutzer keine laufende Sitzung — bei einer
+        # Erstinstallation per SSH als root der Normalfall. `systemctl --user
+        # enable` ist also nie gelaufen: es gibt keinen Symlink in
+        # graphical-session.target.wants/, und `WantedBy=` bleibt wirkungslos.
+        # Die Unit liegt da und startet beim naechsten Login trotzdem nicht.
+        # Ein log_info an dieser Stelle laese sich wie Erfolg und haelt genau
+        # den Menschen vom Nachsehen ab, der den Befehl noch ausfuehren muss.
+        log_warn "Tray-Unit fuer $target_user abgelegt, aber Autostart NICHT eingerichtet"
+        log_warn "(keine laufende Sitzung fuer $target_user — das ist bei einer Installation per SSH normal)."
+        log_warn "Nachtraeglich als $target_user: systemctl --user enable baluhost-tray.service"
     fi
 }
 

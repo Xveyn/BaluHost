@@ -2,12 +2,15 @@
 
 import asyncio
 import json
+import logging
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from baluhost_tray import loop as loop_module
 from baluhost_tray.loop import (
+    GAMING_PROBE_SECONDS,
+    REFRESH_COOLDOWN_SECONDS,
     TICK_SECONDS,
     LoopContext,
     deliver,
@@ -74,13 +77,60 @@ async def test_failed_delivery_keeps_the_popups():
     assert not queue.is_empty()
 
 
-def test_gaming_probe_404_counts_as_not_gaming():
-    """Plugin abgeschaltet -> Route fehlt -> Popup wird gezeigt."""
+@pytest.mark.asyncio
+async def test_a_failed_summary_also_keeps_the_newly_arrived_popups():
+    """Der Zweig, in dem eine Meldung endgueltig verschwindet.
+
+    Drei Dinge muessen zusammenkommen: genug Zurueckgehaltenes fuer die
+    Sammelmeldung, ein D-Bus-Fehlschlag genau dann, und in derselben Runde
+    eine *neue* kritische Meldung. Die alten wurden schon immer zurueckgelegt;
+    die neue fiel durch, weil `pending` vor dem `return` niemandem mehr
+    gehoerte — weder gezeigt noch gehalten.
+    """
+    notifier, queue = _notifier(), PopupQueue()
+    for n in (1, 2, 3, 4):
+        queue.hold(_popup(n))
+    notifier.show_summary.side_effect = RuntimeError("bus gone")
+
+    await deliver([_popup(99)], queue, notifier, hold=False)
+
+    held, _summary = queue.release()
+    assert sorted(popup.notification_id for popup in held) == [1, 2, 3, 4, 99]
+
+
+def test_gaming_probe_404_counts_as_not_gaming(caplog):
+    """Plugin abgeschaltet -> Route fehlt -> Popup wird gezeigt.
+
+    Und zwar schweigend: das abgeschaltete Plugin ist ein Normalzustand, kein
+    Vorfall. Eine Warnung pro Takt waere ein Dauerrauschen im Journal.
+    """
     client = MagicMock()
     response = MagicMock()
     response.status_code = 404
     client.get.return_value = response
-    assert is_gaming_active(client) is False
+    with caplog.at_level(logging.WARNING, logger="baluhost_tray.loop"):
+        assert is_gaming_active(client) is False
+    assert caplog.records == [], caplog.text
+
+
+@pytest.mark.parametrize("code", [401, 403, 429])
+def test_a_refused_gaming_probe_is_logged_loudly(caplog, code):
+    """Das Gate schaltet sich sonst lautlos ab.
+
+    429, 401 und 403 heissen nicht "kein Spiel", sondern "ich darf nicht
+    fragen". Die Folge ist genau das, was das Gate verhindern soll — Popups
+    mitten im Vollbildspiel —, und ohne diese Zeile steht nirgends, warum.
+    403 ist seit dem LAN-Gate der Route ein erreichbarer Fall.
+    """
+    client = MagicMock()
+    response = MagicMock()
+    response.status_code = code
+    client.get.return_value = response
+
+    with caplog.at_level(logging.WARNING, logger="baluhost_tray.loop"):
+        assert is_gaming_active(client) is False
+
+    assert any(str(code) in record.getMessage() for record in caplog.records), caplog.text
 
 
 def test_gaming_probe_error_counts_as_not_gaming():
@@ -99,18 +149,28 @@ def test_gaming_probe_true():
 
 
 class FakeSocket:
-    """Liefert vorgegebene Frames, danach Timeouts — wie eine stille Leitung."""
+    """Liefert vorgegebene Frames, danach Timeouts — wie eine stille Leitung.
 
-    def __init__(self, frames: list, then_idle: int = 0) -> None:
+    Mit `clock` stellt jeder Leerlauf-Takt die Uhr um `step` weiter. Ohne das
+    stuenden alle Runden eines Zyklus auf derselben Zeit, und jede Drosselung,
+    die an `ctx.now` haengt, waere im Test nicht von einem Fehler zu
+    unterscheiden.
+    """
+
+    def __init__(self, frames: list, then_idle: int = 0, clock=None,
+                 step: float = TICK_SECONDS) -> None:
         # str kommt roh durch — so lassen sich kaputte Frames einspeisen.
         self._frames = [f if isinstance(f, str) else json.dumps(f) for f in frames]
         self._idle_left = then_idle
+        self._clock, self._step = clock, step
 
     async def recv(self) -> str:
         if self._frames:
             return self._frames.pop(0)
         if self._idle_left > 0:
             self._idle_left -= 1
+            if self._clock is not None:
+                self._clock.advance(self._step)
             raise asyncio.TimeoutError
         raise ConnectionError("closed")
 
@@ -121,7 +181,8 @@ class FakeSocket:
         return False
 
 
-def _ctx(frames, snapshot=None, gaming=False, then_idle=0) -> LoopContext:
+def _ctx(frames, snapshot=None, gaming=False, then_idle=0, clock=None,
+         step=TICK_SECONDS) -> LoopContext:
     session = MagicMock()
     response = MagicMock()
     response.status_code = 200
@@ -136,7 +197,7 @@ def _ctx(frames, snapshot=None, gaming=False, then_idle=0) -> LoopContext:
     state = TrayState()
     seen: list[IconState] = []
 
-    return LoopContext(
+    ctx = LoopContext(
         session=session,
         watcher=Watcher(session, state),
         state=state,
@@ -144,9 +205,12 @@ def _ctx(frames, snapshot=None, gaming=False, then_idle=0) -> LoopContext:
         notifier=_notifier(),
         sink=seen.append,
         hold_probe=lambda: gaming,
-        connect=lambda url: FakeSocket(frames, then_idle=then_idle),
+        connect=lambda url: FakeSocket(frames, then_idle=then_idle, clock=clock, step=step),
         sleep=AsyncMock(),
     )
+    if clock is not None:
+        ctx.now = clock
+    return ctx
 
 
 @pytest.mark.asyncio
@@ -169,13 +233,18 @@ async def test_idle_tick_drains_the_queue_without_any_frame():
 
     Das Flag kippt ueber hold_probe, nicht ueber sleep: run_cycle ruft sleep
     nie -- das tut nur run_loop vor dem Backoff.
+
+    Die Uhr laeuft mit: seit der Drosselung fragt der zweite Takt nur dann
+    erneut, wenn seit der letzten Probe auch wirklich Zeit vergangen ist.
     """
+    clock = FakeClock()
     ctx = _ctx(
         frames=[{"type": "notification",
                  "payload": {"id": 9, "notification_type": "critical",
                              "title": "SMART", "message": "Fehler"}}],
         then_idle=2,
         gaming=True,
+        clock=clock,
     )
     calls = {"n": 0}
 
@@ -191,6 +260,105 @@ async def test_idle_tick_drains_the_queue_without_any_frame():
     # Ohne den Idle-Tick waere hier nie zugestellt worden.
     ctx.notifier.show.assert_awaited()
     assert calls["n"] >= 2, "der Tick muss erneut gefragt haben"
+
+
+_CRITICAL_FRAME = {
+    "type": "notification",
+    "payload": {"id": 5, "notification_type": "critical",
+                "title": "RAID", "message": "degradiert"},
+}
+
+
+def _counting_probe(ctx: LoopContext, answer: bool) -> dict:
+    calls = {"n": 0}
+
+    def _probe() -> bool:
+        calls["n"] += 1
+        return answer
+
+    ctx.hold_probe = _probe
+    return calls
+
+
+@pytest.mark.asyncio
+async def test_the_gaming_probe_is_not_repeated_within_the_interval():
+    """Nicht pro Frame fragen — pro halbe Minute.
+
+    Solange waehrend einer Spielsitzung etwas in der Warteschlange liegt,
+    kostete *jeder* eingehende Frame eine HTTP-Runde zu /session-state, auch
+    die uninteressanten. Ein Schwall (30 im Web-UI einzeln weggeraeumte
+    Meldungen, rund 60 Frames) reisst damit das Limit steam_games_read —
+    60/min, nutzergebunden und geteilt mit GET /games, das die BaluApp
+    benutzt.
+    """
+    clock = FakeClock()
+    ctx = _ctx(frames=[_CRITICAL_FRAME], then_idle=1, gaming=True,
+               clock=clock, step=5.0)
+    calls = _counting_probe(ctx, answer=True)
+
+    with pytest.raises(ConnectionError):
+        await run_cycle(ctx)
+
+    assert calls["n"] == 1, "die zweite Runde lag innerhalb der 30 s"
+
+
+@pytest.mark.asyncio
+async def test_the_gaming_probe_runs_again_after_the_interval():
+    """Die andere Richtung: gedrosselt ist nicht abgeschaltet.
+
+    Ohne das Nachfragen bliebe das Zurueckgehaltene bis zum naechsten Frame
+    liegen — die Spielsitzung endet aber, ohne dass ein Frame eintrifft.
+    """
+    clock = FakeClock()
+    ctx = _ctx(frames=[_CRITICAL_FRAME], then_idle=1, gaming=True,
+               clock=clock, step=GAMING_PROBE_SECONDS + 1.0)
+    calls = _counting_probe(ctx, answer=True)
+
+    with pytest.raises(ConnectionError):
+        await run_cycle(ctx)
+
+    assert calls["n"] == 2
+
+
+@pytest.mark.asyncio
+async def test_quiet_mode_holds_the_popup_and_skips_the_probe():
+    """Die Verdrahtung, die die Doku zusagt und die nie geprueft war.
+
+    QuietMode ist fuer sich getestet, aber dass `_should_hold` sie ueberhaupt
+    ansieht, pruefte nichts. Die zweite Zusage steckt mit drin: stumm
+    geschaltet, findet die HTTP-Runde zum Gaming-Plugin gar nicht erst statt.
+    """
+    clock = FakeClock()
+    ctx = _ctx(frames=[_CRITICAL_FRAME], clock=clock)
+    calls = _counting_probe(ctx, answer=False)
+    ctx.quiet.mute_for(3600.0, clock())
+
+    with pytest.raises(ConnectionError):
+        await run_cycle(ctx)
+
+    ctx.notifier.show.assert_not_awaited()
+    assert not ctx.queue.is_empty(), "zurueckgehalten heisst gehalten, nicht verworfen"
+    assert calls["n"] == 0, "stumm schliesst den Gaming-Probe kurz"
+
+
+@pytest.mark.asyncio
+async def test_a_refused_snapshot_aborts_the_cycle():
+    """Ein Zyklus ohne Snapshot darf nicht "verbunden" behaupten.
+
+    Der Aufbau ist: Socket auf, Snapshot laden, *dann* gruen werden. Faellt
+    der Snapshot durch und der Zyklus liefe trotzdem weiter, zeigte das Tray
+    einen Zustand von vorhin als aktuellen an — und nichts sagte, dass er alt
+    ist.
+    """
+    ctx = _ctx(frames=[])
+    ctx.session.client.return_value.get.return_value.status_code = 503
+
+    with pytest.raises(TemporaryFailure):
+        await run_cycle(ctx)
+
+    assert ctx.state.connected is False
+    assert ctx.state.icon_state() is IconState.OFFLINE
+    ctx.notifier.show_summary.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -392,6 +560,39 @@ async def test_healthy_cycle_hands_back_the_refresh(monkeypatch):
     await asyncio.wait_for(run_loop(ctx), timeout=5)
 
     assert ctx.session.refresh_access.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_a_spent_refresh_comes_back_after_the_cooldown(monkeypatch):
+    """Der Zustand ohne Ausweg: gelungener Refresh, weiter abgelehntes Token.
+
+    `refreshed` wurde nur von einer gesunden Runde zurueckgegeben — und genau
+    die kommt hier nie zustande, weil jeder Zyklus an der 401 scheitert. Die
+    Schleife lief damit fuer immer im Sechzig-Sekunden-Backoff und fragte nie
+    wieder nach einem frischen Token, obwohl ein frisches Token das einzige
+    ist, was sie retten koennte.
+
+    Das dritte Feld fehlt ueberall: keine Runde war je verbunden. Was die
+    Bremse hier loest, ist die verstrichene Zeit, nicht der Gesundheitspfad.
+    """
+    clock = FakeClock()
+    ctx, _ = _loop_ctx(clock)
+    ctx.session.refresh_access.return_value = None
+    script = [
+        (0.0, AuthExpired("401")),                              # Refresh 1
+        (0.0, AuthExpired("401")),                              # gebremst
+        (REFRESH_COOLDOWN_SECONDS + 1.0, AuthExpired("401")),   # Bremse geht auf
+        (0.0, PairingLost("stop")),
+    ]
+    cycle = _scripted_cycle(clock, script)
+    monkeypatch.setattr(loop_module, "run_cycle", cycle)
+
+    await asyncio.wait_for(run_loop(ctx), timeout=5)
+
+    assert ctx.session.refresh_access.call_count == 2
+    # Und die Bremse bleibt eine Bremse: die zweite Runde lag innerhalb der
+    # Frist und musste einen Backoff kosten statt eines Refreshs.
+    assert [call["refresh_calls"] for call in cycle.calls] == [0, 1, 1, 2]
 
 
 @pytest.mark.asyncio
