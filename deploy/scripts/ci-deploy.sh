@@ -212,9 +212,26 @@ build_install_companion() {
     local stage_dir="$INSTALL_DIR/.companion"
     local staged_deb="$stage_dir/baluhost-companion.deb"
 
+    # rustup puts cargo in ~/.cargo/bin and hooks it up through ~/.bashrc and
+    # ~/.profile — neither of which this script ever sees. A GitHub Actions
+    # `run:` step is a non-interactive, non-login shell, and the self-hosted
+    # runner hands each step the fixed PATH from its own .path file. Without
+    # this lookup, a host that HAS Rust installed still fails the check below
+    # and skips the companion build while the deploy stays green (BaluNode,
+    # 2026-09-21). Only consulted when the PATH search comes up empty, so a
+    # system-wide Rust installation is never shadowed by a user's rustup.
+    local cargo_home="${CARGO_HOME:-${HOME:-}/.cargo}"
+    if ! command -v cargo >/dev/null 2>&1 && [[ -x "$cargo_home/bin/cargo" ]]; then
+        export PATH="$cargo_home/bin:$PATH"
+        log_info "Using rustup toolchain at $cargo_home/bin (not on the runner PATH)."
+    fi
+
     if ! command -v cargo >/dev/null 2>&1; then
         log_warn "Rust/cargo not found on this host — cannot build companion. Skipping."
         log_warn "Install Rust (see docs) then re-run with INSTALL_COMPANION=1."
+        log_warn "Rust IS installed, for another account? A deploy step reads neither"
+        log_warn "~/.profile nor ~/.bashrc, so its ~/.cargo/bin is not on PATH — point"
+        log_warn "CARGO_HOME at that installation, or add its bin/ to the runner PATH."
         return 0
     fi
 
