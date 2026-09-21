@@ -32,8 +32,13 @@ PAIR_LOCK = "baluhost-tray-pair"
 #   EXIT_TRANSIENT (3) moeglicherweise voruebergehend. Beim Anmelden kann das
 #                      Tray vor Plasma oder vor dem Session-Bus dran sein;
 #                      dann hilft ein Neustart wirklich. Ist es doch
-#                      dauerhaft, beendet das Startlimit der Unit die
-#                      Versuche von selbst.
+#                      dauerhaft, ist nach fuenf Versuchen Schluss — aber nur,
+#                      weil die Unit ihr Startlimit selbst setzt
+#                      (StartLimitIntervalSec=300 bei StartLimitBurst=5). Mit
+#                      der systemd-Vorgabe (Fenster 10s) faellt bei
+#                      RestartSec=10s hoechstens ein Start in jedes Fenster,
+#                      das Limit waere unerreichbar und die Versuche liefen
+#                      endlos.
 EXIT_DONE = 0
 EXIT_TRANSIENT = 3
 

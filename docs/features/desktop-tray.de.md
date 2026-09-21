@@ -4,9 +4,11 @@ Das BaluHost-Tray ist ein kleines Symbol im Plasma-Panel. Es zeigt, ob es
 ungelesene Meldungen vom NAS gibt, und meldet kritische Ereignisse als
 Desktop-Benachrichtigung — ohne dass die Web-UI offen sein muss.
 
-Es ist ein eigenes Konsolenprogramm (`baluhost-tray`) aus dem Python-Extra
+Es ist ein eigenes Konsolenprogramm aus dem Python-Extra
 `baluhost-backend[tray]` und laeuft als **systemd-User-Unit** in der
 Desktop-Sitzung. Kein root, keine Systemdienst-Rechte: das Tray liest nur.
+Auf einer normalen Installation liegt es unter
+`/opt/baluhost/backend/.venv/bin/baluhost-tray`.
 
 ---
 
@@ -47,8 +49,21 @@ sagt der Tooltip beim Darueberfahren:
 ## Kopplung
 
 ```bash
-baluhost-tray --pair
+/opt/baluhost/backend/.venv/bin/baluhost-tray --pair
 ```
+
+Das Programm liegt im venv der Installation und ist damit **nicht im PATH** —
+der nackte Name `baluhost-tray` funktioniert auf dem Zielrechner nicht von
+selbst. Wer sich die Tipparbeit sparen will, legt einen Symlink an:
+
+```bash
+sudo ln -s /opt/baluhost/backend/.venv/bin/baluhost-tray /usr/local/bin/baluhost-tray
+```
+
+Ein Alias in `~/.bashrc` tut es genauso. Beides ist ein Angebot, keine
+Voraussetzung; in dieser Doku steht deshalb durchgehend der volle Pfad. Die
+Meldungen des Programms selbst — etwa der Tooltip *„nicht gekoppelt:
+baluhost-tray --pair"* — nennen weiterhin den kurzen Namen.
 
 Das Programm zeigt einen **sechsstelligen Code** und die Adresse zur Freigabe.
 Den Code in der Web-UI unter **Geraete** bestaetigen — fertig, die Zugangsdaten
@@ -63,10 +78,10 @@ eigenes Schloss, es muss also nichts gestoppt werden.
 > systemctl --user restart baluhost-tray
 > ```
 >
-> Der Hintergrundprozess liest die Zugangsdaten **nur beim Start** und beendet
-> sich, wenn die Kopplung wegfaellt. Ohne Neustart nimmt der laufende Dienst
-> die frischen Token nie auf — das Symbol bliebe grau, obwohl das Koppeln
-> erfolgreich war. Das ist der haeufigste Stolperstein beim ersten Einrichten.
+> Der Hintergrundprozess liest die Zugangsdaten **nur beim Start**. Ohne
+> Neustart nimmt der laufende Dienst die frischen Token nie auf — das Symbol
+> bliebe grau, obwohl das Koppeln erfolgreich war. Das ist der haeufigste
+> Stolperstein beim ersten Einrichten.
 
 Beim allerersten Mal ist der Neustart ohnehin noetig: die Unit startet ohne
 vorhandene Zugangsdaten gar nicht erst (siehe *Autostart*).
@@ -88,7 +103,7 @@ Ein einfacher Linksklick auf das Symbol oeffnet ebenfalls die Web-UI.
 
 Der Menuepunkt heisst bewusst *„Geraete in der Web-UI"* und nicht *„Neu
 koppeln"*: er kann die Kopplung nicht selbst wiederherstellen, dafuer braucht
-es `baluhost-tray --pair` auf der Konsole.
+es `/opt/baluhost/backend/.venv/bin/baluhost-tray --pair` auf der Konsole.
 
 ---
 
@@ -147,7 +162,11 @@ meldet sich **einmal** mit *„Kopplung aufgehoben — bitte neu koppeln"* und
 loescht die Zugangsdaten von der Platte. Danach ist Ruhe: es entsteht kein
 Sturm von Anfragen im Log.
 
-Wer erneut koppeln will, fuehrt `baluhost-tray --pair` aus und startet den
+Beendet wird dabei nur der Hintergrund-Arbeiter — der Prozess selbst laeuft
+mit grauem Symbol weiter, damit der Tooltip die Erklaerung behalten kann.
+
+Wer erneut koppeln will, fuehrt
+`/opt/baluhost/backend/.venv/bin/baluhost-tray --pair` aus und startet den
 Dienst neu (siehe oben).
 
 ---
@@ -175,17 +194,46 @@ sudo TRAY_DESKTOP_USER=sven TRAY_WEB_URL=https://baluhost.local ./install.sh
 Steht kein Desktop-Benutzer fest, meldet der Installer das und ueberspringt
 den Schritt, statt die Unit in ein falsches Home zu schreiben.
 
-Zwei Eigenheiten der Unit sind Absicht:
+### Einmalig: das Extra `[tray]` nachinstallieren
+
+Das venv der Installation enthaelt das Extra **nicht**. Das ist Absicht: Qt
+gehoert nicht auf eine kopflose Serverinstallation, und das Tray ist ein
+Opt-in fuer die eine Maschine, die auch Desktop ist. Genau einmal:
+
+```bash
+sudo /opt/baluhost/backend/.venv/bin/pip install -e '/opt/baluhost/backend[tray]'
+```
+
+Ohne diesen Schritt ist die Unit zwar angelegt **und aktiviert**, das Tray
+beendet sich beim Start aber sofort mit *„PyQt6 fehlt"*. Der Installer weist
+beim Anlegen der Unit mit genau diesem Befehl darauf hin.
+
+Der volle Pfad ins venv ist noetig, nicht Bequemlichkeit: ein nacktes
+`pip install` liefe gegen das System-Python, und das ist auf Debian 13
+„externally managed" (PEP 668) und weist die Installation ab.
+
+### Drei Eigenheiten der Unit sind Absicht
 
 - **`ConditionPathExists=%h/.baluhost/tray-tokens.json`** — ohne Kopplung
-  startet die Unit gar nicht erst. Sonst wuerde sie starten, sich sofort
-  beenden und im Zehnsekundentakt wiederbelebt, bis das Startlimit greift.
+  startet die Unit gar nicht erst. Das verhindert *keinen* Neustart-Sturm:
+  der ungekoppelte Fall endet mit Exit 0, und `Restart=on-failure` startet
+  bei 0 ohnehin nicht neu. Der Gewinn ist die Lesbarkeit des Zustands —
+  `systemctl --user status` zeigt `condition failed`, und das heisst fuer
+  einen Menschen „noch nicht eingerichtet". Ein Start, der sich sofort sauber
+  beendet, saehe dort dagegen wie ein Fehlstart aus.
 - **`Restart=on-failure`**, nicht `always` — die Exit-Codes sind
   bedeutungstragend: `0` heisst *dauerhaft erledigt* (nicht gekoppelt, zweite
   Instanz laeuft, Extra fehlt), da hilft kein Neustart. `3` heisst
-  *moeglicherweise voruebergehend* (kein Session-Bus, kein Tray-Host in der
-  Sitzung), da hilft er wirklich — beim Anmelden kann das Tray schlicht vor
-  Plasma dran sein.
+  *moeglicherweise voruebergehend*: kein Session-Bus oder kein Tray-Host in
+  der Sitzung — beim Anmelden kann das Tray schlicht vor Plasma dran sein —,
+  **oder** ein durchgereichter Fehler des Hintergrundprozesses, dessen
+  Ursache niemand kennt. Da hilft ein Neustart wirklich.
+- **`StartLimitIntervalSec=300` mit `StartLimitBurst=5`** — die Unit setzt ihr
+  Startlimit selbst. Die systemd-Vorgabe ist ein Fenster von zehn Sekunden
+  bei fuenf Versuchen; bei `RestartSec=10s` faellt hoechstens ein Start in
+  jedes Fenster, die fuenf werden nie erreicht, und ein dauerhafter Exit 3
+  liefe **endlos** alle zehn Sekunden weiter. Fuenf Minuten fassen die fuenf
+  Versuche, danach ist Schluss.
 
 ---
 
@@ -205,8 +253,10 @@ systemctl --user set-environment BALUHOST_TRAY_LOG_LEVEL=DEBUG
 systemctl --user restart baluhost-tray
 ```
 
-Fehlschlaege erscheinen als Klartextzeile, nicht als Traceback — ein Traceback
-im Journal liest niemand.
+Zu jedem Fehlschlag steht eine Klartextzeile im Journal, die sagt, was zu tun
+ist. Im unerwarteten Fall steht der Traceback **zusaetzlich** dort
+(`logger.exception` in `tray.py`): die Zeile ist fuer den Menschen davor, der
+Traceback fuer die Ursachensuche.
 
 ---
 
@@ -214,11 +264,11 @@ im Journal liest niemand.
 
 | Beobachtung | Ursache | Abhilfe |
 |---|---|---|
-| Symbol erscheint nicht, Unit „inactive (dead)", Condition nicht erfuellt | Nie gekoppelt | `baluhost-tray --pair`, dann `systemctl --user restart baluhost-tray` |
+| Symbol erscheint nicht, Unit „inactive (dead)", Condition nicht erfuellt | Nie gekoppelt | `/opt/baluhost/backend/.venv/bin/baluhost-tray --pair`, dann `systemctl --user restart baluhost-tray` |
 | Symbol bleibt grau, Tooltip *„nicht gekoppelt"* | Gerade gekoppelt, Dienst nicht neu gestartet | `systemctl --user restart baluhost-tray` |
 | Symbol bleibt grau, Tooltip *„nicht erreichbar"* | Backend aus oder Netz weg | Warten; das Tray verbindet sich selbst wieder |
-| Beim Start beendet mit Code 3 | Tray war vor Plasma dran | Nichts tun — `Restart=on-failure` versucht es erneut |
-| *„PyQt6 fehlt"* | Extra nicht installiert | `pip install 'baluhost-backend[tray]'` |
+| Beim Start beendet mit Code 3 | Tray war vor Plasma dran — **oder** der Hintergrundprozess ist unerwartet gescheitert | Beim Anmelden: nichts tun, `Restart=on-failure` versucht es erneut. Sonst ins Journal sehen (`journalctl --user -u baluhost-tray`): steht dort *„Tray-Hintergrund beendet"* oder ein Traceback, ist es ein echter Absturz und kein Startreihenfolge-Problem |
+| *„PyQt6 fehlt"* | Extra nicht installiert | `sudo /opt/baluhost/backend/.venv/bin/pip install -e '/opt/baluhost/backend[tray]'` |
 | *„BaluHost Tray laeuft bereits in dieser Sitzung."* | Zweite Instanz | Nichts tun; die erste macht bereits das Richtige |
 
 Nach einer Verbindungsunterbrechung meldet sich das Tray nur, wenn sie
@@ -226,3 +276,107 @@ Nach einer Verbindungsunterbrechung meldet sich das Tray nur, wenn sie
 keinen Popup-Regen ausloesen. Ein geschlummerter („gesnoozter") Eintrag faerbt
 das Symbol nach Ablauf der Frist wieder ein, spaetestens beim Abgleich alle
 zehn Minuten.
+
+---
+
+## Abnahme auf dem Zielrechner
+
+Kein CI-Ersatz. PyQt6 ist auf dem Entwicklungsrechner nicht installiert, das
+Tray laesst sich dort nicht starten — diese Liste ist fuer einen Menschen an
+der echten Maschine geschrieben.
+
+### Voraussetzungen
+
+- [ ] **0a.** Extra einmalig nachinstallieren:
+      `sudo /opt/baluhost/backend/.venv/bin/pip install -e '/opt/baluhost/backend[tray]'`
+- [ ] **0b.** `test -f ~/.config/systemd/user/baluhost-tray.service` → die
+      Datei muss da sein. Fehlt sie, ist Modul 10 in den Zweig *„Kein
+      Desktop-Benutzer bekannt"* gelaufen (oder in *„Kein Home fuer …"*).
+      Abhilfe: Installation erneut mit `TRAY_DESKTOP_USER=<name>`.
+- [ ] **0c.** `/opt/baluhost/backend/.venv/bin/baluhost-tray --pair` →
+      sechsstelliger Code erscheint; in der Web-UI unter **Geraete**
+      freigeben; Ausgabe `Gekoppelt.`
+- [ ] **0d.** **`systemctl --user restart baluhost-tray`** — zwingend. Der
+      Arbeiter liest die Zugangsdaten **nur beim Start**; ohne Neustart nimmt
+      ein laufender Dienst die frischen Token nie auf und das Symbol bleibt
+      grau, obwohl das Koppeln geklappt hat. Vor dem ersten Koppeln startet
+      die Unit wegen `ConditionPathExists` ohnehin nicht
+      (`systemctl --user status` zeigt `condition failed`) — das ist Absicht,
+      kein Fehler.
+
+### Die zwoelf Punkte
+
+- [ ] **1.** `systemctl --user start baluhost-tray` → Symbol erscheint im Panel.
+- [ ] **2.** Backend stoppen → Symbol wird grau, **eine** Meldung, danach Ruhe.
+- [ ] **3.** Backend starten → Symbol wird gruen; Rueckmeldung nur bei
+      Unterbrechung ueber zwei Minuten.
+- [ ] **4.** Kritische Testmeldung erzeugen → rotes Symbol plus Popup.
+      `POST /api/notifications` ist **admin-only** (`get_current_admin`) und
+      nimmt einen `NotificationCreate`-Body. Damit das Tray ueberhaupt
+      reagiert, muss `notification_type` **`critical`** sein — `warning`
+      faerbt das Symbol nur und loest kein Popup aus — **und** `user_id` das
+      gekoppelte Konto treffen (`null` ist ein Rundruf und erreicht nur
+      Admin-Konten). `category` muss aus der festen Liste stammen: `raid`,
+      `smart`, `backup`, `scheduler`, `system`, `security`, `sync`, `vpn`,
+      `lifecycle`.
+
+      ```bash
+      # Admin-Token holen (bei aktivem 2FA liefert der Login stattdessen einen
+      # pending_token — dann den Token aus der angemeldeten Web-UI nehmen)
+      TOKEN=$(curl -s -X POST https://baluhost.local/api/auth/login \
+        -H 'Content-Type: application/json' \
+        -d '{"username":"admin","password":"<passwort>"}' \
+        | python3 -c 'import sys,json; print(json.load(sys.stdin)["access_token"])')
+
+      # user_id ist die id des gekoppelten Kontos, nicht die des Admins
+      curl -X POST https://baluhost.local/api/notifications \
+        -H "Authorization: Bearer $TOKEN" \
+        -H 'Content-Type: application/json' \
+        -d '{
+              "user_id": 1,
+              "notification_type": "critical",
+              "category": "system",
+              "title": "Abnahme Schritt 4",
+              "message": "Testmeldung fuer das Desktop-Tray",
+              "priority": 3
+            }'
+      ```
+
+      Einen spontan degradierenden RAID gibt es nicht zu simulieren:
+      `emit_raid_degraded_sync` wird nur aus `degrade()` gerufen, also wenn
+      BaluHost selbst ein Device ausfallen laesst. Alternative ohne HTTP:
+      `simulate_failure` im Dev-Backend.
+- [ ] **5.** Dieselbe Meldung **auf dem Handy** wegwischen → Symbol wird ohne
+      Zutun gruen.
+- [ ] **6.** Meldung snoozen, Frist kurz waehlen → Symbol gruen, und nach
+      spaetestens zehn Minuten (Neuabgleich) wieder rot.
+- [ ] **7.** Spiel im Vollbild starten — **direkt aus Steam, nicht ueber
+      BaluHost** —, Testmeldung erzeugen → kein Popup, Symbol rot.
+- [ ] **8.** Spiel beenden → innerhalb von 30 Sekunden wird die
+      zurueckgehaltene Meldung zugestellt.
+- [ ] **9.** „Eine Stunde stumm" waehlen, Meldung erzeugen → kein Popup;
+      Menuepunkt erneut waehlen oder abwarten → Zustellung.
+- [ ] **10.** Zweites `/opt/baluhost/backend/.venv/bin/baluhost-tray` starten →
+      beendet sich mit Hinweis („BaluHost Tray laeuft bereits in dieser
+      Sitzung.", Exit-Code 0).
+- [ ] **11.** `/opt/baluhost/backend/.venv/bin/baluhost-tray --pair` bei
+      laufendem Dienst → zeigt einen Code, statt sich zu beenden.
+- [ ] **12.** Kopplung in der Web-UI widerrufen → Symbol grau, eine Meldung,
+      kein Sturm von Anfragen im Log.
+
+### Nach Punkt 12
+
+- [ ] **13.** Nach dem Widerruf erneut koppeln:
+      `/opt/baluhost/backend/.venv/bin/baluhost-tray --pair`, freigeben,
+      **dann `systemctl --user restart baluhost-tray`** → Symbol wird wieder
+      gruen. Ohne den Neustart bleibt es grau — dieselbe Falle wie bei 0d, und
+      derselbe Grund. Genau hier wird sie ein zweites Mal gestellt, weil Punkt
+      11 zeigt, dass Koppeln bei laufendem Dienst geht: es geht, aber der
+      Dienst *uebernimmt* die neuen Token erst nach einem Neustart.
+
+### Autostart pruefen
+
+- [ ] **14.** Abmelden und neu anmelden → das Symbol ist ohne Zutun da
+      (`WantedBy=graphical-session.target`).
+- [ ] **15.** `systemctl --user status baluhost-tray` zeigt `enabled`;
+      `journalctl --user -u baluhost-tray` enthaelt keine Tracebacks.
