@@ -76,3 +76,45 @@ class TrayState:
         if count == 1:
             return "BaluHost — 1 ungelesene Meldung"
         return f"BaluHost — {count} ungelesene Meldungen"
+
+
+SUMMARY_THRESHOLD = 4
+
+
+@dataclass(frozen=True)
+class PendingPopup:
+    notification_id: int
+    title: str
+    message: str
+
+
+class PopupQueue:
+    """Popups held back while a game is on screen or quiet mode runs.
+
+    Held, not dropped: when the reason goes away the user still gets told. A
+    reconnect may replay the same notification, so entries are keyed by id.
+    """
+
+    def __init__(self) -> None:
+        self._held: dict[int, PendingPopup] = {}
+
+    def hold(self, popup: PendingPopup) -> None:
+        self._held.setdefault(popup.notification_id, popup)
+
+    def is_empty(self) -> bool:
+        return not self._held
+
+    def release(self) -> list[PendingPopup]:
+        """Return everything held and forget it."""
+        items = list(self._held.values())
+        self._held.clear()
+        return items
+
+    def summary(self) -> tuple[str, str] | None:
+        """One line instead of a burst, once it would be a burst."""
+        if len(self._held) < SUMMARY_THRESHOLD:
+            return None
+        return (
+            "BaluHost",
+            f"{len(self._held)} neue kritische Meldungen",
+        )

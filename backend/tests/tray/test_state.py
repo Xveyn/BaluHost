@@ -92,3 +92,46 @@ def test_tooltip_says_offline_when_disconnected():
     state = TrayState()
     state.set_connected(False)
     assert "erreichbar" in state.tooltip()
+
+
+from baluhost_tray.state import PendingPopup, PopupQueue
+
+
+def _popup(n: int) -> PendingPopup:
+    return PendingPopup(notification_id=n, title=f"Titel {n}", message=f"Text {n}")
+
+
+def test_queue_starts_empty():
+    assert PopupQueue().is_empty()
+
+
+def test_release_returns_and_clears():
+    queue = PopupQueue()
+    queue.hold(_popup(1))
+    queue.hold(_popup(2))
+    released = queue.release()
+    assert [p.notification_id for p in released] == [1, 2]
+    assert queue.is_empty()
+
+
+def test_below_threshold_no_summary():
+    queue = PopupQueue()
+    for n in (1, 2, 3):
+        queue.hold(_popup(n))
+    assert queue.summary() is None
+
+
+def test_at_threshold_summarises():
+    queue = PopupQueue()
+    for n in (1, 2, 3, 4):
+        queue.hold(_popup(n))
+    title, message = queue.summary()
+    assert "4" in title or "4" in message
+
+
+def test_same_notification_held_once():
+    """Ein Reconnect darf dieselbe Meldung nicht doppelt zustellen."""
+    queue = PopupQueue()
+    queue.hold(_popup(1))
+    queue.hold(_popup(1))
+    assert len(queue.release()) == 1
