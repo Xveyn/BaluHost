@@ -170,9 +170,15 @@ seit der Anmeldung tot, Rolle deshalb nie erfahren. Er schwächt nichts, weil au
 diesem Weg ohnehin polkit entscheidet und nicht die Sichtbarkeit eines
 Menüeintrags.
 
-Die Rolle wird beim Start ermittelt und nach jedem erfolgreichen Reconnect
-aufgefrischt. Ein abgelaufener Access-Token darf dabei nicht als „keine Rolle"
-durchgehen — siehe „Der Stolperstein beim abgelaufenen Token".
+Die Rolle wird **einmal** beim Start ermittelt, nicht bei jedem Reconnect neu
+aufgefrischt — `tray.py` sagt das auch selbst so im Kommentar über dem
+`fetch_account_facts`-Aufruf: eine Rollenänderung ist selten genug, dass sie
+einen Tray-Neustart verlangen darf, und ein Reconnect-Hook würde `run_loop`
+anfassen, wo diese Entscheidung nicht hingehört. Praktisch heißt das: eine
+Sitzung, die mit totem Backend beginnt, zeigt den Menüpunkt für ihre gesamte
+Dauer, auch nachdem das Backend längst wieder erreichbar ist. Ein
+abgelaufener Access-Token darf bei der Ermittlung selbst nicht als „keine
+Rolle" durchgehen — siehe „Der Stolperstein beim abgelaufenen Token".
 
 ## Backend: `POST /api/system/restart-all`
 

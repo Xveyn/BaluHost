@@ -126,6 +126,12 @@ wer vor einem entsperrten Desktop sitzt, soll damit nicht den Dienst
 unterbrechen koennen. Danach startet das Backend die Units selbst; das Symbol
 wird kurz grau, waehrend das Backend selbst neu startet.
 
+Auf einer bereits installierten Box, die die sudoers-Zeile fuer
+`baluhost-backend-local` noch nicht kennt (ein normaler Deploy rendert
+`/etc/sudoers.d/baluhost-deploy` nicht neu — das braucht einen einmaligen
+manuellen Lauf von `install-deploy-sudoers.sh`), meldet die Antwort genau
+diese eine Unit als fehlgeschlagen, ohne dass etwas anderes daran scheitert.
+
 **Wenn das Backend nicht mehr antwortet** — genau der Fall, fuer den es den
 Menuepunkt gibt — fragt das Tray kurz nach und ruft dann `systemctl` direkt.
 Die Rechtefrage stellt dann das System: KDE zeigt seinen eigenen
@@ -138,8 +144,12 @@ Admin-Identitaet. Ist er es nicht, fragt der Dialog nach dem Passwort eines
 *anderen* Admins. Das ist kein Fehler, nur unerwartet.
 
 Ist das gekoppelte Konto nachweislich kein Admin, erscheint der Menuepunkt
-nicht. Konnte die Rolle nicht abgefragt werden — weil das Backend nicht
-antwortet —, ist er da; dann entscheidet ohnehin polkit.
+nicht. Konnte die Rolle beim Start nicht abgefragt werden — weil das Backend
+nicht antwortet —, ist er da; dann entscheidet ohnehin polkit. Die Rolle wird
+nur einmal beim Start ermittelt, nicht bei jedem Reconnect neu: eine Sitzung,
+die mit totem Backend beginnt, zeigt den Menuepunkt fuer ihre gesamte Dauer,
+auch nachdem das Backend laengst wieder erreichbar ist. Wer sicher gehen will,
+startet den Tray neu (`systemctl --user restart baluhost-tray`).
 
 Der Neustart ueber das Backend steht im Audit-Log. Der Notweg nicht: dort
 schreibt niemand mehr in die Datenbank. Die Spur liegt im Journal, wo polkitd

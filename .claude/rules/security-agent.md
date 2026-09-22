@@ -288,7 +288,16 @@ close an alert, check whether that file already rules on it.
     Autorisierung fünf Minuten an diesem Prozess halten, und `manage-units`
     deckt auch `StartTransientUnit` ab — also beliebige Codeausführung als root.
     Der API-Weg nutzt die bestehenden NOPASSWD-Einträge aus
-    `baluhost-deploy-sudoers` (jetzt fünf statt vier Units).
+    `baluhost-deploy-sudoers` (in der Vorlage jetzt fünf statt vier Units).
+    Diese fünfte Zeile (`baluhost-backend-local`) erreicht eine bereits
+    installierte Box aber nicht von selbst: `ci-deploy.sh` kann
+    `/etc/sudoers.d/baluhost-deploy` nicht neu rendern — sie ist die eine
+    sudoers-Datei, deren Erlaubnis erst die anderen drei installiert —, und
+    `install-deploy-sudoers.sh` steht auch nicht in dessen
+    `SYNC_PERMISSIONS=1`-Liste. Bis ein Operator es einmalig von Hand ausführt,
+    bekommt `restart_unit("baluhost-backend-local")` `sudo: a password is
+    required` zurück — fail-closed und laut: die Antwort meldet diese Unit als
+    fehlgeschlagen, und der Companion-Kanal läuft mit altem Code weiter.
 
 Entry 10 ("SECURITY.md outdated") was removed on 2026-07-21: the file had already
 been rewritten, and its one remaining stale item — the supported-versions table —

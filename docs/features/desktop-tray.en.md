@@ -125,6 +125,12 @@ should not be able to interrupt the service with it. After that the backend
 restarts the units itself; the icon turns grey briefly while the backend
 restarts.
 
+On an already-installed box that does not yet know the sudoers line for
+`baluhost-backend-local` (a routine deploy does not re-render
+`/etc/sudoers.d/baluhost-deploy` — that needs a one-time manual run of
+`install-deploy-sudoers.sh`), the response reports exactly that one unit as
+failed, without anything else failing along with it.
+
 **When the backend no longer answers** — exactly the case this exists for —
 the tray asks for confirmation and then calls `systemctl` directly. The
 permission question is then asked by the system: KDE shows its own polkit
@@ -138,8 +144,12 @@ asks for a *different* admin's password instead. That is not a bug, just
 unexpected.
 
 If the paired account is provably not an admin, the menu entry does not
-appear. If the role could not be looked up — because the backend does not
-answer — it is there; polkit decides either way.
+appear. If the role could not be looked up at start — because the backend
+does not answer — it is there; polkit decides either way. The role is only
+determined once at start, not re-checked on every reconnect: a session that
+begins with a dead backend shows the menu entry for its whole duration, even
+once the backend is reachable again. To be sure, restart the tray
+(`systemctl --user restart baluhost-tray`).
 
 A restart through the backend is written to the audit log. The fallback is
 not: nobody writes to the database any more at that point. The trail lives in
