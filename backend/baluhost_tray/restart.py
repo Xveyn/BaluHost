@@ -47,6 +47,7 @@ class RestartOutcome:
     message: str
     retry_secret: bool = False   # wrong password/code — ask again
     offer_local: bool = False    # API died mid-flight — offer the fallback
+    totp_required: bool = False  # the route wants a code, not a password
 
 
 @dataclass(frozen=True)
@@ -215,3 +216,102 @@ def restart_via_systemctl(
         f"Neustart fehlgeschlagen — abgebrochen oder keine Berechtigung.\n\n"
         f"{detail}{tail}",
     )
+
+
+def _detail(response) -> Any:
+    try:
+        return response.json().get("detail")
+    except (ValueError, AttributeError):
+        return None
+
+
+def restart_via_api(
+    client,
+    secret: str,
+    totp: bool,
+    on_auth_expired: Callable[[], None] | None = None,
+) -> RestartOutcome:
+    """The normal route: the backend restarts its own units after the step-up.
+
+    ``secret`` is a password or a TOTP code; ``totp`` decides which field it
+    goes into. ``on_auth_expired`` is called at most once, for a plain 401.
+    """
+    body = {"code": secret} if totp else {"current_password": secret}
+    refreshed = False
+
+    while True:
+        try:
+            response = client.post(RESTART_ALL_PATH, json=body, timeout=API_TIMEOUT)
+        except httpx.TimeoutException:
+            # Nicht als "Backend tot" behandeln: die Route startet vier Units
+            # synchron. Wer hier den Notweg anböte, liesse den Nutzer alles ein
+            # zweites Mal starten, waehrend es gerade ordentlich laeuft.
+            return RestartOutcome(
+                False,
+                "Der Neustart dauert länger als erwartet. Er läuft "
+                "wahrscheinlich noch — bitte den Zustand prüfen, bevor du es "
+                "erneut versuchst.",
+            )
+        except httpx.HTTPError as exc:
+            return RestartOutcome(
+                False,
+                f"Das Backend hat die Verbindung abgebrochen ({exc}).",
+                offer_local=True,
+            )
+
+        code = response.status_code
+        detail = _detail(response)
+
+        if code == 401:
+            if isinstance(detail, dict) and detail.get("error") == "step_up_failed":
+                return RestartOutcome(
+                    False,
+                    "Passwort bzw. 2FA-Code stimmt nicht.",
+                    retry_secret=True,
+                    totp_required=bool(detail.get("totp_required")),
+                )
+            if on_auth_expired is not None and not refreshed:
+                try:
+                    on_auth_expired()
+                except Exception as exc:        # noqa: BLE001 — PairingLost u.a.
+                    return RestartOutcome(
+                        False, f"Anmeldung konnte nicht erneuert werden: {exc}"
+                    )
+                refreshed = True
+                continue
+            return RestartOutcome(
+                False,
+                "Die Kopplung ist abgelaufen. Einmalig ausführen: "
+                "baluhost-tray --pair",
+            )
+
+        if code == 403:
+            if isinstance(detail, dict) and detail.get("error") == "local_network_required":
+                return RestartOutcome(
+                    False, "Der Neustart ist nur aus dem lokalen Netz möglich."
+                )
+            return RestartOutcome(False, "Dieses Konto ist kein BaluHost-Admin.")
+        if code == 429:
+            return RestartOutcome(
+                False, "Zu viele Versuche. In einer Minute erneut probieren."
+            )
+        if code != 200:
+            return RestartOutcome(
+                False, f"Das Backend hat den Neustart abgelehnt ({code})."
+            )
+
+        try:
+            units = response.json()["units"]
+            failed = [u["name"] for u in units if not u.get("success")]
+        except (ValueError, KeyError, TypeError, AttributeError) as exc:
+            return RestartOutcome(
+                False, f"Unerwartete Antwort des Backends ({exc})."
+            )
+
+        if failed:
+            return RestartOutcome(False, "Nicht neu gestartet: " + ", ".join(failed))
+        return RestartOutcome(
+            True,
+            "Dienste neu gestartet. Das Backend startet gleich ebenfalls neu — "
+            "das Symbol wird kurz grau.",
+        )

@@ -285,3 +285,200 @@ def test_success_message_names_the_count():
     outcome = restart.restart_via_systemctl(runner=runner)
 
     assert str(len(restart.UNITS)) in outcome.message
+
+
+# --- Normalweg: API -------------------------------------------------------
+
+
+def _ok_payload(failed: list[str] | None = None) -> dict:
+    units = [
+        {"name": name, "success": name not in (failed or []), "message": None}
+        for name in restart.UNITS[:-1]
+    ]
+    return {
+        "units": units,
+        "backend_restart_scheduled": True,
+        "eta_seconds": 1,
+        "initiated_by": "admin",
+    }
+
+
+def test_api_sends_the_password_in_the_password_field():
+    client = _client(post=_response(200, _ok_payload()))
+
+    outcome = restart.restart_via_api(client, "geheim", totp=False)
+
+    assert outcome.ok is True
+    assert client.post.call_args.args[0] == restart.RESTART_ALL_PATH
+    assert client.post.call_args.kwargs["json"] == {"current_password": "geheim"}
+
+
+def test_api_sends_the_code_in_the_code_field():
+    client = _client(post=_response(200, _ok_payload()))
+
+    restart.restart_via_api(client, "123456", totp=True)
+
+    assert client.post.call_args.kwargs["json"] == {"code": "123456"}
+
+
+def test_api_success_message_mentions_the_backend_coming_back():
+    outcome = restart.restart_via_api(
+        _client(post=_response(200, _ok_payload())), "geheim", totp=False
+    )
+    assert "Backend" in outcome.message
+
+
+def test_api_reports_a_failed_unit_by_name():
+    client = _client(post=_response(200, _ok_payload(failed=["baluhost-webdav"])))
+
+    outcome = restart.restart_via_api(client, "geheim", totp=False)
+
+    assert outcome.ok is False
+    assert "baluhost-webdav" in outcome.message
+
+
+def test_step_up_failure_asks_again():
+    client = _client(
+        post=_response(401, {"detail": {"error": "step_up_failed", "totp_required": False}})
+    )
+
+    outcome = restart.restart_via_api(client, "falsch", totp=False)
+
+    assert outcome.ok is False
+    assert outcome.retry_secret is True
+
+
+def test_step_up_failure_switches_to_totp_when_the_body_says_so():
+    """Der 401 ist die zuverlässigere Quelle als ein vorher geholter Status."""
+    client = _client(
+        post=_response(401, {"detail": {"error": "step_up_failed", "totp_required": True}})
+    )
+
+    outcome = restart.restart_via_api(client, "geheim", totp=False)
+
+    assert outcome.retry_secret is True
+    assert outcome.totp_required is True
+
+
+def test_plain_401_refreshes_once_and_retries():
+    """Abgelaufenes Token ist auch 401 — aber etwas völlig anderes."""
+    client = MagicMock()
+    client.post.side_effect = [
+        _response(401, {"detail": "Not authenticated"}),
+        _response(200, _ok_payload()),
+    ]
+    refreshed = []
+
+    outcome = restart.restart_via_api(
+        client, "geheim", totp=False, on_auth_expired=lambda: refreshed.append(True)
+    )
+
+    assert outcome.ok is True
+    assert refreshed == [True]
+    assert client.post.call_count == 2
+
+
+def test_plain_401_gives_up_after_one_refresh():
+    client = MagicMock()
+    client.post.side_effect = [
+        _response(401, {"detail": "Not authenticated"}),
+        _response(401, {"detail": "Not authenticated"}),
+    ]
+
+    outcome = restart.restart_via_api(
+        client, "geheim", totp=False, on_auth_expired=lambda: None
+    )
+
+    assert outcome.ok is False
+    assert outcome.retry_secret is False
+    assert "--pair" in outcome.message
+
+
+def test_a_failing_refresh_does_not_escape():
+    """session.refresh_access wirft PairingLost — das darf den Klick nicht sprengen."""
+    client = MagicMock()
+    client.post.side_effect = [_response(401, {"detail": "Not authenticated"})]
+
+    def boom():
+        raise RuntimeError("pairing lost")
+
+    outcome = restart.restart_via_api(
+        client, "geheim", totp=False, on_auth_expired=boom
+    )
+
+    assert outcome.ok is False
+
+
+def test_step_up_failure_is_not_retried_as_an_expired_token():
+    client = MagicMock()
+    client.post.side_effect = [
+        _response(401, {"detail": {"error": "step_up_failed", "totp_required": False}})
+    ]
+    refreshed = []
+
+    restart.restart_via_api(
+        client, "falsch", totp=False, on_auth_expired=lambda: refreshed.append(True)
+    )
+
+    assert refreshed == []
+    assert client.post.call_count == 1
+
+
+def test_403_local_network_is_named():
+    client = _client(post=_response(403, {"detail": {"error": "local_network_required"}}))
+
+    outcome = restart.restart_via_api(client, "geheim", totp=False)
+
+    assert outcome.ok is False
+    assert "lokalen Netz" in outcome.message
+
+
+def test_403_admin_is_named():
+    client = _client(post=_response(403, {"detail": "Insufficient permissions"}))
+
+    outcome = restart.restart_via_api(client, "geheim", totp=False)
+
+    assert "Admin" in outcome.message
+
+
+def test_429_names_the_wait():
+    outcome = restart.restart_via_api(_client(post=_response(429)), "geheim", totp=False)
+    assert outcome.ok is False
+    assert "Minute" in outcome.message
+
+
+def test_5xx_is_reported_as_a_server_error():
+    outcome = restart.restart_via_api(_client(post=_response(500)), "geheim", totp=False)
+    assert outcome.ok is False
+    assert outcome.offer_local is False
+
+
+def test_timeout_does_not_offer_the_fallback():
+    """Sonst startet der Nutzer alles ein zweites Mal, während es gerade läuft."""
+    client = _client(post=httpx.ReadTimeout("too slow"))
+
+    outcome = restart.restart_via_api(client, "geheim", totp=False)
+
+    assert outcome.ok is False
+    assert outcome.offer_local is False
+    assert "länger" in outcome.message
+
+
+def test_transport_error_offers_the_fallback():
+    """Die Probe war gerade noch grün — dazwischen ist das Backend gestorben."""
+    client = _client(post=httpx.ConnectError("connection refused"))
+
+    outcome = restart.restart_via_api(client, "geheim", totp=False)
+
+    assert outcome.ok is False
+    assert outcome.offer_local is True
+
+
+def test_unparsable_body_does_not_crash():
+    response = MagicMock()
+    response.status_code = 200
+    response.json.side_effect = ValueError("not json")
+
+    outcome = restart.restart_via_api(_client(post=response), "geheim", totp=False)
+
+    assert outcome.ok is False
