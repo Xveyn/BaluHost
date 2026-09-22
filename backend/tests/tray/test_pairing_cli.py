@@ -35,19 +35,28 @@ def _run(verification_url: str, web_url: str = "https://baluhost.local") -> list
     return printed
 
 
+PREFIX = "Freigeben unter: "
+
+
 def _link(lines: list[str]) -> str:
-    hits = [ln for ln in lines if "http" in ln and "Freigeben" in ln]
+    """Nur die Adresse, ohne die Zeile drumherum.
+
+    Damit werden die Zusicherungen unten exakte Vergleiche statt
+    Teilstring-Pruefungen. Das ist nicht nur schaerfer — `"https://host" in
+    text` haelt auch `https://boese.example/?x=https://host` fuer einen
+    Treffer —, es ist auch das Muster, das CodeQL zu Recht als
+    py/incomplete-url-substring-sanitization anstreicht.
+    """
+    hits = [ln for ln in lines if ln.startswith(PREFIX)]
     assert hits, f"keine Freigabe-Zeile in der Ausgabe: {lines}"
-    return hits[0]
+    return hits[0][len(PREFIX):].strip()
 
 
 def test_the_link_does_not_point_at_the_api_port():
     """Der eigentliche Fehler: der Server liefert seine eigene Adresse."""
     link = _link(_run("http://localhost:8000/devices?pair=1"))
 
-    assert ":8000" not in link
-    assert "localhost" not in link
-    assert "https://baluhost.local" in link
+    assert link == "https://baluhost.local/devices?pair=1"
 
 
 def test_the_link_keeps_path_and_query_from_the_server():
@@ -58,22 +67,21 @@ def test_the_link_keeps_path_and_query_from_the_server():
     """
     link = _link(_run("http://localhost:8000/geraete?pair=1&x=2"))
 
-    assert "/geraete?pair=1&x=2" in link
-    assert link.endswith("https://baluhost.local/geraete?pair=1&x=2")
+    assert link == "https://baluhost.local/geraete?pair=1&x=2"
 
 
 def test_an_unusable_server_url_still_yields_a_reachable_link():
     """Lieber ein Link auf die bekannte Standardseite als gar keiner."""
     link = _link(_run(""))
 
-    assert "https://baluhost.local/devices?pair=1" in link
+    assert link == "https://baluhost.local/devices?pair=1"
 
 
 def test_a_custom_web_url_is_honoured():
     link = _link(_run("http://localhost:8000/devices?pair=1",
                       web_url="https://nas.example.net"))
 
-    assert "https://nas.example.net/devices?pair=1" in link
+    assert link == "https://nas.example.net/devices?pair=1"
 
 
 def test_no_apology_about_the_wrong_port_is_printed():
