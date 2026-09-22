@@ -75,7 +75,7 @@ def test_wrong_password_is_asked_again_up_to_three_times():
 
 
 def test_backend_can_switch_the_flow_to_a_code():
-    """Der 401 weiss besser als wir, was die Route will."""
+    """Der 401 weiß besser als wir, was die Route will."""
     prompt = _prompts("geheim", "123456")
     seen_totp = []
 
@@ -124,6 +124,36 @@ def test_non_admin_is_told_without_being_asked_for_a_password():
     assert outcome.ok is False
     assert prompt.seen == []
     assert "Admin" in outcome.message
+
+
+def test_unknown_admin_status_proceeds_to_api_auth():
+    """Identitätsprüfung `is_admin is False` nicht `not is_admin`.
+
+    Wenn das Backend seit der Anmeldung tot ist, konnte die Rolle nie
+    abgefragt werden (is_admin=None). Der Ablauf darf dann *nicht* mit
+    der Nicht-Admin-Meldung scheitern, sondern normal weiterlaufen.
+
+    Ein versehentlicher Refactor zu `if not account.is_admin:` würde
+    diesen Notfall brechen: das Tray verweigerte den Dienst genau dann,
+    wenn es ihn am meisten braucht.
+    """
+    prompt = _prompts("geheim")
+    called = {}
+
+    def api(client, secret, totp, on_auth_expired=None):
+        called.update(secret=secret, totp=totp)
+        return restart.RestartOutcome(True, "ok")
+
+    outcome = restart.restart_flow(
+        MagicMock(), prompt,
+        probe=lambda c: True, facts=_facts(is_admin=None),
+        api=api, local=_never_local,
+    )
+
+    # Nicht mit Nicht-Admin-Meldung abgelehnt, sondern normal gefragt
+    assert outcome.ok is True
+    assert prompt.seen == ["password"]
+    assert called == {"secret": "geheim", "totp": False}
 
 
 def test_dead_api_confirms_and_uses_systemctl():
