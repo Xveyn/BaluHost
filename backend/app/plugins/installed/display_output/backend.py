@@ -7,8 +7,14 @@ Entwicklungsbetrieb, ein Linux-Backend, das mit der realen Session spricht.
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 from typing import Dict, List, Optional, Protocol, Tuple
 
+from app.plugins.installed.display_output.brightness import (
+    DisplayBrightness,
+    read_displays,
+    write_brightness,
+)
 from app.plugins.installed.display_output.kscreen import (
     build_apply_args,
     parse_outputs,
@@ -28,6 +34,13 @@ class DisplayBackend(Protocol):
     async def apply(
         self, wanted: Dict[str, Tuple[bool, Optional[str]]], live_outputs: List[DisplayOutput]
     ) -> Tuple[bool, str]: ...
+
+    # Helligkeit laeuft ueber einen anderen Mechanismus als die Ausgangswahl
+    # (powerdevil ueber den Session-Bus statt kscreen-doctor) und liegt deshalb
+    # in eigenen Methoden. ``None`` heisst "keine Auskunft", ``[]`` heisst
+    # "erreichbar, aber nichts steuerbar".
+    async def get_brightness(self) -> Optional[List[DisplayBrightness]]: ...
+    async def set_brightness(self, display_id: str, raw: int) -> Tuple[bool, str]: ...
 
 
 def _dev_modes(entries: List[tuple]) -> List[DisplayMode]:
@@ -75,6 +88,21 @@ class DevDisplayBackend:
                 ]),
             ),
         ]
+        # Genau EIN Eintrag, obwohl zwei Ausgaenge gemeldet werden — so hat es
+        # die Messung auf BaluNode ergeben: powerdevil fuehrt nur
+        # eingeschaltete, steuerbare Bildschirme. Ein Dev-Backend mit einem
+        # Regler je Ausgang behauptete einen Zustand, den das echte nie liefert.
+        # Und der Objektname ist keiner der Connector-Namen: diese Zuordnung
+        # gibt die D-Bus-Schnittstelle nicht her.
+        self._brightness: List[DisplayBrightness] = [
+            DisplayBrightness(
+                id="display13",
+                label="Dev-Bildschirm (extern)",
+                internal=False,
+                raw=10000,
+                maximum=10000,
+            )
+        ]
 
     async def get_layout(self) -> DisplayLayout:
         # lit folgt hier direkt selected: das Dev-Backend simuliert keine
@@ -98,6 +126,20 @@ class DevDisplayBackend:
             if selected and mode_id:
                 output.current_mode_id = mode_id
         return True, "Angewendet (Dev)"
+
+    async def get_brightness(self) -> Optional[List[DisplayBrightness]]:
+        return list(self._brightness)
+
+    async def set_brightness(self, display_id: str, raw: int) -> Tuple[bool, str]:
+        for index, display in enumerate(self._brightness):
+            if display.id != display_id:
+                continue
+            clamped = max(0, min(display.maximum, raw))
+            self._brightness[index] = replace(display, raw=clamped)
+            return True, "Gesetzt (Dev)"
+        # Der Service prueft die ID vorher gegen die Enumeration; hier ist es
+        # die zweite Schranke, und sie meldet statt zu werfen.
+        return False, f"Unbekannter Bildschirm: {display_id}"
 
 
 class KWinDisplayBackend:
@@ -133,3 +175,13 @@ class KWinDisplayBackend:
         args = build_apply_args(wanted, live_outputs)
         # Genau ein Aufruf: kscreen-doctor wendet alle Argumente gemeinsam an.
         return await asyncio.to_thread(run_kscreen, args[1:])
+
+    async def get_brightness(self) -> Optional[List[DisplayBrightness]]:
+        # 1+n Unterprozesse, deshalb in einem Thread: der Event-Loop des
+        # Workers soll darauf nicht warten.
+        return await asyncio.to_thread(read_displays)
+
+    async def set_brightness(self, display_id: str, raw: int) -> Tuple[bool, str]:
+        # Der Geraetewert kommt fertig aus dem Service — dieses Backend rechnet
+        # nicht mit, damit es genau eine Stelle gibt, die die Skala kennt.
+        return await asyncio.to_thread(write_brightness, display_id, raw)

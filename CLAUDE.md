@@ -74,7 +74,7 @@ client/
 **Tests**: `backend/tests/`
 **Fan control**: `backend/app/services/power/fan_control.py`
 **Audio control**: `backend/app/plugins/installed/audio_control/` (bundled Plugin; `pactl.py` kapselt den gesamten pactl-Kontakt)
-**Display outputs**: `backend/app/plugins/installed/display_output/` (bundled Plugin; `kscreen.py` kapselt den gesamten kscreen-doctor-Kontakt)
+**Display outputs**: `backend/app/plugins/installed/display_output/` (bundled Plugin; `kscreen.py` kapselt den gesamten kscreen-doctor-Kontakt, `brightness.py` den gesamten `org.kde.ScreenBrightness`-Kontakt — kscreen-doctor kennt keine Helligkeit)
 **Bluetooth**: `backend/app/plugins/installed/bluetooth/` (bundled Plugin; `bluez.py` kapselt den gesamten org.bluez-Kontakt, `pairing.py` + `agent.py` die Kopplung)
 **Steam-Spielstart**: `backend/app/plugins/installed/steam_gaming/routes.py` (Routen), `launch.py` (gemeinsamer Gaming-Mode-Ablauf), `library.py` (startbare Spiele); Steam startet über `systemd-run --user` (`launcher.py`, #640)
 **Power management**: `backend/app/services/power/manager.py`

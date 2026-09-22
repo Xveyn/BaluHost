@@ -363,3 +363,76 @@ class TestAuditLogging:
         ]})
         assert resp.status_code == 200
         assert security_events == []
+
+
+class TestBrightnessInState:
+    def test_the_state_carries_the_brightness_block(self, client):
+        # Der Lesepfad sitzt absichtlich IM Zustand und nicht in einer zweiten
+        # Route: das Popover pollt alle 5 s gegen ein Limit von 60/min, und ein
+        # Feld im selben Response kostet keine zusaetzliche Anfrage.
+        block = client.get(f"{BASE}/state").json()["brightness"]
+        assert block["available"] is True
+        assert block["displays"][0]["percent"] == 100
+        assert block["displays"][0]["label"]
+
+    def test_a_display_carries_no_device_scale_to_the_client(self, client):
+        # Prozent ist der Vertrag. Die Geraeteskala (raw/maximum) bleibt
+        # serverseitig — der Client hat damit nichts zu rechnen.
+        display = client.get(f"{BASE}/state").json()["brightness"]["displays"][0]
+        assert set(display.keys()) == {"id", "label", "internal", "percent"}
+
+
+class TestBrightnessRoute:
+    def test_a_valid_percent_succeeds_and_is_visible_afterwards(self, client):
+        display_id = client.get(f"{BASE}/state").json()["brightness"]["displays"][0]["id"]
+        resp = client.post(f"{BASE}/brightness", json={"id": display_id, "percent": 60})
+        assert resp.status_code == 200
+        assert resp.json() == {"success": True}
+        after = client.get(f"{BASE}/state").json()["brightness"]["displays"][0]["percent"]
+        assert after == 60
+
+    def test_an_unknown_display_is_400(self, client):
+        resp = client.post(f"{BASE}/brightness", json={"id": "display99", "percent": 60})
+        assert resp.status_code == 400
+
+    def test_zero_percent_is_refused(self, client):
+        # Die Weboberflaeche darf den Menschen am Schreibtisch nicht vor einem
+        # schwarzen Bildschirm sitzen lassen — derselbe Gedanke wie beim
+        # Verbot, alle Ausgaenge abzuwaehlen.
+        resp = client.post(f"{BASE}/brightness", json={"id": "display13", "percent": 0})
+        assert resp.status_code == 422
+
+    def test_more_than_full_is_refused(self, client):
+        resp = client.post(f"{BASE}/brightness", json={"id": "display13", "percent": 101})
+        assert resp.status_code == 422
+
+    def test_a_missing_percent_is_422(self, client):
+        resp = client.post(f"{BASE}/brightness", json={"id": "display13"})
+        assert resp.status_code == 422
+
+    def test_an_id_shaped_like_a_path_escape_never_reaches_the_bus(self, client):
+        # Zwei Schranken, beide muessen halten: der Service prueft gegen die
+        # Enumeration, object_path() laesst nur Pfadbestandteile durch.
+        resp = client.post(f"{BASE}/brightness", json={"id": "../../evil", "percent": 60})
+        assert resp.status_code in (400, 422)
+
+    def test_the_route_is_gated(self):
+        app = FastAPI()
+        app.include_router(DisplayOutputPlugin().get_router(), prefix=BASE)
+        resp = TestClient(app).post(f"{BASE}/brightness", json={"id": "display13", "percent": 60})
+        assert resp.status_code in (401, 403)
+
+    def test_no_qdbus_output_reaches_the_client(self, monkeypatch):
+        secret = "/sys/devices/pci0000:00/EDID-Geheimnis"
+
+        class _Chatty(DevDisplayBackend):
+            async def set_brightness(self, display_id, raw):
+                return False, secret
+
+        service = DisplayService(backend=_Chatty())
+        monkeypatch.setattr(service_module, "get_display_service", lambda: service)
+        client = _app(service)
+        display_id = client.get(f"{BASE}/state").json()["brightness"]["displays"][0]["id"]
+        resp = client.post(f"{BASE}/brightness", json={"id": display_id, "percent": 60})
+        assert resp.status_code == 502
+        assert secret not in resp.text

@@ -29,7 +29,7 @@ plugins/
 └── installed/           # Bundled plugin implementations (one CLAUDE.md each)
     ├── audio_control/      # Volume, output device and per-app mixer of the desktop session (pactl)
     ├── bluetooth/          # BlueZ over D-Bus: devices, scan, pairing with an own agent
-    ├── display_output/     # KWin output selection and video mode (kscreen-doctor)
+    ├── display_output/     # KWin output selection and video mode (kscreen-doctor) + brightness (powerdevil over D-Bus)
     ├── optical_drive/      # CD/DVD burning, reading, ISO browsing (own router)
     ├── steam_gaming/       # Status pill, session ledger, Gaming-Mode menu action, game launch routes
     ├── storage_analytics/  # DEMO ONLY — every number is hard-coded, see its CLAUDE.md

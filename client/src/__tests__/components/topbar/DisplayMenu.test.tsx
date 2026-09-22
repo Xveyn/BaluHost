@@ -19,6 +19,7 @@ vi.mock('../../../api/displayOutput', async () => {
     ...actual,
     getDisplayLayout: vi.fn(),
     applyDisplayLayout: vi.fn().mockResolvedValue(undefined),
+    setDisplayBrightness: vi.fn().mockResolvedValue(undefined),
   };
 });
 
@@ -27,7 +28,11 @@ vi.mock('../../../api/powerPermissions', () => ({
 }));
 
 import { DisplayMenu } from '../../../components/topbar/DisplayMenu';
-import { getDisplayLayout, applyDisplayLayout } from '../../../api/displayOutput';
+import {
+  applyDisplayLayout,
+  getDisplayLayout,
+  setDisplayBrightness,
+} from '../../../api/displayOutput';
 import { getMyPowerPermissions } from '../../../api/powerPermissions';
 import displayDe from '../../../i18n/locales/de/display.json';
 import displayEn from '../../../i18n/locales/en/display.json';
@@ -51,6 +56,13 @@ const LAYOUT = {
       ],
     },
   ],
+  // Genau EIN Helligkeitsobjekt bei zwei Ausgaengen — so hat powerdevil es auf
+  // BaluNode gemeldet. Die Objekt-ID ist kein Connector-Name.
+  brightness: {
+    available: true,
+    detail: null,
+    displays: [{ id: 'display13', label: 'Example XY27', internal: false, percent: 100 }],
+  },
 };
 
 beforeEach(() => {
@@ -240,6 +252,122 @@ describe('DisplayMenu', () => {
   });
 });
 
+describe('DisplayMenu Helligkeit', () => {
+  const slider = () =>
+    screen.getByLabelText('display:brightnessFor:Example XY27') as HTMLInputElement;
+
+  it('zeigt einen Regler je steuerbaren Bildschirm, nicht je Ausgang', async () => {
+    // Zwei Ausgaenge, ein Regler: powerdevil fuehrt nur eingeschaltete,
+    // steuerbare Bildschirme, und die Zuordnung zu einem Connector gibt die
+    // Schnittstelle nicht her.
+    await open();
+    expect(screen.getAllByRole('slider').length).toBe(1);
+    expect(slider().value).toBe('100');
+    expect(screen.getByText('Example XY27')).toBeTruthy();
+  });
+
+  it('laesst den Bildschirm nicht auf null drehen', async () => {
+    // Die Untergrenze ist die Zusage an den Menschen am Schreibtisch: die
+    // Weboberflaeche darf ihn nicht vor einem schwarzen Bildschirm sitzen
+    // lassen. Das Backend lehnt 0 ohnehin mit 422 ab.
+    await open();
+    expect(slider().min).toBe('5');
+    expect(slider().max).toBe('100');
+  });
+
+  it('zeigt den neuen Wert sofort, bevor der Server geantwortet hat', async () => {
+    await open();
+    fireEvent.change(slider(), { target: { value: '60' } });
+    // Ohne optimistische Anzeige springt der Regler unter dem Finger zurueck.
+    expect(slider().value).toBe('60');
+    expect(screen.getByText('60 %')).toBeTruthy();
+  });
+
+  it('schickt einen Reglerwert erst nach der Entprellung', async () => {
+    await open();
+    vi.useFakeTimers();
+    fireEvent.change(slider(), { target: { value: '60' } });
+    expect(setDisplayBrightness).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(250);
+    expect(setDisplayBrightness).toHaveBeenCalledTimes(1);
+    expect(setDisplayBrightness).toHaveBeenCalledWith('display13', 60);
+  });
+
+  it('verwirft die Zwischenschritte einer Reglerbewegung', async () => {
+    // Ein Ziehen erzeugt Dutzende Aenderungen. Ohne Verwerfen wird daraus ein
+    // Dutzend D-Bus-Aufrufe, und das Limit von 60/min ist in Sekunden leer.
+    await open();
+    vi.useFakeTimers();
+    fireEvent.change(slider(), { target: { value: '80' } });
+    fireEvent.change(slider(), { target: { value: '70' } });
+    fireEvent.change(slider(), { target: { value: '55' } });
+    await vi.advanceTimersByTimeAsync(250);
+    expect(setDisplayBrightness).toHaveBeenCalledTimes(1);
+    expect(setDisplayBrightness).toHaveBeenCalledWith('display13', 55);
+  });
+
+  it('laesst den Poll-Takt aus, solange eine Reglerbewegung aussteht', async () => {
+    // Sonst holt der Takt den alten Serverwert und der Regler springt mitten
+    // im Ziehen zurueck.
+    //
+    // Die Zeiten sind der Gegenstand des Tests, nicht Beiwerk: der Poll-Takt
+    // liegt bei 5000 ms, die Entprellung bei 200 ms. Eine Bewegung bei 4900 ms
+    // ist bei 5000 ms also noch offen — genau dann MUSS der Takt aussetzen.
+    // Spult man stattdessen erst 5000 ms weiter und bewegt dann, ist die
+    // Entprellung beim naechsten Takt laengst durch und der Test misst nichts.
+    render(<DisplayMenu />);
+    const button = await screen.findByLabelText('display:title');
+    vi.useFakeTimers();
+    fireEvent.click(button);
+    await vi.waitFor(() => expect(screen.getByText('DP-3')).toBeInTheDocument());
+    const callsBefore = vi.mocked(getDisplayLayout).mock.calls.length;
+
+    await vi.advanceTimersByTimeAsync(4900);
+    fireEvent.change(slider(), { target: { value: '40' } });
+    // Ueber den Takt bei 5000 ms hinweg, aber vor der Entprellung bei 5100 ms.
+    await vi.advanceTimersByTimeAsync(150);
+    expect(vi.mocked(getDisplayLayout).mock.calls.length).toBe(callsBefore);
+
+    // Und danach holt der Schreibvorgang den frischen Zustand selbst.
+    await vi.advanceTimersByTimeAsync(100);
+    expect(setDisplayBrightness).toHaveBeenCalledWith('display13', 40);
+    expect(vi.mocked(getDisplayLayout).mock.calls.length).toBe(callsBefore + 1);
+  });
+
+  it('meldet, wenn kein Bildschirm steuerbar ist', async () => {
+    vi.mocked(getDisplayLayout).mockResolvedValue({
+      ...structuredClone(LAYOUT),
+      brightness: { available: true, detail: null, displays: [] },
+    } as never);
+    await open();
+    expect(await screen.findByText('display:noBrightness')).toBeTruthy();
+    expect(screen.queryAllByRole('slider').length).toBe(0);
+  });
+
+  it('unterscheidet den unerreichbaren Dienst von der leeren Liste', async () => {
+    // Zwei verschiedene Aussagen: "powerdevil antwortet nicht" ist nicht
+    // dasselbe wie "es gibt nichts zu regeln".
+    vi.mocked(getDisplayLayout).mockResolvedValue({
+      ...structuredClone(LAYOUT),
+      brightness: { available: false, detail: null, displays: [] },
+    } as never);
+    await open();
+    expect(await screen.findByText('display:brightnessUnavailable')).toBeTruthy();
+    expect(screen.queryByText('display:noBrightness')).toBeNull();
+  });
+
+  it('meldet einen fehlgeschlagenen Schreibvorgang', async () => {
+    vi.mocked(setDisplayBrightness).mockRejectedValueOnce({ response: { status: 502 } });
+    await open();
+    vi.useFakeTimers();
+    fireEvent.change(slider(), { target: { value: '60' } });
+    await vi.advanceTimersByTimeAsync(250);
+    await vi.waitFor(() =>
+      expect(screen.getByText('display:brightnessError')).toBeInTheDocument(),
+    );
+  });
+});
+
 describe('display i18n locale contract', () => {
   // Der react-i18next-Mock oben kann diesen Fehler grundsaetzlich nicht
   // fangen: er baut den Anzeigetext IMMER aus `options` zusammen, egal ob der
@@ -252,5 +380,13 @@ describe('display i18n locale contract', () => {
   it('mode-Label traegt den {{output}}-Platzhalter in beiden Sprachen', () => {
     expect(displayDe.mode).toContain('{{output}}');
     expect(displayEn.mode).toContain('{{output}}');
+  });
+
+  it('brightnessFor-Label traegt den {{display}}-Platzhalter in beiden Sprachen', () => {
+    // Dieselbe Falle wie oben: mehrere Regler mit identischem aria-label sind
+    // fuer einen Screenreader ununterscheidbar, und der Mock kann das nicht
+    // sehen.
+    expect(displayDe.brightnessFor).toContain('{{display}}');
+    expect(displayEn.brightnessFor).toContain('{{display}}');
   });
 });

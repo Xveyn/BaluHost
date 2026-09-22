@@ -21,8 +21,15 @@ from app.plugins.installed.display_output.backend import (
     DisplayBackend,
     KWinDisplayBackend,
 )
+from app.plugins.installed.display_output.brightness import to_raw
 from app.plugins.installed.display_output.kscreen import build_apply_args
-from app.plugins.installed.display_output.models import DisplayApplyRequest, DisplayLayout
+from app.plugins.installed.display_output.models import (
+    BrightnessDisplay,
+    BrightnessInfo,
+    BrightnessRequest,
+    DisplayApplyRequest,
+    DisplayLayout,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -77,8 +84,67 @@ class DisplayService:
             self._backend = KWinDisplayBackend()
 
     async def get_layout(self) -> DisplayLayout:
-        """Liest Ausgaenge, Modi und den globalen DPMS-Zustand."""
-        return await self._backend.get_layout()
+        """Liest Ausgaenge, Modi, den globalen DPMS-Zustand und die Helligkeit.
+
+        Die Helligkeit reist im selben Zustand mit, statt in einer zweiten
+        Route zu liegen: das Popover pollt alle 5 s gegen ein Limit von
+        60/min, und ein Feld im vorhandenen Response kostet keine zusaetzliche
+        Anfrage.
+        """
+        layout = await self._backend.get_layout()
+        if not layout.available:
+            # Keine Sitzung, keine Helligkeit. Die 1+n Unterprozesse an
+            # powerdevil braeuchte hier niemand: das Popover zeigt in diesem
+            # Zustand ohnehin nur den Hinweis auf die fehlende Sitzung.
+            return layout
+        return layout.model_copy(update={"brightness": await self._read_brightness()})
+
+    async def _read_brightness(self) -> BrightnessInfo:
+        """Uebersetzt die Geraeteskala in den Prozent-Vertrag der API."""
+        displays = await self._backend.get_brightness()
+        if displays is None:
+            return BrightnessInfo(available=False, detail="Helligkeitsdienst nicht erreichbar")
+        return BrightnessInfo(
+            available=True,
+            displays=[
+                BrightnessDisplay(
+                    id=display.id,
+                    label=display.label,
+                    internal=display.internal,
+                    percent=display.percent,
+                )
+                for display in displays
+            ],
+        )
+
+    async def set_brightness(self, request: BrightnessRequest) -> Tuple[bool, str]:
+        """Setzt die Helligkeit eines Bildschirms.
+
+        Returns:
+            (Erfolg, Meldung). Die Meldung stammt roh von qdbus6 und gehoert
+            ins Log, nicht in eine Client-Antwort.
+
+        Raises:
+            DisplayUnavailable: powerdevil gibt keine Auskunft.
+            InvalidRequest: Die ID stand nicht in der Live-Enumeration.
+        """
+        displays = await self._backend.get_brightness()
+        if displays is None:
+            raise DisplayUnavailable("Helligkeitsdienst nicht erreichbar")
+        target = next((d for d in displays if d.id == request.id), None)
+        if target is None:
+            raise InvalidRequest(f"Unbekannter Bildschirm: {request.id}")
+
+        # Umgerechnet wird hier, weil hier die Geraeteskala bekannt ist —
+        # ``maximum`` ist geraeteabhaengig und verlaesst die Serverseite nicht.
+        raw = to_raw(request.percent, target.maximum)
+        logger.info(
+            "Helligkeit %s: %s %% (%s von %s)", target.id, request.percent, raw, target.maximum
+        )
+        # ``target.id`` statt ``request.id``: weitergegeben wird der Wert aus
+        # der Enumeration, nicht der aus dem Request. Beide sind hier gleich —
+        # dass es der enumerierte ist, ist der Punkt.
+        return await self._backend.set_brightness(target.id, raw)
 
     async def apply(self, request: DisplayApplyRequest) -> ApplyResult:
         """Prueft den Wunsch gegen die Live-Enumeration und wendet ihn an.
