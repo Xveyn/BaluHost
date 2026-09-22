@@ -49,6 +49,13 @@ MENU_QUIET = "Eine Stunde stumm"
 # Er oeffnet die Geraeteseite, und der Name sagt genau das.
 MENU_DEVICES = "Geräte in der Web-UI"
 MENU_RESTART = "BaluHost neu starten…"
+# Der Titel steht ueber vier verschiedenen Dialogen und las sich deshalb wie
+# eine Aussage ueber den Ausgang — "BaluHost neu starten" ueber einer Meldung,
+# die einen Fehlschlag meldet, widerspricht sich. Ein Titel je Rolle.
+TITLE_ASK = "BaluHost neu starten?"
+TITLE_PROMPT = "BaluHost neu starten"
+TITLE_DONE = "Neustart abgeschlossen"
+TITLE_FAILED = "Neustart unvollständig"
 MENU_QUIT = "Beenden"
 QUIET_SECONDS = 3600.0
 PROMPT_TIMEOUT = 300.0      # der Worker wartet nicht ewig auf einen Dialog
@@ -102,6 +109,10 @@ def run_tray(base_url: str, web_url: str) -> int:
         raise NotifierUnavailable("no system tray in this session")
 
     icons = _build_icons()
+    # Nach _build_icons, nicht davor: ohne das bleibt das Icon jedes
+    # Dialogfensters leer, und vor dem Aufbau gaebe es `icons` nicht.
+    # Das Panel-Icon haengt am QSystemTrayIcon und ist davon unberuehrt.
+    app.setWindowIcon(icons[IconState.OK])
     state = TrayState()
     queue = PopupQueue()
     quiet = QuietMode()
@@ -164,7 +175,7 @@ def run_tray(base_url: str, web_url: str) -> int:
             if mode == "local":
                 choice = QMessageBox.question(
                     None,
-                    "BaluHost neu starten",
+                    TITLE_ASK,
                     "Das Backend antwortet nicht.\n\nDienste direkt über das "
                     "System neu starten? Das System fragt gleich nach dem "
                     "Passwort.\n\nLaufende Aufträge und Uploads werden dabei "
@@ -181,7 +192,7 @@ def run_tray(base_url: str, web_url: str) -> int:
                      f"werden abgebrochen."
             )
             typed, ok = QInputDialog.getText(
-                None, "BaluHost neu starten", text, QLineEdit.EchoMode.Password
+                None, TITLE_PROMPT, text, QLineEdit.EchoMode.Password
             )
             value = typed if ok and typed else None
         finally:
@@ -203,7 +214,7 @@ def run_tray(base_url: str, web_url: str) -> int:
     def _restart_done(ok: bool, message: str) -> None:
         restart_action.setEnabled(True)
         box = QMessageBox.information if ok else QMessageBox.warning
-        box(None, "BaluHost neu starten", message)
+        box(None, TITLE_DONE if ok else TITLE_FAILED, message)
 
     bridge.restart_finished.connect(_restart_done)
 

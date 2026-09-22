@@ -151,3 +151,27 @@ def test_restart_support_units_continues_after_a_failure():
         ("baluhost-webdav", True),
         ("baluhost-backend-local", True),
     ]
+
+
+def test_restart_unit_reports_the_return_code():
+    """Der Aufrufer muss "durch ein Signal beendet" von "exit 1" unterscheiden koennen.
+
+    Beim Selbst-Neustart des Backends raeumt systemd die eigene cgroup ab und
+    beendet diesen systemctl-Aufruf per SIGTERM (-15). Das ist der Erfolgsfall,
+    nicht ein Fehlschlag — unterscheidbar aber nur am Rueckgabecode, und der
+    steckte bisher nur als Text in der Meldung (#704).
+    """
+    def runner(args, **kwargs):
+        return _Completed(returncode=-15)
+
+    result = system_restart.restart_unit("baluhost-backend", runner=runner)
+
+    assert result.success is False
+    assert result.returncode == -15
+
+
+def test_restart_unit_return_code_is_none_on_success():
+    def runner(args, **kwargs):
+        return _Completed()
+
+    assert system_restart.restart_unit("baluhost-webdav", runner=runner).returncode is None

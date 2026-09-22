@@ -1,6 +1,8 @@
 """Tests für POST /api/system/restart-all (Admin + LAN + Step-up)."""
 import inspect
 
+import logging
+
 import pytest
 
 from app.api.routes import system as system_module
@@ -288,3 +290,50 @@ def test_rate_limit_decorator_is_actually_attached():
     assert (
         "app.api.routes.system.restart_all_services" in user_limiter._route_limits
     ), "kein Rate-Limit an der Route registriert"
+
+
+# --- Protokollierung des Selbst-Neustarts (#704) -------------------------
+
+def test_signal_terminated_self_restart_is_not_an_error(caplog):
+    """SIGTERM auf den eigenen systemctl-Aufruf IST der gelungene Selbst-Neustart.
+
+    systemd raeumt beim Stoppen der alten Unit die cgroup ab, in der dieser
+    Aufruf steckt. Die frueherere ERROR-Zeile behauptete das Gegenteil ("the
+    service is still running the old process") — und zwar bei jedem
+    erfolgreichen Sammelneustart.
+    """
+    from app.api.routes import system as system_module
+
+    result = system_restart.UnitResult(
+        "baluhost-backend", False, "exit -15", returncode=-15
+    )
+
+    with caplog.at_level(logging.INFO):
+        system_module._log_backend_restart_outcome(result)
+
+    assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
+    assert any("expected" in r.getMessage() for r in caplog.records)
+
+
+def test_genuinely_failed_self_restart_is_still_an_error(caplog):
+    from app.api.routes import system as system_module
+
+    result = system_restart.UnitResult(
+        "baluhost-backend", False, "Unit not found", returncode=1
+    )
+
+    with caplog.at_level(logging.INFO):
+        system_module._log_backend_restart_outcome(result)
+
+    assert [r for r in caplog.records if r.levelno >= logging.ERROR]
+
+
+def test_successful_self_restart_logs_nothing_alarming(caplog):
+    from app.api.routes import system as system_module
+
+    with caplog.at_level(logging.INFO):
+        system_module._log_backend_restart_outcome(
+            system_restart.UnitResult("baluhost-backend", True)
+        )
+
+    assert not [r for r in caplog.records if r.levelno >= logging.WARNING]

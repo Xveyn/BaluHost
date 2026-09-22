@@ -7,12 +7,19 @@ does not have to detect anything itself.
 
 from __future__ import annotations
 
-from baluhost_tray.state import PendingPopup
+from baluhost_tray.icons import icon_path
+from baluhost_tray.state import IconState, PendingPopup
 
 _BUS_NAME = "org.freedesktop.Notifications"
 _BUS_PATH = "/org/freedesktop/Notifications"
 _APP_NAME = "BaluHost"
 _TIMEOUT_MS = 10_000
+# A path, not a theme name. The spec allows either, but the icons live inside
+# this package and are never installed into an icon theme — the name
+# "baluhost" resolved to nothing and Plasma drew an empty placeholder. The OK
+# artwork is the brand icon; its green badge is the one compromise, since no
+# badge-free file exists and PendingPopup carries no severity.
+_ICON_URI = icon_path(IconState.OK, 48).as_uri()
 
 
 class NotifierUnavailable(Exception):
@@ -58,7 +65,7 @@ class Notifier:
         return await self._iface.call_notify(
             _APP_NAME,
             0,               # replaces_id: 0 = new notification
-            "baluhost",      # icon name
+            _ICON_URI,
             title,
             message,
             [],              # actions

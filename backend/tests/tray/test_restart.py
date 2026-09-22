@@ -534,3 +534,20 @@ def test_unparsable_body_does_not_crash():
     outcome = restart.restart_via_api(_client(post=response), "geheim", totp=False)
 
     assert outcome.ok is False
+
+
+def test_api_failure_names_the_units_that_did_restart_too():
+    """Nur den Fehlschlag zu nennen liest sich als "gar nichts hat funktioniert".
+
+    Genau so wurde die Meldung bei der Abnahme gelesen: vier von fuenf Units
+    liefen neu, im Dialog stand nur die fuenfte — und der Eindruck war, der
+    ganze Neustart sei gescheitert.
+    """
+    client = _client(post=_response(200, _ok_payload(failed=["baluhost-backend-local"])))
+
+    outcome = restart.restart_via_api(client, "geheim", totp=False)
+
+    assert outcome.ok is False
+    assert "baluhost-backend-local" in outcome.message
+    assert "baluhost-scheduler" in outcome.message
+    assert "baluhost-webdav" in outcome.message
