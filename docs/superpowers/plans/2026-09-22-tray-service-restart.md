@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Ein Menüpunkt im Tray startet alle BaluHost-Units neu — über die API mit BaluHost-Step-up, und bei totem Backend über `systemctl` mit polkit-Abfrage.
+**Goal:** Ein Menüpunkt im Tray startet alle fünf BaluHost-Units neu — über die API mit BaluHost-Step-up, und bei totem Backend über `systemctl` mit polkit-Abfrage.
 
-**Architecture:** Zwei Wege, ein Menüpunkt. Das Tray probt beim Klick `/api/health`. Antwortet die API, fragt ein Dialog Passwort bzw. TOTP und `POST /api/system/restart-all` erledigt den Rest im Backend (drei Units synchron, `baluhost-backend` zuletzt per Timer). Antwortet sie nicht, ruft das Tray `systemctl restart` selbst; systemd fragt polkit, KDE zeigt den Dialog. Alles Entscheidbare im Tray liegt in `restart.py` und ist ohne Qt, ohne systemd und ohne Backend prüfbar.
+**Architecture:** Zwei Wege, ein Menüpunkt. Das Tray probt beim Klick `/api/health`. Antwortet die API, fragt ein Dialog Passwort bzw. TOTP und `POST /api/system/restart-all` erledigt den Rest im Backend (vier Units synchron, `baluhost-backend` zuletzt per Timer). Antwortet sie nicht, ruft das Tray **einen** `systemctl restart` für alle Units auf; systemd fragt polkit, KDE zeigt den Dialog. Alles Entscheidbare im Tray liegt in `restart.py` und ist ohne Qt, ohne systemd und ohne Backend prüfbar.
 
 **Tech Stack:** Python 3.11+, FastAPI, Pydantic v2, SQLAlchemy, pytest; Tray: PyQt6, httpx über `baluhost_tui.client.BackendClient`.
 
@@ -12,14 +12,18 @@
 
 ## Global Constraints
 
-- **Unit-Reihenfolge, wörtlich:** `("baluhost-scheduler", "baluhost-monitoring", "baluhost-webdav", "baluhost-backend")`. `baluhost-backend` steht zuletzt, weil sein Neustart den Prozess beendet, der die Sequenz ausführt. `baluhost-backend-local` gehört **nicht** dazu (socket-aktiviert).
-- **Keine neue Rechteregel:** keine sudoers-Zeile, kein polkit-Policy-File, `NoNewPrivileges=yes` in `baluhost-tray.service` bleibt unverändert. Wer im Plan eine Rechteerweiterung braucht, hat sich verlaufen.
-- **`subprocess` immer mit Argumentliste**, nie `shell=True` (`.claude/rules/security-agent.md`).
+- **Unit-Liste, wörtlich:** `("baluhost-scheduler", "baluhost-monitoring", "baluhost-webdav", "baluhost-backend-local", "baluhost-backend")`. `baluhost-backend` steht zuletzt, weil sein Neustart auf dem API-Weg den Prozess beendet, der die Sequenz ausführt.
+- **Eine sudoers-Zeile kommt dazu** (`baluhost-backend-local`), gleiche Form wie die vier bestehenden. Sonst keine Rechteerweiterung: kein polkit-Policy-File, kein neues Recht für den Desktop-Nutzer, `NoNewPrivileges=yes` in `baluhost-tray.service` bleibt.
+- **Der Notweg startet einen kurzlebigen `systemctl`-Prozess je Aufruf.** Nie `org.freedesktop.systemd1.Manager.RestartUnit` aus dem langlebigen Tray-Prozess über D-Bus — das erzeugt ein Fünf-Minuten-Fenster, in dem derselbe Prozess `manage-units` (und damit `StartTransientUnit` = root-Codeausführung) ohne Abfrage nutzen darf.
+- **Kein SIGINT-Fallback im Prod-Zweig.** Bei `--workers 4` trifft `os.kill(os.getpid(), SIGINT)` einen Kindprozess, den uvicorn sofort neu startet (Issue #695). Fehlschlag wird protokolliert, nicht kaschiert.
+- **`subprocess` immer mit Argumentliste**, nie `shell=True`.
 - **Pydantic-Schemas für Request-Bodies**, nie rohes `dict`.
 - **Rate-Limit auf jedem neuen Endpunkt** — es gibt keinen globalen Fallback.
-- **Deutsch** für alle Texte, die ein Mensch im Tray sieht; Code, Bezeichner und Docstrings wie im umgebenden Modul (Tray-Docstrings sind englisch, Kommentare gemischt).
-- **Bestehendes `/api/system/restart` bleibt unangetastet** — `localApi.ts:313` und die Companion-App hängen daran.
-- **Testlauf:** `cd backend && python -m pytest <pfad> -v`. Commit nach jeder Task.
+- **Deutsch** für alle Texte, die ein Mensch im Tray sieht; Code und Docstrings wie im umgebenden Modul (Tray-Docstrings englisch, Kommentare gemischt).
+- **`/api/system/restart` bleibt unangetastet** — `localApi.ts:313` und die Companion-App hängen daran. Die Step-up-Lücke dort ist Issue #699 und wird dokumentiert, nicht stillschweigend gelassen.
+- **Testlauf:** `cd backend && ./.venv/bin/python -m pytest <pfad> -v`. **Nicht** `python -m pytest` — `python` existiert auf dieser Maschine nicht. Baseline vor Task 1 gemessen: **2 failed, 5758 passed, 18 skipped** (beide Fehlschläge in `tests/plugins/sandbox/test_phase3_e2e.py`, vorbestehend).
+- **PyQt6 fehlt im venv** (`backend/.venv`), liegt aber im System-Python. Qt-Tests deshalb mit `pytest.importorskip("PyQt6")`; sie laufen auf dieser Maschine über `QT_QPA_PLATFORM=offscreen python3 -m pytest … -o addopts=""` und im Produktions-venv mit dem Extra `[tray]`.
+- **Commit nach jeder Task.**
 
 ---
 
@@ -30,39 +34,32 @@
 | Datei | Verantwortung |
 |---|---|
 | `backend/app/services/system_restart.py` | Unit-Liste und `systemctl`-Aufruf im Backend. Einzige Stelle, die im Backend `sudo systemctl restart` kennt. |
-| `backend/app/services/step_up.py` | Zweiter Nachweis (Passwort oder frisches TOTP) für eine Aktion, die ein gültiges Token allein nicht decken soll. |
-| `backend/baluhost_tray/restart.py` | Alles Entscheidbare des Tray-Neustarts: Probe, Pfadwahl, API-Aufruf, `systemctl`-Aufruf, Fehlerabbildung, Sichtbarkeitsregel. |
-| `backend/tests/services/test_system_restart.py` | Tests zu Task 1 |
-| `backend/tests/services/test_step_up.py` | Tests zu Task 2 |
-| `backend/tests/api/test_system_restart_all.py` | Tests zu Task 4 |
-| `backend/tests/tray/test_restart.py` | Tests zu Task 5–7 |
+| `backend/app/services/step_up.py` | Zweiter Nachweis (Passwort oder TOTP/Backup-Code) für eine Aktion, die ein gültiges Token allein nicht decken soll. |
+| `backend/baluhost_tray/restart.py` | Alles Entscheidbare des Tray-Neustarts: Probe, Kontodaten, Pfadwahl, API-Aufruf, `systemctl`-Aufruf, Fehlerabbildung, Sichtbarkeitsregel. |
+| `backend/tests/services/test_system_restart.py` | Task 1 |
+| `backend/tests/test_deploy_sudoers_units.py` | Task 1 (sudoers-Vorlage gegen die Unit-Liste) |
+| `backend/tests/services/test_step_up.py` | Task 2 |
+| `backend/tests/schemas/test_system_restart_schemas.py` | Task 3 |
+| `backend/tests/api/test_system_restart_all.py` | Task 4 |
+| `backend/tests/tray/test_restart.py` | Task 5–7 |
+| `backend/tests/tray/test_restart_flow.py` | Task 8 |
+| `backend/tests/tray/test_tray_wiring.py` | Task 9 (Qt-Rauchtest, `importorskip`) |
 
-**Geändert:**
-
-| Datei | Änderung |
-|---|---|
-| `backend/app/schemas/system.py` | drei neue Schemas |
-| `backend/app/core/rate_limiter.py` | Schlüssel `system_restart` |
-| `backend/tests/test_rate_limit_values.py` | Test für den neuen Schlüssel |
-| `backend/app/api/routes/system.py` | neue Route `/restart-all` + Helfer `_schedule_backend_restart` |
-| `backend/baluhost_tray/tray.py` | Menüpunkt, zwei Bridge-Signale, Dialoge, Arbeitsthread |
-| `docs/superpowers/specs/2026-09-21-desktop-tray-design.md` | Nicht-Ziel als überholt markieren |
-| `.claude/rules/security-agent.md`, `.claude/rules/architecture.md` | neuer Endpunkt, neue Gap |
+**Geändert:** `backend/app/schemas/system.py`, `backend/app/core/rate_limiter.py`, `backend/tests/test_rate_limit_values.py`, `backend/app/api/routes/system.py`, `backend/baluhost_tray/tray.py`, `deploy/install/templates/baluhost-deploy-sudoers`, `deploy/install/templates/baluhost-tray.service`, `docs/features/desktop-tray.{de,en}.md`, `docs/superpowers/specs/2026-09-21-desktop-tray-design.md`, `.claude/rules/{security-agent,architecture}.md`
 
 ---
 
-## Task 1: Backend — Unit-Liste und `systemctl`-Helfer
+## Task 1: Backend — Unit-Liste, `systemctl`-Helfer, sudoers-Zeile
 
 **Files:**
 - Create: `backend/app/services/system_restart.py`
-- Test: `backend/tests/services/test_system_restart.py`
+- Modify: `deploy/install/templates/baluhost-deploy-sudoers`
+- Test: `backend/tests/services/test_system_restart.py`, `backend/tests/test_deploy_sudoers_units.py`
 
 **Interfaces:**
-- Consumes: nichts
 - Produces:
-  - `BALUHOST_UNITS: tuple[str, ...]` (4 Einträge, Backend zuletzt)
-  - `SUPPORT_UNITS: tuple[str, ...]` (die ersten drei)
-  - `BACKEND_UNIT: str`
+  - `BALUHOST_UNITS: tuple[str, ...]` (5 Einträge, Backend zuletzt)
+  - `SUPPORT_UNITS: tuple[str, ...]` (die ersten vier), `BACKEND_UNIT: str`
   - `@dataclass(frozen=True) UnitResult(name: str, success: bool, message: str | None = None)`
   - `restart_unit(unit: str, runner=subprocess.run, timeout: float = 20.0) -> UnitResult`
   - `restart_support_units(runner=subprocess.run) -> list[UnitResult]`
@@ -93,9 +90,12 @@ def test_backend_unit_is_last():
     assert system_restart.SUPPORT_UNITS == system_restart.BALUHOST_UNITS[:-1]
 
 
-def test_backend_local_is_not_in_the_list():
-    """Socket-aktiviert — die Socket-Unit startet sie bei Bedarf selbst."""
-    assert "baluhost-backend-local" not in system_restart.BALUHOST_UNITS
+def test_local_channel_unit_is_included():
+    """Sie ist socket-aktiviert, läuft danach aber dauerhaft weiter.
+
+    Ohne sie liefe der Companion-Kanal nach dem Neustart mit altem Code.
+    """
+    assert "baluhost-backend-local" in system_restart.SUPPORT_UNITS
 
 
 def test_restart_unit_uses_argument_list_without_shell():
@@ -173,7 +173,12 @@ def test_restart_support_units_keeps_order_and_skips_backend():
 
     results = system_restart.restart_support_units(runner=runner)
 
-    assert seen == ["baluhost-scheduler", "baluhost-monitoring", "baluhost-webdav"]
+    assert seen == [
+        "baluhost-scheduler",
+        "baluhost-monitoring",
+        "baluhost-webdav",
+        "baluhost-backend-local",
+    ]
     assert [r.name for r in results] == seen
     assert all(r.success for r in results)
 
@@ -191,12 +196,51 @@ def test_restart_support_units_continues_after_a_failure():
         ("baluhost-scheduler", True),
         ("baluhost-monitoring", False),
         ("baluhost-webdav", True),
+        ("baluhost-backend-local", True),
     ]
 ```
 
-- [ ] **Step 2: Test laufen lassen, Fehlschlag bestätigen**
+```python
+# backend/tests/test_deploy_sudoers_units.py
+"""Die sudoers-Vorlage deckt genau die Units ab, die der Code neu startet.
 
-Run: `cd backend && python -m pytest tests/services/test_system_restart.py -v`
+Ohne diese Prüfung fällt eine neue Unit erst in Produktion auf — als
+`sudo: no entry`, gemeldet als fehlgeschlagener Neustart, den niemand erklärt.
+Und eine übrig gebliebene Zeile erweitert den Radius, ohne dass sie jemand
+benutzt.
+"""
+import re
+from pathlib import Path
+
+from app.services.system_restart import BALUHOST_UNITS
+
+TEMPLATE = (
+    Path(__file__).resolve().parents[2]
+    / "deploy" / "install" / "templates" / "baluhost-deploy-sudoers"
+)
+
+
+def _restart_units() -> set[str]:
+    lines = [
+        line
+        for line in TEMPLATE.read_text(encoding="utf-8").splitlines()
+        if not line.lstrip().startswith("#")
+    ]
+    return set(re.findall(r"/usr/bin/systemctl restart (\S+)", "\n".join(lines)))
+
+
+def test_sudoers_covers_exactly_the_units_we_restart():
+    assert _restart_units() == set(BALUHOST_UNITS)
+
+
+def test_no_wildcard_in_the_restart_entries():
+    """Ein Platzhalter im Unit-Namen wäre ein viel längerer Hebel."""
+    assert not [unit for unit in _restart_units() if "*" in unit or "?" in unit]
+```
+
+- [ ] **Step 2: Tests laufen lassen, Fehlschlag bestätigen**
+
+Run: `cd backend && ./.venv/bin/python -m pytest tests/services/test_system_restart.py tests/test_deploy_sudoers_units.py -v`
 Erwartet: FAIL — `ModuleNotFoundError: No module named 'app.services.system_restart'`
 
 - [ ] **Step 3: Implementierung schreiben**
@@ -207,8 +251,12 @@ Erwartet: FAIL — `ModuleNotFoundError: No module named 'app.services.system_re
 
 Die Reihenfolge ist Teil des Vertrags: ``baluhost-backend`` steht zuletzt, weil
 sein Neustart den Prozess beendet, der diese Funktion ausführt. Alles, was
-danach käme, liefe nie. ``baluhost-backend-local`` fehlt bewusst — sie ist
-socket-aktiviert, die Socket-Unit startet sie bei Bedarf selbst.
+danach käme, liefe nie.
+
+``baluhost-backend-local`` ist dabei, obwohl sie socket-aktiviert ist: sie ist
+``Type=simple`` mit ``Restart=on-failure`` und läuft nach dem ersten
+Verbindungsaufbau dauerhaft weiter. Ohne sie liefe der Companion-Kanal nach
+einem "Neustart" mit altem Code.
 """
 
 from __future__ import annotations
@@ -224,6 +272,7 @@ BALUHOST_UNITS: tuple[str, ...] = (
     "baluhost-scheduler",
     "baluhost-monitoring",
     "baluhost-webdav",
+    "baluhost-backend-local",
     "baluhost-backend",
 )
 SUPPORT_UNITS: tuple[str, ...] = BALUHOST_UNITS[:-1]
@@ -283,16 +332,28 @@ def restart_support_units(
     return [restart_unit(unit, runner=runner) for unit in SUPPORT_UNITS]
 ```
 
+In `deploy/install/templates/baluhost-deploy-sudoers` nach der `baluhost-webdav`-Zeile einfügen:
+
+```
+@@BALUHOST_USER@@ ALL=(root) NOPASSWD: /usr/bin/systemctl restart baluhost-backend-local
+```
+
 - [ ] **Step 4: Tests laufen lassen**
 
-Run: `cd backend && python -m pytest tests/services/test_system_restart.py -v`
-Erwartet: PASS (10 Tests)
+Run: `cd backend && ./.venv/bin/python -m pytest tests/services/test_system_restart.py tests/test_deploy_sudoers_units.py -v`
+Erwartet: PASS (12 Tests)
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add backend/app/services/system_restart.py backend/tests/services/test_system_restart.py
+git add backend/app/services/system_restart.py backend/tests/services/test_system_restart.py \
+        backend/tests/test_deploy_sudoers_units.py deploy/install/templates/baluhost-deploy-sudoers
 git commit -m "feat(system): Helfer fuer den Neustart der BaluHost-Units
+
+Fuenf Units, Backend zuletzt. baluhost-backend-local ist dabei, weil sie
+socket-aktiviert startet, danach aber dauerhaft laeuft -- dafuer kommt eine
+fuenfte sudoers-Zeile derselben Form dazu. Ein Test haelt Vorlage und
+Unit-Liste zusammen.
 
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 ```
@@ -306,10 +367,9 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Test: `backend/tests/services/test_step_up.py`
 
 **Interfaces:**
-- Consumes: nichts aus Task 1
 - Produces: `verify_step_up(db: Session, user_record, current_password: str | None, code: str | None) -> bool`
 
-**Hinweis für den Umsetzer:** `auth.py:_verify_fresh_totp` macht fast dasselbe. Es wird **nicht** umgebaut — ein Refactoring der 2FA-Routen gehört nicht in diese Änderung. Das neue Modul ist die gemeinsame Stelle für künftige Step-ups; `auth.py` kann später nachziehen.
+**Hinweis für den Umsetzer:** `auth.py:_verify_fresh_totp` macht fast dasselbe und wird **nicht** umgebaut — ein Refactoring der 2FA-Routen gehört nicht in diese Änderung. Der Name dort verspricht mehr, als der Code hält (keine Frischeprüfung, Issue #697); das neue Modul übernimmt das Verhalten und benennt es im Docstring ehrlich.
 
 - [ ] **Step 1: Test schreiben**
 
@@ -355,7 +415,7 @@ def test_missing_password_rejected(password_user):
 
 
 def test_totp_user_ignores_password(monkeypatch, totp_user):
-    """Mit 2FA zählt nur ein frischer Code — ein Passwort öffnet nichts."""
+    """Mit 2FA zählt nur der Code — ein Passwort öffnet nichts."""
     monkeypatch.setattr(
         "app.services.auth.authenticate_user",
         lambda username, password, db=None: totp_user,
@@ -363,7 +423,7 @@ def test_totp_user_ignores_password(monkeypatch, totp_user):
     assert step_up.verify_step_up(None, totp_user, "richtig", None) is False
 
 
-def test_fresh_totp_accepted(monkeypatch, totp_user):
+def test_totp_code_accepted(monkeypatch, totp_user):
     monkeypatch.setattr(
         "app.services.totp_service.verify_code",
         lambda db, user_id, code: code == "123456",
@@ -395,7 +455,7 @@ def test_value_error_from_totp_is_a_rejection(monkeypatch, totp_user):
 
 - [ ] **Step 2: Test laufen lassen, Fehlschlag bestätigen**
 
-Run: `cd backend && python -m pytest tests/services/test_step_up.py -v`
+Run: `cd backend && ./.venv/bin/python -m pytest tests/services/test_step_up.py -v`
 Erwartet: FAIL — `ModuleNotFoundError: No module named 'app.services.step_up'`
 
 - [ ] **Step 3: Implementierung schreiben**
@@ -406,8 +466,13 @@ Erwartet: FAIL — `ModuleNotFoundError: No module named 'app.services.step_up'`
 
 Ein gekoppeltes Gerät hält sein Token tagelang. Für eine Aktion, die den Dienst
 unterbricht, ist "dieses Gerät war einmal angemeldet" zu wenig — verlangt wird
-derselbe Nachweis wie bei einer Anmeldung: frisches TOTP, wenn 2FA aktiv ist,
-sonst das Passwort.
+derselbe Nachweis wie bei einer Anmeldung.
+
+Was tatsächlich akzeptiert wird, und zwar genau so wie in den 2FA-Routen: bei
+aktivem 2FA ein Code im aktuellen ±1-Zeitfenster (~90 s, **ohne**
+Frischeprüfung — derselbe Code geht mehrfach, Issue #697) oder ein Backup-Code;
+sonst das Passwort. Der Name "Step-up" beschreibt den Zweck, nicht eine
+Einmaligkeitsgarantie, die es hier nicht gibt.
 """
 
 from __future__ import annotations
@@ -428,8 +493,8 @@ def verify_step_up(
 ) -> bool:
     """True, wenn der zweite Nachweis erbracht ist. Wirft nie."""
     if user_record.totp_enabled:
-        # Mit 2FA zählt ausschließlich ein frischer Code. Ein Passwort würde
-        # den zweiten Faktor aushebeln, den der Nutzer gerade eingeschaltet hat.
+        # Mit 2FA zählt ausschließlich der Code. Ein Passwort würde den zweiten
+        # Faktor aushebeln, den der Nutzer gerade eingeschaltet hat.
         if not code:
             return False
         try:
@@ -451,7 +516,7 @@ def verify_step_up(
 
 - [ ] **Step 4: Tests laufen lassen**
 
-Run: `cd backend && python -m pytest tests/services/test_step_up.py -v`
+Run: `cd backend && ./.venv/bin/python -m pytest tests/services/test_step_up.py -v`
 Erwartet: PASS (7 Tests)
 
 - [ ] **Step 5: Commit**
@@ -468,34 +533,30 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 ## Task 3: Backend — Schemas und Rate-Limit-Schlüssel
 
 **Files:**
-- Modify: `backend/app/schemas/system.py` (anhängen)
-- Modify: `backend/app/core/rate_limiter.py` (`RATE_LIMITS`)
-- Test: `backend/tests/test_rate_limit_values.py` (anhängen)
+- Modify: `backend/app/schemas/system.py` (anhängen), `backend/app/core/rate_limiter.py`
+- Test: `backend/tests/schemas/test_system_restart_schemas.py`, `backend/tests/test_rate_limit_values.py`
 
 **Interfaces:**
-- Consumes: nichts
-- Produces:
-  - `SystemRestartAllRequest(current_password: str | None = None, code: str | None = None)`
-  - `UnitRestartResult(name: str, success: bool, message: str | None = None)`
-  - `SystemRestartAllResponse(units: list[UnitRestartResult], backend_restart_scheduled: bool, eta_seconds: int, initiated_by: str)`
-  - `RATE_LIMITS["system_restart"] == "5/minute"`
+- Produces: `SystemRestartAllRequest`, `UnitRestartResult`, `SystemRestartAllResponse`, `RATE_LIMITS["system_restart"] == "5/minute"`
 
 - [ ] **Step 1: Test schreiben**
 
 ```python
 # an backend/tests/test_rate_limit_values.py anhängen
 
-def test_system_restart_is_as_strict_as_a_password_endpoint():
+def test_system_restart_is_strict():
     """/api/system/restart-all nimmt ein Passwort entgegen.
 
-    admin_operations wäre dafür zu locker; der Wert folgt auth_password_change.
+    admin_operations (30/minute) wäre dafür zu locker. Was dieser Wert NICHT
+    ist: derselbe Schutz wie auth_password_change — jene Route liegt zusätzlich
+    hinter nginx' auth_limit (5 r/m), diese nicht. Und der Limiter lebt im
+    Prozessspeicher, den der Endpunkt selbst neu startet. Siehe security-agent.md.
     """
     assert RATE_LIMITS["system_restart"] == "5/minute"
-    assert RATE_LIMITS["system_restart"] == RATE_LIMITS["auth_password_change"]
 ```
 
 ```python
-# backend/tests/schemas/test_system_restart_schemas.py (neu)
+# backend/tests/schemas/test_system_restart_schemas.py
 """Tests für die Schemas des Sammelneustarts."""
 from app.schemas.system import (
     SystemRestartAllRequest,
@@ -534,7 +595,7 @@ def test_response_carries_per_unit_results():
 
 - [ ] **Step 2: Tests laufen lassen, Fehlschlag bestätigen**
 
-Run: `cd backend && python -m pytest tests/test_rate_limit_values.py tests/schemas/test_system_restart_schemas.py -v`
+Run: `cd backend && ./.venv/bin/python -m pytest tests/test_rate_limit_values.py tests/schemas/test_system_restart_schemas.py -v`
 Erwartet: FAIL — `KeyError: 'system_restart'` bzw. `ImportError: cannot import name 'SystemRestartAllRequest'`
 
 - [ ] **Step 3: Implementierung schreiben**
@@ -581,7 +642,7 @@ class SystemRestartAllResponse(BaseModel):
 
 - [ ] **Step 4: Tests laufen lassen**
 
-Run: `cd backend && python -m pytest tests/test_rate_limit_values.py tests/schemas/test_system_restart_schemas.py -v`
+Run: `cd backend && ./.venv/bin/python -m pytest tests/test_rate_limit_values.py tests/schemas/test_system_restart_schemas.py -v`
 Erwartet: PASS
 
 - [ ] **Step 5: Commit**
@@ -603,14 +664,16 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Test: `backend/tests/api/test_system_restart_all.py`
 
 **Interfaces:**
-- Consumes: `system_restart.restart_support_units`, `system_restart.BACKEND_UNIT` (Task 1); `step_up.verify_step_up` (Task 2); die drei Schemas und `get_limit("system_restart")` (Task 3)
-- Produces: `POST /api/system/restart-all` und `_schedule_backend_restart(eta: float = 1.0) -> None` in `system.py`
+- Consumes: `system_restart` (Task 1), `step_up` (Task 2), die Schemas und `get_limit("system_restart")` (Task 3)
+- Produces: `POST /api/system/restart-all`, `_schedule_backend_restart(eta: float = 1.0) -> None`
+
+**Drei Gates, in dieser Reihenfolge:** Admin → LAN → Step-up. Und API-Keys fliegen raus, bevor irgendetwas passiert.
 
 - [ ] **Step 1: Test schreiben**
 
 ```python
 # backend/tests/api/test_system_restart_all.py
-"""Tests für POST /api/system/restart-all (Admin + Step-up)."""
+"""Tests für POST /api/system/restart-all (Admin + LAN + Step-up)."""
 import pytest
 
 from app.core.config import settings
@@ -632,7 +695,7 @@ def no_real_restart(monkeypatch):
 
 @pytest.fixture
 def fake_units(monkeypatch):
-    """Alle drei Support-Units melden Erfolg, ohne systemctl anzufassen."""
+    """Alle Support-Units melden Erfolg, ohne systemctl anzufassen."""
     calls = []
 
     def fake_restart_support_units(runner=None):
@@ -658,11 +721,49 @@ def test_regular_user_is_rejected(client, user_headers):
     assert r.status_code == 403
 
 
+def test_non_local_client_is_rejected(client, admin_headers, fake_units, monkeypatch):
+    """:8000 lauscht auf 0.0.0.0 ohne Paketfilter (#698) — das Gate ist real."""
+    monkeypatch.setattr(
+        "app.api.routes.system.is_private_or_local_ip", lambda ip: False
+    )
+
+    r = client.post(
+        PATH, json={"current_password": settings.admin_password}, headers=admin_headers
+    )
+
+    assert r.status_code == 403
+    assert r.json()["detail"]["error"] == "local_network_required"
+    assert fake_units == []
+
+
+def test_api_key_is_rejected(client, admin_headers, fake_units, monkeypatch):
+    """Ein Step-up soll Anwesenheit belegen; ein Schlüssel kann das nicht.
+
+    Nebenbei: ein Key-Aufrufer fiele in get_user_identifier auf den
+    IP-Schlüssel zurück und könnte das Rate-Limit aufweichen.
+    """
+    from app.api.routes import system as system_module
+
+    # deps.get_current_user setzt request.state.auth_method = "api_key";
+    # hier wird der Leser dieses Markers ersetzt, nicht die halbe Auth-Kette.
+    monkeypatch.setattr(system_module, "_is_api_key_request", lambda request: True)
+
+    r = client.post(
+        PATH, json={"current_password": settings.admin_password}, headers=admin_headers
+    )
+
+    assert r.status_code == 403
+    assert r.json()["detail"]["error"] == "api_key_not_allowed"
+    assert fake_units == []
+
+
 def test_wrong_password_returns_structured_401(client, admin_headers, fake_units):
     r = client.post(PATH, json={"current_password": "falsch"}, headers=admin_headers)
 
     assert r.status_code == 401
-    assert r.json()["detail"]["error"] == "step_up_failed"
+    detail = r.json()["detail"]
+    assert detail["error"] == "step_up_failed"
+    assert detail["totp_required"] is False
     assert fake_units == []          # ohne Nachweis wird nichts neu gestartet
 
 
@@ -723,6 +824,7 @@ def test_failing_unit_is_reported_without_blocking_the_rest(
             system_restart.UnitResult("baluhost-scheduler", True),
             system_restart.UnitResult("baluhost-monitoring", False, "boom"),
             system_restart.UnitResult("baluhost-webdav", True),
+            system_restart.UnitResult("baluhost-backend-local", True),
         ],
     )
 
@@ -754,33 +856,58 @@ def test_dev_mode_touches_no_units(client, admin_headers, monkeypatch, no_real_r
     assert no_real_restart == [1.0]
 
 
-def test_totp_account_needs_a_code(client, admin_headers, fake_units, monkeypatch):
-    """Mit 2FA öffnet das Passwort nichts mehr."""
+def test_totp_account_needs_a_code_and_the_body_says_so(
+    client, admin_headers, fake_units, monkeypatch
+):
+    """Mit 2FA öffnet das Passwort nichts — und der 401 sagt dem Client, warum."""
+    from app.api.routes import system as system_module
+
+    monkeypatch.setattr(system_module, "_totp_enabled_for", lambda user_record: True)
     monkeypatch.setattr(
         "app.services.step_up.verify_step_up",
         lambda db, user_record, current_password, code: code == "123456",
     )
 
-    assert client.post(
+    rejected = client.post(
         PATH, json={"current_password": settings.admin_password}, headers=admin_headers
-    ).status_code == 401
+    )
+    assert rejected.status_code == 401
+    assert rejected.json()["detail"]["totp_required"] is True
+
     assert client.post(
         PATH, json={"code": "123456"}, headers=admin_headers
     ).status_code == 200
+
+
+def test_rate_limit_decorator_is_actually_attached():
+    """Der Wert in RATE_LIMITS nützt nichts, wenn der Dekorator fehlt.
+
+    Im Testmodus liefert get_limit() für diesen Schlüssel ein sehr hohes Limit,
+    der Dekorator bremst hier also nichts — geprüft wird nur, dass er dranhängt.
+    """
+    from app.main import app
+
+    route = next(
+        r for r in app.routes if getattr(r, "path", "").endswith("/system/restart-all")
+    )
+    assert getattr(route.endpoint, "_rate_limit_marker", None) or hasattr(
+        route.endpoint, "__wrapped__"
+    ), "keine Rate-Limit-Umhüllung an der Route"
 ```
 
 - [ ] **Step 2: Tests laufen lassen, Fehlschlag bestätigen**
 
-Run: `cd backend && python -m pytest tests/api/test_system_restart_all.py -v`
+Run: `cd backend && ./.venv/bin/python -m pytest tests/api/test_system_restart_all.py -v`
 Erwartet: FAIL — 404 auf allen Routen, plus `AttributeError` beim Patchen von `_schedule_backend_restart`
 
 - [ ] **Step 3: Implementierung schreiben**
 
-Zuerst die Importe oben in `backend/app/api/routes/system.py` ergänzen:
+Importe oben in `backend/app/api/routes/system.py` ergänzen:
 
 ```python
 import asyncio
 
+from app.core.network_utils import is_private_or_local_ip
 from app.models.user import User as UserModel
 from app.services import step_up, system_restart
 from app.schemas.system import (
@@ -790,41 +917,55 @@ from app.schemas.system import (
 )
 ```
 
-**Modul importieren, nicht die Funktion.** `from app.services.step_up import
-verify_step_up` bindet den Namen hier fest; ein `monkeypatch.setattr` auf
-`app.services.step_up.verify_step_up` ginge dann ins Leere, und der
-2FA-Test wäre ein stiller Blindgänger. Deshalb `step_up.verify_step_up(...)`
-am Aufrufort — wie bei `system_restart` auch.
+**Module importieren, nicht die Funktionen.** `from app.services.step_up import verify_step_up` bindet den Namen hier fest; ein `monkeypatch.setattr` auf `app.services.step_up.verify_step_up` ginge dann ins Leere, und der 2FA-Test wäre ein stiller Blindgänger.
 
-Dann, direkt nach `restart_system` (der bestehenden Route), Helfer und Route:
+**Bereits vorhanden und nicht erneut zu importieren:** `logging`, `os`, `signal`, `threading`, `status`, `HTTPException`, `Depends`, `Request`, `Response`, `Session` (aus `sqlalchemy.orm`), `deps` (die DB-Session kommt als `Depends(deps.get_db)`), `user_limiter`, `get_limit`, `UserPublic`, `get_audit_logger_db`.
+
+Dann, nach der bestehenden `restart_system`-Route:
 
 ```python
+def _is_api_key_request(request: Request) -> bool:
+    """deps.get_current_user setzt diesen Marker für den API-Key-Pfad."""
+    return getattr(request.state, "auth_method", None) == "api_key"
+
+
+def _totp_enabled_for(user_record) -> bool:
+    """Eigene Funktion, damit Tests die 2FA-Variante ohne Secret erreichen."""
+    return bool(getattr(user_record, "totp_enabled", False))
+
+
 def _schedule_backend_restart(eta: float = 1.0) -> None:
     """Das Backend zuletzt neu starten, nachdem die Antwort draußen ist.
 
     Bewusst als eigener Helfer und nicht im Route-Körper: Tests müssen ihn
     ersetzen können, sonst beendet der Timer den Testlauf.
 
-    `/api/system/restart` behält seinen eigenen, wortgleichen Ablauf. Diese
-    Änderung fasst die Route nicht an, weil die Companion-App und
-    `localApi.ts` daran hängen; das Zusammenlegen ist eine eigene Aufgabe.
+    **Kein SIGINT-Fallback.** Das bestehende `/api/system/restart` fällt bei
+    einem Fehlschlag auf `os.kill(os.getpid(), SIGINT)` zurück; bei
+    `uvicorn --workers 4` trifft das einen Kindprozess, den uvicorn binnen
+    einer halben Sekunde neu startet, während drei Worker unverändert
+    weiterlaufen — und der Aufrufer hat "Neustart geplant" gelesen. Issue #695.
+    Hier wird ein Fehlschlag protokolliert und sonst nichts getan.
+    `/api/system/restart` bleibt unangetastet, weil die Companion-App und
+    `localApi.ts` daran hängen.
     """
     from app.core.config import settings
 
     def _perform() -> None:
         logger = logging.getLogger(__name__)
         if settings.is_dev_mode:
+            # Dort läuft ein einzelner Prozess — dort stimmt SIGINT.
             logger.info("Dev mode: sending SIGINT to trigger restart")
             os.kill(os.getpid(), signal.SIGINT)
             return
         result = system_restart.restart_unit(system_restart.BACKEND_UNIT)
         if not result.success:
-            logger.warning(
-                "restart of %s failed: %s — falling back to SIGINT",
+            logger.error(
+                "restart of %s failed: %s — the service is still running the "
+                "old process",
                 result.name,
                 result.message,
             )
-            os.kill(os.getpid(), signal.SIGINT)
 
     timer = threading.Timer(float(eta), _perform)
     timer.daemon = True
@@ -840,9 +981,9 @@ async def restart_all_services(
     user: UserPublic = Depends(deps.get_current_admin),
     db: Session = Depends(deps.get_db),
 ) -> SystemRestartAllResponse:
-    """Alle BaluHost-Units neu starten (Admin + Step-up).
+    """Alle BaluHost-Units neu starten (Admin + lokales Netz + Step-up).
 
-    Die drei Nebendienste laufen synchron, damit ihr Ergebnis in die Antwort
+    Die vier Nebendienste laufen synchron, damit ihr Ergebnis in die Antwort
     passt. `baluhost-backend` kommt zuletzt und per Timer — die Antwort muss
     raus sein, bevor der Prozess stirbt.
     """
@@ -853,12 +994,54 @@ async def restart_all_services(
     audit = get_audit_logger_db()
     ip_address = request.client.host if request.client else None
 
+    if _is_api_key_request(request):
+        audit.log_security_event(
+            action="restart_all_api_key_denied",
+            user=user.username,
+            details={"ip_address": ip_address},
+            success=False,
+            db=db,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "error": "api_key_not_allowed",
+                "message": (
+                    "Dieser Vorgang verlangt eine erneute Anmeldung und ist "
+                    "mit einem API-Schlüssel nicht möglich."
+                ),
+            },
+        )
+
+    # LAN-Gate (echte Client-IP über --proxy-headers), Muster wie
+    # /api/auth/recovery-reset. Grund: :8000 lauscht auf 0.0.0.0 und es läuft
+    # kein Paketfilter (#698) — ohne dieses Gate wäre der Endpunkt aus LAN und
+    # VPN an nginx und dessen Rate-Limits vorbei erreichbar.
+    if not is_private_or_local_ip(ip_address):
+        audit.log_security_event(
+            action="restart_all_denied",
+            user=user.username,
+            details={"ip_address": ip_address, "reason": "non_local"},
+            success=False,
+            db=db,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "error": "local_network_required",
+                "message": (
+                    "Der Sammelneustart ist nur aus dem lokalen Netz möglich."
+                ),
+            },
+        )
+
     user_record = db.query(UserModel).filter(UserModel.id == user.id).first()
     if not user_record:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
         )
 
+    totp_required = _totp_enabled_for(user_record)
     if not step_up.verify_step_up(
         db, user_record, payload.current_password, payload.code
     ):
@@ -873,6 +1056,10 @@ async def restart_all_services(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={
                 "error": "step_up_failed",
+                # Sagt dem Client, welches Feld die Route erwartet. Zuverlässiger
+                # als ein vorher abgefragter 2FA-Status, der bei abgelaufenem
+                # Token leer zurückkommt.
+                "totp_required": totp_required,
                 "message": (
                     "Erneute Anmeldung fehlgeschlagen. Passwort bzw. "
                     "2FA-Code prüfen."
@@ -915,23 +1102,26 @@ async def restart_all_services(
     )
 ```
 
-**Hinweis:** Bereits in `system.py` importiert und **nicht** erneut hinzuzufügen: `logging`, `os`, `signal`, `threading`, `status`, `HTTPException`, `Depends`, `Request`, `Response`, `Session` (aus `sqlalchemy.orm`), `deps` (die DB-Session kommt als `Depends(deps.get_db)`, es gibt kein freistehendes `get_db`), `user_limiter`, `get_limit`, `UserPublic` und `get_audit_logger_db`. Neu sind nur `asyncio`, `UserModel`, `step_up`, `system_restart` und die drei Schemas.
-
 - [ ] **Step 4: Tests laufen lassen**
 
-Run: `cd backend && python -m pytest tests/api/test_system_restart_all.py -v`
-Erwartet: PASS (10 Tests)
+Run: `cd backend && ./.venv/bin/python -m pytest tests/api/test_system_restart_all.py -v`
+Erwartet: PASS (13 Tests)
 
 - [ ] **Step 5: Regression prüfen**
 
-Run: `cd backend && python -m pytest tests/api tests/services/test_system_restart.py tests/services/test_step_up.py -q`
-Erwartet: keine neuen Fehlschläge gegenüber dem Stand vor der Task (vorher einmal messen und die Zahl notieren)
+Run: `cd backend && ./.venv/bin/python -m pytest tests/api tests/services tests/schemas -q`
+Erwartet: keine neuen Fehlschläge
 
 - [ ] **Step 6: Commit**
 
 ```bash
 git add backend/app/api/routes/system.py backend/tests/api/test_system_restart_all.py
-git commit -m "feat(system): POST /api/system/restart-all mit Step-up
+git commit -m "feat(system): POST /api/system/restart-all mit Step-up und LAN-Gate
+
+Drei Gates: Admin, lokales Netz, zweiter Nachweis. API-Keys werden
+abgelehnt -- ein Step-up soll Anwesenheit belegen, und ein Key-Aufrufer
+wuerde nebenbei den Rate-Limit-Schluessel auf die IP verschieben.
+Kein SIGINT-Fallback (#695).
 
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 ```
@@ -945,13 +1135,12 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Test: `backend/tests/tray/test_restart.py`
 
 **Interfaces:**
-- Consumes: `app.services.system_restart.BALUHOST_UNITS` (nur im Test, für den Gleichheitsvergleich)
 - Produces:
-  - `UNITS: tuple[str, ...]`, `HEALTH_PATH`, `RESTART_ALL_PATH`, `PROBE_TIMEOUT`
-  - `@dataclass(frozen=True) RestartOutcome(ok: bool, message: str, retry_secret: bool = False, offer_local: bool = False)`
+  - `UNITS: tuple[str, ...]`, `HEALTH_PATH`, `ME_PATH`, `TOTP_STATUS_PATH`, `RESTART_ALL_PATH`, `PROBE_TIMEOUT`, `API_TIMEOUT`
+  - `@dataclass(frozen=True) RestartOutcome(ok, message, retry_secret=False, offer_local=False)`
   - `@dataclass(frozen=True) AccountFacts(is_admin: bool | None, totp_enabled: bool)`
   - `probe_api(client) -> bool`
-  - `fetch_account_facts(client) -> AccountFacts`
+  - `fetch_account_facts(client, on_auth_expired=None) -> AccountFacts`
   - `menu_visible(is_admin: bool | None, api_reachable: bool) -> bool`
 
 - [ ] **Step 1: Test schreiben**
@@ -1005,7 +1194,6 @@ def test_units_match_the_backend():
 def test_probe_true_on_200():
     client = _client(get=_response(200))
     assert restart.probe_api(client) is True
-    client.get.assert_called_once()
     assert client.get.call_args.kwargs["timeout"] == restart.PROBE_TIMEOUT
 
 
@@ -1015,13 +1203,11 @@ def test_probe_false_on_error_status():
 
 def test_probe_false_on_transport_error():
     """Kein Statuscode, gar keine Antwort — genau der Notfall."""
-    client = _client(get=httpx.ConnectError("connection refused"))
-    assert restart.probe_api(client) is False
+    assert restart.probe_api(_client(get=httpx.ConnectError("refused"))) is False
 
 
 def test_probe_false_on_timeout():
-    client = _client(get=httpx.ReadTimeout("too slow"))
-    assert restart.probe_api(client) is False
+    assert restart.probe_api(_client(get=httpx.ReadTimeout("slow"))) is False
 
 
 # --- Kontodaten ----------------------------------------------------------
@@ -1033,9 +1219,9 @@ def test_facts_report_admin_and_totp():
         _response(200, {"enabled": True}),
     ]
 
-    facts = restart.fetch_account_facts(client)
-
-    assert facts == restart.AccountFacts(is_admin=True, totp_enabled=True)
+    assert restart.fetch_account_facts(client) == restart.AccountFacts(
+        is_admin=True, totp_enabled=True
+    )
 
 
 def test_facts_report_non_admin():
@@ -1049,8 +1235,7 @@ def test_facts_report_non_admin():
 
 def test_facts_unknown_when_me_is_unreachable():
     """Unbekannt ist nicht dasselbe wie 'kein Admin' — siehe menu_visible."""
-    client = MagicMock()
-    client.get.side_effect = httpx.ConnectError("down")
+    client = _client(get=httpx.ConnectError("down"))
 
     facts = restart.fetch_account_facts(client)
 
@@ -1058,13 +1243,56 @@ def test_facts_unknown_when_me_is_unreachable():
     assert facts.totp_enabled is False
 
 
-def test_facts_totp_defaults_to_false_when_status_fails():
+def test_facts_refresh_once_on_401_and_retry():
+    """Der Normalfall beim Tray-Start ist ein abgelaufener Access-Token (#692).
+
+    Ohne Refresh liefe ein 2FA-Konto in drei Passwortabfragen, die die Route
+    gar nicht akzeptiert.
+    """
     client = MagicMock()
     client.get.side_effect = [
-        _response(200, {"role": "admin"}),
-        _response(500),
+        _response(401),                              # /me, Token abgelaufen
+        _response(200, {"role": "admin"}),           # /me nach dem Refresh
+        _response(200, {"enabled": True}),           # /2fa/status
     ]
+    refreshed = []
+
+    facts = restart.fetch_account_facts(
+        client, on_auth_expired=lambda: refreshed.append(True)
+    )
+
+    assert refreshed == [True]
+    assert facts == restart.AccountFacts(is_admin=True, totp_enabled=True)
+
+
+def test_facts_give_up_after_one_refresh():
+    client = MagicMock()
+    client.get.side_effect = [_response(401), _response(401)]
+
+    facts = restart.fetch_account_facts(client, on_auth_expired=lambda: None)
+
+    assert facts.is_admin is None
+
+
+def test_facts_survive_a_failing_refresh():
+    """refresh_access wirft PairingLost/TemporaryFailure — das darf nicht durch."""
+    client = MagicMock()
+    client.get.side_effect = [_response(401)]
+
+    def boom():
+        raise RuntimeError("refresh kaputt")
+
+    facts = restart.fetch_account_facts(client, on_auth_expired=boom)
+
+    assert facts.is_admin is None
+
+
+def test_facts_totp_defaults_to_false_when_status_fails():
+    client = MagicMock()
+    client.get.side_effect = [_response(200, {"role": "admin"}), _response(500)]
+
     facts = restart.fetch_account_facts(client)
+
     assert facts.is_admin is True
     assert facts.totp_enabled is False
 
@@ -1088,7 +1316,7 @@ def test_menu_visible(is_admin, reachable, expected):
 
 - [ ] **Step 2: Tests laufen lassen, Fehlschlag bestätigen**
 
-Run: `cd backend && python -m pytest tests/tray/test_restart.py -v`
+Run: `cd backend && ./.venv/bin/python -m pytest tests/tray/test_restart.py -v`
 Erwartet: FAIL — `ModuleNotFoundError: No module named 'baluhost_tray.restart'`
 
 - [ ] **Step 3: Implementierung schreiben**
@@ -1108,7 +1336,9 @@ question that still has an honest answer.
 
 from __future__ import annotations
 
+import subprocess
 from dataclasses import dataclass
+from typing import Any, Callable, Sequence
 
 import httpx
 
@@ -1120,13 +1350,16 @@ RESTART_ALL_PATH = "/api/system/restart-all"
 # Long enough that a busy backend still counts as alive, short enough that the
 # dialog does not feel stuck in the case this feature exists for.
 PROBE_TIMEOUT = 2.0
-# The API path restarts three units synchronously before it answers.
-API_TIMEOUT = 60.0
+# The API path restarts four units synchronously (20 s each in the worst case)
+# before it answers. Below that, a slow restart would look like a dead backend.
+API_TIMEOUT = 120.0
+LOCAL_TIMEOUT = 120.0
 
 UNITS: tuple[str, ...] = (
     "baluhost-scheduler",
     "baluhost-monitoring",
     "baluhost-webdav",
+    "baluhost-backend-local",
     "baluhost-backend",
 )
 
@@ -1149,6 +1382,9 @@ class AccountFacts:
     totp_enabled: bool
 
 
+_UNKNOWN = AccountFacts(is_admin=None, totp_enabled=False)
+
+
 def probe_api(client) -> bool:
     """Does the API answer right now?
 
@@ -1162,33 +1398,57 @@ def probe_api(client) -> bool:
         return False
 
 
-def fetch_account_facts(client) -> AccountFacts:
-    """Role and 2FA state of the paired account. Never raises."""
-    try:
-        response = client.get(ME_PATH, timeout=PROBE_TIMEOUT)
+def fetch_account_facts(
+    client,
+    on_auth_expired: Callable[[], None] | None = None,
+) -> AccountFacts:
+    """Role and 2FA state of the paired account. Never raises.
+
+    Refreshes once on a 401: an expired access token is the normal state at
+    tray start (#692), and without the retry a 2FA account would be asked three
+    times for a password the route does not accept.
+    """
+    refreshed = False
+    while True:
+        try:
+            response = client.get(ME_PATH, timeout=PROBE_TIMEOUT)
+        except httpx.HTTPError:
+            return _UNKNOWN
+
+        if response.status_code == 401 and on_auth_expired is not None and not refreshed:
+            try:
+                on_auth_expired()
+            except Exception:       # noqa: BLE001 — PairingLost, network, anything
+                return _UNKNOWN
+            refreshed = True
+            continue
+
         if response.status_code != 200:
-            return AccountFacts(is_admin=None, totp_enabled=False)
-        is_admin = response.json().get("role") == "admin"
-    except (httpx.HTTPError, ValueError, KeyError):
-        return AccountFacts(is_admin=None, totp_enabled=False)
+            return _UNKNOWN
+
+        try:
+            is_admin = response.json().get("role") == "admin"
+        except (ValueError, AttributeError):
+            return _UNKNOWN
+        break
 
     totp_enabled = False
     try:
         status_response = client.get(TOTP_STATUS_PATH, timeout=PROBE_TIMEOUT)
         if status_response.status_code == 200:
             totp_enabled = bool(status_response.json().get("enabled"))
-    except (httpx.HTTPError, ValueError):
-        # A missing 2FA state only mislabels the dialog; the backend decides
-        # what it accepts either way.
+    except (httpx.HTTPError, ValueError, AttributeError):
+        # A missing 2FA state only mislabels the dialog, and the route's 401
+        # carries `totp_required` anyway.
         pass
 
     return AccountFacts(is_admin=is_admin, totp_enabled=totp_enabled)
 
 
 def menu_visible(is_admin: bool | None, api_reachable: bool) -> bool:
-    """Show the entry for admins — and for anyone when the API is unreachable.
+    """Show the entry for admins — and for anyone when we could not ask.
 
-    The second half is the point: without it the button would be missing in
+    The middle case is the point: without it the button would be missing in
     exactly the situation it exists for, where the backend has been dead since
     login and the role was never learned. It weakens nothing, because on that
     route polkit decides, not the visibility of a menu entry.
@@ -1202,8 +1462,8 @@ def menu_visible(is_admin: bool | None, api_reachable: bool) -> bool:
 
 - [ ] **Step 4: Tests laufen lassen**
 
-Run: `cd backend && python -m pytest tests/tray/test_restart.py -v`
-Erwartet: PASS (15 Tests)
+Run: `cd backend && ./.venv/bin/python -m pytest tests/tray/test_restart.py -v`
+Erwartet: PASS (18 Tests)
 
 - [ ] **Step 5: Commit**
 
@@ -1223,8 +1483,9 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Test: `backend/tests/tray/test_restart.py` (anhängen)
 
 **Interfaces:**
-- Consumes: `UNITS`, `RestartOutcome` (Task 5)
-- Produces: `restart_via_systemctl(runner=subprocess.run, units=UNITS, timeout: float = 30.0) -> RestartOutcome`
+- Produces: `restart_via_systemctl(runner=subprocess.run, units=UNITS, timeout=LOCAL_TIMEOUT) -> RestartOutcome`
+
+**Der springende Punkt: ein einziger Aufruf.** polkit bindet die temporäre Autorisierung an die PID des Anfragenden (`polkit_unix_process_equal` verlangt PID-Gleichheit). Fünf einzelne `systemctl`-Aufrufe wären fünf Prozesse und damit **fünf Dialoge**. Ein Aufruf mit allen fünf Units ist ein Prozess, fünf D-Bus-Aufrufe, ein Dialog. Der Zustand je Unit kommt danach aus `systemctl is-active` — lesend, ohne Abfrage.
 
 - [ ] **Step 1: Test schreiben**
 
@@ -1240,19 +1501,29 @@ class _Completed:
         self.stderr = stderr
 
 
-def test_systemctl_restarts_every_unit_in_order():
-    seen = []
+def _runner_script(*responses):
+    """Ein Runner, der die vorbereiteten Antworten der Reihe nach liefert."""
+    calls = []
 
     def runner(args, **kwargs):
-        seen.append(args)
-        return _Completed()
+        calls.append(args)
+        return responses[len(calls) - 1]
+
+    runner.calls = calls
+    return runner
+
+
+def test_systemctl_restarts_all_units_in_one_call():
+    """Ein Prozess, ein polkit-Dialog. Fünf Aufrufe wären fünf Dialoge."""
+    runner = _runner_script(
+        _Completed(),
+        _Completed(stdout="active\n" * len(restart.UNITS)),
+    )
 
     outcome = restart.restart_via_systemctl(runner=runner)
 
     assert outcome.ok is True
-    assert seen == [
-        ["systemctl", "restart", unit] for unit in restart.UNITS
-    ]
+    assert runner.calls[0] == ["systemctl", "restart", *restart.UNITS]
 
 
 def test_systemctl_is_called_without_sudo_and_without_shell():
@@ -1261,7 +1532,7 @@ def test_systemctl_is_called_without_sudo_and_without_shell():
 
     def runner(args, **kwargs):
         calls.append((args, kwargs))
-        return _Completed()
+        return _Completed(stdout="active\n" * len(restart.UNITS))
 
     restart.restart_via_systemctl(runner=runner)
 
@@ -1270,33 +1541,35 @@ def test_systemctl_is_called_without_sudo_and_without_shell():
     assert "shell" not in kwargs
 
 
-def test_systemctl_stops_at_the_first_failure():
-    """Abgebrochene polkit-Abfrage: die restlichen Dialoge erspart man sich."""
-    seen = []
+def test_systemctl_checks_state_with_is_active_afterwards():
+    runner = _runner_script(
+        _Completed(),
+        _Completed(stdout="active\n" * len(restart.UNITS)),
+    )
 
-    def runner(args, **kwargs):
-        seen.append(args[-1])
-        return _Completed(returncode=1, stderr="Interactive authentication required.")
+    restart.restart_via_systemctl(runner=runner)
+
+    assert runner.calls[1] == ["systemctl", "is-active", *restart.UNITS]
+
+
+def test_cancelled_dialog_reports_which_units_are_running():
+    """Wer den Dialog abbricht, will wissen, was jetzt läuft und was nicht."""
+    states = ["active", "active", "failed", "active", "active"]
+    runner = _runner_script(
+        _Completed(returncode=1, stderr="Interactive authentication required."),
+        _Completed(returncode=1, stdout="\n".join(states) + "\n"),
+    )
 
     outcome = restart.restart_via_systemctl(runner=runner)
 
     assert outcome.ok is False
-    assert seen == ["baluhost-scheduler"]
-    assert "baluhost-scheduler" in outcome.message
-
-
-def test_systemctl_failure_message_mentions_authentication():
-    def runner(args, **kwargs):
-        return _Completed(returncode=1, stderr="Interactive authentication required.")
-
-    outcome = restart.restart_via_systemctl(runner=runner)
-
     assert "Interactive authentication required." in outcome.message
+    assert "baluhost-webdav" in outcome.message      # die nicht aktive Unit
 
 
 def test_systemctl_handles_timeout():
     def runner(args, **kwargs):
-        raise subprocess.TimeoutExpired(cmd=args, timeout=30.0)
+        raise subprocess.TimeoutExpired(cmd=args, timeout=120.0)
 
     outcome = restart.restart_via_systemctl(runner=runner)
 
@@ -1315,9 +1588,23 @@ def test_systemctl_handles_missing_binary():
     assert "systemctl" in outcome.message
 
 
-def test_systemctl_success_message_names_the_count():
+def test_failed_is_active_lookup_does_not_hide_the_failure():
+    """Der Neustart ist gescheitert; die Nachschau auch — sag trotzdem etwas."""
     def runner(args, **kwargs):
-        return _Completed()
+        if args[1] == "is-active":
+            raise OSError("systemctl weg")
+        return _Completed(returncode=1, stderr="Interactive authentication required.")
+
+    outcome = restart.restart_via_systemctl(runner=runner)
+
+    assert outcome.ok is False
+    assert "Interactive authentication required." in outcome.message
+
+
+def test_success_message_names_the_count():
+    runner = _runner_script(
+        _Completed(), _Completed(stdout="active\n" * len(restart.UNITS))
+    )
 
     outcome = restart.restart_via_systemctl(runner=runner)
 
@@ -1326,21 +1613,35 @@ def test_systemctl_success_message_names_the_count():
 
 - [ ] **Step 2: Tests laufen lassen, Fehlschlag bestätigen**
 
-Run: `cd backend && python -m pytest tests/tray/test_restart.py -k systemctl -v`
+Run: `cd backend && ./.venv/bin/python -m pytest tests/tray/test_restart.py -k systemctl -v`
 Erwartet: FAIL — `AttributeError: module 'baluhost_tray.restart' has no attribute 'restart_via_systemctl'`
 
 - [ ] **Step 3: Implementierung schreiben**
 
 ```python
-# oben in backend/baluhost_tray/restart.py ergänzen
-import subprocess
-from typing import Any, Callable, Sequence
-
-LOCAL_TIMEOUT = 30.0
-```
-
-```python
 # ans Ende von backend/baluhost_tray/restart.py
+
+def _unit_states(
+    runner: Callable[..., Any], units: Sequence[str], timeout: float
+) -> dict[str, str]:
+    """`systemctl is-active` für alle Units. Lesend — kein polkit, kein Dialog.
+
+    Returns an empty mapping when the query itself fails; the caller must not
+    turn a successful restart into a failure just because the follow-up look
+    did not work.
+    """
+    try:
+        completed = runner(
+            ["systemctl", "is-active", *units],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except (subprocess.SubprocessError, OSError):
+        return {}
+    lines = (completed.stdout or "").splitlines()
+    return {unit: (lines[i].strip() if i < len(lines) else "") for i, unit in enumerate(units)}
+
 
 def restart_via_systemctl(
     runner: Callable[..., Any] = subprocess.run,
@@ -1351,52 +1652,70 @@ def restart_via_systemctl(
 
     No sudo. systemd checks the caller against
     ``org.freedesktop.systemd1.manage-units`` (auth_admin_keep), so KDE's own
-    agent prompts once and that authorisation covers the remaining units. A
-    sudo call would be a second, different answer to the same question — and
-    would need a sudoers line this design does not want.
+    agent prompts.
 
-    Stops at the first failure: once a prompt was cancelled or denied, three
-    more dialogs help nobody.
+    **One call for all units, on purpose.** polkit binds the temporary
+    authorisation to the requesting *process* — five separate systemctl calls
+    would be five processes and five password prompts. One call is one process
+    making five D-Bus requests, so the agent asks once.
+
+    **And it stays a short-lived subprocess.** Calling
+    org.freedesktop.systemd1.Manager.RestartUnit over D-Bus from this
+    long-lived tray process would keep that authorisation alive for five
+    minutes — and `manage-units` also covers StartTransientUnit, i.e. running
+    anything as root. The process boundary is what keeps the radius small.
     """
-    for unit in units:
-        try:
-            completed = runner(
-                ["systemctl", "restart", unit],
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-            )
-        except subprocess.TimeoutExpired:
-            return RestartOutcome(
-                False, f"Zeitüberschreitung beim Neustart von {unit}."
-            )
-        except OSError as exc:
-            return RestartOutcome(
-                False, f"systemctl konnte nicht ausgeführt werden: {exc}"
-            )
+    try:
+        completed = runner(
+            ["systemctl", "restart", *units],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        return RestartOutcome(
+            False,
+            "Zeitüberschreitung beim Neustart. Die Dienste können trotzdem "
+            "gerade hochfahren — bitte den Zustand prüfen.",
+        )
+    except OSError as exc:
+        return RestartOutcome(
+            False, f"systemctl konnte nicht ausgeführt werden: {exc}"
+        )
 
-        if completed.returncode != 0:
-            detail = (completed.stderr or completed.stdout or "").strip()
-            detail = detail or f"exit {completed.returncode}"
-            return RestartOutcome(
-                False,
-                f"Neustart von {unit} fehlgeschlagen — abgebrochen oder keine "
-                f"Berechtigung.\n\n{detail}",
-            )
+    if completed.returncode == 0:
+        return RestartOutcome(True, f"{len(units)} Dienste neu gestartet.")
 
-    return RestartOutcome(True, f"{len(units)} Dienste neu gestartet.")
+    detail = (completed.stderr or completed.stdout or "").strip()
+    detail = detail or f"exit {completed.returncode}"
+    states = _unit_states(runner, units, timeout)
+    inactive = [unit for unit, state in states.items() if state != "active"]
+    tail = (
+        "\n\nNicht aktiv: " + ", ".join(inactive)
+        if inactive
+        else "\n\nAlle Dienste laufen trotzdem."
+    )
+    return RestartOutcome(
+        False,
+        f"Neustart fehlgeschlagen — abgebrochen oder keine Berechtigung.\n\n"
+        f"{detail}{tail}",
+    )
 ```
 
 - [ ] **Step 4: Tests laufen lassen**
 
-Run: `cd backend && python -m pytest tests/tray/test_restart.py -v`
-Erwartet: PASS (22 Tests)
+Run: `cd backend && ./.venv/bin/python -m pytest tests/tray/test_restart.py -v`
+Erwartet: PASS (26 Tests)
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add backend/baluhost_tray/restart.py backend/tests/tray/test_restart.py
-git commit -m "feat(tray): Notweg ueber systemctl mit polkit-Abfrage
+git commit -m "feat(tray): Notweg ueber einen systemctl-Aufruf mit polkit-Abfrage
+
+Ein Aufruf fuer alle Units, weil polkit die temporaere Autorisierung an die
+PID bindet -- fuenf Aufrufe waeren fuenf Passwortdialoge. Der Zustand je Unit
+kommt danach aus is-active, das keine Abfrage braucht.
 
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 ```
@@ -1410,10 +1729,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Test: `backend/tests/tray/test_restart.py` (anhängen)
 
 **Interfaces:**
-- Consumes: `RESTART_ALL_PATH`, `RestartOutcome`, `API_TIMEOUT` (Task 5)
 - Produces: `restart_via_api(client, secret: str, totp: bool, on_auth_expired=None) -> RestartOutcome`
-  - `secret` ist Passwort **oder** TOTP-Code; `totp` entscheidet, in welches Feld er geht.
-  - `on_auth_expired` ist ein Callback ohne Argumente (im Betrieb `Session.refresh_access`). Gibt es ihn und kommt ein einfaches 401, wird er einmal gerufen und der Aufruf wiederholt.
 
 - [ ] **Step 1: Test schreiben**
 
@@ -1452,8 +1768,9 @@ def test_api_sends_the_code_in_the_code_field():
 
 
 def test_api_success_message_mentions_the_backend_coming_back():
-    client = _client(post=_response(200, _ok_payload()))
-    outcome = restart.restart_via_api(client, "geheim", totp=False)
+    outcome = restart.restart_via_api(
+        _client(post=_response(200, _ok_payload())), "geheim", totp=False
+    )
     assert "Backend" in outcome.message
 
 
@@ -1468,13 +1785,25 @@ def test_api_reports_a_failed_unit_by_name():
 
 def test_step_up_failure_asks_again():
     client = _client(
-        post=_response(401, {"detail": {"error": "step_up_failed", "message": "nope"}})
+        post=_response(401, {"detail": {"error": "step_up_failed", "totp_required": False}})
     )
 
     outcome = restart.restart_via_api(client, "falsch", totp=False)
 
     assert outcome.ok is False
     assert outcome.retry_secret is True
+
+
+def test_step_up_failure_switches_to_totp_when_the_body_says_so():
+    """Der 401 ist die zuverlässigere Quelle als ein vorher geholter Status."""
+    client = _client(
+        post=_response(401, {"detail": {"error": "step_up_failed", "totp_required": True}})
+    )
+
+    outcome = restart.restart_via_api(client, "geheim", totp=False)
+
+    assert outcome.retry_secret is True
+    assert outcome.totp_required is True
 
 
 def test_plain_401_refreshes_once_and_retries():
@@ -1511,10 +1840,25 @@ def test_plain_401_gives_up_after_one_refresh():
     assert "--pair" in outcome.message
 
 
+def test_a_failing_refresh_does_not_escape():
+    """session.refresh_access wirft PairingLost — das darf den Klick nicht sprengen."""
+    client = MagicMock()
+    client.post.side_effect = [_response(401, {"detail": "Not authenticated"})]
+
+    def boom():
+        raise RuntimeError("pairing lost")
+
+    outcome = restart.restart_via_api(
+        client, "geheim", totp=False, on_auth_expired=boom
+    )
+
+    assert outcome.ok is False
+
+
 def test_step_up_failure_is_not_retried_as_an_expired_token():
     client = MagicMock()
     client.post.side_effect = [
-        _response(401, {"detail": {"error": "step_up_failed", "message": "nope"}})
+        _response(401, {"detail": {"error": "step_up_failed", "totp_required": False}})
     ]
     refreshed = []
 
@@ -1526,13 +1870,20 @@ def test_step_up_failure_is_not_retried_as_an_expired_token():
     assert client.post.call_count == 1
 
 
-def test_403_says_the_account_may_not():
-    client = _client(post=_response(403, {"detail": "Insufficient permissions"}))
+def test_403_local_network_is_named():
+    client = _client(post=_response(403, {"detail": {"error": "local_network_required"}}))
 
     outcome = restart.restart_via_api(client, "geheim", totp=False)
 
     assert outcome.ok is False
-    assert outcome.retry_secret is False
+    assert "lokalen Netz" in outcome.message
+
+
+def test_403_admin_is_named():
+    client = _client(post=_response(403, {"detail": "Insufficient permissions"}))
+
+    outcome = restart.restart_via_api(client, "geheim", totp=False)
+
     assert "Admin" in outcome.message
 
 
@@ -1546,6 +1897,17 @@ def test_5xx_is_reported_as_a_server_error():
     outcome = restart.restart_via_api(_client(post=_response(500)), "geheim", totp=False)
     assert outcome.ok is False
     assert outcome.offer_local is False
+
+
+def test_timeout_does_not_offer_the_fallback():
+    """Sonst startet der Nutzer alles ein zweites Mal, während es gerade läuft."""
+    client = _client(post=httpx.ReadTimeout("too slow"))
+
+    outcome = restart.restart_via_api(client, "geheim", totp=False)
+
+    assert outcome.ok is False
+    assert outcome.offer_local is False
+    assert "länger" in outcome.message
 
 
 def test_transport_error_offers_the_fallback():
@@ -1570,25 +1932,31 @@ def test_unparsable_body_does_not_crash():
 
 - [ ] **Step 2: Tests laufen lassen, Fehlschlag bestätigen**
 
-Run: `cd backend && python -m pytest tests/tray/test_restart.py -k api -v`
+Run: `cd backend && ./.venv/bin/python -m pytest tests/tray/test_restart.py -k api -v`
 Erwartet: FAIL — `AttributeError: module 'baluhost_tray.restart' has no attribute 'restart_via_api'`
 
 - [ ] **Step 3: Implementierung schreiben**
 
+Zuerst `RestartOutcome` um ein Feld erweitern (oben in der Datei):
+
+```python
+@dataclass(frozen=True)
+class RestartOutcome:
+    ok: bool
+    message: str
+    retry_secret: bool = False   # wrong password/code — ask again
+    offer_local: bool = False    # API died mid-flight — offer the fallback
+    totp_required: bool = False  # the route wants a code, not a password
+```
+
 ```python
 # ans Ende von backend/baluhost_tray/restart.py
 
-def _is_step_up_failure(response) -> bool:
-    """A failed step-up and an expired token are both 401 and mean opposites.
-
-    The route answers a failed step-up with a structured detail; anything else
-    with a 401 is the token, which a refresh can fix.
-    """
+def _detail(response) -> Any:
     try:
-        detail = response.json().get("detail")
+        return response.json().get("detail")
     except (ValueError, AttributeError):
-        return False
-    return isinstance(detail, dict) and detail.get("error") == "step_up_failed"
+        return None
 
 
 def restart_via_api(
@@ -1607,12 +1975,18 @@ def restart_via_api(
 
     while True:
         try:
-            response = client.post(
-                RESTART_ALL_PATH, json=body, timeout=API_TIMEOUT
+            response = client.post(RESTART_ALL_PATH, json=body, timeout=API_TIMEOUT)
+        except httpx.TimeoutException:
+            # Nicht als "Backend tot" behandeln: die Route startet vier Units
+            # synchron. Wer hier den Notweg anböte, liesse den Nutzer alles ein
+            # zweites Mal starten, waehrend es gerade ordentlich laeuft.
+            return RestartOutcome(
+                False,
+                "Der Neustart dauert länger als erwartet. Er läuft "
+                "wahrscheinlich noch — bitte den Zustand prüfen, bevor du es "
+                "erneut versuchst.",
             )
         except httpx.HTTPError as exc:
-            # The probe was green moments ago, so this is the backend dying
-            # mid-flight — exactly what the fallback is for.
             return RestartOutcome(
                 False,
                 f"Das Backend hat die Verbindung abgebrochen ({exc}).",
@@ -1620,16 +1994,23 @@ def restart_via_api(
             )
 
         code = response.status_code
+        detail = _detail(response)
 
         if code == 401:
-            if _is_step_up_failure(response):
+            if isinstance(detail, dict) and detail.get("error") == "step_up_failed":
                 return RestartOutcome(
                     False,
                     "Passwort bzw. 2FA-Code stimmt nicht.",
                     retry_secret=True,
+                    totp_required=bool(detail.get("totp_required")),
                 )
             if on_auth_expired is not None and not refreshed:
-                on_auth_expired()
+                try:
+                    on_auth_expired()
+                except Exception as exc:        # noqa: BLE001 — PairingLost u.a.
+                    return RestartOutcome(
+                        False, f"Anmeldung konnte nicht erneuert werden: {exc}"
+                    )
                 refreshed = True
                 continue
             return RestartOutcome(
@@ -1639,9 +2020,11 @@ def restart_via_api(
             )
 
         if code == 403:
-            return RestartOutcome(
-                False, "Dieses Konto ist kein BaluHost-Admin."
-            )
+            if isinstance(detail, dict) and detail.get("error") == "local_network_required":
+                return RestartOutcome(
+                    False, "Der Neustart ist nur aus dem lokalen Netz möglich."
+                )
+            return RestartOutcome(False, "Dieses Konto ist kein BaluHost-Admin.")
         if code == 429:
             return RestartOutcome(
                 False, "Zu viele Versuche. In einer Minute erneut probieren."
@@ -1652,18 +2035,15 @@ def restart_via_api(
             )
 
         try:
-            payload = response.json()
-            units = payload["units"]
-        except (ValueError, KeyError, TypeError) as exc:
+            units = response.json()["units"]
+            failed = [u["name"] for u in units if not u.get("success")]
+        except (ValueError, KeyError, TypeError, AttributeError) as exc:
             return RestartOutcome(
                 False, f"Unerwartete Antwort des Backends ({exc})."
             )
 
-        failed = [u["name"] for u in units if not u.get("success")]
         if failed:
-            return RestartOutcome(
-                False, "Nicht neu gestartet: " + ", ".join(failed)
-            )
+            return RestartOutcome(False, "Nicht neu gestartet: " + ", ".join(failed))
         return RestartOutcome(
             True,
             "Dienste neu gestartet. Das Backend startet gleich ebenfalls neu — "
@@ -1673,8 +2053,8 @@ def restart_via_api(
 
 - [ ] **Step 4: Tests laufen lassen**
 
-Run: `cd backend && python -m pytest tests/tray/test_restart.py -v`
-Erwartet: PASS (35 Tests)
+Run: `cd backend && ./.venv/bin/python -m pytest tests/tray/test_restart.py -v`
+Erwartet: PASS (43 Tests)
 
 - [ ] **Step 5: Commit**
 
@@ -1682,24 +2062,25 @@ Erwartet: PASS (35 Tests)
 git add backend/baluhost_tray/restart.py backend/tests/tray/test_restart.py
 git commit -m "feat(tray): Normalweg ueber /api/system/restart-all
 
+Timeout wird von Verbindungsabbruch unterschieden -- sonst boete das Tray
+den Notweg an, waehrend das Backend die Units gerade ordentlich neu startet.
+
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 ```
 
 ---
 
-## Task 8: Tray — Menüpunkt, Dialoge, Arbeitsthread
+## Task 8: Tray — der Ablauf (`restart_flow`)
 
 **Files:**
-- Modify: `backend/baluhost_tray/tray.py`
-- Test: `backend/tests/tray/test_restart_flow.py` (neu)
+- Modify: `backend/baluhost_tray/restart.py` (anhängen)
+- Test: `backend/tests/tray/test_restart_flow.py`
 
 **Interfaces:**
-- Consumes: alles aus `baluhost_tray.restart` (Task 5–7), `Session` (vorhanden), `tray_config.load_tokens` (vorhanden)
-- Produces:
-  - `restart_flow(client, prompt, probe=probe_api, facts=fetch_account_facts, api=restart_via_api, local=restart_via_systemctl, on_auth_expired=None) -> RestartOutcome` in `restart.py`
-  - in `tray.py`: `MENU_RESTART`, Bridge-Signale `restart_prompt`, `restart_finished`, `restart_visible`
+- Produces: `restart_flow(client, prompt, probe=probe_api, facts=fetch_account_facts, api=restart_via_api, local=restart_via_systemctl, on_auth_expired=None) -> RestartOutcome`
+  - `prompt` ist ein Callback `(mode: str) -> str | None`; Modi: `"password"`, `"password_retry"`, `"totp"`, `"totp_retry"`, `"local"`.
 
-**Warum der Ablauf noch einmal in `restart.py` landet:** Die Abfolge „proben → Kontodaten → Dialog → Weg wählen → bis zu drei Versuche" ist die eigentliche Logik. In `tray.py` wäre sie nur mit laufendem Qt prüfbar. `prompt` ist ein Callback `(mode: str) -> str | None`; im Betrieb reicht `tray.py` darüber die Dialogantwort durch, im Test ist es eine Liste vorbereiteter Antworten.
+**Warum der Ablauf in `restart.py` und nicht in `tray.py` liegt:** „proben → Kontodaten → Dialog → Weg wählen → bis zu drei Versuche" ist die eigentliche Logik. In `tray.py` wäre sie nur mit laufendem Qt prüfbar.
 
 - [ ] **Step 1: Test schreiben**
 
@@ -1712,7 +2093,9 @@ from baluhost_tray import restart
 
 
 def _facts(is_admin=True, totp=False):
-    return lambda client: restart.AccountFacts(is_admin=is_admin, totp_enabled=totp)
+    return lambda client, on_auth_expired=None: restart.AccountFacts(
+        is_admin=is_admin, totp_enabled=totp
+    )
 
 
 def _prompts(*answers):
@@ -1726,19 +2109,21 @@ def _prompts(*answers):
     return prompt
 
 
+def _never_local(**kwargs):
+    raise AssertionError("der Notweg darf hier nicht laufen")
+
+
 def test_reachable_api_asks_for_a_password_and_calls_the_api():
     prompt = _prompts("geheim")
     called = {}
 
     def api(client, secret, totp, on_auth_expired=None):
-        called["secret"] = secret
-        called["totp"] = totp
+        called.update(secret=secret, totp=totp)
         return restart.RestartOutcome(True, "ok")
 
     outcome = restart.restart_flow(
         MagicMock(), prompt,
-        probe=lambda c: True, facts=_facts(), api=api,
-        local=lambda **kw: restart.RestartOutcome(False, "darf nicht laufen"),
+        probe=lambda c: True, facts=_facts(), api=api, local=_never_local,
     )
 
     assert outcome.ok is True
@@ -1753,7 +2138,7 @@ def test_totp_account_is_asked_for_a_code():
         MagicMock(), prompt,
         probe=lambda c: True, facts=_facts(totp=True),
         api=lambda client, secret, totp, on_auth_expired=None: restart.RestartOutcome(True, "ok"),
-        local=lambda **kw: restart.RestartOutcome(False, "nein"),
+        local=_never_local,
     )
 
     assert prompt.seen == ["totp"]
@@ -1769,13 +2154,35 @@ def test_wrong_password_is_asked_again_up_to_three_times():
 
     outcome = restart.restart_flow(
         MagicMock(), prompt,
-        probe=lambda c: True, facts=_facts(), api=api,
-        local=lambda **kw: restart.RestartOutcome(False, "nein"),
+        probe=lambda c: True, facts=_facts(), api=api, local=_never_local,
     )
 
     assert attempts == ["falsch1", "falsch2", "falsch3"]
     assert prompt.seen == ["password", "password_retry", "password_retry"]
     assert outcome.ok is False
+
+
+def test_backend_can_switch_the_flow_to_a_code():
+    """Der 401 weiss besser als wir, was die Route will."""
+    prompt = _prompts("geheim", "123456")
+    seen_totp = []
+
+    def api(client, secret, totp, on_auth_expired=None):
+        seen_totp.append(totp)
+        if len(seen_totp) == 1:
+            return restart.RestartOutcome(
+                False, "nope", retry_secret=True, totp_required=True
+            )
+        return restart.RestartOutcome(True, "ok")
+
+    outcome = restart.restart_flow(
+        MagicMock(), prompt,
+        probe=lambda c: True, facts=_facts(), api=api, local=_never_local,
+    )
+
+    assert prompt.seen == ["password", "totp_retry"]
+    assert seen_totp == [False, True]
+    assert outcome.ok is True
 
 
 def test_cancelled_dialog_stops_without_calling_anything():
@@ -1786,8 +2193,7 @@ def test_cancelled_dialog_stops_without_calling_anything():
 
     outcome = restart.restart_flow(
         MagicMock(), prompt,
-        probe=lambda c: True, facts=_facts(), api=api,
-        local=lambda **kw: restart.RestartOutcome(False, "nein"),
+        probe=lambda c: True, facts=_facts(), api=api, local=_never_local,
     )
 
     assert outcome.ok is False
@@ -1800,8 +2206,7 @@ def test_non_admin_is_told_without_being_asked_for_a_password():
     outcome = restart.restart_flow(
         MagicMock(), prompt,
         probe=lambda c: True, facts=_facts(is_admin=False),
-        api=lambda **kw: restart.RestartOutcome(True, "ok"),
-        local=lambda **kw: restart.RestartOutcome(True, "ok"),
+        api=lambda **kw: restart.RestartOutcome(True, "ok"), local=_never_local,
     )
 
     assert outcome.ok is False
@@ -1831,8 +2236,7 @@ def test_declined_confirmation_does_not_restart_anything():
     outcome = restart.restart_flow(
         MagicMock(), prompt,
         probe=lambda c: False, facts=_facts(),
-        api=lambda **kw: restart.RestartOutcome(False, "nein"),
-        local=lambda: (_ for _ in ()).throw(AssertionError("darf nicht laufen")),
+        api=lambda **kw: restart.RestartOutcome(False, "nein"), local=_never_local,
     )
 
     assert outcome.ok is False
@@ -1854,14 +2258,30 @@ def test_api_dying_mid_flight_switches_to_the_fallback():
     assert prompt.seen == ["password", "local"]
     assert ran == [True]
     assert outcome.ok is True
+
+
+def test_timeout_does_not_switch_to_the_fallback():
+    prompt = _prompts("geheim")
+
+    outcome = restart.restart_flow(
+        MagicMock(), prompt,
+        probe=lambda c: True, facts=_facts(),
+        api=lambda client, secret, totp, on_auth_expired=None: restart.RestartOutcome(
+            False, "dauert länger"
+        ),
+        local=_never_local,
+    )
+
+    assert prompt.seen == ["password"]
+    assert outcome.ok is False
 ```
 
 - [ ] **Step 2: Tests laufen lassen, Fehlschlag bestätigen**
 
-Run: `cd backend && python -m pytest tests/tray/test_restart_flow.py -v`
+Run: `cd backend && ./.venv/bin/python -m pytest tests/tray/test_restart_flow.py -v`
 Erwartet: FAIL — `AttributeError: module 'baluhost_tray.restart' has no attribute 'restart_flow'`
 
-- [ ] **Step 3: `restart_flow` implementieren**
+- [ ] **Step 3: Implementierung schreiben**
 
 ```python
 # ans Ende von backend/baluhost_tray/restart.py
@@ -1881,31 +2301,34 @@ def restart_flow(
     """One click, start to finish. No Qt in here.
 
     ``prompt(mode)`` returns what the user typed, or None if they cancelled.
-    Modes: "password", "password_retry", "totp", "totp_retry", "local".
     Every collaborator is injected so the whole sequence is testable without a
     backend, without systemd and without a display.
     """
     if not probe(client):
         return _local_flow(prompt, local)
 
-    account = facts(client)
+    account = facts(client, on_auth_expired=on_auth_expired)
     if account.is_admin is False:
         return RestartOutcome(
             False,
             "Dieses Konto ist kein BaluHost-Admin. Neustart nicht möglich.",
         )
 
-    mode = "totp" if account.totp_enabled else "password"
+    totp = account.totp_enabled
     for attempt in range(MAX_SECRET_ATTEMPTS):
+        mode = "totp" if totp else "password"
         secret = prompt(mode if attempt == 0 else f"{mode}_retry")
         if secret is None:
             return RestartOutcome(False, "Abgebrochen.")
 
-        outcome = api(client, secret, account.totp_enabled, on_auth_expired=on_auth_expired)
+        outcome = api(client, secret, totp, on_auth_expired=on_auth_expired)
         if outcome.offer_local:
             return _local_flow(prompt, local)
         if not outcome.retry_secret:
             return outcome
+        # Die Route weiss besser als der vorher geholte 2FA-Status, was sie
+        # erwartet — beim naechsten Versuch danach fragen.
+        totp = outcome.totp_required or totp
 
     return RestartOutcome(False, "Passwort bzw. 2FA-Code dreimal falsch.")
 
@@ -1922,16 +2345,118 @@ def _local_flow(
 
 - [ ] **Step 4: Tests laufen lassen**
 
-Run: `cd backend && python -m pytest tests/tray/test_restart_flow.py -v`
-Erwartet: PASS (8 Tests)
+Run: `cd backend && ./.venv/bin/python -m pytest tests/tray/test_restart_flow.py -v`
+Erwartet: PASS (10 Tests)
 
-- [ ] **Step 5: `tray.py` verdrahten**
+- [ ] **Step 5: Commit**
 
-In `backend/baluhost_tray/tray.py`:
+```bash
+git add backend/baluhost_tray/restart.py backend/tests/tray/test_restart_flow.py
+git commit -m "feat(tray): Ablauf des Dienste-Neustarts ohne Qt
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
+```
+
+---
+
+## Task 9: Tray — Menüpunkt, Dialoge, Arbeitsthread
+
+**Files:**
+- Modify: `backend/baluhost_tray/tray.py`
+- Test: `backend/tests/tray/test_tray_wiring.py`
+
+**Interfaces:**
+- Consumes: `restart_flow`, `fetch_account_facts`, `menu_visible`, `RestartOutcome` (Task 5–8)
+- Produces: `MENU_RESTART` sowie die Bridge-Signale `restart_prompt`, `restart_finished`, `restart_visible`
+
+### Drei Fallstricke, die beim Review aufgefallen sind
+
+1. **`queue` ist in `run_tray()` schon vergeben.** `tray.py:87` hat `queue = PopupQueue()`; ein zusätzliches `import queue` würde beim Aufruf von `queue.Queue(...)` auf die `PopupQueue`-Instanz auflösen und `run_tray` mit `AttributeError` sterben lassen — noch vor `tray_icon.show()`. Deshalb `from queue import Empty, Queue` und **kein** Modulimport.
+2. **Der Menüpunkt darf nicht dauerhaft grau bleiben.** `setEnabled(False)` beim Start, reaktiviert nur über `restart_finished` — also muss der Worker das Signal **garantiert** senden, auch wenn schon der Client-Aufbau scheitert. Ganzer Rumpf in `try`, `emit` in `finally`.
+3. **Die neuen Zeilen in `_main()` gehören in den bestehenden zweiten `try:`-Block.** `tray.py:159-168` erklärt warum: jede Anweisung nach `notifier.connect()`, die daneben liegt, beendet bei einem Fehler den Worker still — Icon für immer grau, Exit 0, systemd sieht einen sauberen Abschluss.
+
+- [ ] **Step 1: Test schreiben**
 
 ```python
-# bei den Importen
-import queue
+# backend/tests/tray/test_tray_wiring.py
+"""Rauchtest für die Qt-Verdrahtung.
+
+Läuft nur, wo das Extra [tray] installiert ist — im venv dieses Repos ist
+PyQt6 nicht dabei, im Produktions-venv und im System-Python schon:
+
+    QT_QPA_PLATFORM=offscreen python3 -m pytest tests/tray/test_tray_wiring.py \
+        -o addopts="" -p no:cacheprovider
+
+Ohne diesen Test importiert **kein** Test `tray.py`, und ein Namensfehler auf
+Funktionsebene fällt erst auf BaluNode auf.
+"""
+import os
+
+import pytest
+
+pytest.importorskip("PyQt6")
+
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+
+class _NoThread:
+    """Der Worker-Thread wird nicht gestartet — kein Bus, kein Netzwerk."""
+
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def start(self):
+        pass
+
+
+def test_run_tray_builds_the_menu(monkeypatch):
+    """Läuft run_tray bis zum Ende durch, ohne dass ein Name kollidiert.
+
+    Genau hier wäre `queue = PopupQueue()` gegen ein `import queue` gelaufen:
+    ein AttributeError zur Laufzeit, den weder ast.parse noch ein Modulimport
+    findet.
+    """
+    from PyQt6.QtWidgets import QApplication, QSystemTrayIcon
+
+    from baluhost_tray import tray as tray_module
+
+    monkeypatch.setattr(
+        QSystemTrayIcon, "isSystemTrayAvailable", staticmethod(lambda: True)
+    )
+    monkeypatch.setattr(QApplication, "exec", lambda self: 0)
+    monkeypatch.setattr(tray_module.threading, "Thread", _NoThread)
+
+    assert tray_module.run_tray("http://localhost:8000", "http://localhost") == 0
+
+
+def test_restart_menu_label_exists():
+    from baluhost_tray import tray as tray_module
+
+    assert tray_module.MENU_RESTART.startswith("BaluHost neu starten")
+```
+
+**Zwei Hinweise für den Umsetzer:** `run_tray` legt selbst ein `QApplication`
+an — der Test darf keines vorher erzeugen, sonst kollidieren zwei Instanzen.
+Und aus demselben Grund ruft nur **ein** Test in dieser Datei `run_tray` auf.
+Lässt sich `run_tray` in dieser Umgebung nicht vollständig durchtreiben, den
+Test auf `import baluhost_tray.tray` plus `MENU_RESTART` reduzieren und im
+Docstring festhalten, was damit nicht mehr abgedeckt ist.
+
+- [ ] **Step 2: Test laufen lassen, Fehlschlag bestätigen**
+
+Run: `cd backend && QT_QPA_PLATFORM=offscreen python3 -m pytest tests/tray/test_tray_wiring.py -o addopts="" -p no:cacheprovider -v`
+Erwartet: FAIL — `AttributeError: module 'baluhost_tray.tray' has no attribute 'MENU_RESTART'`
+
+- [ ] **Step 3: `tray.py` verdrahten**
+
+Importe:
+
+```python
+from queue import Empty, Queue          # NICHT `import queue` — siehe Fallstrick 1
+
+from PyQt6.QtWidgets import (
+    QApplication, QInputDialog, QLineEdit, QMenu, QMessageBox, QSystemTrayIcon,
+)
 
 from baluhost_tray import config as tray_config
 from baluhost_tray.restart import (
@@ -1943,54 +2468,65 @@ from baluhost_tray.restart import (
 from baluhost_tui.client import BackendClient
 ```
 
-```python
-# bei den Menü-Konstanten
-MENU_RESTART = "BaluHost neu starten…"
-```
+Konstanten:
 
 ```python
-# in _Bridge ergänzen
-    restart_prompt = pyqtSignal(str)    # "password" | "password_retry" | "totp" | "totp_retry" | "local"
+MENU_RESTART = "BaluHost neu starten…"
+PROMPT_TIMEOUT = 300.0      # der Worker wartet nicht ewig auf einen Dialog
+```
+
+In `_Bridge`:
+
+```python
+    restart_prompt = pyqtSignal(str)
     restart_finished = pyqtSignal(bool, str)
     restart_visible = pyqtSignal(bool)
 ```
 
-```python
-# in run_tray(), nach dem Menüpunkt MENU_DEVICES und vor dem Separator
+In `run_tray()`, nach dem Menüpunkt `MENU_DEVICES` und vor dem Separator:
 
+```python
     restart_action = menu.addAction(MENU_RESTART)
-    # Bis die Rolle bekannt ist, bleibt der Eintrag sichtbar: unbekannt heisst,
-    # dass die API gerade nicht antwortet — genau der Fall, fuer den der Notweg
-    # da ist. Das Gate ist polkit bzw. das Backend, nicht diese Zeile.
+    # Bis die Rolle bekannt ist sichtbar: unbekannt heisst, dass die API gerade
+    # nicht antwortet — genau der Fall, fuer den der Notweg da ist. Das Gate
+    # ist polkit bzw. das Backend, nicht diese Zeile.
     restart_action.setVisible(True)
     bridge.restart_visible.connect(restart_action.setVisible)
 
     # Die Antwort des Dialogs geht ueber eine Queue zurueck in den
     # Arbeitsthread. Dialoge gehoeren in den GUI-Thread, Netzwerk nicht.
-    answers: queue.Queue = queue.Queue(maxsize=1)
+    answers: Queue = Queue(maxsize=1)
 
     def _show_prompt(mode: str) -> None:
-        if mode == "local":
-            choice = QMessageBox.question(
-                None,
-                "BaluHost neu starten",
-                "Das Backend antwortet nicht.\n\nDienste direkt über das "
-                "System neu starten? Das System fragt gleich nach dem "
-                "Passwort.",
+        # Jeder Pfad legt genau eine Antwort ab. Ohne das finally bliebe der
+        # Worker fuer immer in answers.get() haengen.
+        value = None
+        try:
+            if mode == "local":
+                choice = QMessageBox.question(
+                    None,
+                    "BaluHost neu starten",
+                    "Das Backend antwortet nicht.\n\nDienste direkt über das "
+                    "System neu starten? Das System fragt gleich nach dem "
+                    "Passwort.\n\nLaufende Aufträge und Uploads werden dabei "
+                    "abgebrochen.",
+                )
+                value = "ja" if choice == QMessageBox.StandardButton.Yes else None
+                return
+            is_totp = mode.startswith("totp")
+            label = "2FA-Code" if is_totp else "Passwort"
+            text = (
+                f"{label} stimmt nicht. Noch einmal:"
+                if mode.endswith("_retry")
+                else f"{label} für BaluHost:\n\nLaufende Aufträge und Uploads "
+                     f"werden abgebrochen."
             )
-            answers.put("ja" if choice == QMessageBox.StandardButton.Yes else None)
-            return
-
-        retry = mode.endswith("_retry")
-        is_totp = mode.startswith("totp")
-        label = "2FA-Code" if is_totp else "Passwort"
-        text = f"{label} für BaluHost:"
-        if retry:
-            text = f"{label} stimmt nicht. Noch einmal:"
-        value, ok = QInputDialog.getText(
-            None, "BaluHost neu starten", text, QLineEdit.EchoMode.Password
-        )
-        answers.put(value if ok and value else None)
+            typed, ok = QInputDialog.getText(
+                None, "BaluHost neu starten", text, QLineEdit.EchoMode.Password
+            )
+            value = typed if ok and typed else None
+        finally:
+            answers.put(value)
 
     bridge.restart_prompt.connect(_show_prompt)
 
@@ -2003,17 +2539,34 @@ MENU_RESTART = "BaluHost neu starten…"
 
     def _prompt_from_worker(mode: str) -> str | None:
         bridge.restart_prompt.emit(mode)
-        return answers.get()
+        try:
+            return answers.get(timeout=PROMPT_TIMEOUT)
+        except Empty:
+            return None
+
+    def _refresh_into(client: BackendClient) -> None:
+        """Token erneuern und dem Neustart-Client mitgeben.
+
+        Der Refresh-Token rotiert serverseitig nicht (siehe session.py), ein
+        paralleler Refresh im Worker ist also inhaltlich harmlos. Alles, was
+        dabei schiefgeht, faengt restart.py ab — hier darf nichts durch.
+        """
+        session.refresh_access()
+        tokens = tray_config.load_tokens()
+        if tokens:
+            client.set_token(tokens.access)
 
     def _restart_worker() -> None:
-        # Eigener Client: der Worker-Thread wechselt beim Refresh das Token
-        # des gemeinsamen Clients, und zwei Threads auf demselben Objekt sind
-        # eine Verabredung zum Rennen.
-        tokens = tray_config.load_tokens()
-        client = BackendClient(
-            server=base_url, token=tokens.access if tokens else None
-        )
+        outcome = RestartOutcome(False, "Unerwarteter Fehler.")
+        client = None
         try:
+            # Eigener Client: der Worker-Thread wechselt beim Refresh das Token
+            # des gemeinsamen Clients, und zwei Threads auf demselben Objekt
+            # sind eine Verabredung zum Rennen.
+            tokens = tray_config.load_tokens()
+            client = BackendClient(
+                server=base_url, token=tokens.access if tokens else None
+            )
             outcome = restart_flow(
                 client,
                 _prompt_from_worker,
@@ -2023,19 +2576,11 @@ MENU_RESTART = "BaluHost neu starten…"
             logger.exception("restart flow failed")
             outcome = RestartOutcome(False, f"Unerwarteter Fehler: {exc}")
         finally:
-            client.close()
-        bridge.restart_finished.emit(outcome.ok, outcome.message)
-
-    def _refresh_into(client: BackendClient) -> None:
-        """Token erneuern und dem Neustart-Client mitgeben.
-
-        Der Refresh-Token rotiert serverseitig nicht (siehe session.py), ein
-        paralleler Refresh im Worker ist also harmlos.
-        """
-        session.refresh_access()
-        tokens = tray_config.load_tokens()
-        if tokens:
-            client.set_token(tokens.access)
+            if client is not None:
+                client.close()
+            # Muss feuern: nur dieses Signal macht den Menuepunkt wieder
+            # anklickbar.
+            bridge.restart_finished.emit(outcome.ok, outcome.message)
 
     def _start_restart() -> None:
         restart_action.setEnabled(False)
@@ -2044,55 +2589,53 @@ MENU_RESTART = "BaluHost neu starten…"
     restart_action.triggered.connect(_start_restart)
 ```
 
-In `_main()` (im Worker), direkt nach `await notifier.connect()`:
+In `_main()` — **innerhalb** des bestehenden zweiten `try:`-Blocks, direkt vor `ctx = LoopContext(...)`:
 
 ```python
-        # Sichtbarkeit einmal beim Start bestimmen. Eine Rollenaenderung
-        # braucht danach einen Neustart des Trays — das ist selten genug.
-        account = await asyncio.to_thread(fetch_account_facts, session.client())
-        reachable = account.is_admin is not None
-        bridge.restart_visible.emit(menu_visible(account.is_admin, reachable))
+            # Sichtbarkeit einmal beim Start bestimmen. Eine Rollenaenderung
+            # braucht danach einen Neustart des Trays — das ist selten genug.
+            account = await asyncio.to_thread(
+                fetch_account_facts, session.client(), session.refresh_access
+            )
+            bridge.restart_visible.emit(
+                menu_visible(account.is_admin, account.is_admin is not None)
+            )
 ```
 
-Und die Qt-Importe oben erweitern:
+- [ ] **Step 4: Tests laufen lassen**
 
-```python
-from PyQt6.QtWidgets import (
-    QApplication, QInputDialog, QLineEdit, QMenu, QMessageBox, QSystemTrayIcon,
-)
-```
+Run: `cd backend && QT_QPA_PLATFORM=offscreen python3 -m pytest tests/tray/test_tray_wiring.py -o addopts="" -p no:cacheprovider -v`
+Erwartet: PASS
 
-- [ ] **Step 6: Verdrahtung prüfen**
+Run: `cd backend && ./.venv/bin/python -m pytest tests/tray/ -v`
+Erwartet: PASS, der Qt-Test als SKIPPED (kein PyQt6 im venv)
 
-Run: `cd backend && python -m pytest tests/tray/ -v`
-Erwartet: PASS (alle Tray-Tests, inkl. der bestehenden)
+- [ ] **Step 5: Zusätzlich der Importcheck mit dem Interpreter, der PyQt6 hat**
 
-Run: `cd backend && python -c "import ast,sys; ast.parse(open('baluhost_tray/tray.py').read())"`
-Erwartet: keine Ausgabe (Syntax in Ordnung; PyQt6 ist in der Testumgebung womöglich nicht installiert, deshalb kein Import)
+Run: `cd backend && QT_QPA_PLATFORM=offscreen PYTHONPATH=. python3 -c "import baluhost_tray.tray; print('import ok')"`
+Erwartet: `import ok`
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add backend/baluhost_tray/restart.py backend/baluhost_tray/tray.py \
-        backend/tests/tray/test_restart_flow.py
-git commit -m "feat(tray): Menuepunkt und Ablauf fuer den Dienste-Neustart
+git add backend/baluhost_tray/tray.py backend/tests/tray/test_tray_wiring.py
+git commit -m "feat(tray): Menuepunkt und Dialoge fuer den Dienste-Neustart
 
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 ```
 
 ---
 
-## Task 9: Dokumentation und Regeln
+## Task 10: Dokumentation und Regeln
 
 **Files:**
-- Modify: `docs/superpowers/specs/2026-09-21-desktop-tray-design.md`
-- Modify: `.claude/rules/security-agent.md`
-- Modify: `.claude/rules/architecture.md`
-- Modify: `docs/features/desktop-tray.de.md` **und** `docs/features/desktop-tray.en.md` (beide Sprachfassungen werden gepflegt und müssen gleich bleiben)
+- Modify: `docs/superpowers/specs/2026-09-21-desktop-tray-design.md`, `docs/features/desktop-tray.de.md`, `docs/features/desktop-tray.en.md`, `.claude/rules/security-agent.md`, `.claude/rules/architecture.md`, `deploy/install/templates/baluhost-tray.service`
 
-- [ ] **Step 1: Nicht-Ziel im Tray-Entwurf als überholt markieren**
+- [ ] **Step 1: Beide überholten Stellen im Tray-Entwurf markieren**
 
-In `docs/superpowers/specs/2026-09-21-desktop-tray-design.md`, im Abschnitt „Nicht-Ziele", den ersten Punkt ersetzen durch:
+In `docs/superpowers/specs/2026-09-21-desktop-tray-design.md` **zwei** Stellen, nicht eine:
+
+Im Abschnitt „Nicht-Ziele" (ca. Zeile 45) den ersten Punkt ersetzen:
 
 ```markdown
 - ~~**Service-Steuerung.** Neustarten oder Beenden von Diensten bleibt der
@@ -2100,63 +2643,21 @@ In `docs/superpowers/specs/2026-09-21-desktop-tray-design.md`, im Abschnitt „N
   Privilegiertes an und braucht keine sudoers-Erweiterung.~~
   **Überholt am 2026-09-22** durch
   `2026-09-22-tray-service-restart-design.md`: Das Tray kann Dienste neu
-  starten. Die Zusage „keine sudoers-Erweiterung" gilt weiterhin — der Notweg
-  läuft über polkit, nicht über sudo.
+  starten. Der Notweg läuft über polkit statt über sudo; auf dem API-Weg kommt
+  eine fünfte sudoers-Zeile für `baluhost-backend-local` dazu.
 ```
 
-- [ ] **Step 2: Sicherheitsregeln ergänzen**
-
-In `.claude/rules/security-agent.md`, am Ende des Abschnitts „Role Model" (also nach dem Absatz über `GET /api/plugins/steam_gaming/session-state`) einfügen:
+Und im Abschnitt „Architektur" (ca. Zeile 164) den Absatz über Menü und
+ausgehenden Pfad:
 
 ```markdown
-- `POST /api/system/restart-all` startet alle BaluHost-Units neu. Doppelt
-  gegated: `get_current_admin` **und** ein Step-up
-  (`services/step_up.verify_step_up`) — frisches TOTP, wenn 2FA aktiv ist,
-  sonst das Passwort. Der Grund für den zweiten Nachweis ist das Tray: ein
-  gekoppeltes Gerät hält sein Token tagelang, und „dieses Gerät war einmal
-  angemeldet" ist für eine Dienstunterbrechung zu wenig. Ein gescheiterter
-  Step-up antwortet 401 mit `{"error": "step_up_failed"}` — die
-  Unterscheidung zum abgelaufenen Token ist Teil des Vertrags, der Client
-  reagiert auf beides anders. Rate-Limit `system_restart` (5/minute), weil
-  der Endpunkt ein Passwort entgegennimmt. Durchgesetzt in
-  `api/routes/system.py`.
+> **Überholt am 2026-09-22:** Das Menü hat einen fünften Eintrag („BaluHost neu
+> starten…"), und damit hat das Tray sehr wohl einen ausgehenden Pfad. Siehe
+> `2026-09-22-tray-service-restart-design.md`. Die Aussage zur Meldungsliste
+> gilt weiter.
 ```
 
-In demselben File, unter „Known Gaps & Accepted Risks", als neuen Punkt **10** anhängen — die Liste endet heute bei 9. Direkt darunter steht der Hinweis, dass ein früherer Eintrag 10 am 2026-07-21 entfernt wurde; diesen Satz um einen Halbsatz ergänzen, sonst zeigen zwei Dinge auf dieselbe Nummer:
-
-```markdown
-Entry 10 ("SECURITY.md outdated") was removed on 2026-07-21: … Die Nummer 10
-ist seit dem 2026-09-22 neu vergeben (Tray-Notweg, siehe oben).
-```
-
-Der neue Eintrag:
-
-```markdown
-10. **Der Notweg des Trays schreibt keinen Audit-Eintrag** — Kann das Backend
-    nicht mehr antworten, startet `baluhost_tray/restart.py` die Units selbst
-    über `systemctl`; systemd fragt polkit
-    (`org.freedesktop.systemd1.manage-units`, `auth_admin_keep`), KDE zeigt den
-    Dialog. Ein App-Audit ist in dem Moment unmöglich — die Datenbank ist
-    genau so unerreichbar wie die API. Die Spur liegt im Journal: polkitd
-    protokolliert die Autorisierung, systemd den Neustart. Ein
-    Nachtrag-Endpunkt wurde bewusst verworfen: ein vom Client behaupteter
-    Audit-Eintrag ist schwächeres Beweismaterial als die Zeile, die systemd
-    selbst geschrieben hat. Kein neues Recht für den `baluhost`-Nutzer, keine
-    sudoers-Zeile, kein eigener polkit-Policy-File —
-    `NoNewPrivileges=yes` in `baluhost-tray.service` bleibt, weil `systemctl`
-    nichts im eigenen Prozess eskaliert, sondern über D-Bus fragt. Entwurf:
-    `docs/superpowers/specs/2026-09-22-tray-service-restart-design.md`.
-```
-
-- [ ] **Step 3: API-Liste ergänzen**
-
-In `.claude/rules/architecture.md`, in der Liste unter „API Structure", bei `/api/system/*` ergänzen bzw. als eigene Zeile:
-
-```markdown
-- `/api/system/restart-all` - Sammelneustart aller BaluHost-Units (Admin **und** Step-up, siehe `security-agent.md`)
-```
-
-- [ ] **Step 4: Feature-Doku in beiden Sprachen**
+- [ ] **Step 2: Feature-Doku in beiden Sprachen**
 
 In `docs/features/desktop-tray.de.md`, Abschnitt „Menue und Klick" (ab Zeile 91),
 die Tabelle um eine Zeile **vor** „Beenden" erweitern:
@@ -2165,21 +2666,24 @@ die Tabelle um eine Zeile **vor** „Beenden" erweitern:
 | **BaluHost neu starten…** | Startet alle BaluHost-Dienste neu — fragt vorher nach |
 ```
 
-Und direkt nach dem Absatz über *„Geraete in der Web-UI"* einen neuen Abschnitt
-einfügen:
+Und nach dem Absatz über *„Geraete in der Web-UI"* einen neuen Abschnitt:
 
 ```markdown
 ## Dienste neu starten
 
-Der Menuepunkt *„BaluHost neu starten…"* startet alle vier Units neu:
-`baluhost-scheduler`, `baluhost-monitoring`, `baluhost-webdav` und zuletzt
-`baluhost-backend`. Welchen Weg das Tray nimmt, entscheidet es beim Klick.
+Der Menuepunkt *„BaluHost neu starten…"* startet alle fuenf Units neu:
+`baluhost-scheduler`, `baluhost-monitoring`, `baluhost-webdav`,
+`baluhost-backend-local` und zuletzt `baluhost-backend`.
+
+**Laufende Auftraege werden dabei abgebrochen.** Der Scheduler markiert beim
+Start jede noch laufende Ausfuehrung als abgebrochen, laufende Uploads sterben
+mit dem Prozess. Der Dialog sagt das vorher.
 
 **Wenn das Backend antwortet** fragt ein Dialog nach dem BaluHost-Passwort des
-gekoppelten Kontos — bei aktivem 2FA nach einem frischen Code. Das gekoppelte
-Token allein reicht ausdruecklich nicht: es liegt tagelang auf der Platte, und
+gekoppelten Kontos — bei aktivem 2FA nach einem Code. Das gekoppelte Token
+allein reicht fuer diesen Vorgang nicht: es liegt tagelang auf der Platte, und
 wer vor einem entsperrten Desktop sitzt, soll damit nicht den Dienst
-unterbrechen koennen. Danach startet das Backend die Units selbst. Das Symbol
+unterbrechen koennen. Danach startet das Backend die Units selbst; das Symbol
 wird kurz grau, waehrend das Backend selbst neu startet.
 
 **Wenn das Backend nicht mehr antwortet** — genau der Fall, fuer den es den
@@ -2193,38 +2697,94 @@ polkit nimmt sie laut `/usr/share/polkit-1/rules.d/50-default.rules` als
 Admin-Identitaet. Ist er es nicht, fragt der Dialog nach dem Passwort eines
 *anderen* Admins. Das ist kein Fehler, nur unerwartet.
 
-Ist das gekoppelte Konto kein Admin, erscheint der Menuepunkt nicht — ausser
-das Backend ist gerade nicht erreichbar, dann entscheidet ohnehin polkit.
+Ist das gekoppelte Konto nachweislich kein Admin, erscheint der Menuepunkt
+nicht. Konnte die Rolle nicht abgefragt werden — weil das Backend nicht
+antwortet —, ist er da; dann entscheidet ohnehin polkit.
 
 Der Neustart ueber das Backend steht im Audit-Log. Der Notweg nicht: dort
-schreibt niemand mehr in die Datenbank. Die Spur liegt im Journal, polkitd
-protokolliert die Freigabe und systemd den Neustart.
+schreibt niemand mehr in die Datenbank. Die Spur liegt im Journal, wo polkitd
+die Freigabe samt Nutzer protokolliert. Die systemd-Zeile nennt keinen Urheber,
+und ein abgebrochener Dialog hinterlaesst gar nichts.
 ```
 
-Dieselben beiden Änderungen sinngemäß in `docs/features/desktop-tray.en.md`
-(Abschnitt „Menu and click", ab Zeile 88). Die englische Fassung behält die
-deutschen Menü-Beschriftungen in der Tabelle bei — so steht es dort bereits.
+Dieselben Änderungen sinngemäß in `docs/features/desktop-tray.en.md` (Abschnitt
+„Menu and click", ab Zeile 88). Die englische Fassung behält die deutschen
+Menü-Beschriftungen in der Tabelle bei — so steht es dort bereits.
 
-- [ ] **Step 5: Prüfen, dass nichts anderes die alte Zusage wiederholt**
+- [ ] **Step 3: Sicherheitsregeln ergänzen**
 
-Run: `cd /home/sven/projects/BaluHost && python3 - <<'PY'
-import os, re
-pat = re.compile(r"fasst nichts Privilegiertes an|keine Service-Steuerung|liest nur")
-for dp, dn, fn in os.walk("."):
-    dn[:] = [d for d in dn if d not in {".git", "node_modules", "__pycache__"}]
-    for f in fn:
-        if not f.endswith((".md", ".py", ".service")):
-            continue
-        p = os.path.join(dp, f)
-        for i, line in enumerate(open(p, errors="ignore"), 1):
-            if pat.search(line):
-                print(f"{p}:{i}: {line.strip()[:120]}")
-PY`
+In `.claude/rules/security-agent.md`, am Ende des Abschnitts „Role Model" (nach
+dem Absatz über `GET /api/plugins/steam_gaming/session-state`):
 
-Erwartet: Treffer im Tray-Entwurf (jetzt als überholt markiert) und der Kommentar
-in `deploy/install/templates/baluhost-tray.service` („Kein root, keine
-Rechteerweiterung: das Tray liest nur"). Den Kommentar in der Unit auf den
-neuen Stand bringen:
+```markdown
+- `POST /api/system/restart-all` startet alle fünf BaluHost-Units neu. Dreifach
+  gegated: `get_current_admin`, `is_private_or_local_ip(request.client.host)`
+  und ein Step-up (`services/step_up.verify_step_up`) — Code bei aktivem 2FA,
+  sonst Passwort. **API-Keys werden abgelehnt** (`auth_method == "api_key"` →
+  403): ein Step-up soll Anwesenheit belegen, und ein Key-Aufrufer fiele in
+  `get_user_identifier` auf den IP-Schlüssel zurück und könnte das Rate-Limit
+  über beliebige Quell-IPs aufweichen. Ein gescheiterter Step-up antwortet 401
+  mit `{"error": "step_up_failed", "totp_required": …}`; die Unterscheidung zum
+  abgelaufenen Token ist Teil des Vertrags, der Client reagiert auf beides
+  anders. Rate-Limit `system_restart` (5/minute). Durchgesetzt in
+  `api/routes/system.py`.
+
+  **Was der Step-up nicht deckt:** `POST /api/system/restart` startet
+  `baluhost-backend` weiterhin allein mit dem Admin-Token, ohne zweiten
+  Nachweis und ohne LAN-Gate (Issue #699). Wer ein Tray-Token hat, erreicht die
+  Fähigkeit „Backend neu starten" also auch ohne Step-up. Geschützt ist der
+  *Sammel*neustart, nicht die Fähigkeit als solche.
+```
+
+Unter „Known Gaps & Accepted Risks" als Punkt **10** anhängen — die Liste endet
+heute bei 9, und der Hinweis darunter (über den 2026-07-21 entfernten Eintrag 10)
+bekommt einen Halbsatz, sonst zeigen zwei Dinge auf dieselbe Nummer:
+
+```markdown
+10. **Der Tray-Notweg schreibt keinen Audit-Eintrag, und sein Rate-Limit ist
+    zurücksetzbar** — Zwei getrennte Einschränkungen desselben Features
+    (`docs/superpowers/specs/2026-09-22-tray-service-restart-design.md`):
+
+    *Audit:* Antwortet das Backend nicht, startet `baluhost_tray/restart.py`
+    die Units selbst über einen einzigen `systemctl restart`-Aufruf; systemd
+    fragt polkit (`org.freedesktop.systemd1.manage-units`, `auth_admin_keep`),
+    KDE zeigt den Dialog. Ein App-Audit ist dann unmöglich — die Datenbank ist
+    so unerreichbar wie die API. Im Journal steht die polkitd-Zeile mit Nutzer,
+    Aktion und Zeit; die systemd-Zeile nennt **keinen** Urheber, und ein
+    abgebrochener Dialog hinterlässt **gar nichts**. Ein Nachtrag-Endpunkt
+    wurde verworfen: ein vom Client behaupteter Audit-Eintrag ist schwächeres
+    Beweismaterial als die Zeile, die polkitd selbst geschrieben hat.
+
+    *Rate-Limit:* `system_restart` (5/minute) liegt im Prozessspeicher, gilt
+    also pro uvicorn-Worker (vier, ohne `ip_hash` im nginx-Upstream) — und der
+    Endpunkt startet genau diese Prozesse neu. Ein Angreifer mit Admin-Token
+    kann seine Zähler über `/api/system/restart` zurücksetzen und den Step-up
+    damit schneller raten, als die Zahl vermuten lässt. Belastbar wäre ein
+    persistenter Fehlversuchszähler am Konto (wie `pin_failed_attempts`); das
+    ist bewusst nicht gebaut.
+
+    Der Notweg braucht **kein** neues Recht: kein polkit-Policy-File, keine
+    sudoers-Zeile für den Desktop-Nutzer, `NoNewPrivileges=yes` bleibt.
+    `systemctl` eskaliert nichts im eigenen Prozess. **Wichtig:** Er muss ein
+    kurzlebiger Subprozess bleiben. Ein D-Bus-Aufruf von
+    `Manager.RestartUnit` aus dem langlebigen Tray-Prozess würde die
+    Autorisierung fünf Minuten an diesem Prozess halten, und `manage-units`
+    deckt auch `StartTransientUnit` ab — also beliebige Codeausführung als root.
+    Der API-Weg nutzt die bestehenden NOPASSWD-Einträge aus
+    `baluhost-deploy-sudoers` (jetzt fünf statt vier Units).
+```
+
+- [ ] **Step 4: API-Liste ergänzen**
+
+In `.claude/rules/architecture.md`, unter „API Structure":
+
+```markdown
+- `/api/system/restart-all` - Sammelneustart aller BaluHost-Units (Admin, lokales Netz **und** Step-up, keine API-Keys — siehe `security-agent.md`)
+```
+
+- [ ] **Step 5: Kommentar in der Tray-Unit nachziehen**
+
+In `deploy/install/templates/baluhost-tray.service`:
 
 ```
 # Kein root, keine Rechteerweiterung. Der Neustart-Notweg laeuft ueber
@@ -2233,15 +2793,39 @@ neuen Stand bringen:
 NoNewPrivileges=yes
 ```
 
-Achtung: `backend/tests/tray/test_unit_template.py` prüft diese Datei — nach der
-Änderung laufen lassen.
+`backend/tests/tray/test_unit_template.py` parst nur Direktiven, Kommentare
+fallen weg — die Änderung bricht nichts. Trotzdem laufen lassen.
 
-- [ ] **Step 6: Tests laufen lassen**
+- [ ] **Step 6: Prüfen, dass keine dritte Stelle die alte Zusage wiederholt**
 
-Run: `cd backend && python -m pytest tests/tray/ -v`
+Run:
+```bash
+cd /home/sven/projects/BaluHost && python3 - <<'PY'
+import os, re
+pat = re.compile(r"fasst nichts Privilegiertes an|keine Service-Steuerung|"
+                 r"keinen ausgehenden Pfad|es bedient nicht|liest nur")
+for dp, dn, fn in os.walk("."):
+    dn[:] = [d for d in dn if d not in {".git", "node_modules", "__pycache__", "worktrees"}]
+    for f in fn:
+        if not f.endswith((".md", ".py", ".service")):
+            continue
+        p = os.path.join(dp, f)
+        for i, line in enumerate(open(p, errors="ignore"), 1):
+            if pat.search(line):
+                print(f"{p}:{i}: {line.strip()[:110]}")
+PY
+```
+
+Erwartet: nur Treffer in den beiden nun als überholt markierten Absätzen des
+Entwurfs vom 2026-09-21 und im aktualisierten Unit-Kommentar. `.claude/worktrees/`
+ist ausgeschlossen, sonst kommt jeder Treffer fünffach.
+
+- [ ] **Step 7: Tests laufen lassen**
+
+Run: `cd backend && ./.venv/bin/python -m pytest tests/tray/ -v`
 Erwartet: PASS
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
 git add docs/ .claude/rules/ deploy/install/templates/baluhost-tray.service
@@ -2254,10 +2838,19 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 ## Abschluss
 
-- [ ] **Gesamtlauf:** `cd backend && python -m pytest -q` — keine neuen Fehlschläge gegenüber dem Stand vor Task 1 (Zahl vorher messen; die Suite hat bekannte, vorbestehende Fehlschläge).
-- [ ] **Manuelle Probe auf BaluNode** (erst nach dem Deploy sinnvoll, weil das Tray dort läuft):
+- [ ] **Gesamtlauf:** `cd backend && ./.venv/bin/python -m pytest -q`
+      Erwartet: 2 failed (die vorbestehenden in `tests/plugins/sandbox/test_phase3_e2e.py`), sonst grün.
+- [ ] **Qt-Rauchtest mit dem Interpreter, der PyQt6 hat:**
+      `cd backend && QT_QPA_PLATFORM=offscreen python3 -m pytest tests/tray/ -o addopts="" -p no:cacheprovider -q`
+- [ ] **Manuelle Probe auf BaluNode** (erst nach dem Deploy, und der Deploy muss
+      die neue sudoers-Zeile mitbringen — `SYNC_PERMISSIONS=1`, sonst scheitert
+      der Neustart von `baluhost-backend-local` mit `sudo: no entry`):
   1. `baluhost-tray` neu starten, Menüpunkt „BaluHost neu starten…" ist da.
-  2. Normalweg: Passwort eingeben → Dialog meldet Erfolg, Icon wird kurz grau, kommt zurück.
+  2. Normalweg: Passwort eingeben → Erfolgsmeldung, Icon kurz grau, kommt zurück.
   3. Falsches Passwort → „Passwort bzw. 2FA-Code stimmt nicht.", erneute Abfrage.
-  4. Notweg: `sudo systemctl stop baluhost-backend`, dann Menüpunkt → Bestätigung → KDE fragt nach dem Passwort → alle vier Units laufen wieder (`systemctl status 'baluhost-*'`).
+  4. Notweg: `sudo systemctl stop baluhost-backend`, dann Menüpunkt → Bestätigung
+     → **ein** KDE-Passwortdialog → `systemctl status 'baluhost-*'` zeigt alle
+     fünf Units frisch gestartet.
+  5. Im Journal nachsehen, dass die polkitd-Zeile den Nutzer nennt:
+     `journalctl -t polkitd --since "-5 min"`.
 - [ ] **Branch abschließen** mit superpowers:finishing-a-development-branch.
