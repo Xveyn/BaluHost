@@ -21,7 +21,9 @@ React/TypeScript mit Vitest im Frontend.
 
 ## Global Constraints
 
-- **Branch:** `feat/desktop-tray`, Basis `main` @ `e143b21f`.
+- **Branch:** `feat/desktop-tray-app`, Basis `main` @ `0f144661`.
+  Phase A (Tasks 1-6) ist bereits in `main` gemergt (PR #682); dieser Branch
+  fuehrt Phase B, also Tasks 7-20.
 - **Keine `from __future__ import annotations` in Plugin-Routen.** Hinter dem
   `@user_limiter.limit`-Wrapper von slowapi werden zurückgestellte Annotationen
   zu ForwardRefs, die FastAPI nicht mehr auflöst — jeder Request wird 422.
@@ -1757,8 +1759,9 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Consumes: nichts.
 - Produces:
   - `@dataclass(frozen=True) class PendingPopup: notification_id: int; title: str; message: str`
-  - `class PopupQueue` mit `hold(popup)`, `release() -> list[PendingPopup]`,
-    `summary() -> tuple[str, str] | None`, `is_empty() -> bool`
+  - `class PopupQueue` mit `hold(popup)`, `is_empty() -> bool` und
+    `release() -> tuple[list[PendingPopup], tuple[str, str] | None]` — gibt die
+    zurueckgehaltenen Popups **und** die Sammelmeldung in einem Zug zurueck
   - `SUMMARY_THRESHOLD = 4`
 
 - [ ] **Step 1: Den fehlschlagenden Test schreiben**
@@ -2696,9 +2699,18 @@ from baluhost_tray.state import IconState, TrayState
 from baluhost_tray.watch import Watcher, backoff_delays
 
 
-def test_backoff_grows_and_caps():
+def test_backoff_stays_in_its_jitter_window():
+    """Jeder Wert liegt im Fenster seines gedeckelten Exponentials.
+
+    Bewusst keine Monotonie-Zusage: sobald der Deckel greift, stammen die
+    letzten Werte aus demselben Intervall und sind nur zufaellig aufsteigend —
+    ein Monotonie-Test waere in rund der Haelfte der Laeufe rot.
+    """
     delays = backoff_delays(8, base=1.0, cap=60.0)
-    assert all(b >= a for a, b in zip(delays, delays[1:]))
+    assert len(delays) == 8
+    for attempt, delay in enumerate(delays):
+        ceiling = min(60.0, 1.0 * (2 ** attempt))
+        assert ceiling * 0.5 <= delay <= ceiling, f"attempt {attempt}: {delay}"
     assert max(delays) <= 60.0
 
 
@@ -2955,7 +2967,7 @@ Expected: PASS (11 Tests)
 
 ```bash
 git add backend/baluhost_tray/watch.py backend/tests/tray/test_watch.py
-git commit -m "feat(tray): WebSocket-Beobachter mit Snapshot, Puffer und Backoff
+git commit -m "feat(tray): WebSocket-Beobachter mit Snapshot und Backoff
 
 Der Snapshot fragt unread_only an -- sonst liefert die Route alles
 neueste zuerst, bei 100 gedeckelt, und eine aeltere ungelesene Meldung
@@ -3153,7 +3165,11 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Test: `backend/tests/tray/test_icons.py`
 
 **Interfaces:**
-- Consumes: `client/src-tauri/icons/icon.png` (1024×1024 RGBA) als Quelle.
+- Consumes: `client/src/assets/baluhost-logo.png` (256×256) als Quelle.
+  **Nicht** `client/src-tauri/icons/icon.png` — die Datei ist trotz ihrer
+  1024×1024 RGBA ein Tauri-Platzhalter, ein einfarbig blaues Quadrat ohne
+  jedes Motiv. Zwei Reviews haben ihre Abmessungen bestätigt; niemand hat sie
+  angesehen.
 - Produces: `def icon_path(state: IconState, size: int = 22) -> Path`,
   `SIZES: tuple[int, ...]`
 
@@ -3209,43 +3225,70 @@ Expected: FAIL mit `ModuleNotFoundError: No module named 'baluhost_tray.icons'`
 
 ImageMagick liegt auf der Box; andernfalls von Hand in einem Bildeditor.
 
-```bash
-cd backend/baluhost_tray/icons
-magick ../../../client/src-tauri/icons/icon.png \
-  -fuzz 12% -fill none -draw "alpha 0,0 floodfill" base-1024.png
+**Die Dateien liegen bereits im Repo** — sie wurden erzeugt und bei 22 px
+angesehen, bevor dieser Task übergeben wurde. Der Weg dorthin, zur
+Nachvollziehbarkeit:
 
+```bash
+# 1. Hintergrundquadrat wegschneiden und zuschneiden
+magick client/src/assets/baluhost-logo.png \
+  -fuzz 15% -fill none -draw "alpha 0,0 floodfill" cut.png
+magick cut.png -trim +repage trim.png
+
+# 2. Den duennen hellen Bogen loswerden. Er haengt mit der Katze zusammen
+#    (eine einzige Komponente), laesst sich also nicht per Komponentenanalyse
+#    trennen — aber er ist duenn: ein morphologisches Oeffnen toetet ihn und
+#    stellt den Koerper wieder her.
+magick trim.png -alpha extract -threshold 50% mask.png
+magick mask.png -morphology Open Disk:3 shape.png
+magick shape.png -trim +repage shape.png
+
+# 3. Vollton-Silhouette in Markenblau. Die farbige Variante wurde verworfen:
+#    ihre Innendetails werden bei 22 px zu Matsch, die Silhouette bleibt klar.
+magick -size 192x210 xc:'#3274FF' shape.png \
+  -alpha off -compose CopyOpacity -composite -strip silhouette.png
+
+# 4. Vier Groessen, vier Zustaende
 for s in 22 24 32 48; do
-  magick base-1024.png -resize ${s}x${s} baluhost-tray-ok-${s}.png
-  magick baluhost-tray-ok-${s}.png -colorspace Gray -alpha on \
-    baluhost-tray-offline-${s}.png
-  d=$(( s / 3 ))
+  inner=$(( s * 90 / 100 ))
+  magick silhouette.png -resize ${inner}x${inner} -background none \
+    -gravity center -extent ${s}x${s} -strip baluhost-tray-ok-${s}.png
+  magick baluhost-tray-ok-${s}.png -modulate 100,0,100 -alpha on \
+    -channel A -evaluate multiply 0.6 +channel -strip baluhost-tray-offline-${s}.png
+  d=$(( s / 3 )); r=$(( d / 2 )); cx=$(( s - r - 1 )); cy=$(( s - r - 1 ))
   magick baluhost-tray-ok-${s}.png -fill '#F5A623' -stroke none \
-    -draw "circle $((s-d/2-1)),$((s-d/2-1)) $((s-d/2-1)),$((s-1))" \
-    baluhost-tray-warning-${s}.png
+    -draw "circle ${cx},${cy} ${cx},$(( cy + r ))" -strip baluhost-tray-warning-${s}.png
   magick baluhost-tray-ok-${s}.png -fill '#D0021B' -stroke none \
-    -draw "circle $((s-d/2-1)),$((s-d/2-1)) $((s-d/2-1)),$((s-1))" \
-    baluhost-tray-critical-${s}.png
+    -draw "circle ${cx},${cy} ${cx},$(( cy + r ))" -strip baluhost-tray-critical-${s}.png
 done
-rm base-1024.png
 ```
 
-**Jede Datei bei 22 px im Panel ansehen, bevor es weitergeht.** Ist die Katze
-dort nur ein Fleck, muss die Silhouette von Hand vereinfacht werden — das ist
-der wahrscheinliche Fall und kein Grund, den Schritt zu überspringen.
+**Zwei Fallen dabei, beide erlebt:** Die Größenangabe per Kommandosubstitution
+(`$(magick identify -format %wx%h ...)`) kippt die Farbe ins Graustufenbild —
+Maße explizit hinschreiben. Und `+append` verhält sich in dieser
+ImageMagick-Version eigenwillig; für Vergleichsbilder `montage` benutzen.
 
 `backend/baluhost_tray/icons/README.md`:
 
 ```markdown
 # Tray-Icons
 
-Abgeleitet aus `client/src-tauri/icons/icon.png` (1024²). Das dunkle
+Abgeleitet aus `client/src/assets/baluhost-logo.png` (256²). Das dunkle
 Hintergrundquadrat ist entfernt, sonst säße die Katze im Panel in einem Kasten.
 
-`client/public/baluhost-logo.svg` ist **nicht** die Quelle: 1,2 MB, ein
-nachgezeichnetes Bitmap mit tausenden Pfadpunkten.
+Zwei Dateien, die **nicht** taugen:
+- `client/src-tauri/icons/icon.png` — trotz 1024×1024 RGBA ein
+  Tauri-Platzhalter: genau eine Farbe, ein blaues Quadrat ohne Motiv.
+- `client/public/baluhost-logo.svg` — 1,2 MB, ein nachgezeichnetes Bitmap mit
+  tausenden Pfadpunkten, kein echtes Vektor-Logo.
 
-Zustände: `ok` (Katze pur) · `warning` (gelber Punkt unten rechts) ·
-`critical` (roter Punkt) · `offline` (entsättigt). Der Zustand steckt im
+Zustände: `ok` (grüner Punkt unten rechts) · `warning` (gelber Punkt) ·
+`critical` (roter Punkt) · `offline` (entsättigt, ohne Punkt).
+
+Der ruhige Zustand trägt bewusst **auch** einen Punkt: Ohne Badge ließe sich
+„alles in Ordnung" nicht von „Icon nicht geladen" oder „Zustand unbekannt"
+unterscheiden. Nur `offline` bleibt ohne — dort trägt die Entsättigung die
+Aussage. Der Zustand steckt im
 Badge, nicht in der Färbung der Katze — eine rote Katze liest sich als
 anderes Logo, nicht als Alarm.
 
@@ -3778,8 +3821,7 @@ async def deliver(
 
     pending = list(popups)
     if not queue.is_empty():
-        summary = queue.summary()
-        released = queue.release()
+        released, summary = queue.release()
         if summary:
             try:
                 await notifier.show_summary(*summary)

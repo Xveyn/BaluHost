@@ -225,6 +225,103 @@ log_step "Reloading Systemd"
 systemctl daemon-reload
 log_info "systemd daemon reloaded."
 
+# --- Desktop tray user unit (KDE Plasma) ---
+# Als Funktion, damit der Sonderfall "kein Desktop-Benutzer" an einer Stelle
+# endet statt als verschachtelter Block zwischen den System-Units zu stehen.
+install_tray_user_unit() {
+    # BALUHOST_USER ist das Dienstkonto, nicht zwingend der Mensch an der
+    # Tastatur. Eine User-Unit im Home des Dienstkontos startet in keiner
+    # Desktop-Sitzung, deshalb wird der Desktop-Benutzer getrennt bestimmt.
+    local target_user="${TRAY_DESKTOP_USER:-${SUDO_USER:-}}"
+    if [ -z "$target_user" ]; then
+        log_warn "Kein Desktop-Benutzer bekannt — Tray-Unit nicht installiert."
+        log_warn "Nachtraeglich: TRAY_DESKTOP_USER=<name> erneut ausfuehren."
+        return 0
+    fi
+
+    local user_home
+    # `|| true`, weil getent fuer einen unbekannten Benutzer 2 liefert. Ohne
+    # das risse die Zuweisung unter `set -euo pipefail` den ganzen Installer
+    # ab, statt die Warnung eine Zeile weiter unten zu erreichen.
+    user_home="$(getent passwd "$target_user" | cut -d: -f6 || true)"
+    if [ -z "$user_home" ] || [ ! -d "$user_home" ]; then
+        log_warn "Kein Home fuer $target_user — Tray-Unit uebersprungen."
+        return 0
+    fi
+
+    # Ab hier faengt jedes Kommando seinen eigenen Fehlschlag ab. Unter
+    # `set -euo pipefail` risse sonst ein einziges davon nicht nur diese
+    # Funktion ab, sondern das ganze Modul — und install.sh bricht die
+    # Modulschleife daraufhin mit `break` ab, sodass 11-nginx bis
+    # 14-optional-features nie laufen. Ein optionaler Desktop-Komfortschritt
+    # darf keine Kern-Installation kippen.
+    #
+    # Nicht stattdessen `install_tray_user_unit || log_warn ...` am Aufrufort:
+    # ein Funktionsaufruf in einer ||-Liste schaltet errexit im *gesamten*
+    # Rumpf ab, die Funktion liefe nach einem Fehlschlag einfach weiter.
+    local unit_dir="$user_home/.config/systemd/user"
+    # Als Zielbenutzer anlegen statt als root mit -o/-g: `install -d` setzt
+    # Eigentuemer und Gruppe nur auf die *letzte* Komponente. Fehlen
+    # ~/.config oder ~/.config/systemd noch — und genau so sieht das Home
+    # eines Kontos aus, das sich noch nie angemeldet hat, also der Fall, fuer
+    # den der else-Zweig unten ueberhaupt geschrieben ist —, gehoerten sie
+    # danach root, und die erste Plasma-Sitzung koennte nicht in ~/.config
+    # schreiben.
+    sudo -u "$target_user" mkdir -p "$unit_dir" || {
+        log_warn "Konnte $unit_dir nicht als $target_user anlegen — Tray-Unit uebersprungen."
+        return 0
+    }
+    process_template \
+        "$TEMPLATE_DIR/baluhost-tray.service" \
+        "$unit_dir/baluhost-tray.service" \
+        "VENV_BIN=$VENV_BIN" \
+        "WEB_URL=${TRAY_WEB_URL:-https://baluhost.local}" || {
+        log_warn "Vorlage baluhost-tray.service nicht verarbeitbar — Tray-Unit uebersprungen."
+        return 0
+    }
+    # process_template schreibt als root, die Datei gehoert also root. Ohne
+    # das chown koennte der Benutzer seine eigene Unit nicht mehr aendern.
+    chown "$target_user:$target_user" "$unit_dir/baluhost-tray.service" || {
+        log_warn "Konnte Tray-Unit nicht $target_user zuschreiben — uebersprungen."
+        return 0
+    }
+
+    # Das Extra [tray] steckt bewusst nicht im Standard-venv: Qt gehoert nicht
+    # auf eine kopflose Serverinstallation. Deshalb hier nur ein Hinweis, kein
+    # Abbruch und keine Warnung — der kopflose Server ist der Normalfall.
+    if [ ! -x "$VENV_BIN/baluhost-tray" ]; then
+        log_info "Extra [tray] fehlt — einmalig nachinstallieren mit: sudo $VENV_BIN/pip install -e '$INSTALL_DIR/backend[tray]'"
+    fi
+
+    local uid runtime
+    uid="$(id -u "$target_user")" || {
+        log_warn "Keine UID fuer $target_user — Tray-Unit abgelegt, aber nicht aktiviert."
+        return 0
+    }
+    runtime="/run/user/$uid"
+    if [ -d "$runtime" ] && sudo -u "$target_user" \
+        XDG_RUNTIME_DIR="$runtime" systemctl --user daemon-reload 2>/dev/null; then
+        sudo -u "$target_user" XDG_RUNTIME_DIR="$runtime" \
+            systemctl --user enable baluhost-tray.service || {
+            log_warn "Tray-Unit abgelegt, aber 'systemctl --user enable' schlug fehl."
+            log_warn "Nachtraeglich als $target_user: systemctl --user enable baluhost-tray.service"
+            return 0
+        }
+        log_info "Tray-Unit installiert und aktiviert fuer $target_user"
+    else
+        # Hier hat der Zielbenutzer keine laufende Sitzung — bei einer
+        # Erstinstallation per SSH als root der Normalfall. `systemctl --user
+        # enable` ist also nie gelaufen: es gibt keinen Symlink in
+        # graphical-session.target.wants/, und `WantedBy=` bleibt wirkungslos.
+        # Die Unit liegt da und startet beim naechsten Login trotzdem nicht.
+        # Ein log_info an dieser Stelle laese sich wie Erfolg und haelt genau
+        # den Menschen vom Nachsehen ab, der den Befehl noch ausfuehren muss.
+        log_warn "Tray-Unit fuer $target_user abgelegt, aber Autostart NICHT eingerichtet"
+        log_warn "(keine laufende Sitzung fuer $target_user — das ist bei einer Installation per SSH normal)."
+        log_warn "Nachtraeglich als $target_user: systemctl --user enable baluhost-tray.service"
+    fi
+}
+
 # --- Enable services ---
 log_step "Enabling Services"
 
@@ -236,6 +333,11 @@ for service in "${SERVICES[@]}"; do
         log_info "$service enabled."
     fi
 done
+
+# --- Desktop Tray ---
+log_step "Desktop Tray Unit"
+
+install_tray_user_unit
 
 # --- Verify ---
 log_step "Service Verification"

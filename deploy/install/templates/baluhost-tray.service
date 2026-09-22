@@ -1,0 +1,29 @@
+[Unit]
+Description=BaluHost Desktop Tray (KDE Plasma)
+PartOf=graphical-session.target
+After=graphical-session.target
+# Ohne Kopplung gibt es nichts zu zeigen. Das Tray beendet sich in dem Fall
+# ohnehin sauber mit 0, und Restart=on-failure startet dort gar nicht neu —
+# die Bedingung verhindert also keinen Neustart-Sturm, sondern macht den
+# Zustand lesbar: `systemctl --user status` zeigt "condition failed", und das
+# heisst fuer einen Menschen "noch nicht eingerichtet". Ohne sie stuende dort
+# ein Start, der sich sofort beendet hat — das sieht wie ein Fehlstart aus.
+ConditionPathExists=%h/.baluhost/tray-tokens.json
+# Das Startlimit muss erreichbar sein, sonst laeuft ein dauerhafter Exit 3
+# (kein SNI-Host) endlos alle zehn Sekunden weiter. Die systemd-Vorgabe ist
+# ein Fenster von 10s bei 5 Versuchen; bei einer Wartezeit von 10s zwischen
+# den Starts faellt hoechstens einer in jedes Fenster, die fuenf werden nie
+# erreicht. Fuenf Minuten Fenster fassen die fuenf Versuche.
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+ExecStart=@@VENV_BIN@@/baluhost-tray --web-url @@WEB_URL@@
+Restart=on-failure
+RestartSec=10s
+# Kein root, keine Rechteerweiterung: das Tray liest nur.
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=graphical-session.target

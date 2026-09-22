@@ -12,6 +12,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Request, Response, status
 from sqlalchemy.orm import Session
 
+from app.api import deps
 from app.api.deps import require_power_launch_games
 from app.core.database import get_db
 from app.core.exceptions import (
@@ -29,6 +30,7 @@ from app.plugins.installed.steam_gaming.models import (
     LaunchableGame,
     LaunchResponse,
     RunningGame,
+    SessionStateResponse,
 )
 from app.schemas.user import UserPublic
 from app.services.audit.logger_db import get_audit_logger_db
@@ -47,12 +49,24 @@ def _client_host(request: Request) -> Optional[str]:
 
 
 def _audit(
-    action: str, user: UserPublic, success: bool, details: dict, client_host: Optional[str]
+    action: str,
+    user: UserPublic,
+    success: bool,
+    details: dict,
+    client_host: Optional[str],
+    *,
+    delegated: bool = True,
 ) -> None:
     """Audit launches and refused attempts - never the game name, never a detail.
 
     The name comes from a manifest the desktop user can write; details carry
     subprocess and kscreen-doctor output.
+
+    ``delegated=False`` skips the second, security-typed entry: that one
+    records the exercise of the delegated *power* right and names
+    ``launch_games`` as its resource. A read route behind plain
+    ``get_current_user`` exercises no such right, so claiming it would put a
+    falsehood into the security trail.
     """
     audit_logger = get_audit_logger_db()
     audit_logger.log_event(
@@ -64,7 +78,7 @@ def _audit(
         details=details,
         ip_address=client_host,
     )
-    if getattr(user, "role", None) != "admin":
+    if delegated and getattr(user, "role", None) != "admin":
         audit_logger.log_security_event(
             action="delegated_power_action",
             user=user.username,
@@ -172,3 +186,55 @@ async def launch_installed_game(
         {"app_id": game.app_id, "failed_step": None}, client_host,
     )
     return LaunchResponse(status="requested", session_locked=await current_lock_state())
+
+
+@router.get("/session-state", response_model=SessionStateResponse)
+@user_limiter.limit(_READ_LIMIT)
+async def session_state(
+    request: Request,
+    response: Response,
+    current_user=Depends(deps.get_current_user),
+) -> SessionStateResponse:
+    """Whether a gaming session is on screen - the tray gates popups on this.
+
+    Not gaming_mode_on_screen(): its marker means "*we* started gaming mode"
+    (see CLAUDE.md), so a game launched straight from Steam would not count -
+    which is the common case. game_is_running() is the real source, the marker
+    stays as a second path for Big Picture, and the lit-display requirement is
+    what lets an abandoned session expire on its own.
+
+    Behind get_current_user, not require_power_launch_games: this returns a
+    single boolean the tray polls before every popup, and gating it on the
+    launch right would hand the tray the ability to start games.
+
+    But behind the same LAN gate as launch: the boolean is a presence oracle -
+    "is somebody physically at the machine right now" - and that is an
+    answer about the owner, not about the NAS. The tray runs on the desktop
+    session by design, so the gate costs it nothing. Refusals are audited with
+    the IP for the same reason the neighbouring route audits them; successes
+    are not, because the tray asks every 30 seconds and an entry per probe
+    would bury the trail rather than be one.
+
+    Reads a marker file and sysfs, so it runs off the event loop. Any read
+    error counts as "not gaming": rather one notification too many than a
+    swallowed alarm.
+    """
+    client_host = _client_host(request)
+    if not is_private_or_local_ip(client_host):
+        _audit(
+            "steam_session_state_denied", current_user, False,
+            {"reason": "not_local"}, client_host, delegated=False,
+        )
+        raise ForbiddenError("Session state is only available from the local network")
+
+    from app.services.power import gaming_presence
+
+    def _probe() -> bool:
+        active = gaming_presence.game_is_running() or gaming_presence._marker_is_active()
+        return bool(active and gaming_presence.displays_on())
+
+    try:
+        active = await asyncio.to_thread(_probe)
+    except Exception:
+        active = False
+    return SessionStateResponse(gaming_active=active)

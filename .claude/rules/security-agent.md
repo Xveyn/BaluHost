@@ -80,6 +80,19 @@ verify_mobile_device_token — Validates JWT + X-Device-ID header + device expir
   `re.fullmatch("[0-9]{1,10}")` erfüllen und als Manifest installiert sein; die
   URL wird aus dem Bibliothekseintrag gebaut. Durchgesetzt in
   `plugins/installed/steam_gaming/routes.py`.
+- `GET /api/plugins/steam_gaming/session-state` liefert dem Desktop-Tray einen
+  einzelnen Boolean ("läuft gerade eine Spielsitzung"), damit es Popups
+  zurückhält. Bewusst **kein** `require_power_launch_games` — das Recht zu
+  fragen würde dem Tray zugleich die Fähigkeit geben, Spiele zu starten;
+  stattdessen `get_current_user`. Aber **dasselbe LAN-Gate wie `launch`**:
+  `is_private_or_local_ip(request.client.host)` für alle Rollen. Der Boolean
+  ist ein Anwesenheitsorakel — "sitzt gerade jemand physisch an der
+  Maschine" —, und das ist eine Auskunft über den Besitzer, nicht über den
+  NAS. Das Tray läuft laut Entwurf ohnehin in der Desktop-Sitzung, das Gate
+  kostet es also nichts. Abgelehnte Zugriffe werden mit IP auditiert,
+  erfolgreiche **nicht**: das Tray fragt alle 30 Sekunden, ein Eintrag je
+  Abfrage würde die Spur zuschütten statt eine zu sein. Durchgesetzt in
+  `plugins/installed/steam_gaming/routes.py`.
 
 ### Password Policy (`schemas/auth.py:20-59`)
 - Length: 8-128 characters

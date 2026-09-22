@@ -68,11 +68,16 @@ scheduler = [
 cloud = [
   "pyicloud>=1.0.0"
 ]
+tray = [
+  "PyQt6>=6.6.0,<7.0.0",
+  "websockets>=12.0,<18.0"
+]
 
 [project.scripts]
 baluhost-backend = "app.main:run"
 baluhost-tui = "baluhost_tui.main:cli"
 baluhost-sdk = "app.plugins.sdk.cli:cli"
+baluhost-tray = "baluhost_tray.main:cli"
 
 [build-system]
 requires = ["setuptools>=67.0.0", "wheel"]
@@ -82,8 +87,14 @@ build-backend = "setuptools.build_meta"
 package-dir = {"" = "."}
 
 [tool.setuptools.packages.find]
-include = ["app*", "baluhost_tui*"]
+include = ["app*", "baluhost_tui*", "baluhost_tray*"]
 exclude = ["storage*", "tmp*", "tests*"]
+
+[tool.setuptools.package-data]
+# baluhost_tray.icons ist ein eigenes Paket (icons/__init__.py), kein blosses
+# Unterverzeichnis — ohne diesen Eintrag fehlen die PNGs im Wheel und
+# icon_path() zeigte auf nichts.
+"baluhost_tray.icons" = ["*.png"]
 
 [tool.ruff]
 target-version = "py311"

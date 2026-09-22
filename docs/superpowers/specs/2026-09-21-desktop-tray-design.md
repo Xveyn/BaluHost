@@ -2,8 +2,8 @@
 
 **Datum:** 2026-09-21
 **Status:** Überarbeitet nach kritischem Review (2 vorbestehende Backend-Defekte, 6 Entwurfsfehler)
-**Branch:** `feat/desktop-tray`
-**Basis:** `main` @ `e143b21f`
+**Branch:** `feat/desktop-tray-app` (Phase A in `main`, PR #682)
+**Basis:** `main` @ `0f144661`
 
 ## Problem
 
@@ -111,8 +111,12 @@ nicht unverändert:
 gerendert in 22/24/32/48 px, abgelegt unter `backend/baluhost_tray/icons/`.
 
 **Die Zustände gehören nicht in die Katze.** Eine rot eingefärbte Katze liest
-sich als anderes Logo, nicht als Alarm. Stattdessen ein **Badge unten rechts**:
-Katze pur · Katze + gelber Punkt · Katze + roter Punkt · ausgegraute Katze.
+sich als anderes Logo, nicht als Alarm. Stattdessen ein **Badge unten rechts**: Katze + grüner Punkt · Katze + gelber
+Punkt · Katze + roter Punkt · ausgegraute Katze ohne Punkt.
+
+Auch der ruhige Zustand trägt einen Punkt, denn ohne Badge ließe sich „alles in
+Ordnung" nicht von „Icon nicht geladen" unterscheiden. Bei `offline` trägt die
+Entsättigung die Aussage.
 Nebeneffekt: Weil die Katze farbig bleibt, funktioniert sie auf hellen wie
 dunklen Panels, ohne dass zwei Themen-Varianten gepflegt werden müssen.
 
