@@ -693,6 +693,20 @@ def no_real_restart(monkeypatch):
     return scheduled
 
 
+@pytest.fixture(autouse=True)
+def local_client(monkeypatch):
+    """Das LAN-Gate durchlassen, außer wo ein Test es ausdrücklich schließt.
+
+    Der TestClient meldet `request.client.host == "testclient"`, und das ist
+    keine IP — `is_private_or_local_ip` gibt dafür False zurück. Ohne diese
+    Vorgabe bekäme jeder Happy-Path-Test 403. Muster übernommen aus
+    tests/api/test_recovery_codes.py:132.
+    """
+    from app.api.routes import system as system_module
+
+    monkeypatch.setattr(system_module, "is_private_or_local_ip", lambda ip: True)
+
+
 @pytest.fixture
 def fake_units(monkeypatch):
     """Alle Support-Units melden Erfolg, ohne systemctl anzufassen."""
@@ -882,17 +896,18 @@ def test_totp_account_needs_a_code_and_the_body_says_so(
 def test_rate_limit_decorator_is_actually_attached():
     """Der Wert in RATE_LIMITS nützt nichts, wenn der Dekorator fehlt.
 
-    Im Testmodus liefert get_limit() für diesen Schlüssel ein sehr hohes Limit,
-    der Dekorator bremst hier also nichts — geprüft wird nur, dass er dranhängt.
+    slowapi trägt jede dekorierte Route unter `<modul>.<funktionsname>` in
+    `_route_limits` ein — das ist der Nachweis, dass der Dekorator hängt, und
+    nicht bloß, dass irgendetwas die Funktion umhüllt hat. Im Testmodus
+    liefert get_limit() für diesen Schlüssel ein sehr hohes Limit, gebremst
+    wird hier also nichts.
     """
-    from app.main import app
+    import app.main  # noqa: F401 — registriert die Routen
+    from app.core.rate_limiter import user_limiter
 
-    route = next(
-        r for r in app.routes if getattr(r, "path", "").endswith("/system/restart-all")
-    )
-    assert getattr(route.endpoint, "_rate_limit_marker", None) or hasattr(
-        route.endpoint, "__wrapped__"
-    ), "keine Rate-Limit-Umhüllung an der Route"
+    assert (
+        "app.api.routes.system.restart_all_services" in user_limiter._route_limits
+    ), "kein Rate-Limit an der Route registriert"
 ```
 
 - [ ] **Step 2: Tests laufen lassen, Fehlschlag bestätigen**
