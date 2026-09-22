@@ -218,8 +218,8 @@ async def run_cycle(ctx: LoopContext) -> None:
     url = f"{ctx.session.ws_url()}?token={token}"
 
     async with ctx.connect(url) as socket:
-        ok = await asyncio.to_thread(ctx.watcher.load_snapshot)
-        if not ok:
+        snapshot = await asyncio.to_thread(ctx.watcher.load_snapshot)
+        if not snapshot.ok:
             raise TemporaryFailure("snapshot refused")
 
         ctx.state.set_connected(True)
@@ -235,6 +235,16 @@ async def run_cycle(ctx: LoopContext) -> None:
         _publish(ctx)
 
         last_snapshot = ctx.now()
+
+        # Der Abgleich beim Verbinden kann Popups nachreichen: eine kritische
+        # Meldung, deren Frame waehrend der Trennung verloren ging oder in
+        # einem Worker entstand, an dem dieses Tray nicht haengt. Sie gehen
+        # durch deliver() wie die aus Frames — Stummschaltung, Gaming-Gate und
+        # Sammelmeldung gelten fuer sie genauso. Ein zweiter Zustellweg
+        # funktionierte heute und umginge morgen still die Stummschaltung.
+        if snapshot.popups:
+            hold = await _should_hold(ctx)
+            await deliver(snapshot.popups, ctx.queue, ctx.notifier, hold)
 
         while True:
             try:
@@ -255,8 +265,14 @@ async def run_cycle(ctx: LoopContext) -> None:
             if reload_needed or due:
                 # Catches expired snoozes (the server has no job for them),
                 # missed frames and counter drift.
-                if await asyncio.to_thread(ctx.watcher.load_snapshot):
+                snapshot = await asyncio.to_thread(ctx.watcher.load_snapshot)
+                if snapshot.ok:
                     last_snapshot = ctx.now()
+                # Die zweite Aufrufstelle, und die haeufigere: das Tray ist
+                # verbunden geblieben, nur der Frame kam nie an. Nachgereichtes
+                # wandert in dieselbe Liste wie das aus dem Frame und damit
+                # durch dieselbe Zustellung unten.
+                popups = popups + snapshot.popups
 
             if popups or not ctx.queue.is_empty():
                 hold = await _should_hold(ctx)

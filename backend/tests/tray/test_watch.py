@@ -4,7 +4,7 @@ import logging
 from unittest.mock import MagicMock
 
 from baluhost_tray.state import IconState, TrayState
-from baluhost_tray.watch import Watcher, backoff_delays
+from baluhost_tray.watch import SEEN_IDS_LIMIT, SeenIds, Watcher, backoff_delays
 
 
 def test_backoff_stays_in_its_jitter_window():
@@ -27,16 +27,38 @@ def test_backoff_has_jitter():
     assert backoff_delays(8) != backoff_delays(8)
 
 
-def _watcher(unread: list[dict], status: int = 200):
-    session = MagicMock()
-    response = MagicMock()
+def _reply(session, unread: list[dict], status: int = 200) -> None:
+    """Die naechste Snapshot-Antwort setzen.
+
+    Eigene Funktion, weil das Nachreichen erst ueber *mehrere* Neuabgleiche
+    hintereinander sichtbar wird; ein einmal fest verdrahtetes json()-Ergebnis
+    reicht dafuer nicht.
+    """
+    response = session.client.return_value.get.return_value
     response.status_code = status
     response.json.return_value = {
         "notifications": unread,
         "unread_count": len(unread),
         "total": len(unread),
     }
-    session.client.return_value.get.return_value = response
+
+
+def _row(nid: int, ntype: str = "critical", **fields) -> dict:
+    """Eine ungelesene Zeile, so wie /api/notifications sie liefert."""
+    row = {
+        "id": nid,
+        "notification_type": ntype,
+        "is_read": False,
+        "title": f"T{nid}",
+        "message": f"M{nid}",
+    }
+    row.update(fields)
+    return row
+
+
+def _watcher(unread: list[dict], status: int = 200):
+    session = MagicMock()
+    _reply(session, unread, status)
     state = TrayState()
     state.set_connected(True)
     return Watcher(session, state), state, session
@@ -55,14 +77,14 @@ def test_snapshot_fills_state():
         {"id": 1, "notification_type": "critical", "is_read": False,
          "title": "RAID", "message": "degradiert"},
     ])
-    assert watcher.load_snapshot() is True
+    assert watcher.load_snapshot().ok is True
     assert state.icon_state() == IconState.CRITICAL
 
 
 def test_snapshot_failure_is_reported_not_swallowed():
     """429 darf nicht als 'verbunden, alles gut' durchgehen."""
     watcher, _, _ = _watcher([], status=429)
-    assert watcher.load_snapshot() is False
+    assert watcher.load_snapshot().ok is False
 
 
 def test_snapshot_transport_error_is_reported_not_raised():
@@ -72,7 +94,7 @@ def test_snapshot_transport_error_is_reported_not_raised():
     state = TrayState()
     state.set_connected(True)
     watcher = Watcher(session, state)
-    assert watcher.load_snapshot() is False
+    assert watcher.load_snapshot().ok is False
 
 
 def test_snapshot_malformed_body_is_reported_not_raised():
@@ -84,7 +106,7 @@ def test_snapshot_malformed_body_is_reported_not_raised():
         {"notification_type": "critical", "is_read": False,
          "title": "x", "message": "y"},
     ])
-    assert watcher.load_snapshot() is False
+    assert watcher.load_snapshot().ok is False
 
 
 def test_frame_after_snapshot_wins():
@@ -290,7 +312,169 @@ def test_a_page_that_does_not_hold_all_unread_is_reported(caplog):
     watcher = Watcher(session, TrayState())
 
     with caplog.at_level(logging.INFO, logger="baluhost_tray.watch"):
-        assert watcher.load_snapshot() is True
+        assert watcher.load_snapshot().ok is True
 
     messages = [record.getMessage() for record in caplog.records]
     assert any("150" in message for message in messages), messages
+
+
+# --- Nachgereichte Popups beim Neuabgleich ---------------------------------
+#
+# Hintergrund: das Backend laeuft mit vier Uvicorn-Workern gegen einen
+# prozesslokalen WebSocketManager. Das Tray haengt an genau einem davon und
+# sieht eine kritische Live-Meldung deshalb nur mit rund 25 % Wahrscheinlichkeit
+# (Issue #685). Ein verpasster Frame war bisher nicht verspaetet, sondern
+# endgueltig weg: load_snapshot() setzte nur Farbe und Zaehler.
+
+
+def test_the_first_snapshot_after_start_only_remembers():
+    """Sonst begruesst jedes `systemctl --user restart` mit einer Popup-Lawine.
+
+    Alles Ungelesene ist beim Prozessstart per Definition "noch nie gesehen" —
+    ohne diese Regel poppte der komplette Bestand auf einmal.
+    """
+    watcher, _, _ = _watcher([_row(1), _row(2), _row(3)])
+
+    first = watcher.load_snapshot()
+
+    assert first.ok is True
+    assert first.popups == []
+    # "Gemerkt" heisst: derselbe Bestand loest auch im naechsten Abgleich
+    # nichts aus. Uebersprungen waere er beim zweiten Mal faellig.
+    assert watcher.load_snapshot().popups == []
+
+
+def test_a_later_snapshot_pops_only_the_ids_it_has_never_seen():
+    watcher, _, session = _watcher([_row(1), _row(2), _row(3)])
+    watcher.load_snapshot()
+
+    _reply(session, [
+        _row(1), _row(2), _row(3),
+        _row(4, title="SMART", message="Platte meldet Fehler"),
+    ])
+    outcome = watcher.load_snapshot()
+
+    assert [(p.notification_id, p.title, p.message) for p in outcome.popups] == [
+        (4, "SMART", "Platte meldet Fehler"),
+    ]
+
+
+def test_an_id_already_seen_in_a_frame_is_not_popped_by_the_snapshot():
+    """Sonst kaeme jede Live-Meldung ein zweites Mal, zehn Minuten spaeter."""
+    watcher, _, session = _watcher([])
+    watcher.load_snapshot()
+    watcher.handle_frame({
+        "type": "notification",
+        "payload": {"id": 5, "notification_type": "critical",
+                    "title": "SMART", "message": "Fehler"},
+    })
+
+    _reply(session, [_row(5)])
+
+    assert watcher.load_snapshot().popups == []
+
+
+def test_the_same_id_pops_only_once_across_snapshots():
+    """Einmal nachgereicht ist nachgereicht — auch nach read_all.
+
+    read_all loest einen Neuabgleich aus; wird die Meldung danach wieder
+    ungelesen, taucht dieselbe ID erneut im Abgleich auf. Ein zweites Popup
+    dafuer waere eine Wiederholung, keine Nachricht.
+    """
+    watcher, _, session = _watcher([])
+    watcher.load_snapshot()
+
+    _reply(session, [_row(7)])
+    assert [p.notification_id for p in watcher.load_snapshot().popups] == [7]
+    assert watcher.load_snapshot().popups == []
+
+
+def test_a_warning_in_the_snapshot_colours_without_popup():
+    """Nachgereicht wird nur, was auch live gepoppt haette."""
+    watcher, state, session = _watcher([])
+    watcher.load_snapshot()
+
+    _reply(session, [_row(8, "warning")])
+    outcome = watcher.load_snapshot()
+
+    assert outcome.popups == []
+    assert state.icon_state() == IconState.WARNING
+
+
+def test_a_missed_lower_id_is_caught_up_even_after_a_higher_one_arrived():
+    """Der Gegenbeweis zur Hochwassermarke — der Kern dieses Fixes.
+
+    Es liegt nahe, statt einer Menge nur die hoechste gesehene ID zu merken:
+    O(1) und von selbst beschraenkt. Genau das geht am Fehlerbild vorbei.
+
+    Das Tray haengt an einem Worker, der die kritischen Hardware-Meldungen
+    nicht sendet — andere Meldungen aber schon. Kommt Meldung 100 per Frame an,
+    waehrend Meldung 99 (kritisch, aus dem Primary Worker) verpasst wurde,
+    stuende die Marke danach auf 100 und 99 gaelte fuer immer als gesehen. Der
+    eine Fall, fuer den es diesen Fix gibt, faellt durch.
+    """
+    watcher, _, session = _watcher([])
+    watcher.load_snapshot()                     # Prozessstart
+
+    watcher.handle_frame({
+        "type": "notification",
+        "payload": {"id": 100, "notification_type": "info",
+                    "title": "Backup", "message": "fertig"},
+    })
+
+    _reply(session, [_row(99, "critical"), _row(100, "info")])
+    outcome = watcher.load_snapshot()
+
+    assert [p.notification_id for p in outcome.popups] == [99], (
+        "eine verpasste *niedrigere* ID darf nicht als gesehen gelten"
+    )
+
+
+def test_the_set_of_seen_ids_stays_bounded():
+    """Ein Tray laeuft wochenlang; die Menge darf nicht mitwachsen."""
+    seen = SeenIds(limit=3)
+
+    for nid in range(10):
+        seen.add(nid)
+
+    assert len(seen) == 3
+    assert 9 in seen
+    assert 0 not in seen
+
+
+def test_an_id_that_keeps_showing_up_is_not_displaced():
+    """Verdraengt wird das Aelteste, gemessen am letzten Auftauchen.
+
+    Sonst faellt ausgerechnet eine dauerhaft ungelesene kritische Meldung
+    hinten heraus, obwohl sie in jedem Neuabgleich wieder mitkommt.
+    """
+    seen = SeenIds(limit=3)
+    for nid in (1, 2, 3):
+        seen.add(nid)
+
+    seen.add(1)         # taucht im naechsten Abgleich wieder auf
+    seen.add(4)         # verdraengt jetzt 2, nicht 1
+
+    assert 1 in seen
+    assert 2 not in seen
+
+
+def test_a_displaced_id_may_pop_a_second_time():
+    """Die bewusst in Kauf genommene Kehrseite der Beschraenkung.
+
+    Faellt eine sehr alte ungelesene kritische Meldung aus der Menge, poppt
+    sie einmal erneut. Das ist die richtige Richtung: lieber ein Popup zu viel
+    als ein verschluckter Alarm.
+    """
+    watcher, _, session = _watcher([_row(1, "critical")])
+    watcher.load_snapshot()                     # Prozessstart: 1 gilt als gesehen
+
+    for nid in range(2, 2 + SEEN_IDS_LIMIT):
+        watcher.handle_frame({
+            "type": "notification",
+            "payload": {"id": nid, "notification_type": "info"},
+        })
+
+    _reply(session, [_row(1, "critical")])
+
+    assert [p.notification_id for p in watcher.load_snapshot().popups] == [1]

@@ -124,6 +124,30 @@ erkennen.
 
 ---
 
+## Wenn ein Popup spaet kommt
+
+Das Backend laeuft mit vier Arbeitsprozessen. Eine Live-Meldung erreicht nur
+die Verbindungen des Prozesses, in dem sie entsteht — und das Tray haengt an
+genau einem davon. Es kann also vorkommen, dass das Symbol rot wird, das
+Popup aber ausbleibt.
+
+Das Tray faengt das ab: bei jedem Abgleich — beim Verbinden und danach alle
+zehn Minuten — reicht es Popups fuer kritische Meldungen nach, die es noch nie
+gesehen hat. Ein verpasstes Popup ist damit **spaet, nicht verloren**.
+
+Zwei Dinge folgen daraus:
+
+- Der **erste** Abgleich nach dem Start erzeugt keine Popups. Sonst begruesste
+  jeder Neustart mit dem gesamten ungelesenen Bestand auf einmal.
+- Bei einer Abnahme kann eine Testmeldung ohne Popup ankommen und erst Minuten
+  spaeter erscheinen. Das ist dieses Verhalten, kein Fehler im Tray.
+
+Die Ursache liegt im Backend, nicht im Tray, und ist als
+[Issue #685](https://github.com/Xveyn/BaluHost/issues/685) erfasst. Das
+Nachreichen ist eine Milderung, keine Loesung.
+
+---
+
 ## Stummschaltung
 
 **Eine Stunde stumm** im Menue haelt alle Popups zurueck. Danach — oder wenn
@@ -283,6 +307,7 @@ Traceback fuer die Ursachensuche.
 | Symbol erscheint nicht, Unit „inactive (dead)", Condition nicht erfuellt | Nie gekoppelt | `/opt/baluhost/backend/.venv/bin/baluhost-tray --pair`, dann `systemctl --user restart baluhost-tray` |
 | Symbol bleibt grau, Tooltip *„nicht gekoppelt"* | Gerade gekoppelt, Dienst nicht neu gestartet | `systemctl --user restart baluhost-tray` |
 | Symbol bleibt grau, Tooltip *„nicht erreichbar"* | Backend aus oder Netz weg | Warten; das Tray verbindet sich selbst wieder |
+| Symbol wird rot, aber kein Popup | Die Meldung entstand in einem anderen Arbeitsprozess des Backends ([#685](https://github.com/Xveyn/BaluHost/issues/685)) | Bis zu zehn Minuten warten; das Tray reicht sie beim naechsten Abgleich nach |
 | Beim Start beendet mit Code 3 | Tray war vor Plasma dran — **oder** der Hintergrundprozess ist unerwartet gescheitert | Beim Anmelden: nichts tun, `Restart=on-failure` versucht es erneut. Sonst ins Journal sehen (`journalctl --user -u baluhost-tray`): steht dort *„Tray-Hintergrund beendet"* oder ein Traceback, ist es ein echter Absturz und kein Startreihenfolge-Problem |
 | *„PyQt6 fehlt"* | Extra nicht installiert | `sudo /opt/baluhost/backend/.venv/bin/pip install -e '/opt/baluhost/backend[tray]'` |
 | *„BaluHost Tray laeuft bereits in dieser Sitzung."* | Zweite Instanz | Nichts tun; die erste macht bereits das Richtige |
@@ -327,6 +352,11 @@ der echten Maschine geschrieben.
 - [ ] **3.** Backend starten → Symbol wird gruen; Rueckmeldung nur bei
       Unterbrechung ueber zwei Minuten.
 - [ ] **4.** Kritische Testmeldung erzeugen → rotes Symbol plus Popup.
+      Bleibt das Popup aus, waehrend das Symbol rot wird, ist das **kein
+      Fehlschlag**: die Meldung entstand in einem anderen Arbeitsprozess. Bis
+      zu zehn Minuten warten, das Tray reicht sie beim naechsten Abgleich nach
+      (siehe *Wenn ein Popup spaet kommt*). Erst wenn sie auch dann ausbleibt,
+      ist der Punkt rot.
       `POST /api/notifications` ist **admin-only** (`get_current_admin`) und
       nimmt einen `NotificationCreate`-Body. Damit das Tray ueberhaupt
       reagiert, muss `notification_type` **`critical`** sein — `warning`

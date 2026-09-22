@@ -123,6 +123,30 @@ anything itself.
 
 ---
 
+## When a popup arrives late
+
+The backend runs with four worker processes. A live notification only reaches
+the connections of the process it was created in — and the tray hangs off
+exactly one of them. So it can happen that the icon turns red while the popup
+stays away.
+
+The tray compensates: at every resync — on connect and every ten minutes after
+that — it catches up popups for critical notifications it has never seen. A
+missed popup is therefore **late, not lost**.
+
+Two things follow from this:
+
+- The **first** resync after start raises no popups. Otherwise every restart
+  would greet you with the entire unread backlog at once.
+- During acceptance, a test notification may arrive without a popup and only
+  show up minutes later. That is this behaviour, not a fault in the tray.
+
+The cause sits in the backend, not in the tray, and is tracked as
+[issue #685](https://github.com/Xveyn/BaluHost/issues/685). Catching up is a
+mitigation, not a fix.
+
+---
+
 ## Quiet mode
 
 **Eine Stunde stumm** ("mute for an hour") in the menu holds all popups back.
@@ -279,6 +303,7 @@ finding the cause.
 | No icon, unit "inactive (dead)", condition failed | Never paired | `/opt/baluhost/backend/.venv/bin/baluhost-tray --pair`, then `systemctl --user restart baluhost-tray` |
 | Icon stays grey, tooltip *"nicht gekoppelt"* | Just paired, service not restarted | `systemctl --user restart baluhost-tray` |
 | Icon stays grey, tooltip *"nicht erreichbar"* | Backend down or network gone | Wait; the tray reconnects on its own |
+| Icon turns red but no popup | The notification was created in a different backend worker process ([#685](https://github.com/Xveyn/BaluHost/issues/685)) | Wait up to ten minutes; the tray catches it up at the next resync |
 | Exits with code 3 at login | Tray was ready before Plasma — **or** the background worker failed unexpectedly | At login: nothing, `Restart=on-failure` tries again. Otherwise check the journal (`journalctl --user -u baluhost-tray`): if it says *"Tray-Hintergrund beendet"* or shows a traceback, it is a real crash and not a startup-order problem |
 | *"PyQt6 fehlt"* | Extra not installed | `sudo /opt/baluhost/backend/.venv/bin/pip install -e '/opt/baluhost/backend[tray]'` |
 | *"BaluHost Tray laeuft bereits in dieser Sitzung."* | Second instance | Nothing; the first one is already doing the right thing |
@@ -323,6 +348,11 @@ machine.
 - [ ] **3.** Start the backend → the icon turns green; a message only for an
       outage longer than two minutes.
 - [ ] **4.** Raise a critical test notification → red icon plus popup.
+      If the popup stays away while the icon turns red, that is **not a
+      failure**: the notification was created in a different worker process.
+      Wait up to ten minutes, the tray catches it up at the next resync (see
+      *When a popup arrives late*). Only if it is still missing then does this
+      point fail.
       `POST /api/notifications` is **admin-only** (`get_current_admin`) and
       takes a `NotificationCreate` body. For the tray to react at all,
       `notification_type` must be **`critical`** — `warning` only colours the

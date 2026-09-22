@@ -11,6 +11,7 @@ from baluhost_tray import loop as loop_module
 from baluhost_tray.loop import (
     GAMING_PROBE_SECONDS,
     REFRESH_COOLDOWN_SECONDS,
+    RESNAPSHOT_SECONDS,
     TICK_SECONDS,
     LoopContext,
     deliver,
@@ -815,3 +816,111 @@ async def test_no_resnapshot_before_the_interval():
         await run_cycle(ctx)
 
     assert _snapshot_calls(ctx) == 1        # nur der beim Verbinden
+
+
+# --- Nachgereichte Popups gehen denselben Weg ------------------------------
+
+
+def _snapshot_row(nid: int, ntype: str = "critical") -> dict:
+    return {"id": nid, "notification_type": ntype, "is_read": False,
+            "title": f"T{nid}", "message": f"M{nid}"}
+
+
+def _scripted_snapshots(ctx: LoopContext, bodies: list[list[dict]]) -> None:
+    """Jeder Neuabgleich bekommt die naechste Zeilenliste; die letzte bleibt stehen.
+
+    Das Nachreichen ist erst ab dem *zweiten* Abgleich sichtbar — der erste
+    merkt sich nur. Ein Test braucht deshalb mehr als eine Antwort.
+    """
+    pending = list(bodies)
+
+    def _json() -> dict:
+        rows = pending.pop(0) if len(pending) > 1 else pending[0]
+        return {"notifications": rows, "unread_count": len(rows)}
+
+    ctx.session.client.return_value.get.return_value.json.side_effect = _json
+
+
+@pytest.mark.asyncio
+async def test_a_caught_up_popup_reaches_the_user_after_a_reconnect():
+    """Der Fall, fuer den es das Nachreichen gibt.
+
+    Waehrend der Trennung — oder in einem Worker, an dem das Tray nicht haengt
+    (Issue #685) — entsteht eine kritische Meldung. Kein Frame erreicht das
+    Tray; ohne Nachreichen wird nur das Symbol rot und die Meldung bleibt fuer
+    immer aus.
+
+    Der erste load_snapshot() steht vor dem Zyklus, weil er in Produktion zum
+    ersten Zyklus gehoert: der Prozessstart-Abgleich schweigt, der Zyklus hier
+    ist der Reconnect danach.
+    """
+    ctx = _ctx(frames=[])
+    _scripted_snapshots(ctx, [[], [_snapshot_row(42)]])
+    ctx.watcher.load_snapshot()
+
+    with pytest.raises(ConnectionError):
+        await run_cycle(ctx)
+
+    ctx.notifier.show.assert_awaited_once()
+    assert ctx.notifier.show.await_args.args[0].notification_id == 42
+
+
+@pytest.mark.asyncio
+async def test_a_caught_up_popup_respects_quiet_mode():
+    """Nachgereicht heisst nicht "an der Stummschaltung vorbei".
+
+    Genau dafuer geht das Nachreichen durch deliver() statt direkt an den
+    Notifier: ein zweiter Zustellweg funktioniert heute und umgeht morgen
+    still die Stummschaltung.
+    """
+    clock = FakeClock()
+    ctx = _ctx(frames=[], clock=clock)
+    calls = _counting_probe(ctx, answer=False)
+    ctx.quiet.mute_for(3600.0, clock())
+    _scripted_snapshots(ctx, [[], [_snapshot_row(42)]])
+    ctx.watcher.load_snapshot()
+
+    with pytest.raises(ConnectionError):
+        await run_cycle(ctx)
+
+    ctx.notifier.show.assert_not_awaited()
+    held, _summary = ctx.queue.release()
+    assert [p.notification_id for p in held] == [42]
+    assert calls["n"] == 0, "stumm schliesst den Gaming-Probe kurz"
+
+
+@pytest.mark.asyncio
+async def test_a_caught_up_popup_respects_the_gaming_gate():
+    """Dasselbe fuer das Vollbildspiel: gehalten, nicht verworfen."""
+    ctx = _ctx(frames=[], gaming=True)
+    _scripted_snapshots(ctx, [[], [_snapshot_row(42)]])
+    ctx.watcher.load_snapshot()
+
+    with pytest.raises(ConnectionError):
+        await run_cycle(ctx)
+
+    ctx.notifier.show.assert_not_awaited()
+    assert not ctx.queue.is_empty(), "zurueckgehalten heisst gehalten"
+
+
+@pytest.mark.asyncio
+async def test_the_ten_minute_resync_also_delivers_what_it_catches_up():
+    """Die zweite Aufrufstelle darf die Popups nicht verfallen lassen.
+
+    load_snapshot() wird an zwei Stellen gerufen: beim Verbinden und alle zehn
+    Minuten. Wer nur die erste umstellt, hat einen Rueckgabewert, den niemand
+    liest — und das Nachreichen faellt ausgerechnet im haeufigsten Fall aus:
+    das Tray ist verbunden geblieben, nur der Frame kam nie an.
+    """
+    clock = FakeClock()
+    ctx = _ctx(frames=[])
+    ctx.now = clock
+    ctx.connect = lambda url: TickingSocket(clock, step=RESNAPSHOT_SECONDS + 1.0, ticks=1)
+    _scripted_snapshots(ctx, [[], [], [_snapshot_row(42)]])
+    ctx.watcher.load_snapshot()
+
+    with pytest.raises(ConnectionError):
+        await run_cycle(ctx)
+
+    ctx.notifier.show.assert_awaited_once()
+    assert ctx.notifier.show.await_args.args[0].notification_id == 42
