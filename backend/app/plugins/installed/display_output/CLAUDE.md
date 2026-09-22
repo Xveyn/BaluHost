@@ -1,8 +1,9 @@
 # Display Output Plugin
 
 Bundled (in-process, fully trusted) plugin: enumerates the KWin outputs, picks
-which one is active and sets its video mode, driven from a popover in the topbar.
-Ships its own FastAPI router; the UI is a **core** component, not a sandbox bundle.
+which one is active, sets its video mode and its brightness, driven from a
+popover in the topbar. Ships its own FastAPI router; the UI is a **core**
+component, not a sandbox bundle.
 
 Trust tier, lifecycle and the `PluginBase` contract are in `../../CLAUDE.md` —
 this file only covers what is specific to this plugin.
@@ -13,6 +14,7 @@ this file only covers what is specific to this plugin.
 |---|---|
 | `__init__.py` | `DisplayOutputPlugin`, the router, the audit helper, the error mapping |
 | `kscreen.py` | The **only** module that knows `kscreen-doctor` exists: parser, runner, argv builder |
+| `brightness.py` | The **only** module that knows `org.kde.ScreenBrightness` exists: parser, runner, percent↔device conversion |
 | `backend.py` | `DisplayBackend` protocol, `DevDisplayBackend`, `KWinDisplayBackend` |
 | `service.py` | `DisplayService` — backend choice, the whole validation, module singleton |
 | `models.py` | Pydantic models; the field names are the API contract to the frontend |
@@ -54,6 +56,46 @@ cross-checks it against the client-supplied `mode_name` — a mismatch is a 409,
 not a silently wrong mode. `mode_id` and `mode_name` are all-or-nothing on the
 wire; accepting one without the other would make the cross-check optional.
 
+## Brightness is a different mechanism, not a kscreen-doctor setting
+
+`kscreen-doctor` has **no** brightness. Its `sdr-brightness` (100–1000) is the
+luminance SDR content is mapped to inside an HDR screen — not what a person
+means by "brightness". The control runs over powerdevil's session-bus service
+`org.kde.ScreenBrightness` (Plasma 6.3; measured on BaluNode with
+powerdevil 4:6.3.6-1) via `qdbus6`, the same way every other KDE interaction in
+this repo works (`services/power/desktop_windows.py`, `os_auto_suspend.py`).
+
+Three measured facts the design rests on:
+
+- **`XDG_RUNTIME_DIR` alone is enough.** With it set and
+  `DBUS_SESSION_BUS_ADDRESS` unset, libdbus finds the bus at
+  `$XDG_RUNTIME_DIR/bus`; without it the same call dies with "Unable to
+  autolaunch a dbus-daemon". The backend unit sets neither —
+  `wayland_session_env()` supplies the one that matters.
+- **Fewer brightness objects than outputs.** BaluNode has two connected
+  outputs and exactly **one** object (`display13`, an external panel at
+  `MaxBrightness` 10000): powerdevil lists only enabled, controllable screens.
+  There is **no** `/sys/class/backlight` on this box — the write reaches the
+  panel over DDC/CI through KWin, which holds DRM master. The backend must
+  never touch `/dev/i2c-*` itself (root-only, and `baluhost` is in no `i2c`
+  group).
+- **The object name maps to no connector.** The interface offers only the EDID
+  `Label`, so `BrightnessDisplay` deliberately carries **no** `output` field —
+  it would assert a mapping the API does not provide. `display13` is as
+  ephemeral as a mode id and is never stored.
+
+The device scale stays server-side: the API speaks percent (0–100), and
+`to_raw`/`to_percent` convert against the per-device `MaxBrightness`. Rounding
+is half-up rather than `round()`, whose round-to-even would turn 2.5 % into 2
+and 3.5 % into 4.
+
+**Writes floor at `MIN_BRIGHTNESS_PERCENT` (5), reads do not.** KDE itself
+allows 0 (`knownSafeBrightnessMin` = 0); the narrower rule here is the same
+thought as "an apply after which nothing is selected is rejected" — a remote
+slider must not leave the person at the desk in front of a black screen. Reads
+stay at `ge=0` because Plasma's own slider does not know this floor and a
+reported 2 % must not be re-reported as 5 %.
+
 ## Two levels of "on"
 
 | Level | Source | Field |
@@ -87,11 +129,16 @@ does not. Every field access goes through `.get()`.
 - **Every route** carries `@user_limiter.limit(get_limit("display_output"))`,
   its own category at `60/minute`: the popover polls only while open, every 5 s.
 - **Nothing from the request becomes an argv element without having appeared in
-  the live enumeration first.** Names and mode ids are matched against measured
-  values, not escaped or filtered. List-args already rule out shell injection —
-  this is the belt to that suspender.
-- **`kscreen-doctor` output never reaches a client.** stdout/stderr carry EDID
-  names and paths; they are logged, and a success answers `{"success": true}`.
+  the live enumeration first.** Names, mode ids and brightness object ids are
+  matched against measured values, not escaped or filtered. List-args already
+  rule out shell injection — this is the belt to that suspender. For brightness
+  the service passes the **enumerated** object on, not the one from the request
+  body, and `brightness.object_path()` additionally admits only pure path
+  elements (`[A-Za-z0-9_]{1,64}`) — a second, independent latch.
+- **`kscreen-doctor` and `qdbus6` output never reaches a client.** stdout/stderr
+  carry EDID names and paths; they are logged, and a success answers
+  `{"success": true}`. stderr does **not** decide success: measured, `qdbus6`
+  writes four lines of locale warning to stderr and still exits 0.
 - **An `apply` after which no connected output would be selected is rejected.**
   "Nothing should be lit" belongs on the DPMS switch in `PowerMenu` — reversible,
   and it does not throw the KWin configuration away.
@@ -120,12 +167,26 @@ as disabled forever and the topbar stays empty, with no error and no log line.
 
 | Method | Path | Body |
 |---|---|---|
-| GET | `/state` | — (returns outputs, `displays_powered`, `available`, `detail`) |
+| GET | `/state` | — (returns outputs, `displays_powered`, `available`, `detail`, `brightness`) |
 | POST | `/apply` | `{"outputs": [{"name", "selected", "mode_id"?, "mode_name"?}]}` |
+| POST | `/brightness` | `{"id", "percent"}` |
 
 Failure mapping: validation → 400, stale `mode_name` for a live `mode_id` → 409,
 KWin unreachable on a write → 502. A **read** with an unreachable session is not
 an error — it answers 200 with `available: false` so the UI can show that state.
+
+**Brightness is read inside `/state`, not in a route of its own.** The popover
+polls every 5 s against a 60/min category; a field in the existing response
+costs no extra request, a second route would double the poll. `brightness`
+carries its own `available`, because KWin can run while powerdevil is missing —
+and `available: false` with an empty list ("no answer") is a different statement
+from `available: true` with an empty list ("nothing controllable"), which the UI
+shows differently. A dead session skips the brightness read entirely.
+
+**`POST /brightness` writes no audit entry**, unlike `/apply` — the same call
+`audio_control` makes for its volume levels: a slider drag changes no
+configuration, is instantly reversible, and debounced writes would bury the
+entries that matter in noise. `can_manage_displays` still gates it.
 
 Because the plugin contributes a router, it is mounted **once at startup**
 (`core/lifespan.py`). Enabling it at runtime leaves these paths at 404 until
@@ -140,11 +201,21 @@ implicitly.
 
 ## Tests
 
-`backend/tests/plugins/test_display_output_{parser,kscreen,backend,service,routes,ui_manifest}.py`
+`backend/tests/plugins/test_display_output_{parser,kscreen,brightness,backend,service,routes,ui_manifest}.py`
 plus `backend/tests/test_display_detector_connector_states.py`.
 
-The fixture `backend/tests/plugins/fixtures/kscreen_balunode.json` is a
-**measured** `kscreen-doctor -j` recording from BaluNode (2026-09-08), not an
-invented payload. The duplicate and ambiguous modes in it are the test subject —
-re-measure rather than hand-edit. No test invokes real `kscreen-doctor`; the CI
-runner has no Wayland session.
+Both fixtures are **measured**, not invented payloads:
+`backend/tests/plugins/fixtures/kscreen_balunode.json` is a `kscreen-doctor -j`
+recording from BaluNode (2026-09-08) whose duplicate and ambiguous modes are the
+test subject, and `fixtures/screenbrightness_balunode.txt` is a
+`Properties.GetAll` recording of `display13` (2026-09-22) with **only** its
+`Label` replaced by a neutral name — the repo is public and no test cares which
+model hangs there. Re-measure rather than hand-edit. No test invokes real `kscreen-doctor` or `qdbus6`; the CI runner
+has neither a Wayland session nor a session bus.
+
+**Running this suite from a deep path fails for an unrelated reason (#700).** The
+sandbox e2e tests (`tests/plugins/sandbox/test_phase{3,4}_e2e.py`) build their
+Unix socket inside `tests/plugins/sandbox/fixtures/sample_plugin/`, which
+exceeds the 108-byte `AF_UNIX` limit from inside a `.claude/worktrees/<name>/`
+checkout. They pass on the same commit unpacked at a short path — so four red
+tests there are not yours.
