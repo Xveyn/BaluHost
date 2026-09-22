@@ -48,6 +48,16 @@ def test_probe_true_on_200():
     assert client.get.call_args.kwargs["timeout"] == restart.PROBE_TIMEOUT
 
 
+def test_probe_true_on_429():
+    """/api/health teilt sich sein Rate-Limit mit allem anderen auf localhost.
+
+    Ein ausgeschoepftes Limit heisst "gedrosselt", nicht "tot" — sonst schickte
+    eine harmlose 429 den Nutzer auf den Notweg: kein BaluHost-Step-up, kein
+    App-Audit, obwohl die API antwortet.
+    """
+    assert restart.probe_api(_client(get=_response(429))) is True
+
+
 def test_probe_false_on_error_status():
     assert restart.probe_api(_client(get=_response(502))) is False
 
@@ -216,14 +226,25 @@ def test_systemctl_is_called_without_sudo_and_without_shell():
 
 
 def test_systemctl_checks_state_with_is_active_afterwards():
+    """Nur der Fehlschlag braucht den Zustand — bei Erfolg fragt niemand danach."""
     runner = _runner_script(
-        _Completed(),
+        _Completed(returncode=1, stderr="Interactive authentication required."),
         _Completed(stdout="active\n" * len(restart.UNITS)),
     )
 
     restart.restart_via_systemctl(runner=runner)
 
     assert runner.calls[1] == ["systemctl", "is-active", *restart.UNITS]
+
+
+def test_systemctl_success_does_not_check_state():
+    """Erfolgreich, also niemand braucht `is-active` — ein zweiter Aufruf waere verschwendet."""
+    runner = _runner_script(_Completed())
+
+    outcome = restart.restart_via_systemctl(runner=runner)
+
+    assert outcome.ok is True
+    assert len(runner.calls) == 1
 
 
 def test_cancelled_dialog_reports_which_units_are_running():
@@ -456,6 +477,20 @@ def test_403_admin_is_named():
     outcome = restart.restart_via_api(client, "geheim", totp=False)
 
     assert "Admin" in outcome.message
+
+
+def test_403_api_key_not_allowed_is_named():
+    """Heute unerreichbar (das Tray spricht ein JWT), aber der 403-Vertrag hat
+    drei Formen auf der Route — der Client sollte alle drei kennen."""
+    client = _client(
+        post=_response(403, {"detail": {"error": "api_key_not_allowed"}})
+    )
+
+    outcome = restart.restart_via_api(client, "geheim", totp=False)
+
+    assert outcome.ok is False
+    assert "API-Schlüssel" in outcome.message
+    assert "Admin" not in outcome.message
 
 
 def test_429_names_the_wait():

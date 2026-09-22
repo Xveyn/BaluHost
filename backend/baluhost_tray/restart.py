@@ -69,7 +69,12 @@ def probe_api(client) -> bool:
     perfectly fine.
     """
     try:
-        return client.get(HEALTH_PATH, timeout=PROBE_TIMEOUT).status_code == 200
+        # < 500, nicht == 200: /api/health teilt sich sein IP-Rate-Limit mit
+        # allem anderen auf localhost. Ein ausgeschöpftes Limit (429) heisst
+        # "Backend lebt, gerade gedrosselt" — nicht "Backend tot". Mit == 200
+        # würde ein 429 den Notweg auslösen: kein BaluHost-Step-up, kein
+        # App-Audit, obwohl die API antwortet.
+        return client.get(HEALTH_PATH, timeout=PROBE_TIMEOUT).status_code < 500
     except httpx.HTTPError:
         return False
 
@@ -193,15 +198,17 @@ def restart_via_systemctl(
             "Zeitüberschreitung beim Neustart. Die Dienste können trotzdem "
             "gerade hochfahren — bitte den Zustand prüfen.",
         )
-    except Exception as exc:  # pragma: no cover - defensiv
+    except Exception as exc:
         return RestartOutcome(
             False, f"systemctl konnte nicht ausgeführt werden: {exc}"
         )
 
-    states = _unit_states(runner, units, timeout)
-
     if completed.returncode == 0:
         return RestartOutcome(True, f"{len(units)} Dienste neu gestartet.")
+
+    # Erst hier abgefragt: bei Erfolg braucht niemand das Ergebnis, und ein
+    # zusätzlicher `systemctl is-active`-Aufruf wäre verschwendet.
+    states = _unit_states(runner, units, timeout)
 
     detail = (completed.stderr or completed.stdout or "").strip()
     detail = detail or f"exit {completed.returncode}"
@@ -295,6 +302,15 @@ def restart_via_api(
             if isinstance(detail, dict) and detail.get("error") == "local_network_required":
                 return RestartOutcome(
                     False, "Der Neustart ist nur aus dem lokalen Netz möglich."
+                )
+            if isinstance(detail, dict) and detail.get("error") == "api_key_not_allowed":
+                # Heute unerreichbar — das Tray spricht mit einem JWT, nie mit
+                # einem API-Key —, aber der 403-Vertrag hat drei Formen auf der
+                # Route, also pflegen wir sie auch hier zu dritt.
+                return RestartOutcome(
+                    False,
+                    "Dieser Vorgang verlangt eine erneute Anmeldung und ist "
+                    "mit einem API-Schlüssel nicht möglich.",
                 )
             return RestartOutcome(False, "Dieses Konto ist kein BaluHost-Admin.")
         if code == 429:

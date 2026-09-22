@@ -227,9 +227,14 @@ def run_tray(base_url: str, web_url: str) -> int:
     def _refresh_into(client: BackendClient) -> None:
         """Token erneuern und dem Neustart-Client mitgeben.
 
-        Der Refresh-Token rotiert serverseitig nicht (siehe session.py), ein
-        paralleler Refresh im Worker ist also inhaltlich harmlos. Alles, was
-        dabei schiefgeht, faengt restart.py ab — hier darf nichts durch.
+        `session.refresh_access()` schreibt in den Authorization-Header des
+        gemeinsam genutzten Loop-Clients (`session.client()`), ueber
+        `httpx.Headers.__setitem__` — das loescht den alten Eintrag und haengt
+        den neuen an. Zwischen den beiden Schritten liegt eine Luecke: eine
+        Anfrage, die der Loop im run_loop-Thread genau in diesem Moment
+        aufbaut, kann ohne Header rausgehen. Harmlos, weil selbstheilend — ein
+        401 daraus laesst den Loop selbst erneut refreshen. Alles, was beim
+        Refresh hier schiefgeht, faengt restart.py ab — hier darf nichts durch.
         """
         session.refresh_access()
         tokens = tray_config.load_tokens()
