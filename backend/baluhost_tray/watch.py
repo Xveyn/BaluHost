@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import random
+from collections import OrderedDict
 from dataclasses import dataclass, field
 
 from baluhost_tray.state import PendingPopup, TrayState
@@ -22,6 +23,10 @@ COLOURING_TYPES = frozenset({"critical", "warning"})
 BULK_ACTIONS = frozenset({"read_all", "dismissed_all", "deleted_all"})
 SNAPSHOT_PATH = "/api/notifications"
 SNAPSHOT_PAGE_SIZE = 100
+# Wie viele Meldungs-Ids sich das Tray merkt. Ein Tray laeuft wochenlang; ohne
+# Deckel waechst die Menge mit jeder Meldung mit. Eine Snapshot-Seite fasst 100
+# Zeilen, das hier ist also Platz fuer mehrere Seiten plus laufende Frames.
+SEEN_IDS_LIMIT = 512
 
 
 def backoff_delays(attempts: int, base: float = 1.0, cap: float = 60.0) -> list[float]:
@@ -54,17 +59,84 @@ class FrameOutcome:
     reload_needed: bool = False
 
 
+@dataclass
+class SnapshotOutcome:
+    """Wie FrameOutcome, nur fuer den Neuabgleich.
+
+    `ok` traegt weiter genau die Bedeutung des frueheren `-> bool`: False
+    bricht den Zyklus ab, statt "verbunden" zu behaupten. `popups` kommt dazu,
+    weil der Neuabgleich seit #685 auch Meldungen nachreicht, deren Frame das
+    Tray nie erreicht hat. Beides zusammen in einem Rueckgabewert, damit keine
+    Aufrufstelle die Popups stillschweigend fallen lassen kann.
+    """
+
+    ok: bool = False
+    popups: list[PendingPopup] = field(default_factory=list)
+
+
+class SeenIds:
+    """Beschraenktes Gedaechtnis: welche Meldungen das Tray schon kannte.
+
+    Eine echte Menge, keine Hochwassermarke. Nur die hoechste gesehene Id zu
+    merken waere O(1) und von selbst beschraenkt — und ginge am Fehlerbild
+    vorbei: das Tray haengt an einem Worker, der die kritischen
+    Hardware-Meldungen nicht sendet, andere Meldungen aber schon. Kommt Meldung
+    100 per Frame an, waehrend die kritische 99 verpasst wurde, gaelte 99 unter
+    einer Marke fuer immer als gesehen.
+
+    Verdraengt wird das aelteste Auftauchen, nicht der aelteste Eintrag: was in
+    jedem Neuabgleich wieder mitkommt — also alles dauerhaft Ungelesene —,
+    rutscht dabei nach vorn und faellt nicht heraus.
+
+    Laeuft die Menge trotzdem ueber, kann eine sehr alte ungelesene kritische
+    Meldung einmal erneut poppen. Das ist die bewusst gewaehlte Richtung:
+    lieber ein Popup zu viel als ein verschluckter Alarm.
+    """
+
+    def __init__(self, limit: int = SEEN_IDS_LIMIT) -> None:
+        self._limit = limit
+        self._ids: OrderedDict[int, None] = OrderedDict()
+
+    def __contains__(self, notification_id: int) -> bool:
+        return notification_id in self._ids
+
+    def __len__(self) -> int:
+        return len(self._ids)
+
+    def add(self, notification_id: int) -> None:
+        if notification_id in self._ids:
+            self._ids.move_to_end(notification_id)
+            return
+        self._ids[notification_id] = None
+        while len(self._ids) > self._limit:
+            self._ids.popitem(last=False)
+
+
 class Watcher:
     def __init__(self, session, state: TrayState) -> None:
         self._session = session
         self._state = state
+        # Gehoert hierher und nicht in TrayState: apply_snapshot() ersetzt den
+        # Zustand bei jedem Abgleich, und mit ihm wuerde das Gedaechtnis
+        # zuruecksetzen, das genau *ueber* Abgleiche hinweg halten muss. Der
+        # Watcher lebt so lange wie der Prozess, auch ueber Reconnects hinweg:
+        # run_loop behaelt denselben LoopContext.
+        self._seen = SeenIds()
+        self._primed = False
 
-    def load_snapshot(self) -> bool:
-        """Replace state from REST. Returns False if the snapshot failed.
+    def load_snapshot(self) -> SnapshotOutcome:
+        """Replace state from REST, and catch up popups that never arrived.
 
         unread_only matters: without it the route returns everything newest
         first, capped at 100 rows, and an older unread notification would
         fall off the page — green icon, unread server.
+
+        Das Nachreichen ist eine Milderung, keine Loesung: in Produktion laufen
+        vier Uvicorn-Worker gegen einen prozesslokalen WebSocketManager, und ein
+        Broadcast erreicht nur die Verbindungen seines eigenen Prozesses
+        (Issue #685). Ein verpasster Frame war damit nicht verspaetet, sondern
+        endgueltig weg. Aus "nie" wird hier "spaetestens beim naechsten
+        Abgleich".
         """
         try:
             response = self._session.client().get(
@@ -73,32 +145,44 @@ class Watcher:
             )
         except Exception as exc:
             logger.warning("snapshot request failed: %s", exc)
-            return False
+            return SnapshotOutcome()
 
         if response.status_code != 200:
             # Never treat this as success: the loop would go on to claim
             # "connected" while showing stale state.
             logger.warning("snapshot refused: %s", response.status_code)
-            return False
+            return SnapshotOutcome()
 
         try:
             body = response.json()
             items = [
-                (int(raw["id"]), str(raw.get("notification_type", "")))
+                (
+                    int(raw["id"]),
+                    str(raw.get("notification_type", "")),
+                    # Titel und Text werden mitgezogen, weil ein nachgereichtes
+                    # Popup beides braucht. Fehlen sie, ist das kein
+                    # Fehlschlag: der ok-Vertrag deckt Transport, Status,
+                    # kaputtes JSON und eine fehlende id ab — nicht einen
+                    # fehlenden Titel.
+                    str(raw.get("title", "BaluHost")),
+                    str(raw.get("message", "")),
+                )
                 for raw in body.get("notifications", [])
                 if not raw.get("is_read")
             ]
-            self._state.apply_snapshot(items)
+            self._state.apply_snapshot([(nid, ntype) for nid, ntype, _t, _m in items])
         except (ValueError, KeyError, TypeError) as exc:
             # A 200 with broken JSON or a row missing "id" is still not a
-            # success -- the -> bool contract covers parsing, not just the
+            # success -- the ok contract covers parsing, not just the
             # transport. Kept as its own except (and its own log line, not
             # the "refused" one above) so the two failure modes stay
             # distinguishable in the log. A bare programming mistake
             # (AttributeError from a typo) is deliberately not caught here
             # and keeps propagating.
             logger.warning("snapshot body unusable: %s", exc)
-            return False
+            return SnapshotOutcome()
+
+        popups = self._catch_up(items)
 
         reported = body.get("unread_count")
         if isinstance(reported, int) and reported != len(items):
@@ -108,7 +192,32 @@ class Watcher:
                 "snapshot page holds %d of %d unread notifications",
                 len(items), reported,
             )
-        return True
+        return SnapshotOutcome(ok=True, popups=popups)
+
+    def _catch_up(self, items: list[tuple[int, str, str, str]]) -> list[PendingPopup]:
+        """Popups fuer kritische Meldungen, die das Tray nie zu Gesicht bekam.
+
+        Der erste Abgleich nach Prozessstart erzeugt nichts. Dort ist alles
+        Ungelesene per Definition "noch nie gesehen", und jedes
+        `systemctl --user restart` begruesste den Nutzer sonst mit einer
+        Popup-Lawine fuer den gesamten Bestand. Er merkt sich nur.
+        """
+        first_run, self._primed = not self._primed, True
+        popups: list[PendingPopup] = []
+        for nid, ntype, title, message in items:
+            known = nid in self._seen
+            # Auch Bekanntes geht durch add(): das haelt alles dauerhaft
+            # Ungelesene vorn in der Verdraengungsreihenfolge, statt es
+            # ausgerechnet dann zu vergessen, wenn es noch offen ist.
+            self._seen.add(nid)
+            if known or first_run or ntype not in POPUP_TYPES:
+                continue
+            popups.append(PendingPopup(
+                notification_id=nid,
+                title=title,
+                message=message,
+            ))
+        return popups
 
     def handle_frame(self, frame: dict) -> FrameOutcome:
         """Apply one frame.
@@ -132,6 +241,12 @@ class Watcher:
             if nid is None:
                 logger.warning("notification frame without a usable id, ignored")
                 return FrameOutcome()
+            # Live gesehen ist gesehen: der naechste Neuabgleich darf diese
+            # Meldung nicht ein zweites Mal als "nie gesehen" nachreichen. Nur
+            # merken, nicht filtern — ein Frame loest sein Popup weiterhin
+            # unbesehen aus, denn ein Popup zu viel ist besser als ein
+            # verschluckter Alarm.
+            self._seen.add(nid)
             if ntype in COLOURING_TYPES:
                 self._state.add(nid, ntype)
             if ntype in POPUP_TYPES:
