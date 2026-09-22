@@ -193,7 +193,7 @@ def restart_via_systemctl(
             "Zeitüberschreitung beim Neustart. Die Dienste können trotzdem "
             "gerade hochfahren — bitte den Zustand prüfen.",
         )
-    except OSError as exc:
+    except Exception as exc:  # pragma: no cover - defensiv
         return RestartOutcome(
             False, f"systemctl konnte nicht ausgeführt werden: {exc}"
         )
@@ -205,12 +205,18 @@ def restart_via_systemctl(
 
     detail = (completed.stderr or completed.stdout or "").strip()
     detail = detail or f"exit {completed.returncode}"
-    inactive = [unit for unit, state in states.items() if state != "active"]
-    tail = (
-        "\n\nNicht aktiv: " + ", ".join(inactive)
-        if inactive
-        else "\n\nAlle Dienste laufen trotzdem."
-    )
+
+    if not states:
+        # Der is-active-Aufruf selbst ist gescheitert — der Zustand ist unbekannt
+        tail = "\n\nWelche Dienste jetzt laufen, konnte nicht ermittelt werden."
+    else:
+        inactive = [unit for unit, state in states.items() if state != "active"]
+        tail = (
+            "\n\nNicht aktiv: " + ", ".join(inactive)
+            if inactive
+            else "\n\nAlle Dienste laufen trotzdem."
+        )
+
     return RestartOutcome(
         False,
         f"Neustart fehlgeschlagen — abgebrochen oder keine Berechtigung.\n\n"

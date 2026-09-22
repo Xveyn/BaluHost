@@ -264,8 +264,23 @@ def test_systemctl_handles_missing_binary():
     assert "systemctl" in outcome.message
 
 
+def test_systemctl_handles_unexpected_exceptions():
+    """Breite Exception-Behandlung wie im Backend: UnicodeDecodeError, RuntimeError, etc."""
+    def runner(args, **kwargs):
+        raise RuntimeError("unexpected error from runner")
+
+    outcome = restart.restart_via_systemctl(runner=runner)
+
+    assert outcome.ok is False
+    assert "unexpected error from runner" in outcome.message
+
+
 def test_failed_is_active_lookup_does_not_hide_the_failure():
-    """Der Neustart ist gescheitert; die Nachschau auch — sag trotzdem etwas."""
+    """Der Neustart ist gescheitert; die Nachschau auch — sag trotzdem etwas.
+
+    Die Meldung darf nicht behaupten, alle Dienste liefen, und muss die
+    Unbekanntheit benennen.
+    """
     def runner(args, **kwargs):
         if args[1] == "is-active":
             raise OSError("systemctl weg")
@@ -275,6 +290,8 @@ def test_failed_is_active_lookup_does_not_hide_the_failure():
 
     assert outcome.ok is False
     assert "Interactive authentication required." in outcome.message
+    assert "konnte nicht ermittelt werden" in outcome.message
+    assert "Alle Dienste laufen" not in outcome.message
 
 
 def test_success_message_names_the_count():
