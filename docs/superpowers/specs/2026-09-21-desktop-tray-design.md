@@ -42,9 +42,13 @@ das Tray nicht erneut melden.
 
 ## Nicht-Ziele
 
-- **Service-Steuerung.** Neustarten oder Beenden von Diensten bleibt der
+- ~~**Service-Steuerung.** Neustarten oder Beenden von Diensten bleibt der
   Companion-App und der Web-UI vorbehalten. Das Tray fasst nichts
-  Privilegiertes an und braucht keine sudoers-Erweiterung.
+  Privilegiertes an und braucht keine sudoers-Erweiterung.~~
+  **Überholt am 2026-09-22** durch
+  `2026-09-22-tray-service-restart-design.md`: Das Tray kann Dienste neu
+  starten. Der Notweg läuft über polkit statt über sudo; auf dem API-Weg kommt
+  eine fünfte sudoers-Zeile für `baluhost-backend-local` dazu.
 - **Ein zweiter Gesundheitsbegriff.** Es wird kein Aggregat-Endpunkt gebaut und
   keine eigene Schwellwertlogik über RAID, SMART oder Plattenfüllstand gelegt.
 - **Ein `desktop_enabled`-Kanal in den Notification-Preferences.** Die
@@ -160,12 +164,17 @@ Qt-Signale. Bewusst ohne Zusatzabhängigkeit wie `qasync`.
 Darstellung, die gesamte Logik sitzt in `state.py`. Das ist der Grund für die
 Trennung — so ist alles Prüfbare ohne Qt prüfbar (siehe Tests).
 
-**Menü, bewusst schmal:** BaluHost öffnen · eine Stunde stumm · neu koppeln ·
+~~**Menü, bewusst schmal:** BaluHost öffnen · eine Stunde stumm · neu koppeln ·
 Beenden. Keine Meldungsliste (siehe Nicht-Ziele) und keine Service-Steuerung —
-letztere bleibt bei Companion-App und Web-UI.
+letztere bleibt bei Companion-App und Web-UI.~~
 
-Weil die Liste entfällt, hat das Tray **keinen ausgehenden Pfad**: Es markiert
-nichts als gelesen. Das ist Absicht — es zeigt und meldet, es bedient nicht.
+~~Weil die Liste entfällt, hat das Tray **keinen ausgehenden Pfad**: Es markiert
+nichts als gelesen. Das ist Absicht — es zeigt und meldet, es bedient nicht.~~
+
+> **Überholt am 2026-09-22:** Das Menü hat einen fünften Eintrag („BaluHost neu
+> starten…"), und damit hat das Tray sehr wohl einen ausgehenden Pfad. Siehe
+> `2026-09-22-tray-service-restart-design.md`. Die Aussage zur Meldungsliste
+> gilt weiter.
 
 ## Authentifizierung
 
