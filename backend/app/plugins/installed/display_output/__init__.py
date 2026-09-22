@@ -21,7 +21,11 @@ from app.core.exceptions import BadGatewayError
 from app.core.rate_limiter import get_limit, user_limiter
 from app.plugins.base import PluginBase, PluginMetadata, PluginUIManifest
 from app.plugins.installed.display_output import service as service_module
-from app.plugins.installed.display_output.models import DisplayApplyRequest, DisplayLayout
+from app.plugins.installed.display_output.models import (
+    BrightnessRequest,
+    DisplayApplyRequest,
+    DisplayLayout,
+)
 from app.plugins.installed.display_output.service import (
     DisplayUnavailable,
     InvalidRequest,
@@ -161,6 +165,47 @@ async def apply_display_layout(
     )
     logger.warning("Display-Anwendung fehlgeschlagen: %s", result.message)
     raise BadGatewayError("Aktion fehlgeschlagen")
+
+
+@router.post("/brightness")
+@user_limiter.limit(_LIMIT)
+async def set_display_brightness(
+    body: BrightnessRequest,
+    request: Request,
+    response: Response,
+    current_user=Depends(require_power_manage_displays),
+) -> dict:
+    """Setzt die Helligkeit eines Bildschirms ueber powerdevil.
+
+    Gelesen wird die Helligkeit nicht hier, sondern als Feld in ``GET /state``:
+    ein Feld im vorhandenen Response kostet keine zusaetzliche Abfrage, eine
+    zweite Route verdoppelte den Poll-Takt gegen dasselbe Limit.
+
+    **Kein Audit-Eintrag** — im Unterschied zu ``apply``, und aus demselben
+    Grund, aus dem ``audio_control`` seine Pegel nicht auditiert: ein Reglerzug
+    aendert keine Konfiguration, er ist sofort reversibel, und entprellte
+    Schreibvorgaenge fuellten die Spur mit Rauschen, in dem die
+    schuetzenswerten Eintraege untergingen. Die Berechtigung
+    (``can_manage_displays``) gilt unveraendert.
+
+    Die ID aus dem Rumpf wird im Service gegen die Enumeration **dieses**
+    Vorgangs geprueft, bevor sie zu einem Objektpfad wird.
+    """
+    service = service_module.get_display_service()
+    try:
+        ok, message = await service.set_brightness(body)
+    except InvalidRequest as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    except DisplayUnavailable as exc:
+        # BadGatewayError statt HTTPException(502) — Begruendung wie oben.
+        raise BadGatewayError("Helligkeitssteuerung nicht erreichbar") from exc
+
+    if not ok:
+        # `message` stammt roh von qdbus6 und kann EDID-Namen tragen: geloggt,
+        # nie ausgeliefert.
+        logger.warning("Helligkeit setzen fehlgeschlagen: %s", message)
+        raise BadGatewayError("Aktion fehlgeschlagen")
+    return {"success": True}
 
 
 class DisplayOutputPlugin(PluginBase):

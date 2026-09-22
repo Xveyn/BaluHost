@@ -41,6 +41,45 @@ class DisplayOutput(BaseModel):
     modes: List[DisplayMode] = Field(default_factory=list)
 
 
+# Untergrenze, die die Weboberflaeche setzen darf. KDE selbst erlaubt 0
+# (gemessen: ``knownSafeBrightnessMin`` = 0) — hier ist es bewusst enger: ein
+# Regler aus der Ferne darf den Menschen am Schreibtisch nicht vor einem
+# schwarzen Bildschirm sitzen lassen. Derselbe Gedanke wie das Verbot, alle
+# Ausgaenge abzuwaehlen.
+MIN_BRIGHTNESS_PERCENT = 5
+
+
+class BrightnessDisplay(BaseModel):
+    """Ein Bildschirm, dessen Helligkeit gesetzt werden kann.
+
+    Nicht deckungsgleich mit einem ``DisplayOutput``: powerdevil meldet nur
+    eingeschaltete, steuerbare Bildschirme und vergibt eigene Objektnamen. Die
+    Zuordnung zu einem Connector-Namen gibt die D-Bus-Schnittstelle nicht her —
+    deshalb gibt es hier kein ``output``-Feld, das sie behaupten wuerde.
+    """
+
+    id: str = Field(..., description="Lebender powerdevil-Objektname, z. B. 'display13'; nie speichern")
+    label: str = Field(..., description="EDID-Name; faellt auf die ID zurueck, wenn er leer ist")
+    internal: bool = Field(..., description="Eingebautes Panel statt externem Bildschirm")
+    # ge=0, obwohl geschrieben erst ab MIN_BRIGHTNESS_PERCENT werden darf:
+    # Plasmas eigener Regler kennt diese Grenze nicht, ein gemeldeter Wert von
+    # 2 % ist also moeglich — und ihn auf 5 zu heben waere eine Falschaussage.
+    percent: int = Field(..., ge=0, le=100, description="Die Geraeteskala bleibt serverseitig")
+
+
+class BrightnessInfo(BaseModel):
+    """Der Helligkeitsteil von ``GET /state``.
+
+    ``available`` ist getrennt von dem der Ausgaenge: KWin kann laufen, waehrend
+    powerdevil fehlt. Der Vorgabewert ist ``False`` — ohne Messung wird keine
+    Erreichbarkeit behauptet.
+    """
+
+    available: bool = Field(default=False, description="False, wenn powerdevil keine Auskunft gab")
+    displays: List[BrightnessDisplay] = Field(default_factory=list)
+    detail: Optional[str] = Field(default=None, description="Kurzer Hinweis fuer die UI")
+
+
 class DisplayLayout(BaseModel):
     """Gesamtzustand, wie ihn GET /state liefert."""
 
@@ -50,6 +89,13 @@ class DisplayLayout(BaseModel):
     )
     available: bool = Field(default=True, description="False, wenn KWin nicht erreichbar ist")
     detail: Optional[str] = Field(default=None, description="Kurzer Hinweis fuer die UI")
+    brightness: BrightnessInfo = Field(
+        default_factory=BrightnessInfo,
+        description=(
+            "Helligkeit reist im Zustand mit, statt in einer zweiten Route zu liegen: "
+            "das Popover pollt alle 5 s gegen ein Limit von 60/min"
+        ),
+    )
 
 
 class DisplayOutputRequest(BaseModel):
@@ -73,3 +119,10 @@ class DisplayApplyRequest(BaseModel):
     # berechtigter Aufrufer einen beliebig grossen Rumpf schicken, den ein
     # Worker parsen muss, bevor die erste inhaltliche Pruefung greift.
     outputs: List[DisplayOutputRequest] = Field(..., min_length=1, max_length=16)
+
+
+class BrightnessRequest(BaseModel):
+    """Rumpf von ``POST /brightness`` — ein Bildschirm, ein Prozentwert."""
+
+    id: str = Field(..., min_length=1, max_length=64, description="Aus der letzten Enumeration")
+    percent: int = Field(..., ge=MIN_BRIGHTNESS_PERCENT, le=100)

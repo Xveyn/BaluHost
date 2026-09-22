@@ -4,6 +4,7 @@ from unittest.mock import patch
 import pytest
 
 from app.plugins.installed.display_output.backend import DevDisplayBackend, KWinDisplayBackend
+from app.plugins.installed.display_output.brightness import DisplayBrightness
 
 
 class TestDevBackend:
@@ -104,3 +105,69 @@ class TestKWinBackend:
         assert layout.outputs[0].selected is True
         assert layout.outputs[0].lit is False
         assert layout.displays_powered is False
+
+
+class TestDevBackendBrightness:
+    @pytest.mark.asyncio
+    async def test_offers_one_controllable_display_although_two_outputs_exist(self):
+        # Gemessen auf BaluNode: zwei verbundene Ausgaenge, aber nur EIN
+        # Helligkeitsobjekt — powerdevil meldet nur eingeschaltete, steuerbare
+        # Bildschirme. Ein Dev-Backend mit zwei Reglern behauptete einen
+        # Zustand, den das echte nie liefert.
+        displays = await DevDisplayBackend().get_brightness()
+        assert len(displays) == 1
+        assert displays[0].percent == 100
+
+    @pytest.mark.asyncio
+    async def test_the_object_id_is_not_an_output_name(self):
+        # powerdevil vergibt eigene, fluechtige Objektnamen. Wer hier
+        # "HDMI-A-1" einsetzt, baut eine Zuordnung, die die API nicht hergibt.
+        displays = await DevDisplayBackend().get_brightness()
+        assert displays[0].id not in {"HDMI-A-1", "DP-3"}
+
+    @pytest.mark.asyncio
+    async def test_a_write_changes_what_the_next_read_returns(self):
+        backend = DevDisplayBackend()
+        target = (await backend.get_brightness())[0]
+        ok, _ = await backend.set_brightness(target.id, 6000)
+        assert ok is True
+        assert (await backend.get_brightness())[0].raw == 6000
+
+    @pytest.mark.asyncio
+    async def test_an_unknown_id_is_reported_not_raised(self):
+        ok, _ = await DevDisplayBackend().set_brightness("display99", 5000)
+        assert ok is False
+
+
+class TestKWinBackendBrightness:
+    @pytest.mark.asyncio
+    async def test_the_module_answer_is_passed_through_unchanged(self):
+        measured = [
+            DisplayBrightness(
+                id="display13", label="Example Corp. XY27-1234",
+                internal=False, raw=10000, maximum=10000,
+            )
+        ]
+        with patch(
+            "app.plugins.installed.display_output.backend.read_displays", return_value=measured
+        ):
+            assert await KWinDisplayBackend().get_brightness() == measured
+
+    @pytest.mark.asyncio
+    async def test_an_unreachable_service_stays_none(self):
+        # None heisst "keine Auskunft", [] heisst "nichts steuerbar". Das
+        # Backend darf das eine nicht zum anderen machen.
+        with patch(
+            "app.plugins.installed.display_output.backend.read_displays", return_value=None
+        ):
+            assert await KWinDisplayBackend().get_brightness() is None
+
+    @pytest.mark.asyncio
+    async def test_the_raw_value_reaches_the_module_unchanged(self):
+        # Umgerechnet wird im Service; das Backend rechnet nicht mit.
+        with patch(
+            "app.plugins.installed.display_output.backend.write_brightness",
+            return_value=(True, ""),
+        ) as write:
+            await KWinDisplayBackend().set_brightness("display13", 6000)
+        assert write.call_args.args == ("display13", 6000)

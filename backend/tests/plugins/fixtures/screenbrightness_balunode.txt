@@ -1,0 +1,4 @@
+Brightness: 10000
+IsInternal: false
+Label: Example Corp. XY27-1234
+MaxBrightness: 10000
