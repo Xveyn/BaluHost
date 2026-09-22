@@ -58,12 +58,12 @@ def start_qt_app(base_url: str, web_url: str) -> int:
     return run_tray(base_url, web_url)
 
 
-def run_pairing(base_url: str) -> int:
+def run_pairing(base_url: str, web_url: str) -> int:
     # Aus pairing_cli, nicht aus tray: tray.py importiert PyQt6 auf
     # Modulebene, und --pair soll ohne das Extra 'tray' funktionieren.
     from baluhost_tray.pairing_cli import run_pairing_flow
 
-    return run_pairing_flow(base_url)
+    return run_pairing_flow(base_url, web_url)
 
 
 def run(argv: list[str] | None = None) -> int:
@@ -94,7 +94,7 @@ def run(argv: list[str] | None = None) -> int:
 
     # Vor der Token-Pruefung: wer koppeln will, hat per Definition noch keine.
     if args.pair:
-        return run_pairing(args.base_url)
+        return run_pairing(args.base_url, args.web_url)
 
     if tray_config.load_tokens() is None:
         # Der dauerhafte Fall: ohne Kopplung gibt es nichts zu zeigen, und
