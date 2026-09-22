@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
 from sqlalchemy.orm import Session
+import asyncio
 import threading
 import os
 import logging
@@ -7,7 +8,9 @@ import signal
 from datetime import datetime, timedelta, timezone
 
 from app.api import deps
+from app.core.network_utils import is_private_or_local_ip
 from app.core.rate_limiter import limiter, user_limiter, get_limit
+from app.models.user import User as UserModel
 from app.schemas.system import (
     AuditLoggingStatus,
     AuditLoggingToggle,
@@ -18,9 +21,13 @@ from app.schemas.system import (
     StorageBreakdownResponse,
     StorageInfo,
     SystemInfo,
+    SystemRestartAllRequest,
+    SystemRestartAllResponse,
     TelemetryHistoryResponse,
+    UnitRestartResult,
 )
 from app.schemas.user import UserPublic
+from app.services import step_up, system_restart
 from app.services.hardware import smart as smart_service
 from app.services.audit.logger_db import get_audit_logger_db
 from app.services import system as system_service
@@ -311,6 +318,184 @@ async def restart_system(
     timer.start()
 
     return {"message": "Restart scheduled", "initiated_by": user.username, "eta_seconds": eta}
+
+
+def _is_api_key_request(request: Request) -> bool:
+    """deps.get_current_user setzt diesen Marker für den API-Key-Pfad."""
+    return getattr(request.state, "auth_method", None) == "api_key"
+
+
+def _totp_enabled_for(user_record) -> bool:
+    """Eigene Funktion, damit Tests die 2FA-Variante ohne Secret erreichen."""
+    return bool(getattr(user_record, "totp_enabled", False))
+
+
+def _schedule_backend_restart(eta: float = 1.0) -> None:
+    """Das Backend zuletzt neu starten, nachdem die Antwort draußen ist.
+
+    Bewusst als eigener Helfer und nicht im Route-Körper: Tests müssen ihn
+    ersetzen können, sonst beendet der Timer den Testlauf.
+
+    **Kein SIGINT-Fallback.** Das bestehende `/api/system/restart` fällt bei
+    einem Fehlschlag auf `os.kill(os.getpid(), SIGINT)` zurück; bei
+    `uvicorn --workers 4` trifft das einen Kindprozess, den uvicorn binnen
+    einer halben Sekunde neu startet, während drei Worker unverändert
+    weiterlaufen — und der Aufrufer hat "Neustart geplant" gelesen. Issue #695.
+    Hier wird ein Fehlschlag protokolliert und sonst nichts getan.
+    `/api/system/restart` bleibt unangetastet, weil die Companion-App und
+    `localApi.ts` daran hängen.
+    """
+    from app.core.config import settings
+
+    def _perform() -> None:
+        logger = logging.getLogger(__name__)
+        if settings.is_dev_mode:
+            # Dort läuft ein einzelner Prozess — dort stimmt SIGINT.
+            logger.info("Dev mode: sending SIGINT to trigger restart")
+            os.kill(os.getpid(), signal.SIGINT)
+            return
+        result = system_restart.restart_unit(system_restart.BACKEND_UNIT)
+        if not result.success:
+            logger.error(
+                "restart of %s failed: %s — the service is still running the "
+                "old process",
+                result.name,
+                result.message,
+            )
+
+    timer = threading.Timer(float(eta), _perform)
+    timer.daemon = True
+    timer.start()
+
+
+@router.post("/restart-all", response_model=SystemRestartAllResponse)
+@user_limiter.limit(get_limit("system_restart"))
+async def restart_all_services(
+    payload: SystemRestartAllRequest,
+    request: Request,
+    response: Response,
+    user: UserPublic = Depends(deps.get_current_admin),
+    db: Session = Depends(deps.get_db),
+) -> SystemRestartAllResponse:
+    """Alle BaluHost-Units neu starten (Admin + lokales Netz + Step-up).
+
+    Die vier Nebendienste laufen synchron, damit ihr Ergebnis in die Antwort
+    passt. `baluhost-backend` kommt zuletzt und per Timer — die Antwort muss
+    raus sein, bevor der Prozess stirbt.
+    """
+    # settings lokal, wie in den übrigen Routen dieser Datei;
+    # get_audit_logger_db steht bereits oben im Modul.
+    from app.core.config import settings
+
+    audit = get_audit_logger_db()
+    ip_address = request.client.host if request.client else None
+
+    if _is_api_key_request(request):
+        audit.log_security_event(
+            action="restart_all_api_key_denied",
+            user=user.username,
+            details={"ip_address": ip_address},
+            success=False,
+            db=db,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "error": "api_key_not_allowed",
+                "message": (
+                    "Dieser Vorgang verlangt eine erneute Anmeldung und ist "
+                    "mit einem API-Schlüssel nicht möglich."
+                ),
+            },
+        )
+
+    # LAN-Gate (echte Client-IP über --proxy-headers), Muster wie
+    # /api/auth/recovery-reset. Grund: :8000 lauscht auf 0.0.0.0 und es läuft
+    # kein Paketfilter (#698) — ohne dieses Gate wäre der Endpunkt aus LAN und
+    # VPN an nginx und dessen Rate-Limits vorbei erreichbar.
+    if not is_private_or_local_ip(ip_address):
+        audit.log_security_event(
+            action="restart_all_denied",
+            user=user.username,
+            details={"ip_address": ip_address, "reason": "non_local"},
+            success=False,
+            db=db,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "error": "local_network_required",
+                "message": (
+                    "Der Sammelneustart ist nur aus dem lokalen Netz möglich."
+                ),
+            },
+        )
+
+    user_record = db.query(UserModel).filter(UserModel.id == user.id).first()
+    if not user_record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+        )
+
+    totp_required = _totp_enabled_for(user_record)
+    if not step_up.verify_step_up(
+        db, user_record, payload.current_password, payload.code
+    ):
+        audit.log_security_event(
+            action="restart_all_step_up_failed",
+            user=user.username,
+            details={"ip_address": ip_address},
+            success=False,
+            db=db,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "error": "step_up_failed",
+                # Sagt dem Client, welches Feld die Route erwartet. Zuverlässiger
+                # als ein vorher abgefragter 2FA-Status, der bei abgelaufenem
+                # Token leer zurückkommt.
+                "totp_required": totp_required,
+                "message": (
+                    "Erneute Anmeldung fehlgeschlagen. Passwort bzw. "
+                    "2FA-Code prüfen."
+                ),
+            },
+        )
+
+    if settings.is_dev_mode:
+        # Kein systemctl: die übrigen Units gibt es im Dev-Mode nicht.
+        results: list[system_restart.UnitResult] = []
+    else:
+        results = await asyncio.to_thread(system_restart.restart_support_units)
+
+    audit.log_system_event(
+        action="restart_all_initiated",
+        user=user.username,
+        details={
+            "units": [r.name for r in results],
+            "failed": [r.name for r in results if not r.success],
+            "dev_mode": settings.is_dev_mode,
+            "ip_address": ip_address,
+        },
+        success=all(r.success for r in results),
+        db=db,
+    )
+    logging.getLogger(__name__).info(
+        "Restart-all requested via API by user %s", user.username
+    )
+
+    _schedule_backend_restart()
+
+    return SystemRestartAllResponse(
+        units=[
+            UnitRestartResult(name=r.name, success=r.success, message=r.message)
+            for r in results
+        ],
+        backend_restart_scheduled=True,
+        eta_seconds=1,
+        initiated_by=user.username,
+    )
 
 
 @router.get("/smart/status", response_model=SmartStatusResponse)
