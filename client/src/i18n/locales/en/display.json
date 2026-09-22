@@ -14,5 +14,10 @@
   "loadError": "Could not load display state",
   "saveError": "Could not apply the change",
   "conflictError": "The mode list changed. Please try again.",
-  "keepOneSelected": "At least one output must stay selected."
+  "keepOneSelected": "At least one output must stay selected.",
+  "brightness": "Brightness",
+  "brightnessFor": "Brightness — {{display}}",
+  "noBrightness": "No screen with adjustable brightness.",
+  "brightnessUnavailable": "Brightness control is unreachable.",
+  "brightnessError": "Could not set brightness"
 }

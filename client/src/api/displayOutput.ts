@@ -38,11 +38,56 @@ export interface DisplayOutput {
   modes: DisplayMode[];
 }
 
+/**
+ * Untergrenze, die die Oberfläche setzen darf.
+ *
+ * KDE selbst erlaubt 0. Hier ist es bewusst enger: ein Regler aus der Ferne
+ * darf den Menschen am Schreibtisch nicht vor einem schwarzen Bildschirm
+ * sitzen lassen. Das Backend lehnt alles darunter mit 422 ab — diese Konstante
+ * ist dieselbe Zusage im `min`-Attribut des Reglers.
+ */
+export const MIN_BRIGHTNESS_PERCENT = 5;
+
+export interface BrightnessDisplay {
+  /**
+   * Lebender powerdevil-Objektname, z. B. „display13". Nie speichern — er
+   * hängt am KWin-Output und ist nach einem Neustart ein anderer.
+   */
+  id: string;
+  /** EDID-Name; fällt serverseitig auf die ID zurück, wenn er leer ist. */
+  label: string;
+  /** Eingebautes Panel statt externem Bildschirm. */
+  internal: boolean;
+  /** 0–100. Die Geräteskala bleibt serverseitig. */
+  percent: number;
+}
+
+export interface BrightnessInfo {
+  /**
+   * Getrennt von `DisplayLayout.available`: KWin kann laufen, während
+   * powerdevil fehlt. `false` mit leerer Liste heißt „keine Auskunft",
+   * `true` mit leerer Liste heißt „nichts steuerbar" — zwei verschiedene
+   * Aussagen, die die UI verschieden anzeigt.
+   */
+  available: boolean;
+  displays: BrightnessDisplay[];
+  detail: string | null;
+}
+
 export interface DisplayLayout {
   outputs: DisplayOutput[];
   displays_powered: boolean;
   available: boolean;
   detail: string | null;
+  /**
+   * Die Helligkeit reist im Zustand mit, statt in einer eigenen Route zu
+   * liegen: das Popover pollt alle 5 s gegen ein Limit von 60/min.
+   *
+   * Nicht deckungsgleich mit `outputs` — powerdevil führt nur eingeschaltete,
+   * steuerbare Bildschirme und vergibt eigene Objektnamen. Eine Zuordnung
+   * Objekt ↔ Connector gibt die Schnittstelle nicht her.
+   */
+  brightness: BrightnessInfo;
 }
 
 export interface DisplayOutputWish {
@@ -62,6 +107,18 @@ export async function getDisplayLayout(): Promise<DisplayLayout> {
 /** Setzt Auswahl und Modus — ein Aufruf, den das Backend atomar anwendet. */
 export async function applyDisplayLayout(outputs: DisplayOutputWish[]): Promise<void> {
   await apiClient.post(`${BASE}/apply`, { outputs });
+}
+
+/**
+ * Setzt die Helligkeit eines Bildschirms.
+ *
+ * `id` muss aus der letzten Antwort von `getDisplayLayout()` stammen: das
+ * Backend prüft sie gegen die Enumeration desselben Vorgangs und antwortet mit
+ * 400, wenn sie dort nicht steht. Aufrufer entprellen — ein Reglerzug erzeugt
+ * Dutzende Änderungen, und jede wäre ein D-Bus-Aufruf.
+ */
+export async function setDisplayBrightness(id: string, percent: number): Promise<void> {
+  await apiClient.post(`${BASE}/brightness`, { id, percent });
 }
 
 /**

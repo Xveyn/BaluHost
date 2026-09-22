@@ -14,5 +14,10 @@
   "loadError": "Displayzustand konnte nicht geladen werden",
   "saveError": "Änderung konnte nicht übernommen werden",
   "conflictError": "Die Modusliste hat sich geändert. Bitte erneut versuchen.",
-  "keepOneSelected": "Mindestens ein Ausgang muss gewählt bleiben."
+  "keepOneSelected": "Mindestens ein Ausgang muss gewählt bleiben.",
+  "brightness": "Helligkeit",
+  "brightnessFor": "Helligkeit — {{display}}",
+  "noBrightness": "Kein Bildschirm mit regelbarer Helligkeit.",
+  "brightnessUnavailable": "Die Helligkeitssteuerung ist nicht erreichbar.",
+  "brightnessError": "Helligkeit konnte nicht gesetzt werden"
 }

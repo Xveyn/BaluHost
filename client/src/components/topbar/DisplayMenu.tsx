@@ -21,6 +21,8 @@ import {
   applyDisplayLayout,
   formatMode,
   getDisplayLayout,
+  setDisplayBrightness,
+  MIN_BRIGHTNESS_PERCENT,
   type DisplayLayout,
   type DisplayOutputWish,
 } from '../../api/displayOutput';
@@ -28,6 +30,15 @@ import { getMyPowerPermissions } from '../../api/powerPermissions';
 
 /** Abfragetakt, solange das Popover offen ist. */
 const POLL_MS = 5000;
+
+/**
+ * Wartezeit, bevor eine Reglerbewegung zur Anfrage wird.
+ *
+ * Ein Ziehen erzeugt Dutzende Änderungen. Ohne Verwerfen der Zwischenschritte
+ * wäre jede davon ein D-Bus-Aufruf, und das Limit von 60/min wäre in Sekunden
+ * aufgebraucht.
+ */
+const DEBOUNCE_MS = 200;
 
 /** Der bearbeitete Wunsch je Ausgang, bevor „Anwenden" ihn abschickt. */
 interface Draft {
@@ -40,7 +51,7 @@ interface Draft {
  * Sprachwechsel, während das Popover offen bleibt — übersetzt wird erst beim
  * Rendern (`t(error)`), nie beim Setzen.
  */
-type ErrorKey = 'loadError' | 'saveError' | 'conflictError';
+type ErrorKey = 'loadError' | 'saveError' | 'conflictError' | 'brightnessError';
 
 export function DisplayMenu() {
   const { t, i18n } = useTranslation('display');
@@ -53,6 +64,8 @@ export function DisplayMenu() {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const inFlight = useRef(false);
   const dirty = useRef(false);
+  /** Offene, noch nicht abgeschickte Reglerbewegungen je Bildschirm. */
+  const brightnessTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
 
   useEffect(() => {
     let active = true;
@@ -124,9 +137,19 @@ export function DisplayMenu() {
     // einzige Ort, an dem auch saveError/conflictError geräumt wird.
     setError(null);
     void refresh();
-    const id = setInterval(() => void refresh(), POLL_MS);
+    const id = setInterval(() => {
+      // Solange eine Reglerbewegung noch aussteht, NICHT abfragen: der Abruf
+      // brächte den alten Serverwert zurück und ließe den Regler mitten im
+      // Ziehen zurückspringen. Sobald der entprellte Schreibvorgang durch ist,
+      // ruft er selbst refresh() auf.
+      if (brightnessTimers.current.size > 0) return;
+      void refresh();
+    }, POLL_MS);
     return () => clearInterval(id);
   }, [isOpen, refresh]);
+
+  const brightnessTimersRef = brightnessTimers.current;
+  useEffect(() => () => brightnessTimersRef.forEach((id) => clearTimeout(id)), [brightnessTimersRef]);
 
   useEffect(() => {
     const onClickOutside = (event: MouseEvent) => {
@@ -159,6 +182,49 @@ export function DisplayMenu() {
     layout !== null &&
     layout.outputs.some((o) => o.connected) &&
     !layout.outputs.some((o) => o.connected && (draft[o.name]?.selected ?? o.selected));
+
+  // Optionaler Zugriff auf ein laut Vertrag vorhandenes Feld: die Topbar ist
+  // eine Core-Komponente, und ein fehlender Block darf sie nicht zerreißen.
+  const brightnessDisplays = layout?.brightness?.displays ?? [];
+
+  /**
+   * Nimmt eine Reglerbewegung an: zeigt sie sofort und schickt sie entprellt.
+   *
+   * Anders als die Ausgangswahl gibt es hier keinen „Anwenden"-Knopf. Helligkeit
+   * ist ein Wert, den man am Bildschirm wandern sehen will, und sie ist
+   * jederzeit reversibel — ein Entwurf, der erst auf Knopfdruck greift, wäre
+   * hier die falsche Form.
+   */
+  const changeBrightness = useCallback(
+    (id: string, percent: number) => {
+      // Sofort anzeigen, sonst springt der Regler unter dem Finger zurück.
+      setLayout((prev) =>
+        prev
+          ? {
+              ...prev,
+              brightness: {
+                ...prev.brightness,
+                displays: prev.brightness.displays.map((d) =>
+                  d.id === id ? { ...d, percent } : d,
+                ),
+              },
+            }
+          : prev,
+      );
+      const pending = brightnessTimers.current.get(id);
+      if (pending) clearTimeout(pending);
+      brightnessTimers.current.set(
+        id,
+        setTimeout(() => {
+          brightnessTimers.current.delete(id);
+          void setDisplayBrightness(id, percent)
+            .then(refresh)
+            .catch(() => setError('brightnessError'));
+        }, DEBOUNCE_MS),
+      );
+    },
+    [refresh],
+  );
 
   const handleApply = async () => {
     setBusy(true);
@@ -222,7 +288,46 @@ export function DisplayMenu() {
 
           {layout?.available && (
             <>
-              <p className="mb-2 text-xs uppercase tracking-wide text-slate-500">{t('outputs')}</p>
+              <p className="mb-2 text-xs uppercase tracking-wide text-slate-500">
+                {t('brightness')}
+              </p>
+
+              {/* Zwei verschiedene Aussagen, zwei Meldungen: „powerdevil
+                  antwortet nicht" ist nicht dasselbe wie „es gibt nichts zu
+                  regeln". Beides in einen Satz zu falten, verschweigt dem
+                  Nutzer, ob ein Dienst fehlt. */}
+              {!layout.brightness?.available && (
+                <p className="mb-3 text-xs text-slate-400">{t('brightnessUnavailable')}</p>
+              )}
+              {layout.brightness?.available && brightnessDisplays.length === 0 && (
+                <p className="mb-3 text-xs text-slate-400">{t('noBrightness')}</p>
+              )}
+
+              {brightnessDisplays.map((display) => (
+                <div key={display.id} className="mb-3">
+                  <div className="mb-1 flex items-center gap-2">
+                    <span className="truncate text-sm text-slate-200" title={display.label}>
+                      {display.label}
+                    </span>
+                    <span className="ml-auto font-mono text-xs text-slate-400">
+                      {display.percent} %
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    aria-label={t('brightnessFor', { display: display.label })}
+                    min={MIN_BRIGHTNESS_PERCENT}
+                    max={100}
+                    value={display.percent}
+                    onChange={(e) => changeBrightness(display.id, Number(e.target.value))}
+                    className="w-full accent-sky-500"
+                  />
+                </div>
+              ))}
+
+              <p className="mb-2 mt-4 text-xs uppercase tracking-wide text-slate-500">
+                {t('outputs')}
+              </p>
 
               {layout.outputs.map((output) => {
                 const entry = draft[output.name] ?? {
