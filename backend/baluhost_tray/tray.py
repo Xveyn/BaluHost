@@ -12,19 +12,33 @@ import asyncio
 import logging
 import threading
 import time
+from queue import Empty, Queue          # NICHT `import queue`: run_tray() hat
+                                         # schon eine lokale Variable `queue`
+                                         # (PopupQueue) — ein Modulimport wuerde
+                                         # `queue.Queue(...)` darauf aufloesen.
 
 import websockets
 from PyQt6.QtCore import QObject, QTimer, QUrl, pyqtSignal
 from PyQt6.QtGui import QDesktopServices, QIcon
-from PyQt6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
+from PyQt6.QtWidgets import (
+    QApplication, QInputDialog, QLineEdit, QMenu, QMessageBox, QSystemTrayIcon,
+)
 
+from baluhost_tray import config as tray_config
 from baluhost_tray.announce import QuietMode
 from baluhost_tray.icons import SIZES, icon_path
 from baluhost_tray.loop import LoopContext, is_gaming_active, run_loop
 from baluhost_tray.notify import Notifier, NotifierUnavailable
+from baluhost_tray.restart import (
+    RestartOutcome,
+    fetch_account_facts,
+    menu_visible,
+    restart_flow,
+)
 from baluhost_tray.session import Session
 from baluhost_tray.state import IconState, PopupQueue, TrayState
 from baluhost_tray.watch import Watcher
+from baluhost_tui.client import BackendClient
 
 logger = logging.getLogger(__name__)
 
@@ -34,8 +48,10 @@ MENU_QUIET = "Eine Stunde stumm"
 # wiederherstellen — dafuer braucht es `baluhost-tray --pair` auf der Konsole.
 # Er oeffnet die Geraeteseite, und der Name sagt genau das.
 MENU_DEVICES = "Geräte in der Web-UI"
+MENU_RESTART = "BaluHost neu starten…"
 MENU_QUIT = "Beenden"
 QUIET_SECONDS = 3600.0
+PROMPT_TIMEOUT = 300.0      # der Worker wartet nicht ewig auf einen Dialog
 
 
 class _Bridge(QObject):
@@ -49,6 +65,9 @@ class _Bridge(QObject):
     state_changed = pyqtSignal(str)   # IconState.value
     tooltip_changed = pyqtSignal(str)
     fatal = pyqtSignal(str)           # Worker kann nicht weitermachen
+    restart_prompt = pyqtSignal(str)
+    restart_finished = pyqtSignal(bool, str)
+    restart_visible = pyqtSignal(bool)
 
 
 def _build_icons() -> dict[IconState, QIcon]:
@@ -125,6 +144,109 @@ def run_tray(base_url: str, web_url: str) -> int:
     menu.addAction(MENU_DEVICES).triggered.connect(
         lambda: QDesktopServices.openUrl(QUrl(f"{web_url}/devices"))
     )
+
+    restart_action = menu.addAction(MENU_RESTART)
+    # Bis die Rolle bekannt ist sichtbar: unbekannt heisst, dass die API gerade
+    # nicht antwortet — genau der Fall, fuer den der Notweg da ist. Das Gate
+    # ist polkit bzw. das Backend, nicht diese Zeile.
+    restart_action.setVisible(True)
+    bridge.restart_visible.connect(restart_action.setVisible)
+
+    # Die Antwort des Dialogs geht ueber eine Queue zurueck in den
+    # Arbeitsthread. Dialoge gehoeren in den GUI-Thread, Netzwerk nicht.
+    answers: Queue = Queue(maxsize=1)
+
+    def _show_prompt(mode: str) -> None:
+        # Jeder Pfad legt genau eine Antwort ab. Ohne das finally bliebe der
+        # Worker fuer immer in answers.get() haengen.
+        value = None
+        try:
+            if mode == "local":
+                choice = QMessageBox.question(
+                    None,
+                    "BaluHost neu starten",
+                    "Das Backend antwortet nicht.\n\nDienste direkt über das "
+                    "System neu starten? Das System fragt gleich nach dem "
+                    "Passwort.\n\nLaufende Aufträge und Uploads werden dabei "
+                    "abgebrochen.",
+                )
+                value = "ja" if choice == QMessageBox.StandardButton.Yes else None
+                return
+            is_totp = mode.startswith("totp")
+            label = "2FA-Code" if is_totp else "Passwort"
+            text = (
+                f"{label} stimmt nicht. Noch einmal:"
+                if mode.endswith("_retry")
+                else f"{label} für BaluHost:\n\nLaufende Aufträge und Uploads "
+                     f"werden abgebrochen."
+            )
+            typed, ok = QInputDialog.getText(
+                None, "BaluHost neu starten", text, QLineEdit.EchoMode.Password
+            )
+            value = typed if ok and typed else None
+        finally:
+            answers.put(value)
+
+    bridge.restart_prompt.connect(_show_prompt)
+
+    def _restart_done(ok: bool, message: str) -> None:
+        restart_action.setEnabled(True)
+        box = QMessageBox.information if ok else QMessageBox.warning
+        box(None, "BaluHost neu starten", message)
+
+    bridge.restart_finished.connect(_restart_done)
+
+    def _prompt_from_worker(mode: str) -> str | None:
+        bridge.restart_prompt.emit(mode)
+        try:
+            return answers.get(timeout=PROMPT_TIMEOUT)
+        except Empty:
+            return None
+
+    def _refresh_into(client: BackendClient) -> None:
+        """Token erneuern und dem Neustart-Client mitgeben.
+
+        Der Refresh-Token rotiert serverseitig nicht (siehe session.py), ein
+        paralleler Refresh im Worker ist also inhaltlich harmlos. Alles, was
+        dabei schiefgeht, faengt restart.py ab — hier darf nichts durch.
+        """
+        session.refresh_access()
+        tokens = tray_config.load_tokens()
+        if tokens:
+            client.set_token(tokens.access)
+
+    def _restart_worker() -> None:
+        outcome = RestartOutcome(False, "Unerwarteter Fehler.")
+        client = None
+        try:
+            # Eigener Client: der Worker-Thread wechselt beim Refresh das Token
+            # des gemeinsamen Clients, und zwei Threads auf demselben Objekt
+            # sind eine Verabredung zum Rennen.
+            tokens = tray_config.load_tokens()
+            client = BackendClient(
+                server=base_url, token=tokens.access if tokens else None
+            )
+            outcome = restart_flow(
+                client,
+                _prompt_from_worker,
+                on_auth_expired=lambda: _refresh_into(client),
+            )
+        except Exception as exc:                     # noqa: BLE001
+            logger.exception("restart flow failed")
+            outcome = RestartOutcome(False, f"Unerwarteter Fehler: {exc}")
+        finally:
+            if client is not None:
+                client.close()
+            # Muss feuern: nur dieses Signal macht den Menuepunkt wieder
+            # anklickbar.
+            bridge.restart_finished.emit(outcome.ok, outcome.message)
+
+    def _start_restart() -> None:
+        restart_action.setEnabled(False)
+        threading.Thread(target=_restart_worker, daemon=True).start()
+
+    restart_action.triggered.connect(_start_restart)
+
     menu.addSeparator()
     menu.addAction(MENU_QUIT).triggered.connect(app.quit)
     tray_icon.setContextMenu(menu)
@@ -178,6 +300,15 @@ def run_tray(base_url: str, web_url: str) -> int:
         # Anweisung nach notifier.connect() braucht einen Zweig, der ablegt
         # *und* meldet.
         try:
+            # Sichtbarkeit einmal beim Start bestimmen. Eine Rollenaenderung
+            # braucht danach einen Neustart des Trays — das ist selten genug.
+            account = await asyncio.to_thread(
+                fetch_account_facts, session.client(), session.refresh_access
+            )
+            bridge.restart_visible.emit(
+                menu_visible(account.is_admin, account.is_admin is not None)
+            )
+
             ctx = LoopContext(
                 session=session,
                 watcher=Watcher(session, state),
