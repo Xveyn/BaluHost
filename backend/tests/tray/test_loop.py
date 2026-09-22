@@ -938,10 +938,26 @@ async def test_a_401_on_the_snapshot_reaches_the_refresh():
 
     refresh_access wirft hier PairingLost, damit die Schleife endet statt
     weiterzulaufen — der Aufruf selbst ist der Nachweis.
+
+    Die Bremse auf ctx.sleep ist kein Beiwerk: ohne den Fix behandelt
+    run_cycle den 401 als voruebergehend, schlaeft und versucht es erneut —
+    mit demselben abgelaufenen Token, endlos. Genau das lief in Produktion.
+    Ohne die Bremse wuerde dieser Test dann nicht scheitern, sondern haengen,
+    und ein haengender Test meldet keinen Befund, er blockiert nur CI.
     """
     ctx = _ctx(frames=[])
     ctx.session.client.return_value.get.return_value.status_code = 401
     ctx.session.refresh_access.side_effect = PairingLost("Schluss")
+
+    rounds = 0
+
+    async def _sleep(_delay: float) -> None:
+        nonlocal rounds
+        rounds += 1
+        if rounds > 3:
+            raise PairingLost("Probe abgebrochen — die Schleife kam nie zum Refresh")
+
+    ctx.sleep = _sleep
 
     await run_loop(ctx)
 
