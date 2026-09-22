@@ -12,7 +12,7 @@ import asyncio
 import logging
 import threading
 import time
-from queue import Empty, Queue          # NICHT `import queue`: run_tray() hat
+from queue import Empty, Full, Queue    # NICHT `import queue`: run_tray() hat
                                          # schon eine lokale Variable `queue`
                                          # (PopupQueue) — ein Modulimport wuerde
                                          # `queue.Queue(...)` darauf aufloesen.
@@ -185,7 +185,18 @@ def run_tray(base_url: str, web_url: str) -> int:
             )
             value = typed if ok and typed else None
         finally:
-            answers.put(value)
+            # put_nowait, nicht put: laeuft der Worker laengst im
+            # PROMPT_TIMEOUT (niemand liest answers.get() mehr) und wird
+            # dieser verwaiste Dialog erst danach beantwortet, waere die
+            # Queue noch leer und put() ginge durch — aber legt ein zweiter
+            # verwaister Dialog nach, ohne dass ein Worker dazwischen
+            # abgeholt hat, ist die Queue (maxsize=1) voll. Ein blockierendes
+            # put() haengt dann den GUI-Thread komplett auf. Eine Antwort, die
+            # niemand mehr erwartet, ist wertlos — verwerfen statt warten.
+            try:
+                answers.put_nowait(value)
+            except Full:
+                pass
 
     bridge.restart_prompt.connect(_show_prompt)
 
@@ -197,6 +208,16 @@ def run_tray(base_url: str, web_url: str) -> int:
     bridge.restart_finished.connect(_restart_done)
 
     def _prompt_from_worker(mode: str) -> str | None:
+        # Erst leeren, dann fragen: ein Rest aus einem verwaisten frueheren
+        # Dialog (der Worker lief in den Timeout, wurde aber spaeter doch
+        # noch beantwortet) darf nicht als Antwort auf *diesen* neuen Dialog
+        # durchgehen — sonst startet dieser Versuch mit einem alten Passwort,
+        # waehrend der gerade erst geoeffnete Dialog unbeantwortet bleibt.
+        while True:
+            try:
+                answers.get_nowait()
+            except Empty:
+                break
         bridge.restart_prompt.emit(mode)
         try:
             return answers.get(timeout=PROMPT_TIMEOUT)
@@ -235,15 +256,31 @@ def run_tray(base_url: str, web_url: str) -> int:
             logger.exception("restart flow failed")
             outcome = RestartOutcome(False, f"Unerwarteter Fehler: {exc}")
         finally:
+            # client.close() darf das Signal nicht gefaehrden: schlaegt es
+            # fehl, wuerde ein unbehandelter Fehler hier das finally
+            # abbrechen und emit() nie erreichen — der Menuepunkt bliebe fuer
+            # den Rest der Sitzung grau. Deshalb eigenes try/except, und die
+            # Emission steht als letzte Anweisung, die ueberhaupt noch
+            # scheitern koennte.
             if client is not None:
-                client.close()
+                try:
+                    client.close()
+                except Exception:                 # noqa: BLE001
+                    logger.exception("closing the restart client failed")
             # Muss feuern: nur dieses Signal macht den Menuepunkt wieder
             # anklickbar.
             bridge.restart_finished.emit(outcome.ok, outcome.message)
 
     def _start_restart() -> None:
         restart_action.setEnabled(False)
-        threading.Thread(target=_restart_worker, daemon=True).start()
+        try:
+            threading.Thread(target=_restart_worker, daemon=True).start()
+        except Exception:
+            # Der Worker existiert dann nicht und kann restart_finished nie
+            # senden — ohne diesen Zweig bliebe der Menuepunkt fuer den Rest
+            # der Sitzung grau, obwohl gar nichts laeuft.
+            logger.exception("could not start the restart worker thread")
+            restart_action.setEnabled(True)
 
     restart_action.triggered.connect(_start_restart)
 
