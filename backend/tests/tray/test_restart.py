@@ -163,3 +163,125 @@ def test_facts_totp_defaults_to_false_when_status_fails():
 )
 def test_menu_visible(is_admin, reachable, expected):
     assert restart.menu_visible(is_admin, reachable) is expected
+
+
+# --- Notweg: systemctl + polkit -------------------------------------------
+
+
+class _Completed:
+    def __init__(self, returncode=0, stdout="", stderr=""):
+        self.returncode = returncode
+        self.stdout = stdout
+        self.stderr = stderr
+
+
+def _runner_script(*responses):
+    """Ein Runner, der die vorbereiteten Antworten der Reihe nach liefert."""
+    calls = []
+
+    def runner(args, **kwargs):
+        calls.append(args)
+        return responses[len(calls) - 1]
+
+    runner.calls = calls
+    return runner
+
+
+def test_systemctl_restarts_all_units_in_one_call():
+    """Ein Prozess, ein polkit-Dialog. Fünf Aufrufe wären fünf Dialoge."""
+    runner = _runner_script(
+        _Completed(),
+        _Completed(stdout="active\n" * len(restart.UNITS)),
+    )
+
+    outcome = restart.restart_via_systemctl(runner=runner)
+
+    assert outcome.ok is True
+    assert runner.calls[0] == ["systemctl", "restart", *restart.UNITS]
+
+
+def test_systemctl_is_called_without_sudo_and_without_shell():
+    """polkit macht die Rechtefrage — sudo wäre eine zweite, andere Antwort."""
+    calls = []
+
+    def runner(args, **kwargs):
+        calls.append((args, kwargs))
+        return _Completed(stdout="active\n" * len(restart.UNITS))
+
+    restart.restart_via_systemctl(runner=runner)
+
+    args, kwargs = calls[0]
+    assert "sudo" not in args
+    assert "shell" not in kwargs
+
+
+def test_systemctl_checks_state_with_is_active_afterwards():
+    runner = _runner_script(
+        _Completed(),
+        _Completed(stdout="active\n" * len(restart.UNITS)),
+    )
+
+    restart.restart_via_systemctl(runner=runner)
+
+    assert runner.calls[1] == ["systemctl", "is-active", *restart.UNITS]
+
+
+def test_cancelled_dialog_reports_which_units_are_running():
+    """Wer den Dialog abbricht, will wissen, was jetzt läuft und was nicht."""
+    states = ["active", "active", "failed", "active", "active"]
+    runner = _runner_script(
+        _Completed(returncode=1, stderr="Interactive authentication required."),
+        _Completed(returncode=1, stdout="\n".join(states) + "\n"),
+    )
+
+    outcome = restart.restart_via_systemctl(runner=runner)
+
+    assert outcome.ok is False
+    assert "Interactive authentication required." in outcome.message
+    assert "baluhost-webdav" in outcome.message      # die nicht aktive Unit
+
+
+def test_systemctl_handles_timeout():
+    import subprocess
+
+    def runner(args, **kwargs):
+        raise subprocess.TimeoutExpired(cmd=args, timeout=120.0)
+
+    outcome = restart.restart_via_systemctl(runner=runner)
+
+    assert outcome.ok is False
+    assert "Zeit" in outcome.message
+
+
+def test_systemctl_handles_missing_binary():
+    """Kein systemctl heißt: dieser Weg existiert hier nicht — sag es."""
+    def runner(args, **kwargs):
+        raise FileNotFoundError("systemctl")
+
+    outcome = restart.restart_via_systemctl(runner=runner)
+
+    assert outcome.ok is False
+    assert "systemctl" in outcome.message
+
+
+def test_failed_is_active_lookup_does_not_hide_the_failure():
+    """Der Neustart ist gescheitert; die Nachschau auch — sag trotzdem etwas."""
+    def runner(args, **kwargs):
+        if args[1] == "is-active":
+            raise OSError("systemctl weg")
+        return _Completed(returncode=1, stderr="Interactive authentication required.")
+
+    outcome = restart.restart_via_systemctl(runner=runner)
+
+    assert outcome.ok is False
+    assert "Interactive authentication required." in outcome.message
+
+
+def test_success_message_names_the_count():
+    runner = _runner_script(
+        _Completed(), _Completed(stdout="active\n" * len(restart.UNITS))
+    )
+
+    outcome = restart.restart_via_systemctl(runner=runner)
+
+    assert str(len(restart.UNITS)) in outcome.message

@@ -133,3 +133,85 @@ def menu_visible(is_admin: bool | None, api_reachable: bool) -> bool:
     if is_admin is None:
         return True
     return not api_reachable
+
+
+def _unit_states(
+    runner: Callable[..., Any], units: Sequence[str], timeout: float
+) -> dict[str, str]:
+    """`systemctl is-active` für alle Units. Lesend — kein polkit, kein Dialog.
+
+    Returns an empty mapping when the query itself fails; the caller must not
+    turn a successful restart into a failure just because the follow-up look
+    did not work.
+    """
+    try:
+        completed = runner(
+            ["systemctl", "is-active", *units],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except (subprocess.SubprocessError, OSError):
+        return {}
+    lines = (completed.stdout or "").splitlines()
+    return {unit: (lines[i].strip() if i < len(lines) else "") for i, unit in enumerate(units)}
+
+
+def restart_via_systemctl(
+    runner: Callable[..., Any] = subprocess.run,
+    units: Sequence[str] = UNITS,
+    timeout: float = LOCAL_TIMEOUT,
+) -> RestartOutcome:
+    """The fallback: ask systemd directly, let polkit ask the user.
+
+    No sudo. systemd checks the caller against
+    ``org.freedesktop.systemd1.manage-units`` (auth_admin_keep), so KDE's own
+    agent prompts.
+
+    **One call for all units, on purpose.** polkit binds the temporary
+    authorisation to the requesting *process* — five separate systemctl calls
+    would be five processes and five password prompts. One call is one process
+    making five D-Bus requests, so the agent asks once.
+
+    **And it stays a short-lived subprocess.** Calling
+    org.freedesktop.systemd1.Manager.RestartUnit over D-Bus from this
+    long-lived tray process would keep that authorisation alive for five
+    minutes — and `manage-units` also covers StartTransientUnit, i.e. running
+    anything as root. The process boundary is what keeps the radius small.
+    """
+    try:
+        completed = runner(
+            ["systemctl", "restart", *units],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        return RestartOutcome(
+            False,
+            "Zeitüberschreitung beim Neustart. Die Dienste können trotzdem "
+            "gerade hochfahren — bitte den Zustand prüfen.",
+        )
+    except OSError as exc:
+        return RestartOutcome(
+            False, f"systemctl konnte nicht ausgeführt werden: {exc}"
+        )
+
+    states = _unit_states(runner, units, timeout)
+
+    if completed.returncode == 0:
+        return RestartOutcome(True, f"{len(units)} Dienste neu gestartet.")
+
+    detail = (completed.stderr or completed.stdout or "").strip()
+    detail = detail or f"exit {completed.returncode}"
+    inactive = [unit for unit, state in states.items() if state != "active"]
+    tail = (
+        "\n\nNicht aktiv: " + ", ".join(inactive)
+        if inactive
+        else "\n\nAlle Dienste laufen trotzdem."
+    )
+    return RestartOutcome(
+        False,
+        f"Neustart fehlgeschlagen — abgebrochen oder keine Berechtigung.\n\n"
+        f"{detail}{tail}",
+    )
