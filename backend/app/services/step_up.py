@@ -27,7 +27,15 @@ def verify_step_up(
     current_password: str | None,
     code: str | None,
 ) -> bool:
-    """True, wenn der zweite Nachweis erbracht ist. Wirft nie."""
+    """True, wenn der zweite Nachweis erbracht ist.
+
+    Ein falscher Code oder ein falsches Passwort ergeben False, nie eine
+    Exception. Eine kaputte 2FA-Konfiguration dagegen wirft weiter — z. B.
+    ein nicht mehr entschlüsselbares Secret (`cryptography.fernet.InvalidToken`
+    aus `_totp_decrypt`) oder ein Secret, das `pyotp.TOTP(...)` nicht als
+    gültiges Base32 akzeptiert (`binascii.Error`). Das ist gewollt fail-closed:
+    ein 500 statt eines fälschlichen True.
+    """
     if user_record.totp_enabled:
         # Mit 2FA zählt ausschließlich der Code. Ein Passwort würde den zweiten
         # Faktor aushebeln, den der Nutzer gerade eingeschaltet hat.

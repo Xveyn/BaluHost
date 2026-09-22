@@ -1,10 +1,23 @@
 """Tests für POST /api/system/restart-all (Admin + LAN + Step-up)."""
+import inspect
+
 import pytest
 
+from app.api.routes import system as system_module
 from app.core.config import settings
 from app.services import system_restart
 
 PATH = "/api/system/restart-all"
+
+# Aus der echten Funktion gelesen, nicht hier als zweite, unabhängig
+# gepflegte Zahl hingeschrieben — sonst würde eine Änderung an
+# `_schedule_backend_restart`s Default (z. B. 1.0 -> 5.0) von den Tests
+# unbemerkt bleiben, während `no_real_restart`s eigener Default weiter
+# "1.0" behauptet. Berechnet beim Modul-Import, bevor irgendein Test
+# monkeypatcht.
+_REAL_ETA_DEFAULT = inspect.signature(
+    system_module._schedule_backend_restart
+).parameters["eta"].default
 
 
 @pytest.fixture(autouse=True)
@@ -13,7 +26,7 @@ def no_real_restart(monkeypatch):
     scheduled = []
     monkeypatch.setattr(
         "app.api.routes.system._schedule_backend_restart",
-        lambda eta=1.0: scheduled.append(eta),
+        lambda eta=_REAL_ETA_DEFAULT: scheduled.append(eta),
     )
     return scheduled
 
@@ -130,6 +143,47 @@ def test_failed_step_up_is_audited(client, admin_headers, fake_units, monkeypatc
     assert "restart_all_step_up_failed" in events
 
 
+def test_denied_lan_gate_is_audited(client, admin_headers, fake_units, monkeypatch):
+    events = []
+    from app.services.audit import logger_db
+
+    real = logger_db.AuditLoggerDB.log_security_event
+
+    def spy(self, *args, **kwargs):
+        events.append(kwargs.get("action") or (args[0] if args else None))
+        return real(self, *args, **kwargs)
+
+    monkeypatch.setattr(logger_db.AuditLoggerDB, "log_security_event", spy)
+    monkeypatch.setattr(
+        "app.api.routes.system.is_private_or_local_ip", lambda ip: False
+    )
+
+    client.post(
+        PATH, json={"current_password": settings.admin_password}, headers=admin_headers
+    )
+
+    assert "restart_all_denied" in events
+
+
+def test_successful_restart_is_audited(client, admin_headers, fake_units, no_real_restart, monkeypatch):
+    events = []
+    from app.services.audit import logger_db
+
+    real = logger_db.AuditLoggerDB.log_system_event
+
+    def spy(self, *args, **kwargs):
+        events.append(kwargs.get("action") or (args[0] if args else None))
+        return real(self, *args, **kwargs)
+
+    monkeypatch.setattr(logger_db.AuditLoggerDB, "log_system_event", spy)
+
+    client.post(
+        PATH, json={"current_password": settings.admin_password}, headers=admin_headers
+    )
+
+    assert "restart_all_initiated" in events
+
+
 def test_correct_password_restarts_support_units(client, admin_headers, fake_units, no_real_restart):
     r = client.post(
         PATH, json={"current_password": settings.admin_password}, headers=admin_headers
@@ -141,8 +195,9 @@ def test_correct_password_restarts_support_units(client, admin_headers, fake_uni
     assert all(u["success"] for u in body["units"])
     assert body["backend_restart_scheduled"] is True
     assert body["initiated_by"] == settings.admin_username
+    assert body["eta_seconds"] == _REAL_ETA_DEFAULT
     assert fake_units == [True]
-    assert no_real_restart == [1.0]          # Backend zuletzt, per Timer
+    assert no_real_restart == [_REAL_ETA_DEFAULT]          # Backend zuletzt, per Timer
 
 
 def test_backend_unit_is_not_in_the_result_list(client, admin_headers, fake_units):
@@ -175,7 +230,7 @@ def test_failing_unit_is_reported_without_blocking_the_rest(
     failed = [u for u in r.json()["units"] if not u["success"]]
     assert [u["name"] for u in failed] == ["baluhost-monitoring"]
     assert r.json()["backend_restart_scheduled"] is True   # trotzdem
-    assert no_real_restart == [1.0]
+    assert no_real_restart == [_REAL_ETA_DEFAULT]
 
 
 def test_dev_mode_touches_no_units(client, admin_headers, monkeypatch, no_real_restart):
@@ -192,7 +247,7 @@ def test_dev_mode_touches_no_units(client, admin_headers, monkeypatch, no_real_r
 
     assert r.status_code == 200
     assert r.json()["units"] == []
-    assert no_real_restart == [1.0]
+    assert no_real_restart == [_REAL_ETA_DEFAULT]
 
 
 def test_totp_account_needs_a_code_and_the_body_says_so(
