@@ -341,7 +341,7 @@ machine.
       (`systemctl --user status` shows `condition failed`) — that is by design,
       not a fault.
 
-### The twelve points
+### The walkthrough
 
 - [ ] **1.** `systemctl --user start baluhost-tray` → the icon appears in the panel.
 - [ ] **2.** Stop the backend → the icon turns grey, **one** message, then quiet.

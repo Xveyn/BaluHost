@@ -345,7 +345,7 @@ der echten Maschine geschrieben.
       (`systemctl --user status` zeigt `condition failed`) — das ist Absicht,
       kein Fehler.
 
-### Die zwoelf Punkte
+### Der Durchgang
 
 - [ ] **1.** `systemctl --user start baluhost-tray` → Symbol erscheint im Panel.
 - [ ] **2.** Backend stoppen → Symbol wird grau, **eine** Meldung, danach Ruhe.
