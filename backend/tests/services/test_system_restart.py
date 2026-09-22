@@ -71,7 +71,7 @@ def test_restart_unit_truncates_long_output():
 
     result = system_restart.restart_unit("baluhost-webdav", runner=runner)
 
-    assert len(result.message) <= 200
+    assert result.message == ("x" * 1000)[:200]
 
 
 def test_restart_unit_handles_timeout():
@@ -91,7 +91,30 @@ def test_restart_unit_handles_missing_binary():
     result = system_restart.restart_unit("baluhost-webdav", runner=runner)
 
     assert result.success is False
+    assert "sudo" in result.message
+
+
+def test_restart_unit_uses_stdout_when_stderr_is_empty():
+    """stderr or stdout Fallback: wenn stderr leer ist, kommt stdout durch."""
+    def runner(args, **kwargs):
+        return _Completed(returncode=1, stderr="", stdout="error from stdout")
+
+    result = system_restart.restart_unit("baluhost-webdav", runner=runner)
+
+    assert result.success is False
+    assert result.message == "error from stdout"
+
+
+def test_restart_unit_handles_broad_exception():
+    """UnicodeDecodeError und andere unerwartete Ausnahmen werden abgefangen."""
+    def runner(args, **kwargs):
+        raise RuntimeError("kaputt")
+
+    result = system_restart.restart_unit("baluhost-webdav", runner=runner)
+
+    assert result.success is False
     assert result.message
+    assert "kaputt" in result.message
 
 
 def test_restart_support_units_keeps_order_and_skips_backend():

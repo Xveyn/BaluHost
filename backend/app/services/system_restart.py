@@ -59,8 +59,8 @@ def restart_unit(
     except subprocess.TimeoutExpired:
         logger.warning("restart of %s timed out after %.0fs", unit, timeout)
         return UnitResult(unit, False, f"Zeitüberschreitung nach {timeout:.0f}s")
-    except OSError as exc:
-        logger.warning("restart of %s failed to start: %s", unit, exc)
+    except Exception as exc:  # pragma: no cover - defensiv
+        logger.warning("restart of %s failed: %s", unit, exc)
         return UnitResult(unit, False, str(exc)[:MAX_MESSAGE])
 
     if completed.returncode == 0:
