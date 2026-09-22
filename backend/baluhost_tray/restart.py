@@ -331,7 +331,18 @@ def restart_via_api(
             )
 
         if failed:
-            return RestartOutcome(False, "Nicht neu gestartet: " + ", ".join(failed))
+            # Beide Seiten nennen. Stand hier nur der Fehlschlag, las sich die
+            # Meldung als "gar nichts hat funktioniert" — genau so wurde sie
+            # bei der Abnahme verstanden, obwohl vier von fuenf Units liefen.
+            done = [u["name"] for u in units if u.get("success")]
+            lines = []
+            if done:
+                lines.append("Neu gestartet: " + ", ".join(done) + ".")
+            lines.append("Nicht neu gestartet: " + ", ".join(failed) + ".")
+            lines.append(
+                "Das Backend startet unabhaengig davon gleich ebenfalls neu."
+            )
+            return RestartOutcome(False, "\n".join(lines))
         return RestartOutcome(
             True,
             "Dienste neu gestartet. Das Backend startet gleich ebenfalls neu — "

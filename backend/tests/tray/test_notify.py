@@ -4,7 +4,13 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from baluhost_tray.notify import _APP_NAME, _TIMEOUT_MS, Notifier, NotifierUnavailable
+from baluhost_tray.notify import (
+    _APP_NAME,
+    _ICON_URI,
+    _TIMEOUT_MS,
+    Notifier,
+    NotifierUnavailable,
+)
 from baluhost_tray.state import PendingPopup
 
 
@@ -25,7 +31,7 @@ async def test_show_passes_title_and_message():
 
     assert result == 42
     assert notifier._iface.call_notify.await_args[0] == (
-        _APP_NAME, 0, "baluhost", "RAID", "degradiert", [], {}, _TIMEOUT_MS,
+        _APP_NAME, 0, _ICON_URI, "RAID", "degradiert", [], {}, _TIMEOUT_MS,
     )
 
 
@@ -49,3 +55,18 @@ async def test_connect_without_a_bus_raises_the_typed_error():
     notifier = Notifier()
     with pytest.raises(NotifierUnavailable):
         await notifier.connect(_bus_factory=lambda: (_ for _ in ()).throw(OSError("no bus")))
+
+
+def test_icon_is_a_file_uri_that_exists():
+    """`baluhost` gibt es in keinem Icon-Theme — Plasma zeichnete einen leeren Platzhalter.
+
+    Die PNGs liegen im Python-Paket und werden nie in ein Theme installiert, also
+    muss die Benachrichtigung den Pfad mitgeben statt einen Themennamen. Der Test
+    prueft beides: die Form (file://) und dass die Datei wirklich da ist — ein
+    URI auf eine fehlende Datei waere derselbe leere Platzhalter.
+    """
+    from pathlib import Path
+    from urllib.parse import unquote, urlparse
+
+    assert _ICON_URI.startswith("file://")
+    assert Path(unquote(urlparse(_ICON_URI).path)).is_file()
