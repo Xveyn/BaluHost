@@ -924,3 +924,27 @@ async def test_the_ten_minute_resync_also_delivers_what_it_catches_up():
 
     ctx.notifier.show.assert_awaited_once()
     assert ctx.notifier.show.await_args.args[0].notification_id == 42
+
+
+@pytest.mark.asyncio
+async def test_a_401_on_the_snapshot_reaches_the_refresh():
+    """Die Kette, die in Produktion fehlte — nicht nur ihr erstes Glied.
+
+    Am 2026-09-22 lief das Tray minutenlang im Sekundentakt in
+    "snapshot refused: 401", ohne einen einzigen Refresh-Versuch. Ein Test auf
+    watch.load_snapshot() allein haette das nicht gefangen: dort wird die
+    Ausnahme geworfen, aber ob sie durch run_cycle nach run_loop durchkommt
+    und dort den Refresh ausloest, entscheidet sich anderswo.
+
+    refresh_access wirft hier PairingLost, damit die Schleife endet statt
+    weiterzulaufen — der Aufruf selbst ist der Nachweis.
+    """
+    ctx = _ctx(frames=[])
+    ctx.session.client.return_value.get.return_value.status_code = 401
+    ctx.session.refresh_access.side_effect = PairingLost("Schluss")
+
+    await run_loop(ctx)
+
+    assert ctx.session.refresh_access.call_count == 1, (
+        "Der 401 des Abgleichs hat den Refresh nicht erreicht"
+    )
