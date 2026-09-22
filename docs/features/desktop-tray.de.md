@@ -6,8 +6,9 @@ Desktop-Benachrichtigung — ohne dass die Web-UI offen sein muss.
 
 Es ist ein eigenes Konsolenprogramm aus dem Python-Extra
 `baluhost-backend[tray]` und laeuft als **systemd-User-Unit** in der
-Desktop-Sitzung. Kein root, keine Systemdienst-Rechte: das Tray liest nur.
-Auf einer normalen Installation liegt es unter
+Desktop-Sitzung. Kein root, keine Systemdienst-Rechte fuer den Tray-Prozess
+selbst — einen Dienste-Neustart loest er nur an, siehe *Dienste neu starten*
+unten. Auf einer normalen Installation liegt es unter
 `/opt/baluhost/backend/.venv/bin/baluhost-tray`.
 
 ---
@@ -97,6 +98,7 @@ Rechtsklick auf das Symbol:
 | **BaluHost oeffnen** | Oeffnet die Web-UI im Standardbrowser |
 | **Eine Stunde stumm** | Haelt Popups eine Stunde zurueck (umschaltbar) |
 | **Geraete in der Web-UI** | Oeffnet die Geraeteseite — dort wird gekoppelt und widerrufen |
+| **BaluHost neu starten…** | Startet alle BaluHost-Dienste neu — fragt vorher nach |
 | **Beenden** | Beendet das Tray fuer diese Sitzung |
 
 Ein einfacher Linksklick auf das Symbol oeffnet ebenfalls die Web-UI.
@@ -104,6 +106,55 @@ Ein einfacher Linksklick auf das Symbol oeffnet ebenfalls die Web-UI.
 Der Menuepunkt heisst bewusst *„Geraete in der Web-UI"* und nicht *„Neu
 koppeln"*: er kann die Kopplung nicht selbst wiederherstellen, dafuer braucht
 es `/opt/baluhost/backend/.venv/bin/baluhost-tray --pair` auf der Konsole.
+
+---
+
+## Dienste neu starten
+
+Der Menuepunkt *„BaluHost neu starten…"* startet alle fuenf Units neu:
+`baluhost-scheduler`, `baluhost-monitoring`, `baluhost-webdav`,
+`baluhost-backend-local` und zuletzt `baluhost-backend`.
+
+**Laufende Auftraege werden dabei abgebrochen.** Der Scheduler markiert beim
+Start jede noch laufende Ausfuehrung als abgebrochen, laufende Uploads sterben
+mit dem Prozess. Der Dialog sagt das vorher.
+
+**Wenn das Backend antwortet** fragt ein Dialog nach dem BaluHost-Passwort des
+gekoppelten Kontos — bei aktivem 2FA nach einem Code. Das gekoppelte Token
+allein reicht fuer diesen Vorgang nicht: es liegt tagelang auf der Platte, und
+wer vor einem entsperrten Desktop sitzt, soll damit nicht den Dienst
+unterbrechen koennen. Danach startet das Backend die Units selbst; das Symbol
+wird kurz grau, waehrend das Backend selbst neu startet.
+
+Auf einer bereits installierten Box, die die sudoers-Zeile fuer
+`baluhost-backend-local` noch nicht kennt (ein normaler Deploy rendert
+`/etc/sudoers.d/baluhost-deploy` nicht neu — das braucht einen einmaligen
+manuellen Lauf von `install-deploy-sudoers.sh`), meldet die Antwort genau
+diese eine Unit als fehlgeschlagen, ohne dass etwas anderes daran scheitert.
+
+**Wenn das Backend nicht mehr antwortet** — genau der Fall, fuer den es den
+Menuepunkt gibt — fragt das Tray kurz nach und ruft dann `systemctl` direkt.
+Die Rechtefrage stellt dann das System: KDE zeigt seinen eigenen
+polkit-Dialog und will das **Linux-Passwort**. Ein BaluHost-Passwort waere in
+dem Moment ohnehin nicht pruefbar, die Datenbank ist mit dem Backend weg.
+
+**Voraussetzung dafuer:** Der Desktop-Nutzer muss in der Gruppe `sudo` sein —
+polkit nimmt sie laut `/usr/share/polkit-1/rules.d/50-default.rules` als
+Admin-Identitaet. Ist er es nicht, fragt der Dialog nach dem Passwort eines
+*anderen* Admins. Das ist kein Fehler, nur unerwartet.
+
+Ist das gekoppelte Konto nachweislich kein Admin, erscheint der Menuepunkt
+nicht. Konnte die Rolle beim Start nicht abgefragt werden — weil das Backend
+nicht antwortet —, ist er da; dann entscheidet ohnehin polkit. Die Rolle wird
+nur einmal beim Start ermittelt, nicht bei jedem Reconnect neu: eine Sitzung,
+die mit totem Backend beginnt, zeigt den Menuepunkt fuer ihre gesamte Dauer,
+auch nachdem das Backend laengst wieder erreichbar ist. Wer sicher gehen will,
+startet den Tray neu (`systemctl --user restart baluhost-tray`).
+
+Der Neustart ueber das Backend steht im Audit-Log. Der Notweg nicht: dort
+schreibt niemand mehr in die Datenbank. Die Spur liegt im Journal, wo polkitd
+die Freigabe samt Nutzer protokolliert. Die systemd-Zeile nennt keinen Urheber,
+und ein abgebrochener Dialog hinterlaesst gar nichts.
 
 ---
 

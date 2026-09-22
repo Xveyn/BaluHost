@@ -93,6 +93,23 @@ verify_mobile_device_token — Validates JWT + X-Device-ID header + device expir
   erfolgreiche **nicht**: das Tray fragt alle 30 Sekunden, ein Eintrag je
   Abfrage würde die Spur zuschütten statt eine zu sein. Durchgesetzt in
   `plugins/installed/steam_gaming/routes.py`.
+- `POST /api/system/restart-all` startet alle fünf BaluHost-Units neu. Dreifach
+  gegated: `get_current_admin`, `is_private_or_local_ip(request.client.host)`
+  und ein Step-up (`services/step_up.verify_step_up`) — Code bei aktivem 2FA,
+  sonst Passwort. **API-Keys werden abgelehnt** (`auth_method == "api_key"` →
+  403): ein Step-up soll Anwesenheit belegen, und ein Key-Aufrufer fiele in
+  `get_user_identifier` auf den IP-Schlüssel zurück und könnte das Rate-Limit
+  über beliebige Quell-IPs aufweichen. Ein gescheiterter Step-up antwortet 401
+  mit `{"error": "step_up_failed", "totp_required": …}`; die Unterscheidung zum
+  abgelaufenen Token ist Teil des Vertrags, der Client reagiert auf beides
+  anders. Rate-Limit `system_restart` (5/minute). Durchgesetzt in
+  `api/routes/system.py`.
+
+  **Was der Step-up nicht deckt:** `POST /api/system/restart` startet
+  `baluhost-backend` weiterhin allein mit dem Admin-Token, ohne zweiten
+  Nachweis und ohne LAN-Gate (Issue #699). Wer ein Tray-Token hat, erreicht die
+  Fähigkeit „Backend neu starten" also auch ohne Step-up. Geschützt ist der
+  *Sammel*neustart, nicht die Fähigkeit als solche.
 
 ### Password Policy (`schemas/auth.py:20-59`)
 - Length: 8-128 characters
@@ -241,8 +258,50 @@ close an alert, check whether that file already rules on it.
 7. **Token in localStorage** — XSS risk mitigated by CSP headers; HttpOnly cookies would require significant auth refactor
 8. **`change-password` uses raw `dict`** — `api/routes/auth.py:121` accepts `payload: dict` instead of Pydantic model, meaning new passwords bypass the `RegisterRequest` password strength validator
 9. **VPN encryption key empty default** — Validated at use-time in `VPNEncryption` methods, not at startup; fails loudly if missing
+10. **Der Tray-Notweg schreibt keinen Audit-Eintrag, und sein Rate-Limit ist
+    zurücksetzbar** — Zwei getrennte Einschränkungen desselben Features
+    (`docs/superpowers/specs/2026-09-22-tray-service-restart-design.md`):
+
+    *Audit:* Antwortet das Backend nicht, startet `baluhost_tray/restart.py`
+    die Units selbst über einen einzigen `systemctl restart`-Aufruf; systemd
+    fragt polkit (`org.freedesktop.systemd1.manage-units`, `auth_admin_keep`),
+    KDE zeigt den Dialog. Ein App-Audit ist dann unmöglich — die Datenbank ist
+    so unerreichbar wie die API. Im Journal steht die polkitd-Zeile mit Nutzer,
+    Aktion und Zeit; die systemd-Zeile nennt **keinen** Urheber, und ein
+    abgebrochener Dialog hinterlässt **gar nichts**. Ein Nachtrag-Endpunkt
+    wurde verworfen: ein vom Client behaupteter Audit-Eintrag ist schwächeres
+    Beweismaterial als die Zeile, die polkitd selbst geschrieben hat.
+
+    *Rate-Limit:* `system_restart` (5/minute) liegt im Prozessspeicher, gilt
+    also pro uvicorn-Worker (vier, ohne `ip_hash` im nginx-Upstream) — und der
+    Endpunkt startet genau diese Prozesse neu. Ein Angreifer mit Admin-Token
+    kann seine Zähler über `/api/system/restart` zurücksetzen und den Step-up
+    damit schneller raten, als die Zahl vermuten lässt. Belastbar wäre ein
+    persistenter Fehlversuchszähler am Konto (wie `pin_failed_attempts`); das
+    ist bewusst nicht gebaut.
+
+    Der Notweg braucht **kein** neues Recht: kein polkit-Policy-File, keine
+    sudoers-Zeile für den Desktop-Nutzer, `NoNewPrivileges=yes` bleibt.
+    `systemctl` eskaliert nichts im eigenen Prozess. **Wichtig:** Er muss ein
+    kurzlebiger Subprozess bleiben. Ein D-Bus-Aufruf von
+    `Manager.RestartUnit` aus dem langlebigen Tray-Prozess würde die
+    Autorisierung fünf Minuten an diesem Prozess halten, und `manage-units`
+    deckt auch `StartTransientUnit` ab — also beliebige Codeausführung als root.
+    Der API-Weg nutzt die bestehenden NOPASSWD-Einträge aus
+    `baluhost-deploy-sudoers` (in der Vorlage jetzt fünf statt vier Units).
+    Diese fünfte Zeile (`baluhost-backend-local`) erreicht eine bereits
+    installierte Box aber nicht von selbst: `ci-deploy.sh` kann
+    `/etc/sudoers.d/baluhost-deploy` nicht neu rendern — sie ist die eine
+    sudoers-Datei, deren Erlaubnis erst die anderen drei installiert —, und
+    `install-deploy-sudoers.sh` steht auch nicht in dessen
+    `SYNC_PERMISSIONS=1`-Liste. Bis ein Operator es einmalig von Hand ausführt,
+    bekommt `restart_unit("baluhost-backend-local")` `sudo: a password is
+    required` zurück — fail-closed und laut: die Antwort meldet diese Unit als
+    fehlgeschlagen, und der Companion-Kanal läuft mit altem Code weiter.
 
 Entry 10 ("SECURITY.md outdated") was removed on 2026-07-21: the file had already
 been rewritten, and its one remaining stale item — the supported-versions table —
 is now maintained by `scripts/bump_version.py` (#349). It was never a gap in the
-security posture, only in version metadata.
+security posture, only in version metadata. The number was reassigned on
+2026-09-22 to the tray-restart gap above — the two are unrelated entries, not
+a duplicate.

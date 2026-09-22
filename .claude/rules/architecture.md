@@ -91,6 +91,7 @@ All API routes are prefixed with `/api`:
 - `/api/files/*` - File operations
 - `/api/users/*` - User management (admin only)
 - `/api/system/*` - System info, RAID, SMART, telemetry
+- `/api/system/restart-all` - Sammelneustart aller BaluHost-Units (Admin, lokales Netz **und** Step-up, keine API-Keys — siehe `security-agent.md`)
 - `/api/logging/*` - Audit logs
 - `/api/shares/*` - File sharing
 - `/api/backup/*` - Backup/restore

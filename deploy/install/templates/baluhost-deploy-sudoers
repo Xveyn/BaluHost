@@ -7,6 +7,7 @@
 @@BALUHOST_USER@@ ALL=(root) NOPASSWD: /usr/bin/systemctl restart baluhost-monitoring
 @@BALUHOST_USER@@ ALL=(root) NOPASSWD: /usr/bin/systemctl reload nginx
 @@BALUHOST_USER@@ ALL=(root) NOPASSWD: /usr/bin/systemctl restart baluhost-webdav
+@@BALUHOST_USER@@ ALL=(root) NOPASSWD: /usr/bin/systemctl restart baluhost-backend-local
 @@BALUHOST_USER@@ ALL=(root) NOPASSWD: /usr/bin/systemctl status baluhost-*
 
 # Idempotent permission-grant scripts shipped with the repo.

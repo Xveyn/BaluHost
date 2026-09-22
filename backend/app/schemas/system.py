@@ -303,3 +303,35 @@ class AuditLoggingStatus(BaseModel):
 
 class AuditLoggingToggle(BaseModel):
     enabled: bool
+
+
+class SystemRestartAllRequest(BaseModel):
+    """Step-up für den Sammelneustart.
+
+    Beide Felder sind optional: welches gilt, entscheidet `totp_enabled` am
+    Konto. Ein leerer Body ist deshalb kein Validierungsfehler, sondern ein
+    gescheiterter Nachweis — ein Fehlerpfad statt zwei.
+    """
+
+    current_password: str | None = None
+    code: str | None = None
+
+
+class UnitRestartResult(BaseModel):
+    name: str
+    success: bool
+    message: str | None = None
+
+
+class SystemRestartAllResponse(BaseModel):
+    """`baluhost-backend` fehlt in `units` mit Absicht.
+
+    Sein Ergebnis ist zum Antwortzeitpunkt noch nicht bekannt — die Antwort
+    muss raus, bevor der Prozess stirbt. Ein Eintrag, der immer "geplant"
+    bedeutet, gehört nicht in dieselbe Liste wie echte Ergebnisse.
+    """
+
+    units: list[UnitRestartResult]
+    backend_restart_scheduled: bool
+    eta_seconds: int
+    initiated_by: str

@@ -50,6 +50,8 @@ Business logic layer. Routes delegate to services — services contain the actua
 | `nfs_service.py` | NFS share management (export config, mount lifecycle) |
 | `notification_routing.py` | Notification routing rules — maps event types to per-user delivery channels |
 | `pin_service.py` | Device PIN management (set, verify, clear) |
+| `step_up.py` | Second-factor re-verification (fresh TOTP code or backup code, else current password) before a service-interrupting action a valid token alone shouldn't cover — used by `restart-all`'s step-up |
+| `system_restart.py` | Restarts the five BaluHost systemd units via `sudo systemctl restart`, backend last (its own restart ends the calling process) |
 
 ### Service Subdirectories
 

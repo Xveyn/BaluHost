@@ -6,7 +6,8 @@ notifications — without the web UI having to be open.
 
 It is a separate console program from the Python extra
 `baluhost-backend[tray]` and runs as a **systemd user unit** inside the desktop
-session. No root, no system-service privileges: the tray only reads. On a
+session. No root, no system-service privileges for the tray process itself —
+it can only trigger a service restart, see *Restarting services* below. On a
 normal installation it lives at
 `/opt/baluhost/backend/.venv/bin/baluhost-tray`.
 
@@ -96,6 +97,7 @@ Right-click the icon:
 | **BaluHost oeffnen** | Opens the web UI in the default browser |
 | **Eine Stunde stumm** | Holds popups back for one hour (toggle) |
 | **Geraete in der Web-UI** | Opens the devices page — where you pair and revoke |
+| **BaluHost neu starten…** | Restarts all BaluHost services — asks first |
 | **Beenden** | Quits the tray for this session |
 
 A plain left-click on the icon also opens the web UI.
@@ -103,6 +105,56 @@ A plain left-click on the icon also opens the web UI.
 The menu entry is deliberately called *"Geraete in der Web-UI"* (devices in the
 web UI) and not *"Re-pair"*: it cannot restore the pairing by itself, that
 needs `/opt/baluhost/backend/.venv/bin/baluhost-tray --pair` on the console.
+
+---
+
+## Restarting services
+
+The *"BaluHost neu starten…"* (restart BaluHost) menu entry restarts all five
+units: `baluhost-scheduler`, `baluhost-monitoring`, `baluhost-webdav`,
+`baluhost-backend-local`, and last `baluhost-backend`.
+
+**Running jobs get cancelled.** The scheduler marks every still-running
+execution as cancelled as it starts up, and running uploads die with the
+process. The dialog says so beforehand.
+
+**While the backend answers**, a dialog asks for the paired account's BaluHost
+password — or a code, with 2FA on. The paired token alone is not enough for
+this: it sits on disk for days, and whoever is sitting at an unlocked desktop
+should not be able to interrupt the service with it. After that the backend
+restarts the units itself; the icon turns grey briefly while the backend
+restarts.
+
+On an already-installed box that does not yet know the sudoers line for
+`baluhost-backend-local` (a routine deploy does not re-render
+`/etc/sudoers.d/baluhost-deploy` — that needs a one-time manual run of
+`install-deploy-sudoers.sh`), the response reports exactly that one unit as
+failed, without anything else failing along with it.
+
+**When the backend no longer answers** — exactly the case this exists for —
+the tray asks for confirmation and then calls `systemctl` directly. The
+permission question is then asked by the system: KDE shows its own polkit
+dialog and wants the **Linux password**. A BaluHost password could not be
+checked at that point anyway — the database is gone along with the backend.
+
+**Prerequisite:** the desktop user must be in the `sudo` group — polkit treats
+it as the admin identity per
+`/usr/share/polkit-1/rules.d/50-default.rules`. If they are not, the dialog
+asks for a *different* admin's password instead. That is not a bug, just
+unexpected.
+
+If the paired account is provably not an admin, the menu entry does not
+appear. If the role could not be looked up at start — because the backend
+does not answer — it is there; polkit decides either way. The role is only
+determined once at start, not re-checked on every reconnect: a session that
+begins with a dead backend shows the menu entry for its whole duration, even
+once the backend is reachable again. To be sure, restart the tray
+(`systemctl --user restart baluhost-tray`).
+
+A restart through the backend is written to the audit log. The fallback is
+not: nobody writes to the database any more at that point. The trail lives in
+the journal, where polkitd logs the grant together with the user. The systemd
+line names no author, and a cancelled dialog leaves nothing at all.
 
 ---
 
