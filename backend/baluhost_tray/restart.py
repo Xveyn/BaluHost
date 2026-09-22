@@ -315,3 +315,60 @@ def restart_via_api(
             "Dienste neu gestartet. Das Backend startet gleich ebenfalls neu — "
             "das Symbol wird kurz grau.",
         )
+
+
+MAX_SECRET_ATTEMPTS = 3
+
+
+def restart_flow(
+    client,
+    prompt: Callable[[str], str | None],
+    probe: Callable[..., bool] = probe_api,
+    facts: Callable[..., AccountFacts] = fetch_account_facts,
+    api: Callable[..., RestartOutcome] = restart_via_api,
+    local: Callable[..., RestartOutcome] = restart_via_systemctl,
+    on_auth_expired: Callable[[], None] | None = None,
+) -> RestartOutcome:
+    """One click, start to finish. No Qt in here.
+
+    ``prompt(mode)`` returns what the user typed, or None if they cancelled.
+    Every collaborator is injected so the whole sequence is testable without a
+    backend, without systemd and without a display.
+    """
+    if not probe(client):
+        return _local_flow(prompt, local)
+
+    account = facts(client, on_auth_expired=on_auth_expired)
+    if account.is_admin is False:
+        return RestartOutcome(
+            False,
+            "Dieses Konto ist kein BaluHost-Admin. Neustart nicht möglich.",
+        )
+
+    totp = account.totp_enabled
+    for attempt in range(MAX_SECRET_ATTEMPTS):
+        mode = "totp" if totp else "password"
+        secret = prompt(mode if attempt == 0 else f"{mode}_retry")
+        if secret is None:
+            return RestartOutcome(False, "Abgebrochen.")
+
+        outcome = api(client, secret, totp, on_auth_expired=on_auth_expired)
+        if outcome.offer_local:
+            return _local_flow(prompt, local)
+        if not outcome.retry_secret:
+            return outcome
+        # Die Route weiss besser als der vorher geholte 2FA-Status, was sie
+        # erwartet — beim naechsten Versuch danach fragen.
+        totp = outcome.totp_required or totp
+
+    return RestartOutcome(False, "Passwort bzw. 2FA-Code dreimal falsch.")
+
+
+def _local_flow(
+    prompt: Callable[[str], str | None],
+    local: Callable[..., RestartOutcome],
+) -> RestartOutcome:
+    """Confirm, then hand over to systemd — polkit does the asking."""
+    if prompt("local") is None:
+        return RestartOutcome(False, "Abgebrochen.")
+    return local()
