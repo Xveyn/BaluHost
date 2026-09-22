@@ -3,6 +3,9 @@
 import logging
 from unittest.mock import MagicMock
 
+import pytest
+
+from baluhost_tray.session import AuthExpired
 from baluhost_tray.state import IconState, TrayState
 from baluhost_tray.watch import SEEN_IDS_LIMIT, SeenIds, Watcher, backoff_delays
 
@@ -478,3 +481,51 @@ def test_a_displaced_id_may_pop_a_second_time():
     _reply(session, [_row(1, "critical")])
 
     assert [p.notification_id for p in watcher.load_snapshot().popups] == [1]
+
+
+# --- Abgelaufenes Token beim Neuabgleich -----------------------------------
+#
+# Am 2026-09-22 auf der Produktionsmaschine beobachtet: das Tray lief im
+# Sekundentakt in "snapshot refused: 401", ueber Minuten, ohne einen einzigen
+# Refresh-Versuch. Grund: load_snapshot() rief den Client roh auf und behandelte
+# jeden Nicht-200-Status gleich. Nur session.ws_token() kennt 401 als
+# "Token abgelaufen" — und das wird nicht mehr aufgerufen, solange die
+# WebSocket-Verbindung steht. Das Tray kam also nie an die Stelle, die das
+# Token erneuert haette, und war bis zum naechsten Verbindungsabriss blind.
+
+
+def test_an_expired_token_on_the_snapshot_asks_for_a_refresh():
+    """401 heisst "Token abgelaufen", nicht "spaeter nochmal".
+
+    Der Unterschied ist nicht kosmetisch: `ok=False` laesst run_cycle den
+    Zyklus wiederholen, und mit demselben abgelaufenen Token scheitert er
+    wieder — endlos. AuthExpired ist der einzige Weg, der in run_loop den
+    Refresh ausloest.
+    """
+    session = MagicMock()
+    _reply(session, [], status=401)
+    watcher = Watcher(session, TrayState())
+
+    with pytest.raises(AuthExpired):
+        watcher.load_snapshot()
+
+
+def test_other_refusals_stay_temporary():
+    """Nur 401 bedeutet "Token". Ein 500 oder ein 429 darf keinen Refresh
+    ausloesen — das waere ein Weg, die ws-token-Quote leerzulaufen, von der
+    die Kopplung abhaengt."""
+    for status in (403, 429, 500, 502):
+        session = MagicMock()
+        _reply(session, [], status=status)
+        watcher = Watcher(session, TrayState())
+
+        assert watcher.load_snapshot().ok is False, status
+
+
+def test_the_snapshot_still_reports_transport_failures_as_not_ok():
+    """Der ok-Vertrag bleibt fuer alles ausser 401 unveraendert."""
+    session = MagicMock()
+    session.client.return_value.get.side_effect = RuntimeError("Netz weg")
+    watcher = Watcher(session, TrayState())
+
+    assert watcher.load_snapshot().ok is False

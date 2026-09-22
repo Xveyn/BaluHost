@@ -14,6 +14,7 @@ import random
 from collections import OrderedDict
 from dataclasses import dataclass, field
 
+from baluhost_tray.session import AuthExpired
 from baluhost_tray.state import PendingPopup, TrayState
 
 logger = logging.getLogger(__name__)
@@ -146,6 +147,29 @@ class Watcher:
         except Exception as exc:
             logger.warning("snapshot request failed: %s", exc)
             return SnapshotOutcome()
+
+        if response.status_code == 401:
+            # Abgelaufenes Access-Token, und das ist etwas anderes als ein
+            # voruebergehender Fehlschlag. `ok=False` laesst run_cycle den
+            # Zyklus mit demselben Token wiederholen — der naechste Abgleich
+            # bekommt wieder 401, und so weiter.
+            #
+            # Am 2026-09-22 in Produktion beobachtet: das Tray lief ueber
+            # Minuten im Sekundentakt in "snapshot refused: 401", ohne einen
+            # einzigen Refresh-Versuch. Bis dahin kannte nur session.ws_token()
+            # den 401 als "Token abgelaufen" — und der wird nicht mehr
+            # aufgerufen, solange die WebSocket-Verbindung steht, denn die
+            # authentifiziert sich nicht neu. Das Tray kam also gar nicht an
+            # die Stelle, die das Token erneuert haette, und blieb bis zum
+            # naechsten Verbindungsabriss auf einem eingefrorenen Stand
+            # stehen — samt ausgefallenem Nachreichen verpasster Popups, das
+            # ja genau an diesem Abgleich haengt.
+            #
+            # AuthExpired ist der Weg nach draussen: run_loop faengt es,
+            # erneuert das Token und beginnt einen neuen Zyklus. Nur 401 —
+            # ein 429 oder 500 hier zu refreshen wuerde die ws-token-Quote
+            # leerlaufen lassen, an der die Kopplung haengt.
+            raise AuthExpired("snapshot rejected the access token")
 
         if response.status_code != 200:
             # Never treat this as success: the loop would go on to claim
