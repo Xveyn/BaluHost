@@ -147,6 +147,9 @@ RATE_LIMITS = {
     # Benchmark operations - very strict (resource intensive)
     "admin_benchmark": "3/minute",
 
+    # System restart - very strict (accepts password, interrupts service)
+    "system_restart": "5/minute",  # nimmt ein Passwort entgegen (Step-up)
+
     # 2FA operations - strict limits for brute-force protection
     "auth_2fa_verify": "5/minute",
     "auth_2fa_setup": "5/minute",
