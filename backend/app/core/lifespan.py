@@ -13,6 +13,7 @@ import os
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from fastapi import FastAPI
 
@@ -27,6 +28,9 @@ from app.services.service_status import (
     _service_registry,
 )
 from app.services.ws_bus import build_bus
+
+if TYPE_CHECKING:
+    from app.services.websocket_manager import WebSocketManager
 
 logger = logging.getLogger(__name__)
 
@@ -95,7 +99,7 @@ async def _cancel_background_tasks() -> None:
     _BACKGROUND_TASKS.clear()
 
 
-async def _start_ws_bus(manager) -> None:
+async def _start_ws_bus(manager: "WebSocketManager") -> None:
     """Start the cross-process broadcast bus for this worker.
 
     Deliberately NOT behind IS_PRIMARY_WORKER: every worker holds its own
