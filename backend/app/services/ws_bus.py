@@ -47,6 +47,28 @@ VALID_KINDS = frozenset({"user", "admins", "all"})
 
 Deliver = Callable[["WsEnvelope"], Awaitable[None]]
 
+# Matches the password segment of a `scheme://user:password@host` DSN, same
+# shape core/database.py already redacts out of its startup log line.
+_DSN_PASSWORD_RE = re.compile(r"(://[^:/@\s]*:)[^@\s]*(@)")
+
+
+def _safe_reason(exc: BaseException) -> str:
+    """A logging-safe rendering of an exception raised by this module.
+
+    security-agent.md forbids logging secrets, "not even at DEBUG level", and
+    two kinds of secret can otherwise reach these logs: a listener connect
+    failure can echo the DSN verbatim, password included — psycopg2's
+    `invalid dsn: missing "="...` (see _libpq_dsn's docstring) carries the
+    whole attempted DSN — and a publish failure from SQLAlchemy appends
+    `[SQL: ...]` / `[parameters: (...)]` on their own line(s), where the
+    parameters are this module's own broadcast payload. Taking only the
+    first line already drops the parameters clause; the regex then redacts
+    a DSN password on that first line the same way core/database.py redacts
+    it from its own startup log.
+    """
+    first_line = str(exc).splitlines()[0] if str(exc) else ""
+    return _DSN_PASSWORD_RE.sub(r"\1***\2", first_line)
+
 
 @dataclass(frozen=True)
 class WsEnvelope:
@@ -272,7 +294,17 @@ class PostgresWsBus:
             loop = asyncio.get_running_loop()
             await loop.run_in_executor(self._executor, self._notify_sync, raw)
         except Exception as exc:
-            logger.warning("ws bus: publish of %s failed: %s", env.msg_type, exc)
+            # Not the raw exc: a SQLAlchemy DBAPIError's str() appends
+            # "[parameters: (...)]" with this envelope's own payload —
+            # logging it verbatim would put the broadcast's contents in the
+            # log. type(exc).__name__ plus _safe_reason() is enough to act
+            # on; the payload doesn't belong here.
+            logger.warning(
+                "ws bus: publish of %s failed: %s: %s",
+                env.msg_type,
+                type(exc).__name__,
+                _safe_reason(exc),
+            )
 
     def _notify_sync(self, raw: str) -> None:
         """Run pg_notify on a pooled connection. Called in a worker thread.
@@ -310,7 +342,15 @@ class PostgresWsBus:
         import psycopg2
         import psycopg2.extensions
 
-        conn = psycopg2.connect(dsn)
+        # connect_timeout: an unreachable server would otherwise park this
+        # to_thread call forever — no reconnect, no log line, indistinguishable
+        # from a healthy listener. keepalives: a silently dropped TCP
+        # connection (Postgres OOM-killed, a stateful firewall) never fires
+        # add_reader either, so the bus goes quiet with no warning; keepalive
+        # probes turn that into a detectable poll() failure instead.
+        conn = psycopg2.connect(
+            dsn, connect_timeout=10, keepalives=1, keepalives_idle=30
+        )
         conn.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT)
         return conn
 
@@ -332,14 +372,23 @@ class PostgresWsBus:
         try:
             conn = await asyncio.to_thread(self._connect_fn, self._dsn)
         except Exception as exc:
-            logger.warning("ws bus: listener connect failed: %s", exc)
+            # Not the raw exc: psycopg2's own "invalid dsn: ..." failure
+            # echoes the full DSN, password included (see _libpq_dsn).
+            logger.warning("ws bus: listener connect failed: %s", _safe_reason(exc))
             self._schedule_reconnect()
             return
 
         if self._stopping:
-            # stop() cannot cancel a connect already running in a worker
-            # thread, so the connection can land after shutdown. Close it here
-            # or it leaks a Postgres session for the rest of the process.
+            # Reached only when this particular call to _open() was not
+            # itself cancelled — the initial call from start(), or a race
+            # where _open() resumed just before stop() got to cancel it.
+            # When stop() instead cancels a live _reopen_after() task while
+            # it is parked in the await above, CancelledError fires at that
+            # await and this guard is never reached at all — the residual
+            # risk is an abandoned connection that this code never closes.
+            # psycopg2 closes it via its own destructor once nothing
+            # references it anymore; deliberately not architected away with
+            # a _pending_conn wrapper for what is only a shutdown path.
             self._close_conn(conn)
             return
 
@@ -445,7 +494,16 @@ class PostgresWsBus:
     def _schedule_reconnect(self) -> None:
         if self._stopping:
             return
-        delay = min(self._backoff_cap, self._backoff_base * (2 ** self._attempt))
+        # min(self._attempt, 16): min() evaluates both its arguments before
+        # comparing them, so it cannot protect against 2 ** self._attempt
+        # itself overflowing. Once self._attempt reaches ~1024, converting
+        # that int to a float for the multiplication raises OverflowError —
+        # uncaught, since nothing calls this from inside a try block — and no
+        # further reconnect is ever scheduled. Reachable after roughly 12.8
+        # hours of continuous connection failure (1s base, doubling). Capping
+        # the exponent at 16 keeps the value far past backoff_cap (which
+        # clamps it to 60s anyway) without ever approaching float's range.
+        delay = min(self._backoff_cap, self._backoff_base * (2 ** min(self._attempt, 16)))
         delay *= random.uniform(0.5, 1.0)  # jitter: don't stampede after a restart
         self._attempt += 1
         self._reconnect = asyncio.create_task(
@@ -489,7 +547,16 @@ class PostgresWsBus:
             pass
 
     async def stop(self) -> None:
-        """Stop listening. Publishing after this still works."""
+        """Stop listening and shut down the publish executor.
+
+        Cross-process publishing ends here, not just listening: the executor
+        backing publish()'s pg_notify calls is shut down, so every publish()
+        afterwards has run_in_executor raise "cannot schedule new futures
+        after shutdown" and logs a warning instead of reaching Postgres.
+        Local delivery keeps working — publish() calls self._deliver()
+        directly whenever self._connected is False, which it is from here on
+        — so this process's own clients still see its own broadcasts.
+        """
         self._stopping = True
         self._drop()
         tasks = [t for t in (self._consumer, self._reconnect) if t is not None]

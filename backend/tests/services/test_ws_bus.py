@@ -339,6 +339,47 @@ class TestPostgresWsBusPublish:
         assert seen == [env]
         assert len(engine.statements) == 1
 
+    async def test_publish_failure_does_not_log_the_payload(self, caplog):
+        """A SQLAlchemy DBAPIError's str() appends "[parameters: (...)]"
+        with this envelope's own payload on a later line — that must never
+        reach the log, only the exception type and its first line."""
+
+        secret_marker = "top-secret-payload-marker"
+
+        class BoomConn:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def exec_driver_sql(self, sql, params):
+                pass
+
+            def commit(self):
+                raise RuntimeError(
+                    "(psycopg2.OperationalError) boom\n"
+                    f"[SQL: SELECT pg_notify(%s, %s)]\n"
+                    f"[parameters: ('{CHANNEL}', '{{\"marker\": \"{secret_marker}\"}}')]"
+                )
+
+        class BoomEngine:
+            def connect(self):
+                return BoomConn()
+
+        bus = PostgresWsBus("postgresql://x", BoomEngine())
+
+        with caplog.at_level(logging.WARNING):
+            await bus.publish(
+                WsEnvelope(
+                    kind="all", msg_type="notification", payload={"marker": secret_marker}
+                )
+            )
+
+        assert secret_marker not in caplog.text
+        assert "RuntimeError" in caplog.text
+        assert "notification" in caplog.text
+
 
 @pytest.mark.asyncio
 class TestPostgresWsBusListener:
@@ -380,6 +421,43 @@ class TestPostgresWsBusListener:
         await bus.start(None)
         await bus.stop()
         assert opened == []
+
+    async def test_connect_failure_redacts_the_password_from_the_dsn(self, caplog):
+        """psycopg2's own "invalid dsn" failure echoes the DSN verbatim,
+        password included — the exact message _libpq_dsn's docstring quotes."""
+
+        def boom(dsn):
+            raise RuntimeError(
+                'invalid dsn: missing "=" after '
+                '"postgresql://sven:hunter2@host/db..."'
+            )
+
+        bus = PostgresWsBus(
+            "postgresql://sven:hunter2@host/db", FakeEngine(), connect_fn=boom
+        )
+        bus._backoff_base = 0.01
+
+        with caplog.at_level(logging.WARNING):
+            await bus.start(lambda env: _collect([], env))
+
+        assert "hunter2" not in caplog.text
+        assert "sven:***@" in caplog.text
+
+        await bus.stop()
+
+    async def test_schedule_reconnect_does_not_overflow_at_a_high_attempt_count(self):
+        """OverflowError here would silently stop scheduling reconnects
+        forever — the same silent, permanent outage _close_conn's docstring
+        warns about, just reached through the backoff math after roughly
+        12.8 hours of continuous connection failure instead of a stale fd."""
+        bus = PostgresWsBus("postgresql://x", FakeEngine())
+        bus._attempt = 5000
+
+        bus._schedule_reconnect()  # must not raise OverflowError
+
+        assert bus._reconnect is not None
+        bus._reconnect.cancel()
+        await asyncio.gather(bus._reconnect, return_exceptions=True)
 
     async def test_lost_connection_schedules_a_reconnect(self):
         first, second = FakeConn(), FakeConn()
@@ -434,7 +512,16 @@ class TestPostgresWsBusListener:
         await bus.stop()
 
     async def test_stop_during_a_pending_connect_closes_the_connection(self):
-        """to_thread cannot be cancelled: a late connection must not leak."""
+        """Covers the direct-call guard in _open(), not a real stop() cancel.
+
+        This drives _open() directly with _stopping pre-set; it does not
+        reproduce stop() cancelling a live _reopen_after() task. In that real
+        path, CancelledError fires at the `await to_thread(connect_fn)` itself
+        and this guard is never reached — see _open()'s comment. That
+        connection is left for psycopg2's own destructor to close once
+        nothing references it anymore, which is why this test only exercises
+        the one call site (start()) the guard actually protects.
+        """
         conn = FakeConn()
         bus = PostgresWsBus("postgresql://x", FakeEngine(), connect_fn=lambda dsn: conn)
 
@@ -442,7 +529,9 @@ class TestPostgresWsBusListener:
         await bus._open()
 
         assert conn.closed is True
-        assert bus._conn is None
+        # The guard fires before _listen() runs, so a connection that is
+        # about to be discarded never gets a wasted LISTEN issued on it.
+        assert conn.listened == []
 
 
 @pytest.mark.asyncio
