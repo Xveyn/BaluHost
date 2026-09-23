@@ -15,6 +15,8 @@
 - `file_activity.py` - File activity tracking
 - `desktop_pairing.py` - Desktop client pairing
 - `websocket_manager.py` - WebSocket connection management
+- `ws_bus.py` - Prozessübergreifender Broadcast-Bus (Postgres LISTEN/NOTIFY);
+  ein Listener je API-Prozess, Zustellung nur aus dem Listener (#685)
 
 ### Service submodules
 - `files/` - File operations, multi-mountpoint support, quota management

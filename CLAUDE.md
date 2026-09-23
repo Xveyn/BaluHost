@@ -86,6 +86,9 @@ client/
 **Geplanter Systemneustart**: `backend/app/services/power/scheduled_reboot.py` (Automat + Gates), `reboot_schedule.py` (Terminmathematik), `reboot_state.py` (Zustand über den Reboot hinweg); Design: `docs/superpowers/specs/2026-09-12-scheduled-system-reboot-design.md`
 **Setup wizard**: `backend/app/services/setup/`, `backend/app/api/routes/setup.py`
 **Marketplace index signing**: `backend/app/plugins/signing.py`, gate in `backend/app/services/plugin_marketplace.py:get_index()`
+**WebSocket-Broadcasts über Prozessgrenzen**: `backend/app/services/ws_bus.py`
+(Bus), `websocket_manager.py:deliver_local()` (Zustellung), Design:
+`docs/superpowers/specs/2026-09-23-ws-broadcast-bridge-design.md`
 
 Each major directory has its own CLAUDE.md with structure, conventions, and patterns specific to that area. **Keep these in sync when adding/removing files or changing patterns.**
 
