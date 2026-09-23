@@ -41,16 +41,21 @@ logger = logging.getLogger(__name__)
 # only run in one process to avoid conflicts.
 #
 # Detection strategy (in order):
-# 1. If BALUHOST_PRIMARY_WORKER is explicitly set to "0", this worker is
+# 1. A process on the local channel (baluhost-backend-local) is never primary.
+#    It sees a different /tmp than the PrivateTmp TCP unit, so the lock below
+#    cannot keep the two units apart (#685).
+# 2. If BALUHOST_PRIMARY_WORKER is explicitly set to "0", this worker is
 #    secondary (env-var override, useful for manual control).
-# 2. Otherwise, attempt to acquire an exclusive file lock on
+# 3. Otherwise, attempt to acquire an exclusive file lock on
 #    /tmp/baluhost-primary.lock.  The first worker to succeed becomes
 #    primary; the OS releases the lock automatically if the process dies,
 #    so another worker can take over.
-# 3. On Windows / dev-mode, the flock path is skipped and every process
+# 4. On Windows / dev-mode, the flock path is skipped and every process
 #    defaults to primary (single-worker is the norm there).
 # ---------------------------------------------------------------------------
 _primary_lock_fd = None  # kept open to hold the lock for the process lifetime
+# Kept as a module attribute so tests can redirect it; production never changes it.
+PRIMARY_LOCK_PATH = Path("/tmp/baluhost-primary.lock")
 
 IS_PRIMARY_WORKER = False  # Determined in _lifespan() after fork
 
@@ -137,6 +142,19 @@ def _try_become_primary() -> bool:
 
     Returns True if this process is now the primary worker.
     """
+    # The local channel never owns the hardware loops. Both units run the same
+    # app, but only baluhost-backend.service sets PrivateTmp=true — so each unit
+    # sees its own lock file and both used to elect a primary, running fan
+    # control, the power manager, the SMART collector and mDNS twice over.
+    #
+    # Gating on the channel rather than sharing one lock path under /run is
+    # deliberate: a shared lock would hand the role to whoever starts first, and
+    # that is the socket-activated local unit — precisely the process that
+    # should not have it. BALUHOST_CHANNEL=local is already set in that unit, so
+    # this needs no unit-template change (#689) and no operator step.
+    if settings.channel == "local":
+        return False
+
     # Explicit opt-out via env var
     env_val = os.environ.get("BALUHOST_PRIMARY_WORKER")
     if env_val == "0":
@@ -149,7 +167,7 @@ def _try_become_primary() -> bool:
         return True
 
     global _primary_lock_fd
-    lock_path = Path("/tmp/baluhost-primary.lock")
+    lock_path = PRIMARY_LOCK_PATH
 
     # Do NOT unlink before open — that creates a race where two workers
     # each unlink+create different inodes and both acquire the lock.
