@@ -6,15 +6,16 @@
 **Issue:** [#685](https://github.com/Xveyn/BaluHost/issues/685) — „WebSocket-Broadcasts
 erreichen nur einen von vier Uvicorn-Workern"
 **Umfang:** #685 plus drei beim Nachsehen gefundene Befunde, die mitbehoben
-werden (Doppel-Primary, fehlende Gesamtobergrenze für Verbindungen,
-Pool-Dimensionierung) — Begründung unter „Die Entscheidungen".
+werden (Doppel-Primary, fehlende Gesamtobergrenze für Verbindungen) sowie ein
+dritter, der nach Messung ausdrücklich **nicht** geändert wird
+(Pool-Dimensionierung) — Begründung unter „Die Entscheidungen".
 **Vorläufer:** `2026-09-21-desktop-tray-design.md` — das Tray ist der Verbraucher,
 für den dieser Mangel weh tut; die dortige Milderung bleibt bestehen.
 
 ## Problem
 
 `WebSocketManager` hält seine Verbindungen in einem prozesslokalen `dict`
-(`services/websocket_manager.py:37`) hinter einem Modul-Singleton (`:364`). Ein
+(`services/websocket_manager.py:38`) hinter einem Modul-Singleton (`:361`). Ein
 Broadcast erreicht damit nur die Sockets *seines* Prozesses. Eine Brücke zwischen
 den Prozessen gibt es nicht — alle Aufrufstellen arbeiten in-memory.
 
@@ -78,6 +79,7 @@ Prozess sie hängt.
 | Wer stellt zu? | Ausschließlich der Listener — publizieren stellt nie selbst zu |
 | Wer ist Primary? | Nur die Fernkanal-Unit; der lokale Kanal bewirbt sich nicht |
 | Was bindet die Verbindungszahl? | Eine Gesamtobergrenze je Prozess, zusätzlich zur Grenze je Nutzer |
+| Pool-Größe? | Unverändert — die Messung widerlegt die geplante Verkleinerung |
 | Wie wird der echte Pfad geprüft? | Fake-Bus im Unit-Test, echtes Postgres über ein Verifikationsskript |
 
 Die drei zunächst als Folgearbeiten notierten Befunde sind eingearbeitet, weil
@@ -135,10 +137,26 @@ Zwei Implementierungen hinter einem `Protocol` mit `publish(env)`,
 `start(deliver)` und `stop()`:
 
 **`PostgresWsBus`** — `publish()` serialisiert nach JSON und feuert
-`SELECT pg_notify('baluhost_ws', …)` über die bestehende SQLAlchemy-Engine,
-gekapselt in `asyncio.to_thread`: psycopg2 ist synchron und darf den Event-Loop
-nicht anhalten. Kein eigener Verbindungslebenszyklus für das Senden — der Pool
-kann das schon.
+`SELECT pg_notify('baluhost_ws', …)` über die bestehende SQLAlchemy-Engine.
+psycopg2 ist synchron und darf den Event-Loop nicht anhalten, also läuft das in
+einem Thread — aber **nicht** über `asyncio.to_thread`: dessen Default-Executor
+hat auf dieser Maschine 16 Threads, und 16 gleichzeitige Publishes würden 16
+Poolverbindungen ziehen. Stattdessen ein eigener `ThreadPoolExecutor` mit genau
+einem Worker. Der begrenzt den Pool-Verbrauch fürs Publizieren auf **eine**
+Verbindung je Prozess und serialisiert nebenbei die Reihenfolge — ohne ihn
+können `send_notification_state` und das darauf folgende `send_unread_count`
+vertauscht ankommen, weil die Zustellung am Commit hängt.
+
+**Neu am Vertrauensmodell, und es gehört benannt:** bisher hat der
+Broadcast-Pfad die Datenbank *nie* angefasst; jetzt kostet jeder Broadcast eine
+Poolverbindung und eine DB-Runde. Und jeder der sechs Prozesse empfängt
+**jeden** Umschlag, auch die für andere Nutzer, und filtert erst lokal in
+`deliver_local()`. Die Zielauswahl fällt damit von „Prozessgrenze **und**
+Filter" auf „nur Filter" — ein Fehler in `deliver_local()` wäre ein
+Cross-User-Leck statt eines prozesslokalen Fehlers. Deshalb sind dort beide
+Zweige fail-closed ausgelegt: ein unbekanntes `kind` wird verworfen statt an
+alle gesendet, und `admins_only` muss im Umschlag ein echter Boolean sein —
+ein fehlendes Feld gilt nicht als `False`.
 
 Der Listener ist eine **eigene** psycopg2-Verbindung *außerhalb* des Pools (eine
 gepoolte Verbindung müsste für immer ausgecheckt bleiben, was den Pool
@@ -154,7 +172,10 @@ unbegrenzte Menge Tasks erzeugen. Läuft die Queue (maxsize 1000) über, fällt 
 Dev-/SQLite-Pfad und derselbe Code, gegen den die Tests laufen.
 
 Auswahl per `DATABASE_URL.startswith("postgresql")` aus `core/database.py`,
-Singleton wie `get_websocket_manager()`.
+über eine Factory `build_bus()` — **kein** Singleton: den Lebenszyklus hält
+`lifespan._ws_bus`, und ein Prozess braucht genau einen Bus, den er selbst
+startet und stoppt. Ein Modul-Singleton hätte hier nur verdeckt, wer ihn
+besitzt.
 
 ### `WebSocketManager`: Senden und Zustellen trennen
 
@@ -174,8 +195,11 @@ schreiben. Künftig:
 - **Der Rückgabetyp wird `None`.** Heute liefern sie die Zahl erreichter Sockets.
   Der publizierende Prozess kann das nach der Umstellung nicht mehr wissen, und
   ein Wert, der in Produktion immer 0 wäre, ist eine Falle für den nächsten
-  Leser. Keine Aufrufstelle im App-Code nutzt ihn; elf Zusicherungen in
-  `tests/services/test_websocket_manager.py` prüfen künftig `deliver_local()`.
+  Leser. Keine Aufrufstelle im App-Code nutzt ihn. Zehn Zusicherungen in
+  `tests/services/test_websocket_manager.py` und **drei in
+  `tests/plugins/test_dashboard_panel.py`** prüfen künftig den Frame statt den
+  Zähler — die zweite Datei ist die, die man übersieht, weil sie nicht unter
+  `tests/services/` liegt.
 - `is_user_connected()`, `get_connection_count()` und
   `get_connected_user_ids()` bleiben, werden aber im Docstring als **lokale**
   Auskunft markiert: sie kennen nur die Verbindungen dieses Prozesses.
@@ -243,9 +267,10 @@ heute scheitert. Die `COUNT`-Abfrage für den Ungelesen-Zähler läuft damit
 unbedingt; sie hängt an einer Nutzeraktion, das ist bezahlbar.
 
 Alle übrigen Broadcast-Aufrufstellen bleiben unverändert — `service.py`,
-`events.py`, `dashboard_panel_bridge.py`, `lifespan.py` und
-`routes/notifications.py` rufen weiter dieselben Methoden mit denselben
-Argumenten.
+`events.py`, `dashboard_panel_bridge.py` und `lifespan.py` rufen weiter
+dieselben Methoden mit denselben Argumenten. (`routes/notifications.py` steht
+bewusst nicht in dieser Liste: die Datei ruft keine der fünf Methoden, sie
+schickt ihren Anfangs-Zähler direkt über `websocket.send_json`.)
 
 ## Mitbehoben: ein Primary Worker statt zwei
 
@@ -274,11 +299,33 @@ sagt ausdrücklich, dass HTTP-Routen „bei vier Workern meist auf einem Sekund�
 landen und deshalb ohne die Rolle funktionieren müssen. Der Tauri-Companion
 merkt von der Umstellung nichts.
 
-**Der Preis, benannt:** Ist die Fernkanal-Unit unten, ist niemand Primary — die
-Hardware-Schleifen ruhen, bis sie zurück ist (bei `systemctl restart` gut zehn
-Sekunden). Heute übernimmt in diesem Fenster die Local-Unit. Der Tausch ist
-gewollt: zehn Sekunden ohne Regelung sind harmlos, zwei Prozesse, die
-gleichzeitig PWM schreiben, sind es nicht.
+**Der Preis, benannt — und er ist größer als „zehn Sekunden":** Ist die
+Fernkanal-Unit unten, ist niemand Primary. Bei `systemctl restart` sind das gut
+zehn Sekunden (`Restart=always`, `RestartSec=10s`). Bei einer abstürzenden oder
+bewusst gestoppten Unit ist es **unbegrenzt**, denn die socket-aktivierte
+Local-Unit bleibt oben und meldet sich nicht mehr freiwillig. In diesem Fenster
+ruhen Lüfterregelung, Power-Enforcement samt `command_queue.run_poll_loop`,
+Sleep-Manager, der Reboot-Takt, beide Brücken, der Heartbeat-Schreiber und die
+Plugin-Hintergrundtasks.
+
+Konkret für den Companion: `POST /api/power/boost-now` und
+`PUT /api/power/authority` hängen an `require_local_admin`, sind also **nur**
+über die Local-Unit erreichbar. Auf einem Follower laufen sie über die
+Command-Queue (3 s Timeout), die der TCP-Primary bedient — im Normalbetrieb
+also weiterhin korrekt, bei toter TCP-Unit mit Timeout. Heute funktioniert es
+dort, weil die Local-Unit zufällig Primary ist.
+
+Der Tausch bleibt richtig, und der Grund ist größer als die doppelten Meldungen:
+`_schedule_check_loop` läuft heute in **beiden** Primaries, also können **zwei
+Prozesse unabhängig voneinander `systemctl reboot` armieren und auslösen** — die
+weiteste sudoers-Erlaubnis im Projekt (`ci-cd-security.md`, Known Gap 11). Die
+Änderung schließt eine Doppel-Reboot-Gefahr.
+
+Ein eigenes „kein Primary"-Signal wird bewusst **nicht** gebaut: der Zustand ist
+deckungsgleich mit „die TCP-Unit ist unten", und das ist bereits laut — Web-UI
+nicht erreichbar, Tray meldet Verbindungsfehler gegen `localhost:8000`. Wer es
+später explizit will, hat den Mechanismus schon: `service_heartbeats.updated_at`
+schreibt nur der Primary, alle 15 Sekunden.
 
 Folge für dieses Vorhaben: die im Issue-Umfeld gefundenen Doppelzeilen (vier in
 sieben Tagen) entstehen nicht mehr, und die Brücke verteilt keine Doppel-Popups.
@@ -302,23 +349,43 @@ eine Grenze, die er nicht durchsetzt. Künftig steht dort, dass sie je Prozess
 gilt, wie viele Prozesse es gibt, und dass die bindende Grenze die Gesamtzahl
 ist.
 
-## Mitbehoben: Pool-Dimensionierung
+## Mitbehoben: Pool-Dimensionierung — belegt statt verkleinert
 
-`DB_POOL_SIZE=10` und `DB_MAX_OVERFLOW=20` (`core/database.py:_get_pg_pool_config`)
-ergeben je Prozess bis zu 30 Verbindungen. Weder das Template `env.production`
-noch die installierte `.env.production` setzen diese Schlüssel — es gelten also
-die Code-Defaults, und sie gelten für jeden der sechs API-Prozesse plus die
-Worker-Skripte: rechnerisch über 180 gegen `max_connections=100`.
+Dieser Punkt hat sich im Review umgedreht, und das ist der Teil des Entwurfs,
+der am weitesten danebenlag.
 
-Neue Defaults: **`pool_size 5`, `max_overflow 5`**. Das ergibt im schlimmsten
-Fall 10 je Prozess, also 60 über sechs Prozesse, plus die sechs
-Listener-Verbindungen und die Worker-Skripte — mit Abstand unter 100.
-Gemessener Ist-Zustand: `pool_open_max` liegt bei 2–3 je Prozess
-(Concurrency-Log), 28 von 100 Verbindungen belegt. Der Kopfraum bleibt also
-groß, und weil die Schlüssel Umgebungsvariablen sind, ist eine Anhebung ohne
-Code-Änderung möglich, falls `pool_timeout` doch einmal zuschlägt.
+Der erste Entwurf wollte `DB_POOL_SIZE`/`DB_MAX_OVERFLOW` von `10 + 20` auf
+`5 + 5` senken, begründet mit „gemessen sind 2–3 Verbindungen je Prozess offen".
+Diese Zahl war ein Schnappschuss aus einer ruhigen Minute. Über **65.734
+Concurrency-Fenster** seit dem 2026-08-20 sieht es anders aus:
 
-Auch das ist code-only: die Defaults greifen, weil niemand sie überschreibt.
+| Kennzahl | Wert |
+|---|---|
+| `pool_in_use_max`, Spitze | **11** |
+| `pool_open_max`, Spitze | 10 |
+| `pool_saturation_events` | 0 |
+| Fenster mit ≥6 belegten Verbindungen | 84 |
+
+`5 + 5` ergibt eine Decke von 10 — **unter** der gemessenen Spitze von 11. Die
+elfte Anforderung wartet `pool_timeout=30` und wird dann zu HTTP 500 auf einer
+Nutzeranfrage; nach der Datenlage etwa monatlich, gehäuft in den Bursts, in
+denen die Box ohnehin lädt. Der „Fix" wäre eine Regression gewesen.
+
+Dazu war das Ziel gar nicht erreichbar. Die drei Worker-Skripte haben je eine
+eigene Engine, der theoretische Verbrauch ist also `6×Decke + 6 Listener +
+3×Decke` gegen 97 nutzbare Verbindungen (100 minus 3 für Superuser reserviert).
+Das trägt nur bei einer Decke von 10 — also unter der Spitze. **Die theoretische
+Schranke ist über Pool-Größen nicht zu halten.** Wer sie will, braucht ein
+höheres `max_connections` oder pgbouncer; beides ist ein Operator-Schritt mit
+DB-Neustart und gehört in ein eigenes Vorhaben.
+
+Und es wäre der schlechteste Zeitpunkt: dieser Entwurf führt mit `_notify_sync()`
+einen **neuen** Pool-Verbraucher ein.
+
+Also bleibt es bei `10 + 20`, und stattdessen kommt die Messung in den Docstring
+von `_get_pg_pool_config()`, damit die nächste Person sie nicht erneut rät. Das
+Abnahmekriterium wandert von „einmal `select count(*)`" zu „`pool_saturation_events`
+bleibt über eine Woche bei 0" — eine Momentaufnahme sagt über Spitzen nichts.
 
 ## Fehlerbehandlung
 
@@ -330,6 +397,8 @@ Auch das ist code-only: die Defaults greifen, weil niemand sie überschreibt.
 | Unbekanntes `kind` / kaputtes JSON auf dem Kanal | WARNING, verworfen |
 | Queue voll | ältestes Element heraus, WARNING |
 | Einzelner Socket wirft beim Senden | unverändert: Verbindung aufräumen, weiter |
+| Socket nimmt den Frame nicht ab | nach 5 s Timeout wie ein toter behandelt und aufgeräumt |
+| Listener-Verbindung bricht weg | abmelden über den **gemerkten** fd, neu verbinden mit Backoff; bis dahin stellt `publish()` lokal zu |
 
 Zum Größendeckel: `pg_notify` begrenzt die Nutzlast auf 8000 Byte, wir wachen bei
 7500. Gemessen an den heutigen Nachrichten ist das reichlich —
@@ -349,14 +418,14 @@ sie bleibt: wenn der Broadcast versagt, ist die DB-Zeile längst geschrieben.
   Unit-Templates.** `ci-deploy.sh` reicht zum Ausrollen. Das ist bewusst so
   gewählt: Unit-Templates erreichen eine installierte Box nicht von selbst
   (#689).
-- **Sechs zusätzliche dauerhafte Postgres-Verbindungen** (eine je API-Prozess).
-  Gemessen: 28 von 100 belegt, danach 34. Die neuen Pool-Defaults senken
-  gleichzeitig die theoretische Obergrenze von über 180 auf unter 70, die Summe
-  geht also nach unten, nicht nach oben.
-- **Alle drei mitbehobenen Punkte sind code-only.** Der Kanalvergleich nutzt ein
-  `Environment=`, das in der Local-Unit schon steht; die Pool-Defaults greifen,
-  weil `.env.production` sie nicht setzt; die Verbindungsobergrenze ist eine
-  Konstante. Kein Unit-Template, kein Operator-Schritt.
+- **Sechs zusätzliche dauerhafte Postgres-Verbindungen** (eine je API-Prozess,
+  außerhalb des Pools). Gemessen: 28 von 100 belegt, danach 34. Dazu **eine
+  gepoolte Verbindung je Prozess fürs Publizieren** — der Single-Thread-Executor
+  ist genau das, was sie auf eine begrenzt.
+- **Alle mitbehobenen Punkte sind code-only.** Der Kanalvergleich nutzt ein
+  `Environment=`, das in der Local-Unit schon steht; die Verbindungsobergrenze
+  ist eine Konstante; die Pool-Werte bleiben unverändert. Kein Unit-Template,
+  kein Operator-Schritt.
 - **Während des Deploys** starten die beiden Units nicht gleichzeitig. In diesem
   Fenster kann ein alter Prozess noch lokal-only publizieren, während ein neuer
   schon am Bus hängt. Effekt: einzelne Frames überqueren die Grenze nicht,
@@ -415,7 +484,15 @@ einem dritten Dienst macht. Postgres ist dieser Broker schon, mit Aufsicht.
 - Queue-Überlauf verwirft das älteste Element
 - Reconnect: nach simuliertem Verbindungsabriss wird neu verbunden und erneut
   `LISTEN` gesetzt; währenddessen stellt `publish()` lokal zu
-- SQLite/Dev: `get_ws_bus()` liefert `LocalWsBus`
+- Reconnect, der Teil, der wirklich zählt: der Reader wird **abgemeldet**. Die
+  Fake-Verbindung lässt `fileno()` nach dem Verlust werfen, so wie psycopg2 es
+  tut — sonst sieht der Test genau den Fehler nicht, der diese Klasse
+  dauerhaft verstummen lässt
+- `publish()` committet: ohne Commit stellt Postgres nichts zu, und das darf
+  nicht unbemerkt entfernt werden können
+- ein SQLAlchemy-DSN mit Treibersuffix (`postgresql+psycopg2://`) wird für
+  psycopg2 entschärft
+- SQLite/Dev: `build_bus()` liefert `LocalWsBus`
 - `tests/api/test_notification_fanout.py`: publiziert auch ohne lokale Verbindung
 
 **Für die drei mitbehobenen Punkte:**
@@ -428,12 +505,15 @@ einem dritten Dienst macht. Postgres ist dieser Broker schon, mit Aufsicht.
 - `tests/services/test_websocket_manager.py`: die 101. Verbindung eines Prozesses
   wird mit `ConnectionLimitExceeded` abgewiesen, auch wenn sie von einem Nutzer
   ohne eigene Verbindungen kommt; die Grenze je Nutzer bleibt bei 5 wirksam
-- `tests/core/test_database_pool_config.py`: Defaults sind 5/5 und die
-  Umgebungsvariablen überschreiben sie weiterhin
+- kein Test zur Pool-Größe: es gibt keine Verhaltensänderung zu prüfen, nur
+  einen Docstring mit den Messwerten
 
 **Echter Postgres-Pfad:** `scripts/debug/verify_ws_bus.py` startet zwei
-Prozesse gegen die echte Datenbank, publiziert in einem und bestätigt im anderen
-die Zustellung samt Laufzeit. Einmal auf der Produktionsbox gefahren, die
+Prozesse gegen die echte Datenbank und läuft in zwei Phasen: erst normale
+Zustellung samt Laufzeit, dann — und das ist die Phase, die zählt — tötet es
+die Sitzung des Listeners (`pg_terminate_backend` auf die selbst erzeugte pid)
+und publiziert erneut. Der Reconnect ist der Pfad, an dem diese Klasse bricht,
+und kein Unit-Test kann ihn sehen. Einmal auf der Produktionsbox gefahren, die
 Ausgabe kommt in den PR. CI fährt ausschließlich SQLite, also berührt dort kein
 Test den `LISTEN`-Pfad — das ist die bewusst in Kauf genommene Lücke, und das
 Skript ist ihr Gegengewicht.

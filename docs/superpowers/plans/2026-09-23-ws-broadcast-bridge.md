@@ -30,15 +30,18 @@
 | `backend/app/services/ws_bus.py` (neu) | Umschlag, Bus-Protocol, `LocalWsBus`, `PostgresWsBus`, `build_bus()` |
 | `backend/app/services/websocket_manager.py` | Umschlag bauen + publizieren; `deliver_local()` als einzige Stelle, die Sockets anfasst; Gesamtobergrenze |
 | `backend/app/core/lifespan.py` | Bus je Worker starten/stoppen; Primary-Wahl am Kanal |
-| `backend/app/core/database.py` | Pool-Defaults |
 | `backend/app/api/routes/_notification_fanout.py` | lokale Vorprüfung entfernen |
 | `backend/scripts/monitoring_worker.py`, `backend/scripts/scheduler_worker.py` | Loop binden, Bus im Publish-Modus |
 | `backend/scripts/debug/verify_ws_bus.py` (neu) | Verifikation gegen echtes Postgres |
 | `backend/tests/services/test_ws_bus.py` (neu) | Bus-Verhalten |
+| `backend/app/services/ws_bus_publisher.py` (neu) | Publish-Modus für die zwei emittierenden Worker-Skripte |
+| `backend/tests/services/test_ws_bus_publisher.py` (neu) | dito, inkl. Loop-im-Thread |
+| `backend/tests/core/test_lifespan_ws_bus.py` (neu) | Bus-Start je Worker |
 | `backend/tests/services/test_websocket_manager.py` | angepasst auf Publish/Deliver-Trennung + Gesamtobergrenze |
+| `backend/tests/plugins/test_dashboard_panel.py` | drei Zähler-Zusicherungen auf den Frame umgestellt (leicht zu übersehen) |
 | `backend/tests/core/test_primary_worker_channel.py` (neu) | Primary-Wahl am Kanal |
-| `backend/tests/core/test_database_pool_config.py` (neu) | Pool-Defaults |
-| `backend/app/services/CLAUDE.md`, `.claude/rules/architecture.md` | Dokumentation nachziehen |
+| `backend/app/core/database.py` | Docstring: die gemessene Pool-Auslastung, damit niemand sie erneut rät |
+| `backend/app/services/CLAUDE.md`, `backend/app/core/CLAUDE.md`, `.claude/rules/architecture.md`, `.claude/rules/security-agent.md`, `CLAUDE.md` | Dokumentation und Sicherheitsregel nachziehen |
 
 Reihenfolge der Tasks: 1–2 bauen das Fundament (Umschlag, Manager-Trennung) und sind ohne Postgres testbar; 3–4 hängen den echten Transport an; 5–9 sind je ein eigenständiger Fix; 10 schließt ab.
 
@@ -175,6 +178,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Optional, Protocol
 
@@ -184,6 +188,12 @@ logger = logging.getLogger(__name__)
 # parameterised — so this must stay a bare identifier and a module constant.
 # It is never derived from user input.
 CHANNEL = "baluhost_ws"
+
+# The invariant belongs next to the constant, not only in a test: LISTEN takes
+# an identifier and cannot be parameterised, so this name is interpolated into
+# SQL. Asserting the shape here makes a future rename that breaks it fail at
+# import instead of at runtime.
+assert re.fullmatch(r"[a-z_][a-z0-9_]*", CHANNEL), "CHANNEL must be a bare identifier"
 
 # pg_notify caps its payload at 8000 bytes. We watch below that and drop
 # anything larger with a warning rather than letting psycopg2 raise.
@@ -210,6 +220,17 @@ class WsEnvelope:
     payload: Any
     user_id: Optional[int] = None
     admins_only: bool = False
+
+    def __post_init__(self) -> None:
+        """Reject an unknown kind at construction, not at delivery.
+
+        deliver_local() dispatches on kind and its final branch is the
+        permissive one ("all"). A typo like kind="admin" would therefore reach
+        every socket. from_json() already validates, but envelopes are also
+        built directly in-process, and those paths deserve the same guard.
+        """
+        if self.kind not in VALID_KINDS:
+            raise ValueError(f"unknown envelope kind: {self.kind!r}")
 
     def to_json(self) -> str:
         """Serialise for the NOTIFY payload. Raises on unserialisable payloads."""
@@ -255,12 +276,25 @@ class WsEnvelope:
             logger.warning("ws bus: non-integer user_id %r dropped", user_id)
             return None
 
+        # admins_only must be an explicit bool, not a default. Every other check
+        # here fails closed; a `bool(data.get("admins_only", False))` would be
+        # the single field that fails OPEN — an envelope that parses but lost
+        # the flag would deliver an admin_only dashboard panel to every socket,
+        # which is exactly the leak the REST is_privileged() gate exists to
+        # prevent (plugins/CLAUDE.md: "Beides ist nötig").
+        admins_only = data.get("admins_only")
+        if not isinstance(admins_only, bool):
+            logger.warning(
+                "ws bus: %s envelope without a boolean admins_only dropped", msg_type
+            )
+            return None
+
         return WsEnvelope(
             kind=kind,
             msg_type=msg_type,
             payload=data.get("payload"),
             user_id=user_id,
-            admins_only=bool(data.get("admins_only", False)),
+            admins_only=admins_only,
         )
 
 
@@ -302,7 +336,7 @@ class LocalWsBus:
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `cd backend && python -m pytest tests/services/test_ws_bus.py -v`
-Expected: PASS (13 tests)
+Expected: PASS (12 tests)
 
 - [ ] **Step 5: Commit**
 
@@ -419,6 +453,15 @@ Add the import at the top of the module (no `Deliver` — it is unused here, and
 
 ```python
 from app.services.ws_bus import LocalWsBus, WsBus, WsEnvelope
+```
+
+And one new constant next to `MAX_CONNECTIONS_PER_USER`:
+
+```python
+# How long one socket may take a frame before it counts as dead. Delivery now
+# runs through a single bus consumer task, so an unbounded send would let one
+# client with a full TCP window freeze delivery for every user in this process.
+SEND_TIMEOUT_SECONDS = 5.0
 ```
 
 Replace the five send methods' bodies with envelope construction. `broadcast_to_user`:
@@ -539,8 +582,14 @@ Add `deliver_local()` as the single place that touches `_user_connections`:
                     (uid, self._user_connections.get(uid, []))
                     for uid in list(self._admin_users)
                 ]
-            else:  # "all"
+            elif env.kind == "all":
                 targets = list(self._user_connections.items())
+            else:
+                # Never the permissive branch by accident: "all" is named
+                # explicitly, and anything unrecognised is dropped rather than
+                # broadcast to every socket.
+                logger.warning("deliver_local: unknown kind %r, dropped", env.kind)
+                return 0
 
             for user_id, connections in targets:
                 disconnected = []
@@ -550,9 +599,16 @@ Add `deliver_local()` as the single place that touches `_user_connections`:
                     if env.kind == "all" and env.admins_only and not conn.is_admin:
                         continue
                     try:
-                        await conn.websocket.send_json(frame)
+                        # Bounded on purpose. A client that stops reading (full
+                        # TCP window) used to stall only its own caller; now it
+                        # would stall the single bus consumer while holding
+                        # self._lock, freezing delivery for every user in this
+                        # process and silently overflowing the queue.
+                        await asyncio.wait_for(
+                            conn.websocket.send_json(frame), timeout=SEND_TIMEOUT_SECONDS
+                        )
                         sent_count += 1
-                    except Exception as e:
+                    except (Exception, asyncio.TimeoutError) as e:
                         logger.warning(f"Failed to send to user {user_id}: {e}")
                         disconnected.append(conn)
 
@@ -566,6 +622,8 @@ Add `deliver_local()` as the single place that touches `_user_connections`:
 
         return sent_count
 ```
+
+One neighbouring comment becomes untrue with this change. `backend/app/services/notifications/events.py:639-641` says "There is no cycle to avoid — **websocket_manager imports nothing from app**". The conclusion still holds (verified: `ws_bus` loads only stdlib at module level and defers `app.core.database` into `build_bus()`), the premise does not. Amend it to "…imports only `app.services.ws_bus`, which loads nothing from `app` at module level".
 
 Mark the three local-only accessors in their docstrings — add this line to each of `is_user_connected`, `get_connection_count`, `get_connected_user_ids`:
 
@@ -772,15 +830,24 @@ class TestDeliverLocal:
         ws_plain.send_json.assert_not_called()
 ```
 
-- [ ] **Step 6: Run the full manager + bus tests**
+- [ ] **Step 6: Adapt the three count assertions in the dashboard panel tests**
 
-Run: `cd backend && python -m pytest tests/services/test_websocket_manager.py tests/services/test_ws_bus.py -v`
+These are the easiest ones to miss — they live under `tests/plugins/`, not `tests/services/`, and they call `broadcast_typed` on a real `WebSocketManager`. In `backend/tests/plugins/test_dashboard_panel.py`:
+
+- `:187` — delete `assert count == 1` and change line 176's `count = await manager.broadcast_typed(` to `await manager.broadcast_typed(`. The `mock_ws.send_json.assert_called_once_with({...})` right below it stays exactly as it is: `deliver_local` builds the same frame.
+- `:203` — delete `assert count == 0` and drop the `count = ` on line 195. The `assert manager.get_connection_count() == 0` below it is the real assertion and still holds.
+- `:627` — delete `assert count == 1` and drop the `count = ` on line 618. Keep `admin_ws.send_json.assert_called_once()` and `user_ws.send_json.assert_not_called()`.
+
+- [ ] **Step 7: Run the full manager + bus + panel tests**
+
+Run: `cd backend && python -m pytest tests/services/test_websocket_manager.py tests/services/test_ws_bus.py tests/plugins/test_dashboard_panel.py -v`
 Expected: PASS, no failures
 
-- [ ] **Step 7: Run everything that touches notifications**
+- [ ] **Step 8: Run everything that touches notifications**
 
-Run: `cd backend && python -m pytest tests/services/test_event_emitter_broadcast.py tests/api/test_notification_fanout.py tests/services -k "notification or websocket" -v`
-Expected: PASS. `test_event_emitter_broadcast.py` asserts on `await_args` of mocked manager methods, so it is unaffected by the return-type change — confirm that rather than assume it.
+Run: `cd backend && python -m pytest tests/services/test_event_emitter_broadcast.py tests/api/test_notification_fanout.py tests/services/test_notification_service.py -v`
+
+Expected: PASS. No `-k` filter here on purpose: `-k "notification or websocket"` matches module names too, and `test_event_emitter_broadcast` contains neither word — the filter would silently deselect the two tests that matter most (`test_without_a_loop_it_stays_silent_instead_of_raising`, `test_broadcast_failure_does_not_break_the_caller`). These files assert on `await_args` of mocked manager methods, so they should be unaffected by the return-type change — confirm that rather than assume it.
 
 - [ ] **Step 8: Commit**
 
@@ -820,7 +887,13 @@ class _Notify:
 
 
 class FakeConn:
-    """A psycopg2-shaped connection whose readable fd is a real pipe."""
+    """A psycopg2-shaped connection whose readable fd is a real pipe.
+
+    fileno() mimics the behaviour that matters most: psycopg2 raises
+    InterfaceError once the connection is broken or closed. A fake that keeps
+    returning the fd would hide the worst failure this class can have — a
+    listener that never wakes again after one reconnect.
+    """
 
     def __init__(self) -> None:
         self._r, self._w = os.pipe()
@@ -828,8 +901,11 @@ class FakeConn:
         self.closed = False
         self.listened: list[str] = []
         self.poll_raises: Exception | None = None
+        self.fileno_raises = False
 
     def fileno(self) -> int:
+        if self.fileno_raises or self.closed:
+            raise RuntimeError("connection already closed")
         return self._r
 
     def set_isolation_level(self, level) -> None:
@@ -865,6 +941,9 @@ class FakeConn:
 
     def poll(self) -> None:
         if self.poll_raises is not None:
+            # psycopg2 marks the connection closed when poll() fails, and
+            # fileno() raises from then on.
+            self.fileno_raises = True
             raise self.poll_raises
         try:
             os.read(self._r, 1)
@@ -877,6 +956,7 @@ class FakeEngine:
 
     def __init__(self) -> None:
         self.statements: list[tuple] = []
+        self.commits = 0
 
     def connect(self):
         engine = self
@@ -892,7 +972,7 @@ class FakeEngine:
                 engine.statements.append((sql, params))
 
             def commit(self_inner):
-                pass
+                engine.commits += 1
 
         return _Conn()
 
@@ -908,8 +988,18 @@ class TestPostgresWsBusPublish:
 
         sql, params = engine.statements[0]
         assert "pg_notify" in sql
+        assert isinstance(params, tuple), "a list raises ArgumentError in SQLAlchemy"
         assert params[0] == CHANNEL
         assert WsEnvelope.from_json(params[1]) == env
+
+    async def test_publish_commits(self):
+        """NOTIFY is delivered on commit. Without this, nothing ever arrives."""
+        engine = FakeEngine()
+        bus = PostgresWsBus("postgresql://x", engine)
+
+        await bus.publish(WsEnvelope(kind="all", msg_type="notification", payload={}))
+
+        assert engine.commits == 1
 
     async def test_oversized_payload_is_dropped_not_sent(self, caplog):
         engine = FakeEngine()
@@ -1017,25 +1107,72 @@ class TestPostgresWsBusListener:
         await bus.stop()
         assert seen == [env]
 
-    async def test_queue_overflow_drops_the_oldest(self, caplog):
+    async def test_lost_connection_unregisters_the_reader(self):
+        """The regression that would have silenced a worker permanently.
+
+        Reading conn.fileno() inside _close_conn() raises once the connection
+        is broken, remove_reader() is skipped, the next connection gets the
+        same fd back, and add_reader() then only swaps the callback without
+        arming the fd. The listener never wakes again — and _open() logs
+        "reconnected" while it happens.
+        """
         conn = FakeConn()
         bus = PostgresWsBus("postgresql://x", FakeEngine(), connect_fn=lambda dsn: conn)
-        blocked = asyncio.Event()
+        bus._backoff_base = 0.01
 
-        async def slow(env):
-            await blocked.wait()
+        await bus.start(lambda env: _collect([], env))
+        registered_fd = bus._fd
+        assert registered_fd is not None
 
-        await bus.start(slow)
-        with caplog.at_level(logging.WARNING):
-            for i in range(QUEUE_MAXSIZE + 5):
-                conn.deliver(
-                    WsEnvelope(kind="all", msg_type=f"m{i}", payload={}).to_json()
-                )
-            await asyncio.sleep(0.1)
+        loop = asyncio.get_running_loop()
+        conn.poll_raises = RuntimeError("server closed the connection")
+        conn.deliver("{}")
 
-        blocked.set()
+        assert bus._fd is None, "the cached fd must be cleared on loss"
+        assert not loop.remove_reader(registered_fd), (
+            "the reader was still registered — _close_conn did not unregister it"
+        )
         await bus.stop()
+
+    async def test_stop_during_a_pending_connect_closes_the_connection(self):
+        """to_thread cannot be cancelled: a late connection must not leak."""
+        conn = FakeConn()
+        bus = PostgresWsBus("postgresql://x", FakeEngine(), connect_fn=lambda dsn: conn)
+
+        bus._stopping = True
+        await bus._open()
+
+        assert conn.closed is True
+        assert bus._conn is None
+
+
+@pytest.mark.asyncio
+class TestQueueOverflow:
+    """Tested directly on _enqueue: driving it through the pipe would let one
+    reader callback drain everything in a single pass, which proves nothing
+    about what happens when the consumer falls behind."""
+
+    async def test_drops_the_oldest_not_the_newest(self, caplog):
+        bus = PostgresWsBus("postgresql://x", FakeEngine())
+        bus._queue = asyncio.Queue(maxsize=3)
+
+        first = WsEnvelope(kind="all", msg_type="oldest", payload={})
+        for msg_type in ("oldest", "b", "c"):
+            bus._enqueue(WsEnvelope(kind="all", msg_type=msg_type, payload={}))
+
+        with caplog.at_level(logging.WARNING):
+            bus._enqueue(WsEnvelope(kind="all", msg_type="newest", payload={}))
+
         assert "queue full" in caplog.text
+        assert bus._queue.qsize() == 3
+        remaining = [bus._queue.get_nowait().msg_type for _ in range(3)]
+        assert remaining == ["b", "c", "newest"], "the oldest must be the one dropped"
+        assert first.msg_type not in remaining
+
+    async def test_enqueue_without_a_queue_is_a_noop(self):
+        """Publish-only processes never create one."""
+        bus = PostgresWsBus("postgresql://x", FakeEngine())
+        bus._enqueue(WsEnvelope(kind="all", msg_type="m", payload={}))
 
 
 class TestBuildBus:
@@ -1046,7 +1183,23 @@ class TestBuildBus:
         assert isinstance(
             build_bus("postgresql://u:p@h/db", engine=FakeEngine()), PostgresWsBus
         )
+
+    def test_sqlalchemy_driver_suffix_is_stripped_for_psycopg2(self):
+        """psycopg2.connect() cannot parse postgresql+psycopg2:// and the
+        failure is silent — the listener never opens while publish keeps
+        working."""
+        from sqlalchemy import create_engine
+
+        engine = create_engine("postgresql+psycopg2://u:p@h/db")
+        bus = build_bus("postgresql+psycopg2://u:p@h/db", engine=engine)
+
+        assert isinstance(bus, PostgresWsBus)
+        assert "+psycopg2" not in bus._dsn
+        assert bus._dsn.startswith("postgresql://")
+        assert "p@h" in bus._dsn or ":p@" in bus._dsn, "the password must survive"
 ```
+
+`create_engine` on a Postgres URL does not connect, so this test needs no database.
 
 Add `import logging` to the test module's imports.
 
@@ -1087,14 +1240,25 @@ class PostgresWsBus:
         self._connect_fn = connect_fn or self._default_connect
         self._deliver: Optional[Deliver] = None
         self._conn: Any = None
+        # The listener's file descriptor, cached at add_reader() time. It must
+        # NOT be re-read with conn.fileno() later: by the time we unregister,
+        # the connection is usually already dead and fileno() raises
+        # InterfaceError. See _close_conn for what that costs.
+        self._fd: Optional[int] = None
         self._queue: "Optional[asyncio.Queue[WsEnvelope]]" = None
         self._consumer: "Optional[asyncio.Task[None]]" = None
         self._reconnect: "Optional[asyncio.Task[None]]" = None
         self._connected = False
         self._stopping = False
         self._attempt = 0
+        self._dropped = 0
         self._backoff_base = 1.0
         self._backoff_cap = 60.0
+        # One thread, on purpose — see publish(). Bounds this process's pooled
+        # connections for publishing to one, and keeps NOTIFY order.
+        self._executor = ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix="ws_bus_publish"
+        )
 
     # ---------------- publishing ----------------
 
@@ -1118,7 +1282,16 @@ class PostgresWsBus:
             )
             return
 
-        if not self._connected and self._deliver is not None:
+        # Read once: the listener can reconnect while this publish is in flight.
+        # A residual race remains and is accepted — if the reconnect completes
+        # between here and the NOTIFY landing, this envelope is delivered twice
+        # and a desktop popup appears twice. The window is the backoff delay
+        # (>=0.5s) against one executor round-trip, so it is narrow, and it only
+        # opens right after a reconnect. Closing it properly needs a generation
+        # counter compared after the publish; that is not worth the machinery
+        # for a duplicate popup that follows a visible reconnect in the log.
+        connected = self._connected
+        if not connected and self._deliver is not None:
             # Listener down: at least our own clients keep seeing our own work.
             try:
                 await self._deliver(env)
@@ -1126,12 +1299,36 @@ class PostgresWsBus:
                 logger.warning("ws bus: local fallback delivery failed: %s", exc)
 
         try:
-            await asyncio.to_thread(self._notify_sync, raw)
+            # NOT asyncio.to_thread: that uses the loop's default executor,
+            # which is min(32, cpu+4) = 16 threads on this box. Sixteen
+            # concurrent publishes would each check out a pooled connection —
+            # on top of request handling — and pg_notify is the one thing here
+            # that must not fan out. A single-worker executor bounds pool use
+            # to one connection per process and serialises publishes, which is
+            # also the only way the order of two publishes survives: _notify_sync
+            # commits, and NOTIFY is delivered on commit. Without it,
+            # fanout_state's "state then count" pair can arrive reversed.
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(self._executor, self._notify_sync, raw)
         except Exception as exc:
             logger.warning("ws bus: publish of %s failed: %s", env.msg_type, exc)
 
     def _notify_sync(self, raw: str) -> None:
-        """Run pg_notify on a pooled connection. Called in a worker thread."""
+        """Run pg_notify on a pooled connection. Called in a worker thread.
+
+        Three things here are load-bearing and were each verified against
+        PostgreSQL 17.11 with psycopg2 2.9.11:
+
+        - The params must be a TUPLE. A list raises `ArgumentError: List
+          argument must consist only of tuples or dictionaries`.
+        - `conn.commit()` is mandatory. SQLAlchemy's connect() opens a
+          transaction, the `with` exit rolls it back, and NOTIFY is delivered
+          on commit — without it nothing arrives at all.
+        - Every publish gets its own transaction, which matters more than it
+          looks: Postgres collapses identical (channel, payload) notifies
+          raised within ONE transaction into a single delivery. Batching
+          publishes into a shared transaction would silently drop duplicates.
+        """
         with self._engine.connect() as conn:
             conn.exec_driver_sql("SELECT pg_notify(%s, %s)", (CHANNEL, raw))
             conn.commit()
@@ -1168,8 +1365,25 @@ class PostgresWsBus:
             self._schedule_reconnect()
             return
 
+        if self._stopping:
+            # stop() cannot cancel a connect already running in a worker
+            # thread, so the connection can land after shutdown. Close it here
+            # or it leaks a Postgres session for the rest of the process.
+            self._close_conn(conn)
+            return
+
         try:
-            asyncio.get_running_loop().add_reader(conn.fileno(), self._on_readable)
+            fd = conn.fileno()
+            asyncio.get_running_loop().add_reader(fd, self._on_readable)
+            self._fd = fd
+        except NotImplementedError:
+            # Windows' Proactor loop has no add_reader. Unreachable in practice
+            # (dev runs SQLite and so gets LocalWsBus), but a Windows dev box
+            # pointed at Postgres would otherwise retry forever, one warning per
+            # attempt. Stay publish-only instead.
+            logger.warning("ws bus: this event loop cannot watch sockets, publish-only")
+            self._close_conn(conn)
+            return
         except Exception as exc:
             logger.warning("ws bus: cannot watch listener socket: %s", exc)
             self._close_conn(conn)
@@ -1196,11 +1410,19 @@ class PostgresWsBus:
             self._schedule_reconnect()
             return
 
+        # One poll() can surface a whole burst — measured: five pg_notify in one
+        # transaction arrive in a single poll(). After a long event-loop stall
+        # (this process has seen 128s of loop lag) the backlog lands here at
+        # once, so count the drops instead of logging one line per envelope.
+        burst = 0
         while conn.notifies:
             note = conn.notifies.pop(0)
             env = WsEnvelope.from_json(note.payload)
             if env is not None:
                 self._enqueue(env)
+                burst += 1
+        if burst > 50:
+            logger.info("ws bus: drained a burst of %d envelopes", burst)
 
     def _enqueue(self, env: WsEnvelope) -> None:
         queue = self._queue
@@ -1213,7 +1435,16 @@ class PostgresWsBus:
             pass
         try:
             dropped = queue.get_nowait()
-            logger.warning("ws bus: queue full, dropped oldest (%s)", dropped.msg_type)
+            self._dropped += 1
+            # Not one line per envelope: a backlog drains in a single poll(), so
+            # per-drop logging would bury the journal in exactly the situation
+            # where it needs to stay readable.
+            if self._dropped == 1 or self._dropped % 100 == 0:
+                logger.warning(
+                    "ws bus: queue full, dropped oldest (%s); %d dropped so far",
+                    dropped.msg_type,
+                    self._dropped,
+                )
         except asyncio.QueueEmpty:
             pass
         try:
@@ -1254,11 +1485,25 @@ class PostgresWsBus:
             self._close_conn(conn)
 
     def _close_conn(self, conn: Any) -> None:
-        """Unregister before closing — the fd is gone after close()."""
-        try:
-            asyncio.get_running_loop().remove_reader(conn.fileno())
-        except Exception:
-            pass
+        """Unregister the cached fd, then close.
+
+        The fd comes from self._fd, never from conn.fileno(): this runs after
+        poll() has already failed, and psycopg2 then raises InterfaceError from
+        fileno(). Skipping remove_reader() is not a cosmetic leak — it is a
+        silent, permanent outage. The stale selector entry survives close(),
+        the next connection gets the same fd back (the kernel hands out the
+        lowest free one), and add_reader() on an existing key with the same
+        event mask only swaps the callback without ever calling epoll_ctl. The
+        listener would then never wake again while the data sat in the socket,
+        and _open() would have logged "reconnected" — measured on both the
+        selector loop and uvloop.
+        """
+        if self._fd is not None:
+            try:
+                asyncio.get_running_loop().remove_reader(self._fd)
+            except Exception:
+                pass
+            self._fd = None
         try:
             conn.close()
         except Exception:
@@ -1275,6 +1520,9 @@ class PostgresWsBus:
             await asyncio.gather(*tasks, return_exceptions=True)
         self._consumer = None
         self._reconnect = None
+        # wait=False: a publish already inside _notify_sync may be waiting on
+        # pool_timeout, and shutdown must not block behind it.
+        self._executor.shutdown(wait=False)
 
 
 def build_bus(dsn: Optional[str] = None, engine: Any = None) -> WsBus:
@@ -1298,10 +1546,31 @@ def build_bus(dsn: Optional[str] = None, engine: Any = None) -> WsBus:
 
         engine = default_engine
 
-    return PostgresWsBus(dsn, engine)
+    return PostgresWsBus(_libpq_dsn(dsn, engine), engine)
+
+
+def _libpq_dsn(dsn: str, engine: Any) -> str:
+    """Strip the SQLAlchemy driver suffix so psycopg2.connect() can read it.
+
+    SQLAlchemy accepts `postgresql+psycopg2://…`; psycopg2 does not, and fails
+    with `invalid dsn: missing "=" after "postgresql+psycopg2://..."`. That
+    failure mode is the bad kind: the listener never opens, reconnects forever
+    in the 60s backoff, while publishing keeps working — a silently one-way bus
+    with no alarm. This box currently uses the plain `postgresql://` form, so
+    the guard is for the day someone writes the canonical one into .env.
+    """
+    if "+" not in dsn.split("://", 1)[0]:
+        return dsn
+    try:
+        return engine.url.set(drivername="postgresql").render_as_string(
+            hide_password=False
+        )
+    except Exception:  # pragma: no cover - engine without a parsed URL
+        scheme, rest = dsn.split("://", 1)
+        return f"{scheme.split('+', 1)[0]}://{rest}"
 ```
 
-Add to the module's imports: `import asyncio` and `import random`.
+Add to the module's imports: `import asyncio`, `import random`, and `from concurrent.futures import ThreadPoolExecutor`.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -1506,23 +1775,25 @@ git commit -m "feat(ws): Broadcast-Bus in jedem Worker starten und stoppen (#685
 
 - [ ] **Step 1: Write the failing test**
 
-In `backend/tests/api/test_notification_fanout.py`, the existing test at line 88 sets `ws_manager.is_user_connected.return_value = False` and asserts nothing is sent. That expectation is now wrong. Replace that test with:
+In `backend/tests/api/test_notification_fanout.py`, the existing test at line 88 sets `ws_manager.is_user_connected.return_value = False` and asserts nothing is sent. That expectation is now wrong. Replace that test with the following — note the `_patches(...)` context managers from `:25-35`: without them `fanout_state` reaches for the real singleton and the real notification service, and the assertions on the mock fail no matter how correct the implementation is.
 
 ```python
 @pytest.mark.asyncio
-async def test_publishes_even_without_a_local_connection(ws_manager, db_session):
+async def test_publishes_even_without_a_local_connection(ws_manager: MagicMock):
     """The user's client may hang in another process — six of them hold sockets.
 
     Before #685 this returned early, so the worker that handled the "read"
     never published and the tray in the neighbouring process kept its old
     count forever.
     """
-    ws_manager.is_user_connected = MagicMock(return_value=False)
+    ws_manager.is_user_connected.return_value = False
+    p1, p2 = _patches(ws_manager, _service(3))
 
-    await fanout_state(db_session, user_id=1, ids=[7], action="read", is_admin=False)
+    with p1, p2:
+        await fanout_state(MagicMock(), 1, [7], "read", is_admin=False)
 
     ws_manager.send_notification_state.assert_awaited_once_with(1, [7], "read")
-    ws_manager.send_unread_count.assert_awaited_once()
+    ws_manager.send_unread_count.assert_awaited_once_with(1, 3)
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -1597,6 +1868,26 @@ import pytest
 
 from app.services import ws_bus_publisher
 from app.services.ws_bus import WsEnvelope
+
+
+@pytest.fixture(autouse=True)
+def _restore_process_singletons():
+    """These helpers mutate two process-wide singletons on purpose.
+
+    Without restoring them, the manager keeps a RecordingBus and the event
+    emitter keeps a loop that this test already closed — harmless today, a
+    cross-test failure as soon as the suite runs under xdist or someone adds a
+    test that relies on either.
+    """
+    from app.services.notifications.events import get_event_emitter
+    from app.services.websocket_manager import get_websocket_manager
+
+    manager = get_websocket_manager()
+    emitter = get_event_emitter()
+    saved_bus, saved_loop = manager._bus, emitter._loop
+    yield
+    manager._bus = saved_bus
+    emitter._loop = saved_loop
 
 
 class RecordingBus:
@@ -1749,6 +2040,16 @@ Two things were missing for those to reach a client at all:
 
 So these processes get the bus in publish-only mode: no listener, no extra
 connection, just a way out (#685).
+
+Two limits worth knowing before debugging this:
+
+- In dev (SQLite) build_bus() returns a LocalWsBus, and start(None) leaves it
+  without a deliver callback — publish() is a no-op there. Unavoidable: these
+  processes hold no sockets, and in dev there is only one process anyway.
+- NotificationService._websocket_manager stays None here, so its async
+  _send_in_app/_broadcast_to_recipients paths do nothing. That does not matter:
+  both workers only ever use emit_*_sync, and EventEmitter._broadcast_sync
+  reaches for get_websocket_manager() directly.
 """
 
 from __future__ import annotations
@@ -1795,11 +2096,24 @@ class ThreadedBus:
     thread: threading.Thread
 
     def stop(self) -> None:
-        """Stop the loop and join its thread. Safe to call twice."""
+        """Stop the bus, then the loop, then join and close. Safe to call twice.
+
+        Order matters: stopping the loop first would cancel an in-flight publish
+        — including the worker's own shutdown notification — and would leave a
+        listener connection open if this ever runs with one.
+        """
         if not self.thread.is_alive():
             return
+        try:
+            asyncio.run_coroutine_threadsafe(self.bus.stop(), self.loop).result(timeout=5)
+        except Exception as exc:
+            logger.warning("WebSocket bus shutdown failed: %s", exc)
         self.loop.call_soon_threadsafe(self.loop.stop)
         self.thread.join(timeout=5)
+        try:
+            self.loop.close()
+        except Exception:
+            pass
 
 
 def start_publish_only_bus_threaded() -> Optional[ThreadedBus]:
@@ -1880,7 +2194,7 @@ And in the same function's existing `finally:` block, after the `worker.shutdown
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `cd backend && python -m pytest tests/services/test_ws_bus_publisher.py -v`
-Expected: PASS (4 tests)
+Expected: PASS (8 tests)
 
 - [ ] **Step 5: Verify both workers still import and start**
 
@@ -1917,7 +2231,14 @@ Production runs two systemd units of the same app. baluhost-backend sets
 PrivateTmp=true, baluhost-backend-local does not, so each unit sees a different
 /tmp/baluhost-primary.lock and BOTH elected a primary worker — confirmed live
 on 2026-09-23 (PID 1339281 and PID 1338770 both logged "Primary worker: True").
-Fan control, the power manager, the SMART collector and mDNS all ran twice.
+Fan control, the power manager, the SMART collector and mDNS all ran twice, and
+so did the scheduled-reboot tick, which means two processes could independently
+fire `systemctl reboot`.
+
+Note for anyone reading a failure here: tests/conftest.py:31 sets
+BALUHOST_CHANNEL=local for the whole suite, so after this change
+_try_become_primary() returns False by default everywhere. The tests below that
+need the production behaviour set settings.channel explicitly.
 """
 
 from pathlib import Path
@@ -2027,6 +2348,39 @@ def _try_become_primary() -> bool:
 ```
 
 Leave the rest of the function unchanged.
+
+**What this costs, stated plainly — it is more than the design first claimed.**
+`baluhost-backend.service` has `Restart=always`/`RestartSec=10s`, so a normal
+restart leaves the box without a primary for about ten seconds. But a
+crash-looping or deliberately stopped TCP unit leaves it without one
+**indefinitely**, because the socket-activated local unit stays up and no longer
+volunteers. During that window nothing runs the fan loop, the power manager's
+enforcement and `command_queue.run_poll_loop`, the sleep manager, the scheduled
+reboot tick, the SMART and panel bridges, the heartbeat writer, or plugin
+background tasks.
+
+Concretely for the Companion: `POST /api/power/boost-now` and
+`PUT /api/power/authority` sit behind `require_local_admin`, i.e. they are
+reachable **only** through the local unit. On a follower they go through the
+command queue with a 3-second timeout, which the TCP primary's poll loop serves.
+That works in normal operation and fails with a timeout while the TCP unit is
+down — where today it works, because the local unit happens to be primary.
+
+That trade is still right, and the reason is bigger than the duplicate
+notifications: `_schedule_check_loop` runs in *both* primaries today, so **two
+processes can independently arm and fire `systemctl reboot`** — the widest
+sudoers grant in this project (`ci-cd-security.md`, Known Gap 11). Task 7 closes
+a double-reboot hazard, and that alone justifies it.
+
+**No new health signal is built for this, deliberately.** The condition "no
+primary" is identical to "the TCP unit is down", and that is already loud: the
+web UI is unreachable, and the tray points at `http://localhost:8000`
+(`baluhost_tray/main.py:18`) so it reports connection failures. An extra
+"no primary elected" indicator would restate what two other surfaces already
+show. If the operator later wants it explicitly, the mechanism is already
+there — `service_heartbeats.updated_at` is written only by the primary every 15
+seconds, so "newest row older than 45 seconds" is the whole detector. That is a
+follow-up, not part of this work.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -2157,103 +2511,74 @@ git commit -m "fix(ws): Gesamtobergrenze für Verbindungen je Prozess einführen
 
 ---
 
-### Task 9: Pool-Defaults an die Prozesszahl anpassen
+### Task 9: Pool-Dimensionierung belegen statt verkleinern
 
 **Files:**
-- Modify: `backend/app/core/database.py:_get_pg_pool_config`
-- Test: `backend/tests/core/test_database_pool_config.py` (neu)
+- Modify: `backend/app/core/database.py:_get_pg_pool_config` (nur der Docstring)
+- Test: keiner — es gibt keine Verhaltensänderung zu testen
 
-**Interfaces:**
-- Consumes: nichts
-- Produces: unveränderte Signatur `_get_pg_pool_config() -> dict`
+Dieser Task hat sich im Review umgedreht. Der ursprüngliche Plan wollte die
+Defaults von `10 + 20` auf `5 + 5` senken. Die Messung sagt, dass das eine
+Regression wäre:
 
-- [ ] **Step 1: Write the failing test**
+| Kennzahl (65.734 Concurrency-Fenster seit 2026-08-20) | Wert |
+|---|---|
+| `pool_in_use_max`, Spitze | **11** |
+| `pool_open_max`, Spitze | 10 |
+| `pool_saturation_events` | 0 |
+| Fenster mit ≥6 belegten Verbindungen | 84 |
 
-Create `backend/tests/core/test_database_pool_config.py`:
+Eine Decke von 10 (= `5 + 5`) liegt **unter** der gemessenen Spitze von 11: die
+elfte Anforderung wartet `pool_timeout=30`, bekommt `TimeoutError` und wird zu
+HTTP 500 auf einer Nutzeranfrage. Nach der Datenlage etwa monatlich, gehäuft in
+genau den Bursts, in denen die Box ohnehin lädt. Die „2–3 je Prozess" aus dem
+ersten Entwurf waren ein Schnappschuss aus einer ruhigen Minute, kein Maximum.
 
-```python
-"""Pool defaults must fit six API processes into max_connections=100.
+Dazu kommt, dass das Ziel gar nicht erreichbar war: die drei Worker-Skripte
+haben je eine eigene Engine, der theoretische Verbrauch ist also
+`6×Decke + 6 Listener + 3×Decke` gegen 97 nutzbare Verbindungen (100 minus 3
+für Superuser reserviert). Das trägt nur bei einer Decke von 10 — also unter der
+gemessenen Spitze. Die theoretische Schranke ist über Pool-Größen nicht zu
+halten; dafür bräuchte es ein höheres `max_connections` oder pgbouncer, und das
+ist ein Operator-Schritt mit DB-Neustart und damit ein eigenes Vorhaben.
 
-Measured on the box on 2026-09-23: 28 of 100 connections in use, pool_open_max
-2-3 per process. The old defaults (10 + 20) allowed 30 per process, i.e. over
-180 in theory — more than the server accepts.
-"""
+Und es wäre ohnehin der schlechteste Zeitpunkt zum Verkleinern: Task 3 führt mit
+`_notify_sync()` einen **neuen** Pool-Verbraucher ein. Er ist durch den
+Single-Thread-Executor auf eine Verbindung je Prozess begrenzt, aber er ist neu.
 
-from app.core.database import _get_pg_pool_config
+- [ ] **Step 1: Die Messung dorthin schreiben, wo beim nächsten Mal gesucht wird**
 
-
-def test_defaults_fit_all_processes_under_max_connections(monkeypatch):
-    for key in ("DB_POOL_SIZE", "DB_MAX_OVERFLOW"):
-        monkeypatch.delenv(key, raising=False)
-
-    config = _get_pg_pool_config()
-    worst_case_per_process = config["pool_size"] + config["max_overflow"]
-
-    assert worst_case_per_process == 10
-    # Six API processes, plus one listener connection each, plus the three
-    # standalone workers — must stay clear of the server's 100.
-    assert worst_case_per_process * 6 + 6 + 10 < 100
-
-
-def test_environment_still_overrides_the_defaults(monkeypatch):
-    monkeypatch.setenv("DB_POOL_SIZE", "7")
-    monkeypatch.setenv("DB_MAX_OVERFLOW", "9")
-
-    config = _get_pg_pool_config()
-
-    assert config["pool_size"] == 7
-    assert config["max_overflow"] == 9
-
-
-def test_pre_ping_stays_on():
-    assert _get_pg_pool_config()["pool_pre_ping"] is True
-```
-
-- [ ] **Step 2: Run test to verify it fails**
-
-Run: `cd backend && python -m pytest tests/core/test_database_pool_config.py -v`
-Expected: FAIL — `assert 30 == 10`
-
-- [ ] **Step 3: Write minimal implementation**
-
-In `backend/app/core/database.py`:
+In `backend/app/core/database.py`, **nur** der Docstring — die Werte bleiben:
 
 ```python
 def _get_pg_pool_config() -> dict:
     """Get PostgreSQL connection pool configuration from environment.
 
-    The defaults are sized for the whole deployment, not for one process: six
-    API processes (four baluhost-backend workers plus two baluhost-backend-local
-    ones) and three standalone workers share one server with
-    max_connections=100. The former defaults of 10 + 20 allowed 30 per process,
-    over 180 in theory. Measured usage is 2-3 per process, so 5 + 5 leaves
-    ample headroom — and both values stay environment-tunable if pool_timeout
-    ever starts firing.
+    Sizing note, measured 2026-09-23 over 65,734 concurrency windows of
+    baluhost-backend: peak pool_in_use_max was 11, peak pool_open_max 10, and
+    pool_saturation_events stayed at 0 against the ceiling of 30 these values
+    give. Do not lower them without re-measuring — a ceiling of 10 would sit
+    *under* the observed peak and turn a burst into HTTP 500 after pool_timeout.
+
+    The theoretical worst case does exceed the server: nine processes (six API
+    workers plus three standalone workers, each with its own engine) times 30,
+    against max_connections=100. It has never been approached, and shrinking the
+    pool cannot fix it — the only real remedies are a higher max_connections or
+    pgbouncer. Publishing on the ws bus adds one pooled connection per process;
+    its single-worker executor is what bounds it to one.
     """
-    return {
-        "pool_size": int(os.getenv("DB_POOL_SIZE", "5")),
-        "max_overflow": int(os.getenv("DB_MAX_OVERFLOW", "5")),
-        "pool_timeout": int(os.getenv("DB_POOL_TIMEOUT", "30")),
-        "pool_recycle": int(os.getenv("DB_POOL_RECYCLE", "3600")),  # 1 hour
-        "pool_pre_ping": True,  # Verify connections before using
-        "echo": os.getenv("DB_ECHO", "false").lower() == "true",
-        "echo_pool": os.getenv("DB_ECHO_POOL", "false").lower() == "true"
-    }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [ ] **Step 2: Nichts kaputtgemacht?**
 
-Run: `cd backend && python -m pytest tests/core/test_database_pool_config.py -v`
-Expected: PASS (3 tests)
+Run: `cd backend && python -m pytest tests/core -q`
+Expected: PASS. Der Docstring ändert kein Verhalten; der Lauf belegt nur, dass die Datei heil ist.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 3: Commit**
 
-```bash
-git add backend/app/core/database.py backend/tests/core/test_database_pool_config.py
-git commit -m "fix(db): Pool-Defaults auf die tatsächliche Prozesszahl auslegen"
 ```
-
----
+commit -m "docs(db): Pool-Dimensionierung mit Messwerten belegen statt raten"
+```
 
 ### Task 10: Verifikationsskript, Doku, Gesamtlauf
 
@@ -2270,15 +2595,21 @@ Create `backend/scripts/debug/verify_ws_bus.py`:
 """Prove the cross-process bus works against the real database.
 
 CI runs SQLite only, so no test touches the LISTEN path. This script is that
-gap's counterweight: it starts a listener in a child process, publishes from
-the parent, and reports whether the envelope arrived and how long it took.
+gap's counterweight, in two phases:
+
+1. A listener in a child process receives an envelope published by the parent.
+2. The parent kills the listener's Postgres session and publishes again. This
+   is the phase worth having: the reconnect path is where this class fails, and
+   a unit test cannot see it, because a fake connection's fileno() does not
+   raise the way psycopg2's does once the connection is gone.
 
 Run on the box:
 
-    cd /opt/baluhost/backend
-    .venv/bin/python scripts/debug/verify_ws_bus.py
+    cd <worktree>/backend
+    /opt/baluhost/backend/.venv/bin/python scripts/debug/verify_ws_bus.py
 
-Exit code 0 means delivered, 1 means it did not arrive.
+It only ever kills the session it created itself, by pid. Exit code 0 means
+both phases delivered.
 """
 
 from __future__ import annotations
@@ -2315,8 +2646,12 @@ def _ensure_dsn() -> None:
             return
 
 
-def _listener(ready: multiprocessing.Event, got: multiprocessing.Queue) -> None:
-    """Child process: listen and report the first matching envelope."""
+def _listener(
+    ready: multiprocessing.Event,
+    got: multiprocessing.Queue,
+    pids: multiprocessing.Queue,
+) -> None:
+    """Child process: listen, report its backend pid and every matching envelope."""
 
     async def main() -> None:
         from app.services.ws_bus import build_bus
@@ -2327,19 +2662,37 @@ def _listener(ready: multiprocessing.Event, got: multiprocessing.Queue) -> None:
 
         bus = build_bus()
         await bus.start(deliver)
+        # The listener connection's server-side pid, so the parent can kill
+        # exactly this session and nothing else.
+        with bus._conn.cursor() as cur:
+            cur.execute("SELECT pg_backend_pid()")
+            pids.put(cur.fetchone()[0])
         ready.set()
-        await asyncio.sleep(TIMEOUT_SECONDS)
+        await asyncio.sleep(TIMEOUT_SECONDS * 3)
         await bus.stop()
 
     asyncio.run(main())
 
 
-async def _publish() -> None:
+def _terminate(pid: int) -> None:
+    """Kill one Postgres session — the listener's, by pid."""
+    from app.core.database import engine
+
+    with engine.connect() as conn:
+        conn.exec_driver_sql("SELECT pg_terminate_backend(%s)", (pid,))
+        conn.commit()
+
+
+async def _publish(phase: str) -> None:
     from app.services.ws_bus import WsEnvelope, build_bus
 
     bus = build_bus()
     await bus.publish(
-        WsEnvelope(kind="all", msg_type=MARKER, payload={"sent_at": time.time()})
+        WsEnvelope(
+            kind="all",
+            msg_type=MARKER,
+            payload={"phase": phase, "sent_at": time.time()},
+        )
     )
 
 
@@ -2353,6 +2706,10 @@ def main() -> int:
     # production working directory against a worktree checkout is exactly the
     # situation where a PASS could mean nothing.
     print(f"using {ws_bus_module.__file__}")
+    # Also name the database: /opt/baluhost/backend/.env holds a DIFFERENT DSN
+    # than .env.production, so a PASS against the wrong database would be
+    # indistinguishable otherwise.
+    print(f"database {DATABASE_URL.rsplit('@', 1)[-1]}")
 
     if not DATABASE_URL.startswith("postgresql"):
         print(f"FAIL: needs PostgreSQL, got {DATABASE_URL.split(':')[0]}")
@@ -2361,28 +2718,53 @@ def main() -> int:
     ctx = multiprocessing.get_context("spawn")
     ready = ctx.Event()
     got: multiprocessing.Queue = ctx.Queue()
-    child = ctx.Process(target=_listener, args=(ready, got), daemon=True)
+    pids: multiprocessing.Queue = ctx.Queue()
+    child = ctx.Process(target=_listener, args=(ready, got, pids), daemon=True)
     child.start()
 
-    if not ready.wait(timeout=TIMEOUT_SECONDS):
-        print("FAIL: listener process never became ready")
-        child.terminate()
-        return 1
-
-    started = time.perf_counter()
-    asyncio.run(_publish())
-
     try:
-        payload = got.get(timeout=TIMEOUT_SECONDS)
-    except Exception:
-        print("FAIL: envelope never arrived in the other process")
-        child.terminate()
-        return 1
+        if not ready.wait(timeout=TIMEOUT_SECONDS):
+            print("FAIL: listener process never became ready")
+            return 1
 
-    elapsed_ms = (time.perf_counter() - started) * 1000
-    print(f"PASS: delivered cross-process in {elapsed_ms:.1f} ms (payload={payload})")
-    child.terminate()
-    return 0
+        # ---- phase 1: does it work at all? ----
+        started = time.perf_counter()
+        asyncio.run(_publish("phase1"))
+        try:
+            payload = got.get(timeout=TIMEOUT_SECONDS)
+        except Exception:
+            print("FAIL phase 1: envelope never arrived in the other process")
+            return 1
+        print(
+            f"PASS phase 1: delivered cross-process in "
+            f"{(time.perf_counter() - started) * 1000:.1f} ms (payload={payload})"
+        )
+
+        # ---- phase 2: does it survive losing the connection? ----
+        # This is the phase that matters. A listener whose reader was not
+        # unregistered on loss reconnects, logs success, and never delivers
+        # again — and no unit test can see it, because a fake connection's
+        # fileno() does not raise the way psycopg2's does.
+        listener_pid = pids.get(timeout=TIMEOUT_SECONDS)
+        print(f"terminating the listener's backend pid {listener_pid} ...")
+        _terminate(listener_pid)
+
+        deadline = time.monotonic() + TIMEOUT_SECONDS * 2
+        while time.monotonic() < deadline:
+            asyncio.run(_publish("phase2"))
+            try:
+                payload = got.get(timeout=2.0)
+            except Exception:
+                continue
+            print(f"PASS phase 2: delivered again after reconnect (payload={payload})")
+            return 0
+
+        print("FAIL phase 2: nothing arrived after the connection was killed")
+        print("  -> the listener reconnected but its fd is not being watched")
+        return 1
+    finally:
+        child.terminate()
+        child.join(timeout=5)
 
 
 if __name__ == "__main__":
@@ -2408,21 +2790,21 @@ If it reports FAIL, do not proceed: check `journalctl` for `ws bus:` lines, conf
 
 - [ ] **Step 3: Update the documentation**
 
-In `backend/app/services/CLAUDE.md`, add to the top-level service list:
+`backend/app/services/CLAUDE.md:8-9` is a **table** (`| File | Purpose |`), not a bullet list. Add two rows, and amend the existing `websocket_manager.py` row at `:19`:
 
 ```markdown
-- `ws_bus.py` - Cross-process bus for WebSocket broadcasts over Postgres
-  LISTEN/NOTIFY. Every API process holds one listener connection outside the
-  pool; `WebSocketManager`'s five publish methods hand envelopes to it and
-  `deliver_local()` is the only code that writes to sockets. Before this, a
-  broadcast reached only the sockets of its own process — about one in four
-  clients (#685). Not durable by design: a client that is not connected when a
-  message is published does not get it later.
-- `ws_bus_publisher.py` - Publish-only wiring for `monitoring_worker` and
-  `scheduler_worker`, which emit notifications but hold no connections. Also
-  binds the event loop these processes never bound, without which
-  `emit_sync()` broadcasts were dropped before they reached the bus.
+| `websocket_manager.py` | WebSocket connections; publish methods build envelopes for `ws_bus`, `deliver_local()` is the only code that writes to sockets (#685) |
+| `ws_bus.py` | Cross-process broadcast bus over Postgres LISTEN/NOTIFY; one listener connection per API process, outside the pool. Not durable by design |
+| `ws_bus_publisher.py` | Publish-only bus wiring for `monitoring_worker` / `scheduler_worker` (no sockets there), plus the `set_event_loop()` call those processes never made |
 ```
+
+In `backend/app/core/CLAUDE.md:26`, the multi-worker line is now wrong — the channel decides before the lock does. Replace it with:
+
+```markdown
+- **Multi-worker**: Production runs 4 Uvicorn workers in `baluhost-backend` plus 2 in `baluhost-backend-local`. Only one process becomes primary: the local channel never volunteers (`settings.channel == "local"` → False), the rest race for the file lock in `/tmp/baluhost-primary.lock`. Hardware services (fans, power, mDNS, monitoring) only run on primary. Before #685 each unit had its own `PrivateTmp` view of that lock and **both** elected one, running every hardware loop twice
+```
+
+Also in `backend/app/core/CLAUDE.md:14`, the `lifespan.py` row gains `_start_ws_bus`/`_stop_ws_bus` (started in **every** worker, not just the primary) and `PRIMARY_LOCK_PATH`.
 
 In `.claude/rules/architecture.md`, add to the top-level services list:
 
@@ -2439,18 +2821,40 @@ In the root `CLAUDE.md`, add to "Quick Reference: Finding Things":
 `docs/superpowers/specs/2026-09-23-ws-broadcast-bridge-design.md`
 ```
 
+In `.claude/rules/security-agent.md`, extend the raw-SQL exception. The NEVER
+reads "Execute raw SQL with user-controlled input — ORM-only; sole exception:
+static query strings in `services/audit/admin_db.py`". That list is exhaustive,
+and `ws_bus.py` now interpolates an identifier into `LISTEN`, so leaving the rule
+untouched guarantees a future security review re-litigates it (and CodeQL's
+`py/sql-injection` flags f-strings in `execute`). Change it to:
+
+```markdown
+- Execute raw SQL with user-controlled input — ORM-only; sole exceptions: static
+  query strings in `services/audit/admin_db.py`, and `LISTEN`/`pg_notify` in
+  `services/ws_bus.py` (the channel name is a module constant asserted to be a
+  bare identifier at import; `LISTEN` cannot take a bind parameter, the payload
+  always does)
+```
+
 - [ ] **Step 4: Run the full backend suite**
 
 Run: `cd backend && python -m pytest -q --deselect tests/plugins/sandbox/test_phase3_e2e.py::test_e2e_storage_and_metrics_granted`
 
-Expected: no failures. The deselected test fails on this machine for a path-length reason unrelated to this work (#706). Compare the pass count against the pre-change baseline (1211 passed, 2 skipped, with the run stopping at that failure) and report the actual numbers — do not claim the suite is green without the output in front of you.
+Expected: no failures. The deselected test fails on this machine for a path-length reason unrelated to this work (#706).
 
-- [ ] **Step 5: Check the frontend is untouched by the wire format**
+**On comparing against a baseline:** the suite collects ~5941 tests. The figure "1211 passed" recorded before this work came from a `-x` run that stopped at the sandbox failure and is therefore **not** comparable to this command's output — do not treat a number near 5900 as an anomaly. If a baseline comparison is wanted, re-run this exact command on `origin/main` first and use that number. Either way: report the actual output, and do not claim the suite is green without it in front of you.
 
-The frame on the wire is unchanged (`{"type": ..., "payload": ...}`), so no client change is needed. Confirm rather than assume:
+- [ ] **Step 5: Confirm the client ignores the verification message type**
 
-Run: `cd client && npm run build`
-Expected: build succeeds. If any client code matched on something other than the top-level `type`, this is where it shows.
+No frontend change is needed — the frame on the wire is unchanged
+(`{"type": ..., "payload": ...}`). `npm run build` is **not** the way to confirm
+that: this worktree has no `client/node_modules`, so the build would fail for
+reasons unrelated to the change, and no frontend file is touched anyway.
+
+Instead read the message switch in `client/src/hooks/useNotificationSocket.ts`
+and confirm an unknown `type` (specifically `verify-ws-bus` from the
+verification script) falls through without throwing. That is the one frontend
+assumption this work actually makes.
 
 - [ ] **Step 6: Commit**
 
@@ -2472,9 +2876,17 @@ Diese drei Prüfungen gehören in die PR-Beschreibung, mit echter Ausgabe:
 2. **Ein Primary Worker.** `journalctl -u baluhost-backend-local --since "<Start>" | grep "Primary worker"`
    zeigt für alle Worker `False`; dieselbe Abfrage auf `baluhost-backend` zeigt
    genau ein `True`.
-3. **Verbindungen im Rahmen.** Nach einer Stunde Betrieb
-   `select count(*) from pg_stat_activity` — erwartet deutlich unter 50, vorher
-   28 ohne Bus.
+3. **Der neue Pool-Verbraucher tut nicht weh.** `pool_saturation_events` bleibt
+   über eine Woche bei 0 (`journalctl -u baluhost-backend | grep pool_saturation`).
+   Das ist das Kriterium, nicht ein einmaliges `select count(*) from
+   pg_stat_activity` — das zeigt nur einen Augenblick, und die Spitzen sind
+   genau das, was hier interessiert. Zum Vergleich: über 65.734 Fenster seit
+   dem 20.08. lag die Spitze bei 11 belegten Verbindungen je Prozess, bei 0
+   Sättigungen.
+4. **Der Reconnect hält.** `scripts/debug/verify_ws_bus.py` ein zweites Mal
+   fahren, diesmal gegen die deployte Version. Phase 2 tötet die
+   Listener-Sitzung und publiziert erneut — das ist der Pfad, den kein Unit-Test
+   sehen kann.
 
 ## Offene Punkte, die dieser Plan bewusst nicht schließt
 
