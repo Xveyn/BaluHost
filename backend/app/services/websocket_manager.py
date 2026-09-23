@@ -55,7 +55,7 @@ class WebSocketManager:
         self._admin_users: set[int] = set()
         # Lock for thread-safe operations
         self._lock = asyncio.Lock()
-        self._bus: "WsBus" = bus or LocalWsBus(self.deliver_local)
+        self._bus: "WsBus" = bus if bus is not None else LocalWsBus(self.deliver_local)
 
     def set_bus(self, bus: "WsBus") -> None:
         """Replace the transport. Called once at startup, before any publish."""
@@ -253,7 +253,7 @@ class WebSocketManager:
                 for conn in connections:
                     if env.kind == "admins" and not conn.is_admin:
                         continue
-                    if env.kind == "all" and env.admins_only and not conn.is_admin:
+                    if env.admins_only and not conn.is_admin:
                         continue
                     try:
                         # Bounded on purpose. A client that stops reading (full
@@ -265,7 +265,11 @@ class WebSocketManager:
                             conn.websocket.send_json(frame), timeout=SEND_TIMEOUT_SECONDS
                         )
                         sent_count += 1
-                    except (Exception, asyncio.TimeoutError) as e:
+                    except Exception as e:
+                        # A stuck socket counts as dead: on Python 3.11+,
+                        # asyncio.TimeoutError is an Exception subclass (via
+                        # OSError), so it is already caught here — no separate
+                        # branch needed.
                         logger.warning(f"Failed to send to user {user_id}: {e}")
                         disconnected.append(conn)
 

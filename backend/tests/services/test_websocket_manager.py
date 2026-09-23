@@ -1,5 +1,6 @@
 """Tests for services/websocket_manager.py — WebSocketManager with mock WebSockets."""
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -119,6 +120,7 @@ class TestBroadcastToAll:
 
     async def test_no_connections_is_a_noop(self, manager: WebSocketManager):
         await manager.broadcast_typed("some_event", {"event": "update"})
+        assert manager.get_connection_count() == 0
 
     async def test_caller_type_is_not_overwritten(self, manager: WebSocketManager):
         """The regression that made #511 possible: an envelope forced onto the caller."""
@@ -247,6 +249,7 @@ class TestSendNotificationState:
 
     async def test_no_connections_is_a_noop(self, manager: WebSocketManager):
         await manager.send_notification_state(99, [1], "read")
+        assert manager.get_connection_count() == 0
 
     async def test_drops_broken_connection(self, manager: WebSocketManager):
         ws = _make_ws(send_json_side_effect=RuntimeError("gone"))
@@ -320,3 +323,24 @@ class TestDeliverLocal:
 
         assert sent == 1
         ws_plain.send_json.assert_not_called()
+
+    async def test_send_timeout_counts_as_dead(self, manager: WebSocketManager, monkeypatch):
+        """A stuck client must not freeze the bus consumer forever (#685)."""
+        import app.services.websocket_manager as websocket_manager_module
+        from app.services.ws_bus import WsEnvelope
+
+        monkeypatch.setattr(websocket_manager_module, "SEND_TIMEOUT_SECONDS", 0.01)
+
+        async def _hang(_frame):
+            await asyncio.sleep(1)
+
+        ws = _make_ws()
+        ws.send_json = AsyncMock(side_effect=_hang)
+        await manager.connect(ws, user_id=1)
+
+        sent = await manager.deliver_local(
+            WsEnvelope(kind="user", msg_type="notification", payload={"a": 1}, user_id=1)
+        )
+
+        assert sent == 0
+        assert manager.get_connection_count(1) == 0
