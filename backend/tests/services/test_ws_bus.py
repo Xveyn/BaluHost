@@ -1,0 +1,86 @@
+"""Tests for services/ws_bus.py — envelope, local bus, Postgres bus."""
+
+import json
+
+import pytest
+
+from app.services.ws_bus import (
+    CHANNEL,
+    MAX_PAYLOAD_BYTES,
+    LocalWsBus,
+    WsEnvelope,
+)
+
+
+class TestEnvelope:
+    def test_round_trip_user(self):
+        env = WsEnvelope(kind="user", msg_type="notification", payload={"id": 7}, user_id=3)
+        assert WsEnvelope.from_json(env.to_json()) == env
+
+    def test_round_trip_all_with_admins_only(self):
+        env = WsEnvelope(
+            kind="all",
+            msg_type="dashboard_panel_update",
+            payload={"panel_type": "gauge"},
+            admins_only=True,
+        )
+        assert WsEnvelope.from_json(env.to_json()) == env
+
+    def test_round_trip_admins_keeps_user_id_none(self):
+        env = WsEnvelope(kind="admins", msg_type="notification", payload={"id": 1})
+        restored = WsEnvelope.from_json(env.to_json())
+        assert restored is not None
+        assert restored.user_id is None
+
+    def test_payload_may_be_a_list(self):
+        """smart_device_update sends a list, not a dict."""
+        env = WsEnvelope(kind="all", msg_type="smart_device_update", payload=[{"device_id": 9}])
+        assert WsEnvelope.from_json(env.to_json()) == env
+
+    def test_from_json_rejects_broken_json(self):
+        assert WsEnvelope.from_json("{not json") is None
+
+    def test_from_json_rejects_unknown_kind(self):
+        raw = json.dumps({"kind": "everyone", "msg_type": "notification", "payload": {}})
+        assert WsEnvelope.from_json(raw) is None
+
+    def test_from_json_rejects_missing_msg_type(self):
+        raw = json.dumps({"kind": "all", "payload": {}})
+        assert WsEnvelope.from_json(raw) is None
+
+    def test_channel_is_a_bare_identifier(self):
+        """It goes into LISTEN unquoted, so it must not need quoting."""
+        assert CHANNEL.replace("_", "").isalnum()
+
+    def test_payload_cap_leaves_headroom_below_pg_notify_limit(self):
+        assert MAX_PAYLOAD_BYTES < 8000
+
+
+@pytest.mark.asyncio
+class TestLocalWsBus:
+    async def test_publish_delivers_immediately(self):
+        seen: list[WsEnvelope] = []
+
+        async def deliver(env: WsEnvelope) -> None:
+            seen.append(env)
+
+        bus = LocalWsBus(deliver)
+        env = WsEnvelope(kind="admins", msg_type="notification", payload={"id": 1})
+        await bus.publish(env)
+        assert seen == [env]
+
+    async def test_publish_without_deliver_is_a_noop(self):
+        bus = LocalWsBus()
+        await bus.publish(WsEnvelope(kind="admins", msg_type="notification", payload={}))
+
+    async def test_start_sets_the_deliver_callback(self):
+        seen: list[WsEnvelope] = []
+        bus = LocalWsBus()
+        await bus.start(lambda env: _collect(seen, env))
+        await bus.publish(WsEnvelope(kind="all", msg_type="unread_count", payload={"count": 2}))
+        await bus.stop()
+        assert len(seen) == 1
+
+
+async def _collect(sink: list, env) -> None:
+    sink.append(env)
