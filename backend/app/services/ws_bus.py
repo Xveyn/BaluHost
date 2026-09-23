@@ -14,9 +14,12 @@ resync is the safety net.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
+import random
 import re
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Optional, Protocol
 
@@ -169,3 +172,378 @@ class LocalWsBus:
 
     async def stop(self) -> None:
         return None
+
+
+class PostgresWsBus:
+    """Cross-process bus over Postgres LISTEN/NOTIFY.
+
+    Publishing goes through the SQLAlchemy pool in a worker thread (psycopg2 is
+    synchronous and must not stall the event loop). Listening uses a dedicated
+    connection *outside* the pool — a pooled connection would have to stay
+    checked out forever, which would lie to the pool — registered on the event
+    loop via loop.add_reader.
+
+    Delivery happens only here, never in publish(): NOTIFY reaches every
+    session that ran LISTEN, including this process's own, so there is exactly
+    one path to a socket and no double delivery. The one exception is a
+    disconnected listener, where publish() also delivers locally — nothing is
+    replayed across that gap, so it cannot duplicate.
+    """
+
+    def __init__(
+        self,
+        dsn: str,
+        engine: Any,
+        connect_fn: Optional[Callable[[str], Any]] = None,
+    ) -> None:
+        self._dsn = dsn
+        self._engine = engine
+        self._connect_fn = connect_fn or self._default_connect
+        self._deliver: Optional[Deliver] = None
+        self._conn: Any = None
+        # The listener's file descriptor, cached at add_reader() time. It must
+        # NOT be re-read with conn.fileno() later: by the time we unregister,
+        # the connection is usually already dead and fileno() raises
+        # InterfaceError. See _close_conn for what that costs.
+        self._fd: Optional[int] = None
+        self._queue: "Optional[asyncio.Queue[WsEnvelope]]" = None
+        self._consumer: "Optional[asyncio.Task[None]]" = None
+        self._reconnect: "Optional[asyncio.Task[None]]" = None
+        self._connected = False
+        self._stopping = False
+        self._attempt = 0
+        self._dropped = 0
+        self._backoff_base = 1.0
+        self._backoff_cap = 60.0
+        # One thread, on purpose — see publish(). Bounds this process's pooled
+        # connections for publishing to one, and keeps NOTIFY order.
+        self._executor = ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix="ws_bus_publish"
+        )
+
+    # ---------------- publishing ----------------
+
+    async def publish(self, env: WsEnvelope) -> None:
+        """Send an envelope to every process. Never raises."""
+        try:
+            raw = env.to_json()
+        except (TypeError, ValueError) as exc:
+            logger.warning(
+                "ws bus: payload for %s is not serialisable, dropped: %s", env.msg_type, exc
+            )
+            return
+
+        size = len(raw.encode("utf-8"))
+        if size > MAX_PAYLOAD_BYTES:
+            logger.warning(
+                "ws bus: dropping %s — %d bytes exceed the %d byte pg_notify budget",
+                env.msg_type,
+                size,
+                MAX_PAYLOAD_BYTES,
+            )
+            return
+
+        # Read once: the listener can reconnect while this publish is in flight.
+        # A residual race remains and is accepted — if the reconnect completes
+        # between here and the NOTIFY landing, this envelope is delivered twice
+        # and a desktop popup appears twice. The window is the backoff delay
+        # (>=0.5s) against one executor round-trip, so it is narrow, and it only
+        # opens right after a reconnect. Closing it properly needs a generation
+        # counter compared after the publish; that is not worth the machinery
+        # for a duplicate popup that follows a visible reconnect in the log.
+        connected = self._connected
+        if not connected and self._deliver is not None:
+            # Listener down: at least our own clients keep seeing our own work.
+            try:
+                await self._deliver(env)
+            except Exception as exc:
+                logger.warning("ws bus: local fallback delivery failed: %s", exc)
+
+        try:
+            # NOT asyncio.to_thread: that uses the loop's default executor,
+            # which is min(32, cpu+4) = 16 threads on this box. Sixteen
+            # concurrent publishes would each check out a pooled connection —
+            # on top of request handling — and pg_notify is the one thing here
+            # that must not fan out. A single-worker executor bounds pool use
+            # to one connection per process and serialises publishes, which is
+            # also the only way the order of two publishes survives: _notify_sync
+            # commits, and NOTIFY is delivered on commit. Without it,
+            # fanout_state's "state then count" pair can arrive reversed.
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(self._executor, self._notify_sync, raw)
+        except Exception as exc:
+            logger.warning("ws bus: publish of %s failed: %s", env.msg_type, exc)
+
+    def _notify_sync(self, raw: str) -> None:
+        """Run pg_notify on a pooled connection. Called in a worker thread.
+
+        Three things here are load-bearing and were each verified against
+        PostgreSQL 17.11 with psycopg2 2.9.11:
+
+        - The params must be a TUPLE. A list raises `ArgumentError: List
+          argument must consist only of tuples or dictionaries`.
+        - `conn.commit()` is mandatory. SQLAlchemy's connect() opens a
+          transaction, the `with` exit rolls it back, and NOTIFY is delivered
+          on commit — without it nothing arrives at all.
+        - Every publish gets its own transaction, which matters more than it
+          looks: Postgres collapses identical (channel, payload) notifies
+          raised within ONE transaction into a single delivery. Batching
+          publishes into a shared transaction would silently drop duplicates.
+        """
+        with self._engine.connect() as conn:
+            conn.exec_driver_sql("SELECT pg_notify(%s, %s)", (CHANNEL, raw))
+            conn.commit()
+
+    # ---------------- listening ----------------
+
+    async def start(self, deliver: Optional[Deliver]) -> None:
+        """Begin listening, or stay publish-only when there is nowhere to deliver."""
+        self._deliver = deliver
+        if deliver is None:
+            logger.info("ws bus: publish-only, no listener in this process")
+            return
+        self._queue = asyncio.Queue(maxsize=QUEUE_MAXSIZE)
+        self._consumer = asyncio.create_task(self._consume(), name="ws_bus_consumer")
+        await self._open()
+
+    def _default_connect(self, dsn: str) -> Any:
+        import psycopg2
+        import psycopg2.extensions
+
+        conn = psycopg2.connect(dsn)
+        conn.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT)
+        return conn
+
+    def _listen(self, conn: Any) -> None:
+        """Issue LISTEN on a connection, whatever produced it.
+
+        Deliberately not part of connect_fn: connect_fn's job is only to hand
+        back a connection (real psycopg2, or a test double). LISTEN is the
+        bus's own protocol setup and must run the same way for every
+        connection, so it lives here instead of being duplicated into every
+        connect_fn implementation.
+        """
+        with conn.cursor() as cur:
+            # LISTEN takes an identifier, which cannot be parameterised. CHANNEL
+            # is a module constant and never user input — see its definition.
+            cur.execute(f"LISTEN {CHANNEL}")
+
+    async def _open(self) -> None:
+        try:
+            conn = await asyncio.to_thread(self._connect_fn, self._dsn)
+        except Exception as exc:
+            logger.warning("ws bus: listener connect failed: %s", exc)
+            self._schedule_reconnect()
+            return
+
+        if self._stopping:
+            # stop() cannot cancel a connect already running in a worker
+            # thread, so the connection can land after shutdown. Close it here
+            # or it leaks a Postgres session for the rest of the process.
+            self._close_conn(conn)
+            return
+
+        try:
+            await asyncio.to_thread(self._listen, conn)
+        except Exception as exc:
+            logger.warning("ws bus: LISTEN %s failed: %s", CHANNEL, exc)
+            self._close_conn(conn)
+            self._schedule_reconnect()
+            return
+
+        try:
+            fd = conn.fileno()
+            asyncio.get_running_loop().add_reader(fd, self._on_readable)
+            self._fd = fd
+        except NotImplementedError:
+            # Windows' Proactor loop has no add_reader. Unreachable in practice
+            # (dev runs SQLite and so gets LocalWsBus), but a Windows dev box
+            # pointed at Postgres would otherwise retry forever, one warning per
+            # attempt. Stay publish-only instead.
+            logger.warning("ws bus: this event loop cannot watch sockets, publish-only")
+            self._close_conn(conn)
+            return
+        except Exception as exc:
+            logger.warning("ws bus: cannot watch listener socket: %s", exc)
+            self._close_conn(conn)
+            self._schedule_reconnect()
+            return
+
+        self._conn = conn
+        self._connected = True
+        if self._attempt:
+            logger.info("ws bus: listener reconnected after %d attempt(s)", self._attempt)
+        else:
+            logger.info("ws bus: listening on %s", CHANNEL)
+        self._attempt = 0
+
+    def _on_readable(self) -> None:
+        conn = self._conn
+        if conn is None:
+            return
+        try:
+            conn.poll()
+        except Exception as exc:
+            logger.warning("ws bus: listener connection lost: %s", exc)
+            self._drop()
+            self._schedule_reconnect()
+            return
+
+        # One poll() can surface a whole burst — measured: five pg_notify in one
+        # transaction arrive in a single poll(). After a long event-loop stall
+        # (this process has seen 128s of loop lag) the backlog lands here at
+        # once, so count the drops instead of logging one line per envelope.
+        burst = 0
+        while conn.notifies:
+            note = conn.notifies.pop(0)
+            env = WsEnvelope.from_json(note.payload)
+            if env is not None:
+                self._enqueue(env)
+                burst += 1
+        if burst > 50:
+            logger.info("ws bus: drained a burst of %d envelopes", burst)
+
+    def _enqueue(self, env: WsEnvelope) -> None:
+        queue = self._queue
+        if queue is None:
+            return
+        try:
+            queue.put_nowait(env)
+            return
+        except asyncio.QueueFull:
+            pass
+        try:
+            dropped = queue.get_nowait()
+            self._dropped += 1
+            # Not one line per envelope: a backlog drains in a single poll(), so
+            # per-drop logging would bury the journal in exactly the situation
+            # where it needs to stay readable.
+            if self._dropped == 1 or self._dropped % 100 == 0:
+                logger.warning(
+                    "ws bus: queue full, dropped oldest (%s); %d dropped so far",
+                    dropped.msg_type,
+                    self._dropped,
+                )
+        except asyncio.QueueEmpty:
+            pass
+        try:
+            queue.put_nowait(env)
+        except asyncio.QueueFull:
+            logger.warning("ws bus: queue full, dropped %s", env.msg_type)
+
+    async def _consume(self) -> None:
+        assert self._queue is not None
+        while True:
+            env = await self._queue.get()
+            if self._deliver is None:
+                continue
+            try:
+                await self._deliver(env)
+            except Exception as exc:
+                logger.warning("ws bus: delivery of %s failed: %s", env.msg_type, exc)
+
+    def _schedule_reconnect(self) -> None:
+        if self._stopping:
+            return
+        delay = min(self._backoff_cap, self._backoff_base * (2 ** self._attempt))
+        delay *= random.uniform(0.5, 1.0)  # jitter: don't stampede after a restart
+        self._attempt += 1
+        self._reconnect = asyncio.create_task(
+            self._reopen_after(delay), name="ws_bus_reconnect"
+        )
+
+    async def _reopen_after(self, delay: float) -> None:
+        await asyncio.sleep(delay)
+        if not self._stopping:
+            await self._open()
+
+    def _drop(self) -> None:
+        conn, self._conn = self._conn, None
+        self._connected = False
+        if conn is not None:
+            self._close_conn(conn)
+
+    def _close_conn(self, conn: Any) -> None:
+        """Unregister the cached fd, then close.
+
+        The fd comes from self._fd, never from conn.fileno(): this runs after
+        poll() has already failed, and psycopg2 then raises InterfaceError from
+        fileno(). Skipping remove_reader() is not a cosmetic leak — it is a
+        silent, permanent outage. The stale selector entry survives close(),
+        the next connection gets the same fd back (the kernel hands out the
+        lowest free one), and add_reader() on an existing key with the same
+        event mask only swaps the callback without ever calling epoll_ctl. The
+        listener would then never wake again while the data sat in the socket,
+        and _open() would have logged "reconnected" — measured on both the
+        selector loop and uvloop.
+        """
+        if self._fd is not None:
+            try:
+                asyncio.get_running_loop().remove_reader(self._fd)
+            except Exception:
+                pass
+            self._fd = None
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+    async def stop(self) -> None:
+        """Stop listening. Publishing after this still works."""
+        self._stopping = True
+        self._drop()
+        tasks = [t for t in (self._consumer, self._reconnect) if t is not None]
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+        self._consumer = None
+        self._reconnect = None
+        # wait=False: a publish already inside _notify_sync may be waiting on
+        # pool_timeout, and shutdown must not block behind it.
+        self._executor.shutdown(wait=False)
+
+
+def build_bus(dsn: Optional[str] = None, engine: Any = None) -> WsBus:
+    """Pick the bus for this database.
+
+    Postgres gets the real cross-process bus; anything else (SQLite in dev and
+    in tests) gets the local one, where a single process holds every socket
+    anyway. The engine is only looked up for the Postgres path, so a SQLite
+    caller never drags the app engine into an import.
+    """
+    if dsn is None:
+        from app.core.database import DATABASE_URL
+
+        dsn = DATABASE_URL
+
+    if not dsn.startswith("postgresql"):
+        return LocalWsBus()
+
+    if engine is None:
+        from app.core.database import engine as default_engine
+
+        engine = default_engine
+
+    return PostgresWsBus(_libpq_dsn(dsn, engine), engine)
+
+
+def _libpq_dsn(dsn: str, engine: Any) -> str:
+    """Strip the SQLAlchemy driver suffix so psycopg2.connect() can read it.
+
+    SQLAlchemy accepts `postgresql+psycopg2://…`; psycopg2 does not, and fails
+    with `invalid dsn: missing "=" after "postgresql+psycopg2://..."`. That
+    failure mode is the bad kind: the listener never opens, reconnects forever
+    in the 60s backoff, while publishing keeps working — a silently one-way bus
+    with no alarm. This box currently uses the plain `postgresql://` form, so
+    the guard is for the day someone writes the canonical one into .env.
+    """
+    if "+" not in dsn.split("://", 1)[0]:
+        return dsn
+    try:
+        return engine.url.set(drivername="postgresql").render_as_string(
+            hide_password=False
+        )
+    except Exception:  # pragma: no cover - engine without a parsed URL
+        scheme, rest = dsn.split("://", 1)
+        return f"{scheme.split('+', 1)[0]}://{rest}"
