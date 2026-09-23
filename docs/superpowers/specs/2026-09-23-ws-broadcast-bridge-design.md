@@ -5,6 +5,9 @@
 **Basis:** `main` @ `ab51f7c4`
 **Issue:** [#685](https://github.com/Xveyn/BaluHost/issues/685) — „WebSocket-Broadcasts
 erreichen nur einen von vier Uvicorn-Workern"
+**Umfang:** #685 plus drei beim Nachsehen gefundene Befunde, die mitbehoben
+werden (Doppel-Primary, fehlende Gesamtobergrenze für Verbindungen,
+Pool-Dimensionierung) — Begründung unter „Die Entscheidungen".
 **Vorläufer:** `2026-09-21-desktop-tray-design.md` — das Tray ist der Verbraucher,
 für den dieser Mangel weh tut; die dortige Milderung bleibt bestehen.
 
@@ -58,30 +61,31 @@ Prozess sie hängt.
   Live-Zustand, der sich in 1–3 s erneuert; für kritische Meldungen ist der
   REST-Neuabgleich des Trays das Netz. Eine Outbox-Tabelle wurde dafür erwogen
   und verworfen (siehe „Verworfene Wege").
-- **Den Doppel-Primary beheben.** Eigener Befund, eigenes Issue. Er erzeugt echte
-  Doppelzeilen, aber selten: in der Produktions-DB über sieben Tage **vier**
-  Zeilen (zwei Ereignisse, beide „Temperatur erhöht: gpu:edge"), gegenüber 362
-  Meldungen insgesamt. Die weit häufigeren Paare aus `user_id=NULL` und
-  `user_id=2` sind der normale Fan-out an Admins plus geroutete Nutzer, keine
-  Doppelung. **Nebenwirkung, die benannt sein muss:** mit der Brücke werden diese
-  zwei Ereignisse pro Woche als zwei Popups sichtbar statt als eines. Die
-  doppelten Zeilen stehen heute schon in der Web-UI-Liste.
-- **`MAX_CONNECTIONS_PER_USER` prozessübergreifend durchsetzen.** Die Obergrenze
-  von 5 gilt je Prozess, effektiv also 6×. Eigener Befund, eigenes Issue.
-- **Die Pool-Dimensionierung anfassen.** `pool_size 10 + max_overflow 20` je
-  Prozess ergibt rechnerisch 180 mögliche Verbindungen gegen `max_connections=100`.
-  Real sind 2–3 je Prozess offen (`pool_open_max` im Concurrency-Log), aktuell 28
-  von 100 belegt. Notiert, nicht angefasst.
+- **Eine prozessübergreifende Obergrenze *je Nutzer*.** Die wäre nur mit
+  gemeinsamem Zustand zu haben — Tabelle plus Migration plus Aufräumen der
+  Zeilen abgestürzter Worker, oder Advisory Locks an der Listener-Verbindung.
+  Beides steht in keinem Verhältnis zum Risiko. Stattdessen kommt die Grenze,
+  die heute völlig fehlt: eine Gesamtobergrenze je Prozess (siehe „Mitbehoben:
+  eine Obergrenze, die wirklich bindet").
 - **Ein zweiter Dienst für den Notification-WebSocket.** Siehe „Verworfene Wege".
 
-## Die vier Entscheidungen
+## Die Entscheidungen
 
 | Frage | Entscheidung |
 |---|---|
 | Transport | `pg_notify` mit der Nachricht in der Nutzlast |
 | Wer hört zu? | Jeder API-Prozess, **nicht** hinter `IS_PRIMARY_WORKER` |
 | Wer stellt zu? | Ausschließlich der Listener — publizieren stellt nie selbst zu |
+| Wer ist Primary? | Nur die Fernkanal-Unit; der lokale Kanal bewirbt sich nicht |
+| Was bindet die Verbindungszahl? | Eine Gesamtobergrenze je Prozess, zusätzlich zur Grenze je Nutzer |
 | Wie wird der echte Pfad geprüft? | Fake-Bus im Unit-Test, echtes Postgres über ein Verifikationsskript |
+
+Die drei zunächst als Folgearbeiten notierten Befunde sind eingearbeitet, weil
+zwei davon code-only zu beheben sind und der erste mit der Brücke zusammenhängt:
+ohne ihn würde die Brücke die doppelten Meldungen des Doppel-Primary erst sichtbar
+machen (zwei Popups je Ereignis), wo sie heute halb von der Worker-Isolation
+verdeckt sind. Die Brücke allein wäre also eine Verbesserung mit einer neuen
+Verschlechterung im Gepäck.
 
 ## Architektur
 
@@ -243,6 +247,79 @@ Alle übrigen Broadcast-Aufrufstellen bleiben unverändert — `service.py`,
 `routes/notifications.py` rufen weiter dieselben Methoden mit denselben
 Argumenten.
 
+## Mitbehoben: ein Primary Worker statt zwei
+
+`_try_become_primary()` (`core/lifespan.py:96`) gibt **False** zurück, sobald
+`settings.channel == "local"`. Der lokale Kanal bewirbt sich damit nie um die
+Rolle; Eigentümer der Hardware-Schleifen ist immer die Fernkanal-Unit.
+
+Warum so und nicht über den Lock-Pfad: `BALUHOST_CHANNEL=local` steht schon im
+`Environment=` der Local-Unit und ist am laufenden System belegt
+(`systemctl show baluhost-backend-local -p Environment`). Die Änderung ist damit
+**code-only** — kein neuer Lock-Pfad unter `/run/baluhost/`, keine Änderung an
+einem Unit-Template und deshalb kein einmaliger Operator-Schritt, der eine
+installierte Box sonst nicht erreichen würde (#689). Sie ist außerdem
+*deterministisch*: ein gemeinsamer Lock würde die Rolle demjenigen geben, der
+zuerst startet — und das ist die socket-aktivierte Local-Unit.
+
+Was dadurch in der Local-Unit aufhört: Fan-Control-Regelschleife,
+Power-Manager, GPU-Power, SMART-Collector, mDNS-Ankündigung,
+Plugin-Hintergrundtasks, der Reconcile-Takt und die beiden Bridge-Loops. Genau
+das ist der Zweck — jedes davon lief bisher doppelt.
+
+**Was dadurch nicht aufhört:** die API-Routen des lokalen Kanals. Die
+`IS_PRIMARY_WORKER`-Gates in `fan_control.py` schützen Schreibwege und die
+Wiederherstellungslogik, nicht das Lesen; der Kommentar an `fan_control.py:442`
+sagt ausdrücklich, dass HTTP-Routen „bei vier Workern meist auf einem Sekundär"
+landen und deshalb ohne die Rolle funktionieren müssen. Der Tauri-Companion
+merkt von der Umstellung nichts.
+
+**Der Preis, benannt:** Ist die Fernkanal-Unit unten, ist niemand Primary — die
+Hardware-Schleifen ruhen, bis sie zurück ist (bei `systemctl restart` gut zehn
+Sekunden). Heute übernimmt in diesem Fenster die Local-Unit. Der Tausch ist
+gewollt: zehn Sekunden ohne Regelung sind harmlos, zwei Prozesse, die
+gleichzeitig PWM schreiben, sind es nicht.
+
+Folge für dieses Vorhaben: die im Issue-Umfeld gefundenen Doppelzeilen (vier in
+sieben Tagen) entstehen nicht mehr, und die Brücke verteilt keine Doppel-Popups.
+
+## Mitbehoben: eine Obergrenze, die wirklich bindet
+
+`MAX_CONNECTIONS_PER_USER = 5` (`services/websocket_manager.py:17`) gilt je
+Prozess, effektiv also bis zu 30 Verbindungen für einen Nutzer. Das ist nicht
+das eigentliche Loch. Das eigentliche Loch ist: **es gibt überhaupt keine
+Gesamtobergrenze.** Mit N Konten ist die Zahl offener Sockets je Prozess heute
+unbeschränkt, und das ist die Zahl, die Speicher kostet.
+
+Deshalb kommt `MAX_CONNECTIONS_TOTAL = 100` je Prozess hinzu, geprüft in
+`connect()` vor der Grenze je Nutzer, mit derselben
+`ConnectionLimitExceeded`-Ausnahme und demselben `WS_1008`-Abschluss in
+`routes/notifications.py`. Sechs Prozesse × 100 ist eine Größe, die die Maschine
+trägt; „unbeschränkt" ist keine.
+
+Der Kommentar an `MAX_CONNECTIONS_PER_USER` wird berichtigt: er behauptet heute
+eine Grenze, die er nicht durchsetzt. Künftig steht dort, dass sie je Prozess
+gilt, wie viele Prozesse es gibt, und dass die bindende Grenze die Gesamtzahl
+ist.
+
+## Mitbehoben: Pool-Dimensionierung
+
+`DB_POOL_SIZE=10` und `DB_MAX_OVERFLOW=20` (`core/database.py:_get_pg_pool_config`)
+ergeben je Prozess bis zu 30 Verbindungen. Weder das Template `env.production`
+noch die installierte `.env.production` setzen diese Schlüssel — es gelten also
+die Code-Defaults, und sie gelten für jeden der sechs API-Prozesse plus die
+Worker-Skripte: rechnerisch über 180 gegen `max_connections=100`.
+
+Neue Defaults: **`pool_size 5`, `max_overflow 5`**. Das ergibt im schlimmsten
+Fall 10 je Prozess, also 60 über sechs Prozesse, plus die sechs
+Listener-Verbindungen und die Worker-Skripte — mit Abstand unter 100.
+Gemessener Ist-Zustand: `pool_open_max` liegt bei 2–3 je Prozess
+(Concurrency-Log), 28 von 100 Verbindungen belegt. Der Kopfraum bleibt also
+groß, und weil die Schlüssel Umgebungsvariablen sind, ist eine Anhebung ohne
+Code-Änderung möglich, falls `pool_timeout` doch einmal zuschlägt.
+
+Auch das ist code-only: die Defaults greifen, weil niemand sie überschreibt.
+
 ## Fehlerbehandlung
 
 | Fall | Verhalten |
@@ -273,7 +350,13 @@ sie bleibt: wenn der Broadcast versagt, ist die DB-Zeile längst geschrieben.
   gewählt: Unit-Templates erreichen eine installierte Box nicht von selbst
   (#689).
 - **Sechs zusätzliche dauerhafte Postgres-Verbindungen** (eine je API-Prozess).
-  Gemessen: 28 von 100 belegt, danach 34.
+  Gemessen: 28 von 100 belegt, danach 34. Die neuen Pool-Defaults senken
+  gleichzeitig die theoretische Obergrenze von über 180 auf unter 70, die Summe
+  geht also nach unten, nicht nach oben.
+- **Alle drei mitbehobenen Punkte sind code-only.** Der Kanalvergleich nutzt ein
+  `Environment=`, das in der Local-Unit schon steht; die Pool-Defaults greifen,
+  weil `.env.production` sie nicht setzt; die Verbindungsobergrenze ist eine
+  Konstante. Kein Unit-Template, kein Operator-Schritt.
 - **Während des Deploys** starten die beiden Units nicht gleichzeitig. In diesem
   Fenster kann ein alter Prozess noch lokal-only publizieren, während ein neuer
   schon am Bus hängt. Effekt: einzelne Frames überqueren die Grenze nicht,
@@ -294,9 +377,19 @@ Ids verlangt. Für flüchtigen Live-Zustand, der sich alle 1–3 s erneuert, ist
 zu viel Maschinerie.
 
 **Eigener Single-Worker-Prozess für den Notification-WebSocket** (Variante 2 im
-Issue). Löst es nicht: die Emitter laufen weiter in den Primary Workern der
-anderen Units, die Brücke bräuchte man trotzdem — nur mit zwei Prozessen statt
+Issue). Löst es nicht: der Emitter läuft weiter im Primary Worker der
+Fernkanal-Unit, die Brücke bräuchte man trotzdem — nur mit zwei Prozessen statt
 sechs. Zusatzaufwand ohne Ersparnis.
+
+**Gemeinsamer Lock-Pfad unter `/run/baluhost/` für die Primary-Wahl.** Wäre die
+naheliegende Lösung des Doppel-Primary und wurde verworfen, weil sie die Rolle
+demjenigen gibt, der zuerst startet — das ist die socket-aktivierte Local-Unit,
+also gerade der Prozess, der sie nicht haben soll. Der Kanalvergleich ist
+deterministisch und braucht keine Änderung an einem Unit-Template.
+
+**Präsenztabelle für die Verbindungsobergrenze.** Bräuchte eine Migration und
+ein Aufräumen der Zeilen abgestürzter Worker — Zustand, der nur dann korrekt
+ist, wenn ihn jemand pflegt. Siehe „Folgearbeiten".
 
 **Broadcast über die Datenbank pollen** (Variante 3 im Issue). Latenz und Last
 für nichts, wo `LISTEN` schon da ist.
@@ -325,6 +418,19 @@ einem dritten Dienst macht. Postgres ist dieser Broker schon, mit Aufsicht.
 - SQLite/Dev: `get_ws_bus()` liefert `LocalWsBus`
 - `tests/api/test_notification_fanout.py`: publiziert auch ohne lokale Verbindung
 
+**Für die drei mitbehobenen Punkte:**
+
+- `tests/core/test_primary_worker_channel.py`: `_try_become_primary()` gibt bei
+  `settings.channel == "local"` False zurück, **ohne** die Lock-Datei zu
+  berühren; bei `remote` bleibt das heutige Verhalten samt
+  `BALUHOST_PRIMARY_WORKER=0`-Override; zwei Prozesse mit `remote` ergeben
+  weiterhin genau einen Gewinner
+- `tests/services/test_websocket_manager.py`: die 101. Verbindung eines Prozesses
+  wird mit `ConnectionLimitExceeded` abgewiesen, auch wenn sie von einem Nutzer
+  ohne eigene Verbindungen kommt; die Grenze je Nutzer bleibt bei 5 wirksam
+- `tests/core/test_database_pool_config.py`: Defaults sind 5/5 und die
+  Umgebungsvariablen überschreiben sie weiterhin
+
 **Echter Postgres-Pfad:** `scripts/debug/verify_ws_bus.py` startet zwei
 Prozesse gegen die echte Datenbank, publiziert in einem und bestätigt im anderen
 die Zustellung samt Laufzeit. Einmal auf der Produktionsbox gefahren, die
@@ -332,17 +438,20 @@ Ausgabe kommt in den PR. CI fährt ausschließlich SQLite, also berührt dort ke
 Test den `LISTEN`-Pfad — das ist die bewusst in Kauf genommene Lücke, und das
 Skript ist ihr Gegengewicht.
 
-**Nach dem Deploy, am lebenden System:** `/api/schedulers/*/run-now` für einen
-Job auslösen, der eine Meldung erzeugt, und prüfen, dass das Tray das Popup
-zeigt — bei vier Versuchen viermal, nicht einmal.
+**Nach dem Deploy, am lebenden System:**
 
-## Folgearbeiten (eigene Issues)
+1. `/api/schedulers/*/run-now` für einen Job auslösen, der eine Meldung erzeugt,
+   und prüfen, dass das Tray das Popup zeigt — bei vier Versuchen viermal, nicht
+   einmal.
+2. `journalctl -u baluhost-backend-local` zeigt für alle Worker
+   `Primary worker: False`, `journalctl -u baluhost-backend` genau einmal `True`.
+3. Die Verbindungszahl gegen Postgres bleibt nach einer Stunde Betrieb unter 50
+   (`select count(*) from pg_stat_activity`).
 
-1. **Doppel-Primary über zwei systemd-Units.** `PrivateTmp=true` in der
-   TCP-Unit, nicht gesetzt in der Local-Unit → zwei Lock-Namensräume, zwei
-   Primary Worker, doppelte Hardware-Loops (Fan-Control schreibt PWM aus zwei
-   Prozessen). Fix wäre ein gemeinsamer Lock-Pfad unter `/run/baluhost/`.
-2. **`MAX_CONNECTIONS_PER_USER` gilt je Prozess** (`websocket_manager.py:17`),
-   effektiv 6× — der DoS-Deckel ist weicher als sein Kommentar behauptet.
-3. **Pool-Dimensionierung gegen `max_connections`** — rechnerisch 180 gegen 100,
-   real unkritisch. Notiz, kein Alarm.
+## Folgearbeiten
+
+**Prozessübergreifende Obergrenze je Nutzer.** Bleibt bewusst ungebaut, siehe
+„Nicht-Ziele". Wird sie je gebraucht, ist der Weg mit dem besten Verhältnis
+Advisory Locks an der Listener-Verbindung: session-gebunden, also gibt ein
+abgestürzter Worker seine Slots von selbst frei — im Gegensatz zu einer
+Präsenztabelle, deren Zeilen dann liegen bleiben.
