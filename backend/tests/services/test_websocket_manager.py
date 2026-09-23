@@ -344,3 +344,44 @@ class TestDeliverLocal:
 
         assert sent == 0
         assert manager.get_connection_count(1) == 0
+
+
+@pytest.mark.asyncio
+class TestTotalConnectionCap:
+    """The per-user cap bounded nothing in aggregate: N users meant N*5 sockets."""
+
+    async def test_rejects_beyond_the_total_cap(self, manager: WebSocketManager):
+        from app.services.websocket_manager import (
+            MAX_CONNECTIONS_TOTAL,
+            ConnectionLimitExceeded,
+        )
+
+        # Fill the process with connections from many different users, so the
+        # per-user cap is never the thing that trips.
+        for user_id in range(MAX_CONNECTIONS_TOTAL):
+            await manager.connect(_make_ws(), user_id=user_id)
+
+        with pytest.raises(ConnectionLimitExceeded):
+            await manager.connect(_make_ws(), user_id=9999)
+
+    async def test_per_user_cap_still_applies_below_the_total(
+        self, manager: WebSocketManager
+    ):
+        from app.services.websocket_manager import (
+            MAX_CONNECTIONS_PER_USER,
+            ConnectionLimitExceeded,
+        )
+
+        for _ in range(MAX_CONNECTIONS_PER_USER):
+            await manager.connect(_make_ws(), user_id=1)
+
+        with pytest.raises(ConnectionLimitExceeded):
+            await manager.connect(_make_ws(), user_id=1)
+
+    async def test_total_cap_is_higher_than_the_per_user_cap(self):
+        from app.services.websocket_manager import (
+            MAX_CONNECTIONS_PER_USER,
+            MAX_CONNECTIONS_TOTAL,
+        )
+
+        assert MAX_CONNECTIONS_TOTAL > MAX_CONNECTIONS_PER_USER

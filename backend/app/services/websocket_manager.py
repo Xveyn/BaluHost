@@ -14,9 +14,19 @@ from app.services.ws_bus import LocalWsBus, WsBus, WsEnvelope
 
 logger = logging.getLogger(__name__)
 
-# Max simultaneous WebSocket connections per user (DoS guard, Posten 5 #2).
-# Covers a desktop client + phone + a couple of browser tabs.
+# Max simultaneous WebSocket connections per user, per PROCESS (DoS guard,
+# Posten 5 #2). Covers a desktop client + phone + a couple of browser tabs.
+# Six API processes hold connections — four workers of baluhost-backend plus
+# two of baluhost-backend-local — so one user can reach up to 6x this number in
+# total. Enforcing it across processes would need shared state (a presence
+# table, or advisory locks on the bus connection); that is deliberately not
+# built, because the binding limit is the one below.
 MAX_CONNECTIONS_PER_USER = 5
+
+# Max simultaneous connections in this process, across all users. Without this
+# the per-user cap bounded nothing in aggregate: N accounts meant N*5 sockets
+# and the number that costs memory was unlimited.
+MAX_CONNECTIONS_TOTAL = 100
 
 # How long one socket may take a frame before it counts as dead. Delivery now
 # runs through a single bus consumer task, so an unbounded send would let one
@@ -25,7 +35,7 @@ SEND_TIMEOUT_SECONDS = 5.0
 
 
 class ConnectionLimitExceeded(Exception):
-    """Raised when a user exceeds MAX_CONNECTIONS_PER_USER active connections."""
+    """Raised when a user exceeds MAX_CONNECTIONS_PER_USER or the process MAX_CONNECTIONS_TOTAL."""
 
 
 @dataclass
@@ -84,6 +94,10 @@ class WebSocketManager:
         )
 
         async with self._lock:
+            if self._count_connections() >= MAX_CONNECTIONS_TOTAL:
+                raise ConnectionLimitExceeded(
+                    f"process reached {MAX_CONNECTIONS_TOTAL} connections"
+                )
             if len(self._user_connections.get(user_id, [])) >= MAX_CONNECTIONS_PER_USER:
                 raise ConnectionLimitExceeded(
                     f"user {user_id} exceeded {MAX_CONNECTIONS_PER_USER} connections"
