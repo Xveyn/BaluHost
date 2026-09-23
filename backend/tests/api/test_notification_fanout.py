@@ -82,17 +82,21 @@ async def test_empty_ids_on_single_action_sends_nothing(ws_manager: MagicMock):
 
 
 @pytest.mark.asyncio
-async def test_nothing_happens_without_a_connection(ws_manager: MagicMock):
-    """Kein offener Client -> keine COUNT-Query. Der Zaehler kostet sonst
-    eine Datenbankabfrage pro Klick, auch wenn niemand zuhoert."""
+async def test_publishes_even_without_a_local_connection(ws_manager: MagicMock):
+    """The user's client may hang in another process — six of them hold sockets.
+
+    Before #685 this returned early, so the worker that handled the "read"
+    never published and the tray in the neighbouring process kept its old
+    count forever.
+    """
     ws_manager.is_user_connected.return_value = False
-    service = _service(3)
-    p1, p2 = _patches(ws_manager, service)
+    p1, p2 = _patches(ws_manager, _service(3))
+
     with p1, p2:
         await fanout_state(MagicMock(), 1, [7], "read", is_admin=False)
 
-    service.get_unread_count.assert_not_called()
-    ws_manager.send_notification_state.assert_not_awaited()
+    ws_manager.send_notification_state.assert_awaited_once_with(1, [7], "read")
+    ws_manager.send_unread_count.assert_awaited_once_with(1, 3)
 
 
 @pytest.mark.asyncio
