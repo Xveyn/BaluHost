@@ -26,6 +26,7 @@ from app.services.service_status import (
     get_service_status_collector,
     _service_registry,
 )
+from app.services.ws_bus import build_bus
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +54,7 @@ IS_PRIMARY_WORKER = False  # Determined in _lifespan() after fork
 _discovery_service = None
 _plugin_manager = None
 _websocket_manager = None
+_ws_bus = None  # cross-process broadcast bus, one per worker process
 
 # Long-running tasks this module starts itself. The event loop only keeps a
 # weak reference to a task, so anything not held here may be garbage-collected
@@ -91,6 +93,39 @@ async def _cancel_background_tasks() -> None:
         await asyncio.gather(*tasks, return_exceptions=True)
         logger.info("Stopped %d lifespan background task(s)", len(tasks))
     _BACKGROUND_TASKS.clear()
+
+
+async def _start_ws_bus(manager) -> None:
+    """Start the cross-process broadcast bus for this worker.
+
+    Deliberately NOT behind IS_PRIMARY_WORKER: every worker holds its own
+    WebSocket connections, and a bus that only ran on the primary would leave
+    #685 open for the other five API processes.
+
+    Never fatal: without the bus this process falls back to local-only
+    broadcasts, which is what it did before the bus existed.
+    """
+    global _ws_bus
+    try:
+        bus = build_bus()
+        await bus.start(manager.deliver_local)
+        manager.set_bus(bus)
+        _ws_bus = bus
+        logger.info("WebSocket bus started (PID %d)", os.getpid())
+    except Exception as exc:
+        logger.warning("WebSocket bus could not start, local-only broadcasts: %s", exc)
+
+
+async def _stop_ws_bus() -> None:
+    """Stop the bus and release its listener connection."""
+    global _ws_bus
+    if _ws_bus is None:
+        return
+    try:
+        await _ws_bus.stop()
+    except Exception as exc:
+        logger.warning("WebSocket bus shutdown failed: %s", exc)
+    _ws_bus = None
 
 
 def _try_become_primary() -> bool:
@@ -674,6 +709,10 @@ async def _startup(app: FastAPI) -> None:
     except Exception as e:
         logger.warning(f"Notification system could not initialize: {e}")
 
+    # Cross-process broadcast bus — every worker, primary or not (#685).
+    if _websocket_manager is not None:
+        await _start_ws_bus(_websocket_manager)
+
     # Set server start time for uptime tracking
     set_server_start_time()
 
@@ -794,6 +833,7 @@ async def _shutdown() -> None:
     # Stop our own loops before the services they touch (DB, WebSocket manager,
     # plugins) are torn down below.
     await _cancel_background_tasks()
+    await _stop_ws_bus()
 
     from app.services import jobs
     from app.services.power import manager as power_manager
