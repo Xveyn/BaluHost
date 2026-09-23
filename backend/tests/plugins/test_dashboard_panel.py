@@ -179,12 +179,11 @@ class TestBroadcastTyped:
         mock_ws.send_json = AsyncMock()
         await manager.connect(mock_ws, user_id=1, is_admin=False)
 
-        count = await manager.broadcast_typed(
+        await manager.broadcast_typed(
             "dashboard_panel_update",
             {"panel_type": "gauge", "data": {"value": "120 W"}},
         )
 
-        assert count == 1
         mock_ws.send_json.assert_called_once_with({
             "type": "dashboard_panel_update",
             "payload": {"panel_type": "gauge", "data": {"value": "120 W"}},
@@ -198,9 +197,8 @@ class TestBroadcastTyped:
         mock_ws.send_json = AsyncMock(side_effect=Exception("disconnected"))
         await manager.connect(mock_ws, user_id=1, is_admin=False)
 
-        count = await manager.broadcast_typed("test", {"key": "val"})
+        await manager.broadcast_typed("test", {"key": "val"})
 
-        assert count == 0
         # Connection should be cleaned up
         assert manager.get_connection_count() == 0
 
@@ -620,11 +618,10 @@ class TestAdminOnlyBroadcast:
         await manager.connect(admin_ws, user_id=1, is_admin=True)
         await manager.connect(user_ws, user_id=2, is_admin=False)
 
-        count = await manager.broadcast_typed(
+        await manager.broadcast_typed(
             "dashboard_panel_update", {"data": {}}, admins_only=True
         )
 
-        assert count == 1
         admin_ws.send_json.assert_called_once()
         user_ws.send_json.assert_not_called()
 

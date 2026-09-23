@@ -10,11 +10,18 @@ from dataclasses import dataclass
 
 from fastapi import WebSocket
 
+from app.services.ws_bus import LocalWsBus, WsBus, WsEnvelope
+
 logger = logging.getLogger(__name__)
 
 # Max simultaneous WebSocket connections per user (DoS guard, Posten 5 #2).
 # Covers a desktop client + phone + a couple of browser tabs.
 MAX_CONNECTIONS_PER_USER = 5
+
+# How long one socket may take a frame before it counts as dead. Delivery now
+# runs through a single bus consumer task, so an unbounded send would let one
+# client with a full TCP window freeze delivery for every user in this process.
+SEND_TIMEOUT_SECONDS = 5.0
 
 
 class ConnectionLimitExceeded(Exception):
@@ -32,14 +39,27 @@ class Connection:
 class WebSocketManager:
     """Manager for WebSocket connections and message broadcasting."""
 
-    def __init__(self):
-        """Initialize the WebSocket manager."""
+    def __init__(self, bus: "WsBus | None" = None) -> None:
+        """Initialize the WebSocket manager.
+
+        Args:
+            bus: Transport for broadcasts. Defaults to a LocalWsBus wired to
+                this manager — the single-process behaviour, which is what dev
+                mode and the tests want. Production replaces it via set_bus()
+                with the Postgres bus, so a broadcast reaches the other five
+                API processes too (#685).
+        """
         # Map of user_id -> list of connections
         self._user_connections: dict[int, list[Connection]] = {}
         # Set of admin user_ids for admin broadcasts
         self._admin_users: set[int] = set()
         # Lock for thread-safe operations
         self._lock = asyncio.Lock()
+        self._bus: "WsBus" = bus or LocalWsBus(self.deliver_local)
+
+    def set_bus(self, bus: "WsBus") -> None:
+        """Replace the transport. Called once at startup, before any publish."""
+        self._bus = bus
 
     async def connect(
         self,
@@ -108,89 +128,27 @@ class WebSocketManager:
         """Count total active connections."""
         return sum(len(conns) for conns in self._user_connections.values())
 
-    async def broadcast_to_user(
-        self,
-        user_id: int,
-        message: dict[str, Any],
-    ) -> int:
-        """Send a message to all connections for a specific user.
+    async def broadcast_to_user(self, user_id: int, message: dict[str, Any]) -> None:
+        """Publish a notification for one user's connections.
 
-        Args:
-            user_id: Target user ID
-            message: Message to send
-
-        Returns:
-            Number of connections the message was sent to
+        Returns nothing on purpose: delivery happens in every process that
+        holds a connection, so the publisher cannot count sockets. Use
+        deliver_local()'s return value when you need the local number.
         """
-        sent_count = 0
-        async with self._lock:
-            connections = self._user_connections.get(user_id, [])
-            disconnected = []
+        await self._bus.publish(
+            WsEnvelope(kind="user", msg_type="notification", payload=message, user_id=user_id)
+        )
 
-            for conn in connections:
-                try:
-                    await conn.websocket.send_json({
-                        "type": "notification",
-                        "payload": message,
-                    })
-                    sent_count += 1
-                except Exception as e:
-                    logger.warning(f"Failed to send to user {user_id}: {e}")
-                    disconnected.append(conn)
-
-            # Clean up disconnected connections
-            for conn in disconnected:
-                if conn in connections:
-                    connections.remove(conn)
-
-            if not connections and user_id in self._user_connections:
-                del self._user_connections[user_id]
-                self._admin_users.discard(user_id)
-
-        return sent_count
-
-    async def broadcast_to_admins(self, message: dict[str, Any]) -> int:
-        """Broadcast a message to all admin users.
-
-        Args:
-            message: Message to send
-
-        Returns:
-            Number of connections the message was sent to
-        """
-        sent_count = 0
-        async with self._lock:
-            for user_id in list(self._admin_users):
-                connections = self._user_connections.get(user_id, [])
-                disconnected = []
-
-                for conn in connections:
-                    if conn.is_admin:
-                        try:
-                            await conn.websocket.send_json({
-                                "type": "notification",
-                                "payload": message,
-                            })
-                            sent_count += 1
-                        except Exception as e:
-                            logger.warning(f"Failed to send to admin {user_id}: {e}")
-                            disconnected.append(conn)
-
-                # Clean up disconnected connections
-                for conn in disconnected:
-                    if conn in connections:
-                        connections.remove(conn)
-
-                if not connections and user_id in self._user_connections:
-                    del self._user_connections[user_id]
-                    self._admin_users.discard(user_id)
-
-        return sent_count
+    async def broadcast_to_admins(self, message: dict[str, Any]) -> None:
+        """Publish a notification for every admin connection."""
+        await self._bus.publish(
+            WsEnvelope(kind="admins", msg_type="notification", payload=message)
+        )
 
     async def broadcast_typed(
         self, msg_type: str, payload: Any, admins_only: bool = False
-    ) -> int:
-        """Broadcast a typed message to connected users.
+    ) -> None:
+        """Publish a typed message to connected users.
 
         Sends {"type": msg_type, "payload": payload} — the caller names the
         type and it reaches the wire unchanged. This is the only all-users
@@ -214,29 +172,103 @@ class WebSocketManager:
                 without widening this broadcast, so the two enforcement
                 points drift apart. That's fail-closed (no leak), just a trap
                 for the next reader.
+        """
+        await self._bus.publish(
+            WsEnvelope(
+                kind="all", msg_type=msg_type, payload=payload, admins_only=admins_only
+            )
+        )
+
+    async def send_unread_count(self, user_id: int, count: int) -> None:
+        """Publish an updated unread count for one user's connections."""
+        await self._bus.publish(
+            WsEnvelope(
+                kind="user",
+                msg_type="unread_count",
+                payload={"count": count},
+                user_id=user_id,
+            )
+        )
+
+    async def send_notification_state(
+        self, user_id: int, ids: list[int], action: str
+    ) -> None:
+        """Tell a user's connections that notification state changed elsewhere.
+
+        Counterpart to send_unread_count: that one carries the number, this
+        one carries which notifications changed and how, so an open client can
+        update its list.
+
+        Args:
+            user_id: Target user ID
+            ids: Affected notification IDs; empty for the bulk actions, where
+                "all" is exactly what the empty list means
+            action: read | dismissed | snoozed | deleted | restored |
+                read_all | dismissed_all | deleted_all
+        """
+        await self._bus.publish(
+            WsEnvelope(
+                kind="user",
+                msg_type="notification_state",
+                payload={"ids": ids, "action": action},
+                user_id=user_id,
+            )
+        )
+
+    async def deliver_local(self, env: WsEnvelope) -> int:
+        """Write an envelope to this process's matching sockets.
+
+        The only method that touches _user_connections for sending. Called
+        from the bus consumer, never from publish() — see ws_bus for why there
+        is exactly one delivery path.
 
         Returns:
-            Number of connections the message was sent to.
+            Number of connections in *this* process that got the frame.
         """
+        frame = {"type": env.msg_type, "payload": env.payload}
         sent_count = 0
-        async with self._lock:
-            for user_id, connections in list(self._user_connections.items()):
-                disconnected = []
 
+        async with self._lock:
+            if env.kind == "user":
+                if env.user_id is None:
+                    logger.warning("deliver_local: kind=user without user_id, dropped")
+                    return 0
+                targets = [(env.user_id, self._user_connections.get(env.user_id, []))]
+            elif env.kind == "admins":
+                targets = [
+                    (uid, self._user_connections.get(uid, []))
+                    for uid in list(self._admin_users)
+                ]
+            elif env.kind == "all":
+                targets = list(self._user_connections.items())
+            else:
+                # Never the permissive branch by accident: "all" is named
+                # explicitly, and anything unrecognised is dropped rather than
+                # broadcast to every socket.
+                logger.warning("deliver_local: unknown kind %r, dropped", env.kind)
+                return 0
+
+            for user_id, connections in targets:
+                disconnected = []
                 for conn in connections:
-                    if admins_only and not conn.is_admin:
+                    if env.kind == "admins" and not conn.is_admin:
+                        continue
+                    if env.kind == "all" and env.admins_only and not conn.is_admin:
                         continue
                     try:
-                        await conn.websocket.send_json({
-                            "type": msg_type,
-                            "payload": payload,
-                        })
+                        # Bounded on purpose. A client that stops reading (full
+                        # TCP window) used to stall only its own caller; now it
+                        # would stall the single bus consumer while holding
+                        # self._lock, freezing delivery for every user in this
+                        # process and silently overflowing the queue.
+                        await asyncio.wait_for(
+                            conn.websocket.send_json(frame), timeout=SEND_TIMEOUT_SECONDS
+                        )
                         sent_count += 1
-                    except Exception as e:
-                        logger.warning(f"Failed to broadcast to user {user_id}: {e}")
+                    except (Exception, asyncio.TimeoutError) as e:
+                        logger.warning(f"Failed to send to user {user_id}: {e}")
                         disconnected.append(conn)
 
-                # Clean up disconnected connections
                 for conn in disconnected:
                     if conn in connections:
                         connections.remove(conn)
@@ -247,85 +279,11 @@ class WebSocketManager:
 
         return sent_count
 
-    async def send_unread_count(self, user_id: int, count: int) -> int:
-        """Send updated unread count to a user's connections.
-
-        Args:
-            user_id: Target user ID
-            count: Unread notification count
-
-        Returns:
-            Number of connections the message was sent to
-        """
-        sent_count = 0
-        async with self._lock:
-            connections = self._user_connections.get(user_id, [])
-            disconnected = []
-
-            for conn in connections:
-                try:
-                    await conn.websocket.send_json({
-                        "type": "unread_count",
-                        "payload": {"count": count},
-                    })
-                    sent_count += 1
-                except Exception as e:
-                    logger.warning(f"Failed to send unread count to user {user_id}: {e}")
-                    disconnected.append(conn)
-
-            # Clean up disconnected connections
-            for conn in disconnected:
-                if conn in connections:
-                    connections.remove(conn)
-
-        return sent_count
-
-    async def send_notification_state(
-        self, user_id: int, ids: list[int], action: str
-    ) -> int:
-        """Tell a user's connections that notification state changed elsewhere.
-
-        Counterpart to send_unread_count: that one carries the number, this
-        one carries which notifications changed and how, so an open client can
-        update its list. broadcast_to_user() cannot be used here — it
-        hardcodes "type": "notification".
-
-        Args:
-            user_id: Target user ID
-            ids: Affected notification IDs; empty for the bulk actions, where
-                "all" is exactly what the empty list means
-            action: read | dismissed | snoozed | deleted | restored |
-                read_all | dismissed_all | deleted_all
-
-        Returns:
-            Number of connections the message was sent to
-        """
-        sent_count = 0
-        async with self._lock:
-            connections = self._user_connections.get(user_id, [])
-            disconnected = []
-
-            for conn in connections:
-                try:
-                    await conn.websocket.send_json({
-                        "type": "notification_state",
-                        "payload": {"ids": ids, "action": action},
-                    })
-                    sent_count += 1
-                except Exception as e:
-                    logger.warning(
-                        f"Failed to send notification state to user {user_id}: {e}"
-                    )
-                    disconnected.append(conn)
-
-            for conn in disconnected:
-                if conn in connections:
-                    connections.remove(conn)
-
-        return sent_count
-
     def get_connected_user_ids(self) -> list[int]:
         """Get list of all connected user IDs.
+
+        Local only: knows the connections of *this* process. Six API processes
+        hold connections, so a False here does not mean "nobody is listening".
 
         Returns:
             List of user IDs with active connections
@@ -334,6 +292,9 @@ class WebSocketManager:
 
     def get_connection_count(self, user_id: Optional[int] = None) -> int:
         """Get connection count.
+
+        Local only: knows the connections of *this* process. Six API processes
+        hold connections, so a False here does not mean "nobody is listening".
 
         Args:
             user_id: Optional user ID to filter by
@@ -347,6 +308,9 @@ class WebSocketManager:
 
     def is_user_connected(self, user_id: int) -> bool:
         """Check if a user has any active connections.
+
+        Local only: knows the connections of *this* process. Six API processes
+        hold connections, so a False here does not mean "nobody is listening".
 
         Args:
             user_id: User ID to check

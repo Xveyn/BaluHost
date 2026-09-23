@@ -113,3 +113,57 @@ class TestLocalWsBus:
 
 async def _collect(sink: list, env) -> None:
     sink.append(env)
+
+
+@pytest.mark.asyncio
+class TestManagerPublishesEnvelopes:
+    """The five public methods build envelopes; they no longer touch sockets."""
+
+    async def test_each_method_builds_its_envelope(self):
+        from app.services.websocket_manager import WebSocketManager
+
+        sent: list[WsEnvelope] = []
+
+        class FakeBus:
+            async def publish(self, env):
+                sent.append(env)
+
+            async def start(self, deliver):
+                pass
+
+            async def stop(self):
+                pass
+
+        manager = WebSocketManager(bus=FakeBus())
+
+        await manager.broadcast_to_user(3, {"id": 7})
+        await manager.broadcast_to_admins({"id": 8})
+        await manager.broadcast_typed("smart_device_update", [{"device_id": 1}])
+        await manager.broadcast_typed("dashboard_panel_update", {"a": 1}, admins_only=True)
+        await manager.send_unread_count(3, 5)
+        await manager.send_notification_state(3, [7, 8], "read")
+
+        assert sent[0] == WsEnvelope(kind="user", msg_type="notification", payload={"id": 7}, user_id=3)
+        assert sent[1] == WsEnvelope(kind="admins", msg_type="notification", payload={"id": 8})
+        assert sent[2] == WsEnvelope(
+            kind="all", msg_type="smart_device_update", payload=[{"device_id": 1}]
+        )
+        assert sent[3] == WsEnvelope(
+            kind="all", msg_type="dashboard_panel_update", payload={"a": 1}, admins_only=True
+        )
+        assert sent[4] == WsEnvelope(
+            kind="user", msg_type="unread_count", payload={"count": 5}, user_id=3
+        )
+        assert sent[5] == WsEnvelope(
+            kind="user",
+            msg_type="notification_state",
+            payload={"ids": [7, 8], "action": "read"},
+            user_id=3,
+        )
+
+    async def test_publish_methods_return_none(self):
+        """The publisher cannot know how many sockets were reached."""
+        from app.services.websocket_manager import WebSocketManager
+
+        manager = WebSocketManager()
+        assert await manager.broadcast_to_user(1, {"id": 1}) is None
