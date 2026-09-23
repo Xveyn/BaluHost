@@ -48,6 +48,35 @@ class TestEnvelope:
         raw = json.dumps({"kind": "all", "payload": {}})
         assert WsEnvelope.from_json(raw) is None
 
+    def test_from_json_rejects_non_dict_top_level(self):
+        """A JSON array or scalar parses fine but is not one of our envelopes."""
+        raw = json.dumps(["kind", "all"])
+        assert WsEnvelope.from_json(raw) is None
+
+    def test_from_json_rejects_non_integer_user_id(self):
+        """user_id addresses a single socket by its int primary key.
+
+        A string here would fail every identity comparison downstream anyway,
+        but silently — this stops it at the boundary instead.
+        """
+        raw = json.dumps(
+            {"kind": "user", "msg_type": "notification", "payload": {}, "user_id": "3"}
+        )
+        assert WsEnvelope.from_json(raw) is None
+
+    def test_from_json_rejects_missing_admins_only(self):
+        """admins_only is the visibility boundary, not a convenience flag.
+
+        deliver_local() decides from this field whether a payload may reach
+        every connected socket or only admins'. An envelope that lost the
+        field on the wire must not be treated as admins_only=False by
+        default — that default is exactly the leak an admin-only dashboard
+        panel must never suffer, so from_json() fails closed instead of
+        falling back to `bool(data.get("admins_only", False))`.
+        """
+        raw = json.dumps({"kind": "all", "msg_type": "dashboard_panel_update", "payload": {}})
+        assert WsEnvelope.from_json(raw) is None
+
     def test_channel_is_a_bare_identifier(self):
         """It goes into LISTEN unquoted, so it must not need quoting."""
         assert CHANNEL.replace("_", "").isalnum()
