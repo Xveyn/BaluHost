@@ -38,6 +38,8 @@ logger = logging.getLogger(__name__)
 # Detection strategy (in order):
 # 1. If BALUHOST_PRIMARY_WORKER is explicitly set to "0", this worker is
 #    secondary (env-var override, useful for manual control).
+# 1b. A local-channel process (BALUHOST_CHANNEL=local, the UDS unit for the
+#    Tauri companion and the tray) is always secondary (#710).
 # 2. Otherwise, attempt to acquire an exclusive file lock on
 #    /tmp/baluhost-primary.lock.  The first worker to succeed becomes
 #    primary; the OS releases the lock automatically if the process dies,
@@ -101,6 +103,15 @@ def _try_become_primary() -> bool:
     # Explicit opt-out via env var
     env_val = os.environ.get("BALUHOST_PRIMARY_WORKER")
     if env_val == "0":
+        return False
+
+    # Der Local-Channel bewirbt sich gar nicht erst (#710). Seine Unit laeuft
+    # ohne PrivateTmp, die Haupt-Unit mit -- zwei /tmp, zwei Lock-Inodes, und
+    # der flock unten kuerte in jeder Unit einen eigenen Primary: zwei
+    # Fan-Regelkreise auf denselben PWM-Kanaelen. Die Rolle haengt am Kanal,
+    # nicht an einem gemeinsamen Lock-Pfad: den loeschte das
+    # ExecStartPre=rm -f der Haupt-Unit unter der laufenden Local-Unit weg.
+    if settings.channel == "local":
         return False
 
     # On non-Linux (Windows dev-mode), skip file locking
