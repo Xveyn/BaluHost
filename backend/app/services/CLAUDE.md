@@ -54,6 +54,7 @@ Business logic layer. Routes delegate to services — services contain the actua
 | `pin_service.py` | Device PIN management (set, verify, clear) |
 | `step_up.py` | Second-factor re-verification (fresh TOTP code or backup code, else current password) before a service-interrupting action a valid token alone shouldn't cover — used by `restart-all`'s step-up |
 | `system_restart.py` | Restarts the five BaluHost systemd units via `sudo systemctl restart`, backend last (its own restart ends the calling process) |
+| `unit_drift.py` | Deploy smoke-check (`python -m app.services.unit_drift`, run by `ci-deploy.sh` after the health check, always exit 0): installed units + effective `ExecStart` from `systemctl show` vs. the rendered templates, plus drop-ins and `NeedDaemonReload`. Exists because the deploy never renders units (#689); `baluhost-backend-local` is excluded until #717 |
 
 ### Service Subdirectories
 

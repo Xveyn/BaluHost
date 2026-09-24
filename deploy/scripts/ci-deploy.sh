@@ -591,6 +591,17 @@ if health_check; then
     ( cd "$INSTALL_DIR/backend" && "$VENV_BIN/python" -m app.plugins.verify_index_signature ) \
         || log_warn "Marketplace smoke-check could not run (non-fatal)."
 
+    # ─── 8c. Systemd Unit Drift Smoke-Check (non-fatal, #689) ────────────
+    # This script never renders unit files — only the installer's module 10
+    # does. So a template change reaches /opt/baluhost/deploy/ and stops
+    # there; --proxy-headers sat in the template for months while the running
+    # backend lacked it. The check compares the installed units and systemd's
+    # effective ExecStart against the templates and WARNs on any difference.
+    # Read-only, needs no sudo, always exits 0.
+    log_step "Systemd Unit Drift Smoke-Check"
+    ( cd "$INSTALL_DIR/backend" && "$VENV_BIN/python" -m app.services.unit_drift --install-dir "$INSTALL_DIR" ) \
+        || log_warn "Unit drift smoke-check could not run (non-fatal)."
+
     # Opt-in companion build+install runs last, after the deploy is already
     # marked successful, so it can never trigger a rollback of a healthy box.
     if [[ "${INSTALL_COMPANION:-0}" == "1" || "${INSTALL_COMPANION,,}" == "true" ]]; then
