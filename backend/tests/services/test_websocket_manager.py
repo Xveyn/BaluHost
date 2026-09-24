@@ -345,6 +345,51 @@ class TestDeliverLocal:
         assert sent == 0
         assert manager.get_connection_count(1) == 0
 
+    async def test_cancel_during_a_finished_send_is_not_swallowed(
+        self, manager: WebSocketManager
+    ):
+        """Cancelling a delivery loop must stop it, whatever the send is doing.
+
+        asyncio.wait_for() on Python 3.8-3.11 returns the inner result instead
+        of raising CancelledError when the cancel lands just as the inner
+        coroutine completes (CPython #86296, fixed in 3.12). A mock send that
+        finishes immediately hits that window almost every time. The caller
+        then loops on, and whoever awaits the cancelled task waits forever:
+        CI (python:3.11-slim) hung on the SMART-device bridge tests until the
+        job's 15-minute limit. Production runs 3.13, but >=3.11 is supported
+        and lifespan shutdown cancels such loops the same way.
+
+        The cancel point is swept over several scheduler steps so the test
+        does not depend on hitting one exact moment.
+        """
+        from app.services.ws_bus import WsEnvelope
+
+        await manager.connect(_make_ws(), user_id=1)
+        env = WsEnvelope(kind="all", msg_type="m", payload={})
+        stop = False
+
+        async def _deliver_forever():
+            while not stop:
+                await manager.deliver_local(env)
+                await asyncio.sleep(0)
+
+        swallowed = []
+        for steps in range(1, 21):
+            task = asyncio.create_task(_deliver_forever())
+            for _ in range(steps):
+                await asyncio.sleep(0)
+            task.cancel()
+            # asyncio.wait() does not cancel the task on timeout, so a
+            # swallowed cancel shows up as "still pending" instead of hanging.
+            done, _ = await asyncio.wait({task}, timeout=0.5)
+            if not done:
+                swallowed.append(steps)
+                stop = True  # let the loop end so the test itself cannot hang
+                await asyncio.wait({task}, timeout=1)
+                stop = False
+
+        assert swallowed == [], f"cancel swallowed after {swallowed} scheduler steps"
+
 
 @pytest.mark.asyncio
 class TestTotalConnectionCap:

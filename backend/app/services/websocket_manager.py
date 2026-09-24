@@ -275,15 +275,22 @@ class WebSocketManager:
                         # would stall the single bus consumer while holding
                         # self._lock, freezing delivery for every user in this
                         # process and silently overflowing the queue.
-                        await asyncio.wait_for(
-                            conn.websocket.send_json(frame), timeout=SEND_TIMEOUT_SECONDS
-                        )
+                        #
+                        # asyncio.timeout(), not wait_for(): on Python 3.11
+                        # wait_for() returns the result instead of raising
+                        # CancelledError when a cancel lands just as the send
+                        # completes (CPython #86296, fixed in 3.12). The caller
+                        # then never stops -- in CI the SMART-device bridge spun
+                        # until the job limit, and a lifespan shutdown on 3.11
+                        # would wait on it the same way.
+                        async with asyncio.timeout(SEND_TIMEOUT_SECONDS):
+                            await conn.websocket.send_json(frame)
                         sent_count += 1
                     except Exception as e:
-                        # A stuck socket counts as dead: on Python 3.11+,
-                        # asyncio.TimeoutError is an Exception subclass (via
-                        # OSError), so it is already caught here — no separate
-                        # branch needed.
+                        # A stuck socket counts as dead: asyncio.timeout()
+                        # raises the builtin TimeoutError, an Exception
+                        # subclass (via OSError), so it is already caught
+                        # here — no separate branch needed.
                         logger.warning(f"Failed to send to user {user_id}: {e}")
                         disconnected.append(conn)
 
