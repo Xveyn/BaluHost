@@ -52,3 +52,21 @@ def test_restart_menu_label_exists():
     from baluhost_tray import tray as tray_module
 
     assert tray_module.MENU_RESTART.startswith("BaluHost neu starten")
+
+
+def test_dialog_titles_differ_by_role():
+    """Ein Titel fuer alle vier Dialoge las sich wie eine Aussage ueber den Ausgang.
+
+    "BaluHost neu starten" ueber einer Meldung, die einen Fehlschlag meldet,
+    widerspricht sich — bei der Abnahme genau so aufgefallen.
+    """
+    from baluhost_tray import tray as tray_module
+
+    titles = {
+        tray_module.TITLE_ASK,
+        tray_module.TITLE_PROMPT,
+        tray_module.TITLE_DONE,
+        tray_module.TITLE_FAILED,
+    }
+    assert len(titles) == 4
+    assert tray_module.TITLE_DONE != tray_module.TITLE_FAILED

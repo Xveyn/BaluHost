@@ -38,9 +38,17 @@ MAX_MESSAGE = 200
 
 @dataclass(frozen=True)
 class UnitResult:
+    """`returncode` ist None, wenn es gar keinen gab (Timeout, Ausnahme).
+
+    Ein negativer Wert heisst "durch ein Signal beendet" — beim Selbst-Neustart
+    des Backends ist genau das der Erfolgsfall, und nur am Code laesst sich das
+    von einem echten Fehlschlag unterscheiden (#704).
+    """
+
     name: str
     success: bool
     message: str | None = None
+    returncode: int | None = None
 
 
 def restart_unit(
@@ -69,7 +77,7 @@ def restart_unit(
     output = (completed.stderr or completed.stdout or "").strip()
     message = output[:MAX_MESSAGE] if output else f"exit {completed.returncode}"
     logger.warning("restart of %s failed: %s", unit, message)
-    return UnitResult(unit, False, message)
+    return UnitResult(unit, False, message, returncode=completed.returncode)
 
 
 def restart_support_units(

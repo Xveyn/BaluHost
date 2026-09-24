@@ -330,6 +330,35 @@ def _totp_enabled_for(user_record) -> bool:
     return bool(getattr(user_record, "totp_enabled", False))
 
 
+def _log_backend_restart_outcome(result: system_restart.UnitResult) -> None:
+    """Den Ausgang des Selbst-Neustarts protokollieren — eigener Helfer, damit
+    er ohne Timer pruefbar ist.
+
+    Ein negativer Rueckgabecode heisst: unser eigener systemctl-Aufruf wurde
+    von einem Signal beendet. Beim Stoppen der alten Unit raeumt systemd die
+    cgroup ab, in der dieser Aufruf steckt — das IST der gelungene
+    Selbst-Neustart. Frueher stand dafuer eine ERROR-Zeile im Journal, die das
+    Gegenteil behauptete, und zwar bei jedem erfolgreichen Sammelneustart
+    (#704).
+    """
+    logger = logging.getLogger(__name__)
+    if result.success:
+        return
+    if result.returncode is not None and result.returncode < 0:
+        logger.info(
+            "restart of %s: our own systemctl child was terminated by the unit "
+            "teardown (%s) — that is the expected outcome of a self-restart",
+            result.name,
+            result.message,
+        )
+        return
+    logger.error(
+        "restart of %s failed: %s — the service is still running the old process",
+        result.name,
+        result.message,
+    )
+
+
 def _schedule_backend_restart(eta: float = 1.0) -> None:
     """Das Backend zuletzt neu starten, nachdem die Antwort draußen ist.
 
@@ -354,14 +383,9 @@ def _schedule_backend_restart(eta: float = 1.0) -> None:
             logger.info("Dev mode: sending SIGINT to trigger restart")
             os.kill(os.getpid(), signal.SIGINT)
             return
-        result = system_restart.restart_unit(system_restart.BACKEND_UNIT)
-        if not result.success:
-            logger.error(
-                "restart of %s failed: %s — the service is still running the "
-                "old process",
-                result.name,
-                result.message,
-            )
+        _log_backend_restart_outcome(
+            system_restart.restart_unit(system_restart.BACKEND_UNIT)
+        )
 
     timer = threading.Timer(float(eta), _perform)
     timer.daemon = True
