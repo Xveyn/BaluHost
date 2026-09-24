@@ -9,7 +9,11 @@ Active security enforcement rule for BaluHost. Applies to all changes in `backen
 ### NEVER
 
 - Use `shell=True` in `subprocess.run()` or `subprocess.Popen()` — all 15+ service files use list-args exclusively; the only `shell=True` is in `scripts/setup/setup_postgresql.py` (one-time admin script, not app code)
-- Execute raw SQL with user-controlled input — ORM-only; sole exception: static query strings in `services/audit/admin_db.py`
+- Execute raw SQL with user-controlled input — ORM-only; sole exceptions: static
+  query strings in `services/audit/admin_db.py`, and `LISTEN`/`pg_notify` in
+  `services/ws_bus.py` (the channel name is a module constant asserted to be a
+  bare identifier at import; `LISTEN` cannot take a bind parameter, the payload
+  always does)
 - Log secrets, tokens, passwords, or API keys — not even at DEBUG level
 - Return password hashes, internal stack traces, or server internals in API responses
 - Disable or bypass the token-type check in `core/security.py:163` (`payload.get("type") != token_type`)

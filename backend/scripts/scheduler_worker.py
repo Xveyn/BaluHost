@@ -46,6 +46,13 @@ def main() -> int:
     from app.services.notifications.events import init_event_emitter
     init_event_emitter(SessionLocal)
 
+    # Let emit_sync() broadcasts leave this process. main() is synchronous, so
+    # the bus brings its own loop in a daemon thread — _broadcast_sync() needs
+    # one to schedule into. Without this, scheduler failure notifications
+    # reached the database and Firebase but no WebSocket (#685).
+    from app.services.ws_bus_publisher import start_publish_only_bus_threaded
+    _ws_bus_handle = start_publish_only_bus_threaded()
+
     # Create and start the worker
     from app.services.scheduler.worker import SchedulerWorker
     worker = SchedulerWorker()
@@ -70,6 +77,8 @@ def main() -> int:
     finally:
         if worker.running:
             worker.shutdown()
+        if _ws_bus_handle is not None:
+            _ws_bus_handle.stop()
 
     logger.info("Scheduler worker exited cleanly")
     return 0

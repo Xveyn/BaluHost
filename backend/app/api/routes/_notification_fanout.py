@@ -42,10 +42,13 @@ async def fanout_state(
     if not ids and action not in BULK_ACTIONS:
         return
 
+    # No is_user_connected() check here, deliberately. It only knows this
+    # process's connections, and production runs six API processes: the worker
+    # that handles a "mark as read" usually does not hold the tray's socket, so
+    # the check used to skip the publish for exactly the client that needed it
+    # (#685). Publishing unconditionally costs one COUNT query on a user
+    # action, which is affordable.
     manager = get_websocket_manager()
-    if not manager.is_user_connected(user_id):
-        # Nobody listening — skip the work, including the COUNT query.
-        return
 
     try:
         await manager.send_notification_state(user_id, ids, action)

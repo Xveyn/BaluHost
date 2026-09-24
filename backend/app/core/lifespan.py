@@ -13,6 +13,7 @@ import os
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from fastapi import FastAPI
 
@@ -26,6 +27,10 @@ from app.services.service_status import (
     get_service_status_collector,
     _service_registry,
 )
+from app.services.ws_bus import build_bus
+
+if TYPE_CHECKING:
+    from app.services.websocket_manager import WebSocketManager
 
 logger = logging.getLogger(__name__)
 
@@ -36,18 +41,21 @@ logger = logging.getLogger(__name__)
 # only run in one process to avoid conflicts.
 #
 # Detection strategy (in order):
-# 1. If BALUHOST_PRIMARY_WORKER is explicitly set to "0", this worker is
+# 1. A process on the local channel (baluhost-backend-local) is never primary.
+#    It sees a different /tmp than the PrivateTmp TCP unit, so the lock below
+#    cannot keep the two units apart (#685).
+# 2. If BALUHOST_PRIMARY_WORKER is explicitly set to "0", this worker is
 #    secondary (env-var override, useful for manual control).
-# 1b. A local-channel process (BALUHOST_CHANNEL=local, the UDS unit for the
-#    Tauri companion and the tray) is always secondary (#710).
-# 2. Otherwise, attempt to acquire an exclusive file lock on
+# 3. Otherwise, attempt to acquire an exclusive file lock on
 #    /tmp/baluhost-primary.lock.  The first worker to succeed becomes
 #    primary; the OS releases the lock automatically if the process dies,
 #    so another worker can take over.
-# 3. On Windows / dev-mode, the flock path is skipped and every process
+# 4. On Windows / dev-mode, the flock path is skipped and every process
 #    defaults to primary (single-worker is the norm there).
 # ---------------------------------------------------------------------------
 _primary_lock_fd = None  # kept open to hold the lock for the process lifetime
+# Kept as a module attribute so tests can redirect it; production never changes it.
+PRIMARY_LOCK_PATH = Path("/tmp/baluhost-primary.lock")
 
 IS_PRIMARY_WORKER = False  # Determined in _lifespan() after fork
 
@@ -55,6 +63,7 @@ IS_PRIMARY_WORKER = False  # Determined in _lifespan() after fork
 _discovery_service = None
 _plugin_manager = None
 _websocket_manager = None
+_ws_bus = None  # cross-process broadcast bus, one per worker process
 
 # Long-running tasks this module starts itself. The event loop only keeps a
 # weak reference to a task, so anything not held here may be garbage-collected
@@ -95,23 +104,60 @@ async def _cancel_background_tasks() -> None:
     _BACKGROUND_TASKS.clear()
 
 
+async def _start_ws_bus(manager: "WebSocketManager") -> None:
+    """Start the cross-process broadcast bus for this worker.
+
+    Deliberately NOT behind IS_PRIMARY_WORKER: every worker holds its own
+    WebSocket connections, and a bus that only ran on the primary would leave
+    #685 open for the other five API processes.
+
+    Never fatal: without the bus this process falls back to local-only
+    broadcasts, which is what it did before the bus existed.
+    """
+    global _ws_bus
+    try:
+        bus = build_bus()
+        await bus.start(manager.deliver_local)
+        manager.set_bus(bus)
+        _ws_bus = bus
+        logger.info("WebSocket bus started (PID %d)", os.getpid())
+    except Exception as exc:
+        logger.warning("WebSocket bus could not start, local-only broadcasts: %s", exc)
+
+
+async def _stop_ws_bus() -> None:
+    """Stop the bus and release its listener connection."""
+    global _ws_bus
+    if _ws_bus is None:
+        return
+    try:
+        await _ws_bus.stop()
+    except Exception as exc:
+        logger.warning("WebSocket bus shutdown failed: %s", exc)
+    _ws_bus = None
+
+
 def _try_become_primary() -> bool:
     """Try to acquire the primary-worker file lock (non-blocking).
 
     Returns True if this process is now the primary worker.
     """
+    # The local channel never owns the hardware loops. Both units run the same
+    # app, but only baluhost-backend.service sets PrivateTmp=true — so each unit
+    # sees its own lock file and both used to elect a primary, running fan
+    # control, the power manager, the SMART collector and mDNS twice over.
+    #
+    # Gating on the channel rather than sharing one lock path under /run is
+    # deliberate: a shared lock would hand the role to whoever starts first, and
+    # that is the socket-activated local unit — precisely the process that
+    # should not have it. BALUHOST_CHANNEL=local is already set in that unit, so
+    # this needs no unit-template change (#689) and no operator step.
+    if settings.channel == "local":
+        return False
+
     # Explicit opt-out via env var
     env_val = os.environ.get("BALUHOST_PRIMARY_WORKER")
     if env_val == "0":
-        return False
-
-    # Der Local-Channel bewirbt sich gar nicht erst (#710). Seine Unit laeuft
-    # ohne PrivateTmp, die Haupt-Unit mit -- zwei /tmp, zwei Lock-Inodes, und
-    # der flock unten kuerte in jeder Unit einen eigenen Primary: zwei
-    # Fan-Regelkreise auf denselben PWM-Kanaelen. Die Rolle haengt am Kanal,
-    # nicht an einem gemeinsamen Lock-Pfad: den loeschte das
-    # ExecStartPre=rm -f der Haupt-Unit unter der laufenden Local-Unit weg.
-    if settings.channel == "local":
         return False
 
     # On non-Linux (Windows dev-mode), skip file locking
@@ -121,7 +167,7 @@ def _try_become_primary() -> bool:
         return True
 
     global _primary_lock_fd
-    lock_path = Path("/tmp/baluhost-primary.lock")
+    lock_path = PRIMARY_LOCK_PATH
 
     # Do NOT unlink before open — that creates a race where two workers
     # each unlink+create different inodes and both acquire the lock.
@@ -685,6 +731,10 @@ async def _startup(app: FastAPI) -> None:
     except Exception as e:
         logger.warning(f"Notification system could not initialize: {e}")
 
+    # Cross-process broadcast bus — every worker, primary or not (#685).
+    if _websocket_manager is not None:
+        await _start_ws_bus(_websocket_manager)
+
     # Set server start time for uptime tracking
     set_server_start_time()
 
@@ -805,6 +855,7 @@ async def _shutdown() -> None:
     # Stop our own loops before the services they touch (DB, WebSocket manager,
     # plugins) are torn down below.
     await _cancel_background_tasks()
+    await _stop_ws_bus()
 
     from app.services import jobs
     from app.services.power import manager as power_manager

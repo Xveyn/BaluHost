@@ -16,7 +16,9 @@ Business logic layer. Routes delegate to services — services contain the actua
 | `service_status.py` | Background service health registry for admin dashboard |
 | `network_discovery.py` | mDNS/Bonjour local network discovery |
 | `jobs.py` | Health monitor background task (disk space, SMART) |
-| `websocket_manager.py` | WebSocket connection management, broadcast |
+| `websocket_manager.py` | WebSocket connections; publish methods build envelopes for `ws_bus`, `deliver_local()` is the only code that writes to sockets (#685) |
+| `ws_bus.py` | Cross-process broadcast bus over Postgres LISTEN/NOTIFY; one listener connection per API process, outside the pool. Not durable by design |
+| `ws_bus_publisher.py` | Publish-only bus wiring for `monitoring_worker` / `scheduler_worker` (no sockets there), plus the `set_event_loop()` call those processes never made |
 | `file_activity.py` | File activity tracking (uploads, downloads, deletes) |
 | `desktop_pairing.py` | Desktop client device-code pairing flow |
 | `upload_progress.py` | SSE-based upload progress tracking |

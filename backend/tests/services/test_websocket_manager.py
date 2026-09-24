@@ -1,5 +1,6 @@
 """Tests for services/websocket_manager.py — WebSocketManager with mock WebSockets."""
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -72,22 +73,22 @@ class TestBroadcastToUser:
     async def test_sends_to_user(self, manager: WebSocketManager):
         ws = _make_ws()
         await manager.connect(ws, user_id=1)
-        count = await manager.broadcast_to_user(1, {"msg": "hello"})
-        assert count == 1
+        await manager.broadcast_to_user(1, {"msg": "hello"})
         ws.send_json.assert_called_once()
         payload = ws.send_json.call_args[0][0]
         assert payload["type"] == "notification"
         assert payload["payload"] == {"msg": "hello"}
 
-    async def test_returns_zero_for_disconnected_user(self, manager: WebSocketManager):
-        count = await manager.broadcast_to_user(999, {"msg": "hello"})
-        assert count == 0
+    async def test_disconnected_user_gets_nothing(self, manager: WebSocketManager):
+        ws = _make_ws()
+        await manager.connect(ws, user_id=1)
+        await manager.broadcast_to_user(999, {"msg": "hello"})
+        ws.send_json.assert_not_called()
 
     async def test_cleans_up_failed_connection(self, manager: WebSocketManager):
         ws = _make_ws(send_json_side_effect=Exception("connection lost"))
         await manager.connect(ws, user_id=1)
-        count = await manager.broadcast_to_user(1, {"msg": "hello"})
-        assert count == 0
+        await manager.broadcast_to_user(1, {"msg": "hello"})
         assert not manager.is_user_connected(1)
 
 
@@ -99,8 +100,7 @@ class TestBroadcastToAdmins:
         await manager.connect(ws_admin, user_id=1, is_admin=True)
         await manager.connect(ws_user, user_id=2, is_admin=False)
 
-        count = await manager.broadcast_to_admins({"alert": "disk full"})
-        assert count == 1
+        await manager.broadcast_to_admins({"alert": "disk full"})
         ws_admin.send_json.assert_called_once()
         ws_user.send_json.assert_not_called()
 
@@ -114,12 +114,13 @@ class TestBroadcastToAll:
         await manager.connect(ws1, user_id=1)
         await manager.connect(ws2, user_id=2)
 
-        count = await manager.broadcast_typed("some_event", {"event": "update"})
-        assert count == 2
+        await manager.broadcast_typed("some_event", {"event": "update"})
+        ws1.send_json.assert_called_once()
+        ws2.send_json.assert_called_once()
 
-    async def test_empty_when_no_connections(self, manager: WebSocketManager):
-        count = await manager.broadcast_typed("some_event", {"event": "update"})
-        assert count == 0
+    async def test_no_connections_is_a_noop(self, manager: WebSocketManager):
+        await manager.broadcast_typed("some_event", {"event": "update"})
+        assert manager.get_connection_count() == 0
 
     async def test_caller_type_is_not_overwritten(self, manager: WebSocketManager):
         """The regression that made #511 possible: an envelope forced onto the caller."""
@@ -141,8 +142,7 @@ class TestSendUnreadCount:
     async def test_sends_unread_count(self, manager: WebSocketManager):
         ws = _make_ws()
         await manager.connect(ws, user_id=1)
-        count = await manager.send_unread_count(1, 5)
-        assert count == 1
+        await manager.send_unread_count(1, 5)
         payload = ws.send_json.call_args[0][0]
         assert payload["type"] == "unread_count"
         assert payload["payload"]["count"] == 5
@@ -228,9 +228,10 @@ class TestSendNotificationState:
         await manager.connect(ws1, user_id=1)
         await manager.connect(ws2, user_id=1)
 
-        sent = await manager.send_notification_state(1, [7, 8], "read")
+        await manager.send_notification_state(1, [7, 8], "read")
 
-        assert sent == 2
+        ws1.send_json.assert_called_once()
+        ws2.send_json.assert_called_once()
         frame = ws1.send_json.call_args[0][0]
         assert frame == {
             "type": "notification_state",
@@ -246,14 +247,186 @@ class TestSendNotificationState:
 
         assert theirs.send_json.call_count == 0
 
-    async def test_no_connections_is_zero(self, manager: WebSocketManager):
-        assert await manager.send_notification_state(99, [1], "read") == 0
+    async def test_no_connections_is_a_noop(self, manager: WebSocketManager):
+        await manager.send_notification_state(99, [1], "read")
+        assert manager.get_connection_count() == 0
 
     async def test_drops_broken_connection(self, manager: WebSocketManager):
         ws = _make_ws(send_json_side_effect=RuntimeError("gone"))
         await manager.connect(ws, user_id=1)
 
-        sent = await manager.send_notification_state(1, [1], "read")
+        await manager.send_notification_state(1, [1], "read")
+
+        assert manager.get_connection_count(1) == 0
+
+
+@pytest.mark.asyncio
+class TestDeliverLocal:
+    async def test_returns_the_local_count(self, manager: WebSocketManager):
+        from app.services.ws_bus import WsEnvelope
+
+        ws1, ws2 = _make_ws(), _make_ws()
+        await manager.connect(ws1, user_id=1)
+        await manager.connect(ws2, user_id=1)
+
+        sent = await manager.deliver_local(
+            WsEnvelope(kind="user", msg_type="notification", payload={"a": 1}, user_id=1)
+        )
+        assert sent == 2
+
+    async def test_kind_user_without_user_id_is_dropped(self, manager: WebSocketManager):
+        from app.services.ws_bus import WsEnvelope
+
+        ws = _make_ws()
+        await manager.connect(ws, user_id=1)
+        sent = await manager.deliver_local(
+            WsEnvelope(kind="user", msg_type="notification", payload={})
+        )
+        assert sent == 0
+        ws.send_json.assert_not_called()
+
+    async def test_admins_only_skips_non_admin_connections(self, manager: WebSocketManager):
+        """Without this the REST gate on admin_only panels would be decorative."""
+        from app.services.ws_bus import WsEnvelope
+
+        ws_admin, ws_user = _make_ws(), _make_ws()
+        await manager.connect(ws_admin, user_id=1, is_admin=True)
+        await manager.connect(ws_user, user_id=2, is_admin=False)
+
+        sent = await manager.deliver_local(
+            WsEnvelope(
+                kind="all",
+                msg_type="dashboard_panel_update",
+                payload={"admin_only": True},
+                admins_only=True,
+            )
+        )
+
+        assert sent == 1
+        ws_admin.send_json.assert_called_once()
+        ws_user.send_json.assert_not_called()
+
+    async def test_kind_admins_skips_non_admin_connection_of_an_admin_user(
+        self, manager: WebSocketManager
+    ):
+        """_admin_users is keyed by user; a user's non-admin socket must stay out."""
+        from app.services.ws_bus import WsEnvelope
+
+        ws_admin = _make_ws()
+        ws_plain = _make_ws()
+        await manager.connect(ws_admin, user_id=1, is_admin=True)
+        await manager.connect(ws_plain, user_id=1, is_admin=False)
+
+        sent = await manager.deliver_local(
+            WsEnvelope(kind="admins", msg_type="notification", payload={"id": 1})
+        )
+
+        assert sent == 1
+        ws_plain.send_json.assert_not_called()
+
+    async def test_send_timeout_counts_as_dead(self, manager: WebSocketManager, monkeypatch):
+        """A stuck client must not freeze the bus consumer forever (#685)."""
+        import app.services.websocket_manager as websocket_manager_module
+        from app.services.ws_bus import WsEnvelope
+
+        monkeypatch.setattr(websocket_manager_module, "SEND_TIMEOUT_SECONDS", 0.01)
+
+        async def _hang(_frame):
+            await asyncio.sleep(1)
+
+        ws = _make_ws()
+        ws.send_json = AsyncMock(side_effect=_hang)
+        await manager.connect(ws, user_id=1)
+
+        sent = await manager.deliver_local(
+            WsEnvelope(kind="user", msg_type="notification", payload={"a": 1}, user_id=1)
+        )
 
         assert sent == 0
         assert manager.get_connection_count(1) == 0
+
+    async def test_cancel_during_a_finished_send_is_not_swallowed(
+        self, manager: WebSocketManager
+    ):
+        """Cancelling a delivery loop must stop it, whatever the send is doing.
+
+        asyncio.wait_for() on Python 3.8-3.11 returns the inner result instead
+        of raising CancelledError when the cancel lands just as the inner
+        coroutine completes (CPython #86296, fixed in 3.12). A mock send that
+        finishes immediately hits that window almost every time. The caller
+        then loops on, and whoever awaits the cancelled task waits forever:
+        CI (python:3.11-slim) hung on the SMART-device bridge tests until the
+        job's 15-minute limit. Production runs 3.13, but >=3.11 is supported
+        and lifespan shutdown cancels such loops the same way.
+
+        The cancel point is swept over several scheduler steps so the test
+        does not depend on hitting one exact moment.
+        """
+        from app.services.ws_bus import WsEnvelope
+
+        await manager.connect(_make_ws(), user_id=1)
+        env = WsEnvelope(kind="all", msg_type="m", payload={})
+        stop = False
+
+        async def _deliver_forever():
+            while not stop:
+                await manager.deliver_local(env)
+                await asyncio.sleep(0)
+
+        swallowed = []
+        for steps in range(1, 21):
+            task = asyncio.create_task(_deliver_forever())
+            for _ in range(steps):
+                await asyncio.sleep(0)
+            task.cancel()
+            # asyncio.wait() does not cancel the task on timeout, so a
+            # swallowed cancel shows up as "still pending" instead of hanging.
+            done, _ = await asyncio.wait({task}, timeout=0.5)
+            if not done:
+                swallowed.append(steps)
+                stop = True  # let the loop end so the test itself cannot hang
+                await asyncio.wait({task}, timeout=1)
+                stop = False
+
+        assert swallowed == [], f"cancel swallowed after {swallowed} scheduler steps"
+
+
+@pytest.mark.asyncio
+class TestTotalConnectionCap:
+    """The per-user cap bounded nothing in aggregate: N users meant N*5 sockets."""
+
+    async def test_rejects_beyond_the_total_cap(self, manager: WebSocketManager):
+        from app.services.websocket_manager import (
+            MAX_CONNECTIONS_TOTAL,
+            ConnectionLimitExceeded,
+        )
+
+        # Fill the process with connections from many different users, so the
+        # per-user cap is never the thing that trips.
+        for user_id in range(MAX_CONNECTIONS_TOTAL):
+            await manager.connect(_make_ws(), user_id=user_id)
+
+        with pytest.raises(ConnectionLimitExceeded):
+            await manager.connect(_make_ws(), user_id=9999)
+
+    async def test_per_user_cap_still_applies_below_the_total(
+        self, manager: WebSocketManager
+    ):
+        from app.services.websocket_manager import (
+            MAX_CONNECTIONS_PER_USER,
+            ConnectionLimitExceeded,
+        )
+
+        for _ in range(MAX_CONNECTIONS_PER_USER):
+            await manager.connect(_make_ws(), user_id=1)
+
+        with pytest.raises(ConnectionLimitExceeded):
+            await manager.connect(_make_ws(), user_id=1)
+
+    async def test_total_cap_is_higher_than_the_per_user_cap(self):
+        from app.services.websocket_manager import (
+            MAX_CONNECTIONS_PER_USER,
+            MAX_CONNECTIONS_TOTAL,
+        )
+
+        assert MAX_CONNECTIONS_TOTAL > MAX_CONNECTIONS_PER_USER

@@ -637,7 +637,8 @@ class EventEmitter:
         async def _send() -> None:
             # No local import here: it would rebind the name and defeat the
             # tests' patch of this module's get_websocket_manager. There is
-            # no cycle to avoid — websocket_manager imports nothing from app.
+            # no cycle to avoid — websocket_manager imports only
+            # app.services.ws_bus, which loads nothing from app at module level.
             manager = get_websocket_manager()
             try:
                 if user_id is None:

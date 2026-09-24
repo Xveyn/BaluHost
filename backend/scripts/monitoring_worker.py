@@ -41,6 +41,12 @@ async def async_main() -> int:
     from app.services.notifications.events import init_event_emitter
     init_event_emitter(SessionLocal)
 
+    # Let emit_sync() broadcasts leave this process: bind the loop and publish
+    # onto the cross-process bus. Without this, temperature and disk-space
+    # notifications reached the database and Firebase but no WebSocket (#685).
+    from app.services.ws_bus_publisher import start_publish_only_bus
+    await start_publish_only_bus()
+
     # Clean up any stale SHM files from a previous run
     from app.services.monitoring.shm import cleanup_shm
     cleanup_shm()

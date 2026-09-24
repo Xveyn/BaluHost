@@ -38,7 +38,21 @@ def _configure_sqlite(dbapi_conn, _connection_record):
 
 # PostgreSQL connection pool settings (can be overridden via env vars)
 def _get_pg_pool_config() -> dict:
-    """Get PostgreSQL connection pool configuration from environment."""
+    """Get PostgreSQL connection pool configuration from environment.
+
+    Sizing note, measured 2026-09-23 over 65,734 concurrency windows of
+    baluhost-backend: peak pool_in_use_max was 11, peak pool_open_max 10, and
+    pool_saturation_events stayed at 0 against the ceiling of 30 these values
+    give. Do not lower them without re-measuring — a ceiling of 10 would sit
+    *under* the observed peak and turn a burst into HTTP 500 after pool_timeout.
+
+    The theoretical worst case does exceed the server: nine processes (six API
+    workers plus three standalone workers, each with its own engine) times 30,
+    against max_connections=100. It has never been approached, and shrinking the
+    pool cannot fix it — the only real remedies are a higher max_connections or
+    pgbouncer. Publishing on the ws bus adds one pooled connection per process;
+    its single-worker executor is what bounds it to one.
+    """
     return {
         "pool_size": int(os.getenv("DB_POOL_SIZE", "10")),
         "max_overflow": int(os.getenv("DB_MAX_OVERFLOW", "20")),
