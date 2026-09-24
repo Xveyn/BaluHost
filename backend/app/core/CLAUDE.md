@@ -23,6 +23,6 @@ Application foundation: configuration, database, security, and cross-cutting inf
 ## Key Patterns
 
 - **Config**: All settings have env var equivalents (uppercase). `NAS_MODE=dev` enables dev mode with mock backends
-- **Multi-worker**: Production runs 4 Uvicorn workers. Only one becomes primary (file lock in `/tmp/baluhost-primary.lock`). Hardware services (fans, power, mDNS, monitoring) only run on primary
+- **Multi-worker**: Production runs 4 Uvicorn workers. Only one becomes primary (file lock in `/tmp/baluhost-primary.lock`). Hardware services (fans, power, mDNS, monitoring) only run on primary. The lock only arbitrates *within* one systemd unit — `baluhost-backend.service` runs with `PrivateTmp=yes`, so its `/tmp` is not the host's. A local-channel process (`BALUHOST_CHANNEL=local`, `baluhost-backend-local.service`) therefore never bids at all and is always secondary (#710); without that it elected a second primary and ran a second fan control loop against the same PWM channels
 - **DB sessions**: Always use `get_db()` dependency in routes or `SessionLocal()` context manager in services. Never hold sessions across async boundaries
 - **Token types**: `decode_token(token, token_type="access")` enforces type claim — prevents using refresh tokens as access tokens
