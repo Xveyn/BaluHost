@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 from app.core.database import SessionLocal
 from app.models.sync_progress import SyncSchedule
 from app.services.sync.file_sync import FileSyncService
-from app.services.audit.logger import AuditLogger
+from app.services.audit.logger_db import get_audit_logger_db
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +87,10 @@ class SyncBackgroundScheduler:
         )
 
         sync_service = FileSyncService(db)
-        audit_logger = AuditLogger()
+        # DB audit (#727). No db= passed on purpose: log_event commits the
+        # session it is given, which would commit this scheduler's transaction
+        # halfway through.
+        audit_logger = get_audit_logger_db()
 
         try:
             sync_status = sync_service.get_sync_status(
@@ -159,9 +162,12 @@ class SyncBackgroundScheduler:
                 user=str(schedule.user_id),
                 action="scheduled_sync_failed",
                 resource=schedule.device_id,
-                details={"schedule_id": schedule.id, "error": str(e)},
+                # Exception type only: non-admins see error_message in the
+                # audit view, and str(e) can carry paths and internals. The full
+                # text is in the application log above.
+                details={"schedule_id": schedule.id, "error_type": type(e).__name__},
                 success=False,
-                error_message=str(e),
+                error_message=type(e).__name__,
             )
             raise
 
