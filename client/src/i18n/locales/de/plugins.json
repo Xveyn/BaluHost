@@ -4,7 +4,9 @@
   "page": {
     "noOwnPageTitle": "Keine eigene Seite",
     "noOwnPageDesc": "„{{name}}“ ist aktiviert, hat aber keine eigene Seite. Es wird über die Topbar oder das Systemmenü bedient.",
-    "goToDashboard": "Zum Dashboard"
+    "goToDashboard": "Zum Dashboard",
+    "notFoundTitle": "Plugin nicht verfügbar",
+    "notFoundDesc": "„{{name}}“ ist nicht aktiviert oder nicht installiert."
   },
   "tabs": {
     "installed": "Installiert",

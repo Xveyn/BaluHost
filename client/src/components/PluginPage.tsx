@@ -32,16 +32,16 @@ export default function PluginPage() {
           <AlertTriangle className="h-8 w-8 text-red-400" />
         </div>
         <div className="text-center">
-          <h3 className="text-lg font-medium text-white mb-1">{t('error')}</h3>
+          <h3 className="text-lg font-medium text-white mb-1">{t('page.notFoundTitle')}</h3>
           <p className="text-sm text-slate-400 max-w-md">
-            {`Plugin "${pluginName}" is not enabled or does not exist.`}
+            {t('page.notFoundDesc', { name: pluginName })}
           </p>
         </div>
         <button
           onClick={() => navigate('/')}
           className="px-4 py-2 text-sm font-medium rounded-lg border border-slate-700 text-slate-300 hover:border-sky-500/50"
         >
-          {t('goToDashboard')}
+          {t('page.goToDashboard')}
         </button>
       </div>
     );
