@@ -13,7 +13,6 @@ class Settings(BaseSettings):
     # Logging configuration
     log_level: str = "INFO"  # DEBUG|INFO|WARNING|ERROR|CRITICAL
     log_format: str = "text"  # json|text (json recommended for production)
-    audit_logging_enabled: bool = False  # Enable audit logging (auto-enabled in production)
 
     nas_mode: str = "dev"
     is_dev_mode: bool = True  # Added as a field for Pydantic compatibility
@@ -324,9 +323,6 @@ class Settings(BaseSettings):
             if not self.plugins_external_dir:
                 self.plugins_external_dir = "./dev-plugins"
         else:
-            # Production mode: enable audit logging by default
-            if not self.audit_logging_enabled:
-                self.audit_logging_enabled = True
             if self.nas_quota_bytes == 5 * 1024 * 1024 * 1024:
                 self.nas_quota_bytes = None
             if not self.plugins_external_dir:

@@ -32,7 +32,6 @@ from app.services.hardware import smart as smart_service
 from app.services.audit.logger_db import get_audit_logger_db
 from app.services import system as system_service
 from app.services import telemetry as telemetry_service
-from app.services.audit.logger import get_audit_logger
 
 router = APIRouter()
 
@@ -234,8 +233,11 @@ async def shutdown_system(
     will exit the process, allowing the response to be delivered to the
     caller. An audit log entry is written.
     """
-    audit = get_audit_logger()
-    audit.log_system_event(action="shutdown_initiated", user=user.username, details={"method": "api"}, success=True)
+    # DB audit, not the old file logger: the admin audit view reads
+    # audit_logs, and the file entry never showed up there (#727).
+    get_audit_logger_db().log_system_event(
+        action="shutdown_initiated", user=user.username, details={"method": "api"}, success=True,
+    )
     logging.getLogger(__name__).info("Shutdown requested via API by user %s", user.username)
 
     def _perform_exit() -> None:
@@ -291,8 +293,10 @@ async def restart_system(
     """
     from app.core.config import settings
 
-    audit = get_audit_logger()
-    audit.log_system_event(action="restart_initiated", user=user.username, details={"method": "api"}, success=True)
+    # DB audit, not the old file logger (#727) - see shutdown_system.
+    get_audit_logger_db().log_system_event(
+        action="restart_initiated", user=user.username, details={"method": "api"}, success=True,
+    )
     logging.getLogger(__name__).info("Restart requested via API by user %s", user.username)
 
     def _perform_restart() -> None:
