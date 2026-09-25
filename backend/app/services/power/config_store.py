@@ -29,6 +29,23 @@ from app.schemas.power import (
 
 logger = logging.getLogger(__name__)
 
+# The power monitor reloads this every tick (5 s) so a change made through
+# another worker takes effect. Logging each load at INFO filled the prod journal
+# with ~17k identical lines a day (#551); only a changed value is news.
+_last_logged_auto_scaling: Optional[AutoScalingConfig] = None
+
+
+def _log_auto_scaling_loaded(config: AutoScalingConfig, source: str) -> None:
+    """INFO for the first load and every change in this process, DEBUG otherwise."""
+    global _last_logged_auto_scaling
+    changed = config != _last_logged_auto_scaling
+    _last_logged_auto_scaling = config
+    logger.log(
+        logging.INFO if changed else logging.DEBUG,
+        "Loaded auto-scaling config (%s): enabled=%s",
+        source, config.enabled,
+    )
+
 
 def load_auto_scaling_config() -> AutoScalingConfig:
     """Load auto-scaling config from database."""
@@ -50,12 +67,13 @@ def load_auto_scaling_config() -> AutoScalingConfig:
                     cooldown_seconds=db_config.cooldown_seconds,
                     use_cpu_monitoring=db_config.use_cpu_monitoring
                 )
-                logger.info(f"Loaded auto-scaling config from DB: enabled={config.enabled}")
+                _log_auto_scaling_loaded(config, "from DB")
                 return config
             else:
                 # No config in DB yet, use defaults
-                logger.info("No auto-scaling config in DB, using defaults")
-                return AutoScalingConfig()  # type: ignore[call-arg]
+                config = AutoScalingConfig()  # type: ignore[call-arg]
+                _log_auto_scaling_loaded(config, "no row in DB, defaults")
+                return config
         finally:
             db.close()
     except Exception as e:
