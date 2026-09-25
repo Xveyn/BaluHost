@@ -117,3 +117,32 @@ def test_invalid_row_logs_name_not_values(db_session):
     rendered = warn.call_args.args[0] % warn.call_args.args[1:]
     assert "cfg_plugin" in rendered
     assert "s3cr3t" not in rendered
+
+
+def test_put_with_invalid_values_logs_name_not_values(client, admin_headers):
+    # #666: the write path logged str(ValidationError), which carries every
+    # rejected input_value - a secret typed into a plugin's config form would
+    # land in the log. Same rule as the read path above: name + error type only.
+    from unittest.mock import MagicMock, patch
+
+    from app.api.routes import plugins as plugins_routes
+    from app.main import app
+
+    manager = MagicMock()
+    manager.get_plugin.return_value = _SchemaPlugin()
+    app.dependency_overrides[plugins_routes.get_plugin_manager] = lambda: manager
+    try:
+        with patch.object(plugins_routes.logger, "warning") as warn:
+            r = client.put(
+                "/api/plugins/cfg_plugin/config",
+                json={"config": {"interval": "s3cr3t-token"}},
+                headers=admin_headers,
+            )
+    finally:
+        app.dependency_overrides.pop(plugins_routes.get_plugin_manager, None)
+
+    assert r.status_code == 400
+    rendered = warn.call_args.args[0] % warn.call_args.args[1:]
+    assert "cfg_plugin" in rendered
+    assert "s3cr3t-token" not in rendered
+    assert "interval" in rendered  # which field failed stays useful, the value doesn't

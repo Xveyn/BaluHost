@@ -658,7 +658,16 @@ async def update_plugin_config(
     try:
         validated_config = plugin.validate_config(body.config)
     except ValueError as e:
-        logger.warning("Invalid plugin configuration for %s: %s", name, e)
+        # Never str(e): a pydantic ValidationError renders every rejected
+        # input_value, so a secret typed into the form would reach the log
+        # (#666). Field names say what was wrong without saying what was typed.
+        fields = []
+        if callable(getattr(e, "errors", None)):
+            fields = [".".join(map(str, err.get("loc", ()))) for err in e.errors()]
+        logger.warning(
+            "Invalid plugin configuration for %s (%s): fields=%s",
+            name, type(e).__name__, fields,
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid plugin configuration",
