@@ -227,6 +227,7 @@
   "pluginPanel": {
     "title": "Plugin-Panel",
     "noPlugin": "Kein Plugin konfiguriert",
-    "configureHint": "Aktiviere das Dashboard-Panel eines Plugins auf der Plugins-Seite"
+    "configureHint": "Aktiviere das Dashboard-Panel eines Plugins auf der Plugins-Seite",
+    "noData": "Noch keine Daten"
   }
 }
