@@ -165,10 +165,15 @@ class TestBrokenAudioStack:
         monkeypatch.setattr(
             service_module, "get_audio_service", lambda: AudioService(backend=_BrokenBackend())
         )
+        from app.core.exception_handlers import register_exception_handlers
+
         app = FastAPI()
+        # The 502s are BadGatewayError (a ServiceError, #591); without the app's
+        # handlers they would surface as an unhandled exception, not a 502.
+        register_exception_handlers(app)
         app.include_router(AudioControlPlugin().get_router(), prefix="/api/plugins/audio_control")
         app.dependency_overrides[require_power_control_audio] = lambda: _User()
-        return TestClient(app)
+        return TestClient(app, raise_server_exceptions=False)
 
     def test_state_reports_unavailable_instead_of_failing(self, broken_client):
         resp = broken_client.get("/api/plugins/audio_control/state")
@@ -269,3 +274,77 @@ class TestAuditLogging:
         assert resp.status_code == 200
         assert len(events) == 1
         assert events[0]["action"] == "audio_stream_mute"
+
+
+class TestCuratedMessagesSurviveTheScrubber:
+    """A 502's message must reach the client (#591).
+
+    The global handler rewrites the detail of every HTTPException >= 500 to
+    "Internal server error"; only a ServiceError keeps its public message. The
+    other tests here build a bare FastAPI() without that handler, which is why
+    none of them could notice - these register it on purpose.
+    """
+
+    @staticmethod
+    def _client(monkeypatch, backend) -> TestClient:
+        from app.core.exception_handlers import register_exception_handlers
+
+        monkeypatch.setattr(
+            service_module, "get_audio_service", lambda: AudioService(backend=backend)
+        )
+        app = FastAPI()
+        register_exception_handlers(app)
+        app.include_router(AudioControlPlugin().get_router(), prefix="/api/plugins/audio_control")
+        app.dependency_overrides[require_power_control_audio] = lambda: _User()
+        return TestClient(app, raise_server_exceptions=False)
+
+    @staticmethod
+    def _broken_stack():
+        from app.plugins.installed.audio_control.models import AudioState
+
+        class _Broken(DevAudioBackend):
+            async def get_state(self) -> AudioState:
+                return AudioState(available=False, detail="PipeWire nicht erreichbar")
+
+            async def set_sink_volume(self, sink_id, percent):
+                return False, "Zeitueberschreitung"
+
+        return _Broken()
+
+    @staticmethod
+    def _failing_writes():
+        class _Failing(DevAudioBackend):
+            async def set_sink_volume(self, sink_id, percent):
+                return False, "pactl: Failure"
+
+            async def set_default_sink(self, name):
+                return False, "pactl: Failure"
+
+        return _Failing()
+
+    def test_write_on_a_broken_stack_says_audio_unreachable(self, monkeypatch):
+        client = self._client(monkeypatch, self._broken_stack())
+        resp = client.put("/api/plugins/audio_control/sinks/61/volume", json={"percent": 10})
+        assert resp.status_code == 502
+        assert resp.json()["detail"] == "Audio nicht erreichbar"
+
+    def test_default_sink_on_a_broken_stack_says_audio_unreachable(self, monkeypatch):
+        client = self._client(monkeypatch, self._broken_stack())
+        resp = client.put("/api/plugins/audio_control/default-sink", json={"name": "egal"})
+        assert resp.status_code == 502
+        assert resp.json()["detail"] == "Audio nicht erreichbar"
+
+    def test_failed_write_on_a_working_stack_says_action_failed(self, monkeypatch):
+        client = self._client(monkeypatch, self._failing_writes())
+        resp = client.put("/api/plugins/audio_control/sinks/61/volume", json={"percent": 10})
+        assert resp.status_code == 502
+        assert resp.json()["detail"] == "Aktion fehlgeschlagen"
+
+    def test_failed_default_sink_on_a_working_stack_says_action_failed(self, monkeypatch):
+        client = self._client(monkeypatch, self._failing_writes())
+        resp = client.put(
+            "/api/plugins/audio_control/default-sink",
+            json={"name": "alsa_output.dev-gpu.hdmi-stereo"},
+        )
+        assert resp.status_code == 502
+        assert resp.json()["detail"] == "Aktion fehlgeschlagen"

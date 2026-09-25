@@ -16,6 +16,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
 from app.api.deps import require_power_control_audio
+from app.core.exceptions import BadGatewayError
 from app.core.rate_limiter import get_limit, user_limiter
 from app.plugins.base import PluginBase, PluginMetadata, PluginUIManifest
 from app.plugins.installed.audio_control.models import (
@@ -85,16 +86,14 @@ async def _apply(ok: bool, message: str, kind: str, target_id: int) -> dict:
 
     state = await service_module.get_audio_service().get_state()
     if not state.available:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY, detail="Audio nicht erreichbar"
-        )
+        raise BadGatewayError("Audio nicht erreichbar")
 
     known = state.sinks if kind == "sink" else state.streams
     if not any(item.id == target_id for item in known):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Nicht gefunden")
 
     logger.warning("Audio-Schreibvorgang fehlgeschlagen (%s %s): %s", kind, target_id, message)
-    raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Aktion fehlgeschlagen")
+    raise BadGatewayError("Aktion fehlgeschlagen")
 
 
 async def _apply_default_sink(ok: bool, message: str, name: str) -> dict:
@@ -104,14 +103,12 @@ async def _apply_default_sink(ok: bool, message: str, name: str) -> dict:
 
     state = await service_module.get_audio_service().get_state()
     if not state.available:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY, detail="Audio nicht erreichbar"
-        )
+        raise BadGatewayError("Audio nicht erreichbar")
     if not any(sink.name == name for sink in state.sinks):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Nicht gefunden")
 
     logger.warning("Standardgeraet konnte nicht gesetzt werden (%s): %s", name, message)
-    raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Aktion fehlgeschlagen")
+    raise BadGatewayError("Aktion fehlgeschlagen")
 
 
 @router.get("/state", response_model=AudioState)
@@ -177,9 +174,7 @@ async def set_default_sink(
     service = service_module.get_audio_service()
     state = await service.get_state()
     if not state.available:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY, detail="Audio nicht erreichbar"
-        )
+        raise BadGatewayError("Audio nicht erreichbar")
     if not any(sink.name == body.name for sink in state.sinks):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Nicht gefunden")
 
