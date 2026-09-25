@@ -484,3 +484,51 @@ class TestInvalidationHelper:
         _invalidate_ssd_cache(str(entry.source_path), db=db)
         db.refresh(entry)
         assert entry.is_valid is False
+
+
+class TestConfigPathSuffixIsStable:
+    """get_config() appends the array suffix once, whatever the separator (#636).
+
+    It compared str(path).endswith("/<array>"); a Windows path ends in
+    "\<array>", so every call appended another "/<array>" and the cache root
+    kept growing (md0/md0/md0...). Backslash paths are written out literally
+    so the test means the same on the Linux CI and the Windows dev box.
+    """
+
+    WIN_ROOT = r"D:\baluhost\cache"
+
+    def _config(self, db: Session, cache_path: str) -> SSDCacheConfig:
+        config = SSDCacheConfig(array_name=ARRAY_NAME, is_enabled=False, cache_path=cache_path)
+        db.add(config)
+        db.commit()
+        return config
+
+    def test_windows_path_with_suffix_is_left_alone(self, db: Session):
+        path = self.WIN_ROOT + "\\" + ARRAY_NAME
+        self._config(db, path)
+        service = SSDFileCacheService(db, ARRAY_NAME)
+
+        for _ in range(3):
+            config = service.get_config()
+
+        assert config.cache_path == path
+
+    def test_missing_suffix_is_appended_exactly_once(self, db: Session):
+        self._config(db, "/srv/custom-cache")
+        service = SSDFileCacheService(db, ARRAY_NAME)
+
+        for _ in range(3):
+            config = service.get_config()
+
+        assert config.cache_path == f"/srv/custom-cache/{ARRAY_NAME}"
+
+    def test_windows_path_without_suffix_gets_it_once(self, db: Session):
+        self._config(db, self.WIN_ROOT)
+        service = SSDFileCacheService(db, ARRAY_NAME)
+
+        first = service.get_config().cache_path
+        for _ in range(2):
+            config = service.get_config()
+
+        assert config.cache_path == first
+        assert first.startswith(self.WIN_ROOT) and first.endswith(ARRAY_NAME)
