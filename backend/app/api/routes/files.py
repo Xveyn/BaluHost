@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.api import deps
 from app.core.database import get_db
+from app.core.exceptions import InsufficientStorageError
 from app.core.power_rating import requires_power
 from app.core.rate_limiter import user_limiter, get_limit
 from app.schemas.power import ServicePowerProperty
@@ -754,7 +755,9 @@ async def upload_files(
             path, incoming, user=user, folder_paths=None, db=db, upload_ids=upload_ids
         )
     except file_service.QuotaExceededError as exc:
-        raise HTTPException(status_code=status.HTTP_507_INSUFFICIENT_STORAGE, detail=str(exc)) from exc
+        # QuotaExceededError carries our own byte counts, no internals; a plain
+        # HTTPException(507) had the scrubber turn it into "Internal server error".
+        raise InsufficientStorageError(str(exc)) from exc
     except PermissionDeniedError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     except file_service.FileAccessError as exc:

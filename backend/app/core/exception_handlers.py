@@ -21,7 +21,10 @@ logger = logging.getLogger(__name__)
 
 async def _service_error_handler(request: Request, exc: ServiceError) -> JSONResponse:
     logger.warning("ServiceError on %s %s: %s", request.method, request.url.path, exc)
-    return JSONResponse(status_code=exc.http_status, content={"detail": exc.public_message})
+    detail = exc.public_detail if exc.public_detail is not None else exc.public_message
+    return JSONResponse(
+        status_code=exc.http_status, content={"detail": detail}, headers=exc.headers
+    )
 
 
 async def _http_exception_handler(request: Request, exc: StarletteHTTPException):
@@ -33,7 +36,14 @@ async def _http_exception_handler(request: Request, exc: StarletteHTTPException)
             "HTTP %s on %s %s (detail scrubbed): %s",
             exc.status_code, request.method, request.url.path, exc.detail,
         )
-        return JSONResponse(status_code=exc.status_code, content={"detail": "Internal server error"})
+        # Headers are kept: the raising code set them on purpose (Retry-After,
+        # WWW-Authenticate), and dropping them broke the sync-sleep 503's
+        # documented Retry-After contract. Only the text is internal.
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"detail": "Internal server error"},
+            headers=getattr(exc, "headers", None),
+        )
     return await http_exception_handler(request, exc)
 
 

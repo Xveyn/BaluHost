@@ -533,13 +533,18 @@ async def require_sync_allowed(request: Request) -> None:
         next_wake_at = wake_dt.isoformat()
         retry_after = int((wake_dt - now).total_seconds())
 
-    raise HTTPException(
-        status_code=503,
+    # A ServiceError, not HTTPException(503): the global 5xx scrubber replaced
+    # this payload with "Internal server error" and dropped Retry-After, which
+    # broke the contract in docs/sleep-aware-sync-client-guide.md.
+    from app.core.exceptions import ServiceUnavailableError
+
+    raise ServiceUnavailableError(
+        "Sync blocked: NAS is in sleep mode",
         detail={
             "message": "Sync blocked: NAS is in sleep mode",
             "sleep_state": state.value,
             "next_wake_at": next_wake_at,
             "retry_after_seconds": retry_after,
         },
-        headers={"Retry-After": str(retry_after)} if retry_after else {},
+        headers={"Retry-After": str(retry_after)} if retry_after else None,
     )
