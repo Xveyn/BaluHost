@@ -49,7 +49,7 @@ class SQLiteToPostgreSQLMigrator:
         if not self.backup or not self.source_path.exists():
             return None
         
-        logger.info("📦 Erstelle SQLite Backup...")
+        logger.info("Erstelle SQLite Backup...")
         
         try:
             backup_dir = Path("dev-backups")
@@ -60,7 +60,7 @@ class SQLiteToPostgreSQLMigrator:
             
             shutil.copy2(self.source_path, backup_path)
             
-            logger.info(f"✅ Backup erstellt: {backup_path}")
+            logger.info(f"Backup erstellt: {backup_path}")
             self.migration_log.append({
                 "step": "backup",
                 "status": "success",
@@ -71,7 +71,7 @@ class SQLiteToPostgreSQLMigrator:
             return backup_path
             
         except Exception as e:
-            logger.error(f"❌ Backup fehlgeschlagen: {e}")
+            logger.error(f"Backup fehlgeschlagen: {e}")
             self.migration_log.append({
                 "step": "backup",
                 "status": "error",
@@ -82,21 +82,21 @@ class SQLiteToPostgreSQLMigrator:
     
     def verify_sqlite_database(self) -> bool:
         """Verifiziere SQLite Datenbank."""
-        logger.info("🔍 Verifiziere SQLite Datenbank...")
+        logger.info("Verifiziere SQLite Datenbank...")
         
         try:
             if not self.source_path.exists():
-                logger.error(f"❌ SQLite Datei nicht gefunden: {self.source_path}")
+                logger.error(f"SQLite Datei nicht gefunden: {self.source_path}")
                 return False
             
             # Prüfe ob es eine echte SQLite Datei ist
             with open(self.source_path, 'rb') as f:
                 header = f.read(16)
                 if not header.startswith(b'SQLite format 3'):
-                    logger.error("❌ Datei ist keine gültige SQLite Datenbank")
+                    logger.error("Datei ist keine gültige SQLite Datenbank")
                     return False
             
-            logger.info("✅ SQLite Datenbank ist gültig")
+            logger.info("SQLite Datenbank ist gültig")
             self.migration_log.append({
                 "step": "verify_sqlite",
                 "status": "success",
@@ -106,7 +106,7 @@ class SQLiteToPostgreSQLMigrator:
             return True
             
         except Exception as e:
-            logger.error(f"❌ Verifikation fehlgeschlagen: {e}")
+            logger.error(f"Verifikation fehlgeschlagen: {e}")
             self.migration_log.append({
                 "step": "verify_sqlite",
                 "status": "error",
@@ -117,7 +117,7 @@ class SQLiteToPostgreSQLMigrator:
     
     def migrate_database(self) -> bool:
         """Führe Datenbank-Migration durch."""
-        logger.info("🔄 Starte Datenbank-Migration...")
+        logger.info("Starte Datenbank-Migration...")
         
         try:
             from sqlalchemy import create_engine, inspect, text, MetaData, Table
@@ -127,31 +127,31 @@ class SQLiteToPostgreSQLMigrator:
             postgres_engine = create_engine(self.target_url, echo=False)
             
             # 1. Verifiziere PostgreSQL Verbindung
-            logger.info("📡 Teste PostgreSQL Verbindung...")
+            logger.info("Teste PostgreSQL Verbindung...")
             try:
                 with postgres_engine.connect() as conn:
                     conn.execute(text("SELECT 1"))
-                logger.info("✅ PostgreSQL Verbindung erfolgreich")
+                logger.info("PostgreSQL Verbindung erfolgreich")
             except Exception as e:
-                logger.error(f"❌ PostgreSQL Verbindung fehlgeschlagen: {e}")
+                logger.error(f"PostgreSQL Verbindung fehlgeschlagen: {e}")
                 logger.error("   Stelle sicher, dass PostgreSQL läuft")
                 logger.error("   Oder führe aus: docker-compose -f deployment/docker-compose.yml up -d")
                 return False
             
             # 2. Lese SQLite Struktur
-            logger.info("📖 Lese SQLite Struktur...")
+            logger.info("Lese SQLite Struktur...")
             inspector = inspect(sqlite_engine)
             tables = inspector.get_table_names()
             
             if not tables:
-                logger.warning("⚠️  Keine Tabellen in SQLite gefunden")
+                logger.warning("Keine Tabellen in SQLite gefunden")
                 return True
             
-            logger.info(f"📋 Gefundene Tabellen: {tables}")
+            logger.info(f"Gefundene Tabellen: {tables}")
             
             # 3. Migriere Tabellen
             for table_name in tables:
-                logger.info(f"🚀 Migriere Tabelle: {table_name}")
+                logger.info(f"Migriere Tabelle: {table_name}")
                 
                 try:
                     # Lese Daten aus SQLite
@@ -162,13 +162,13 @@ class SQLiteToPostgreSQLMigrator:
                             rows = result.fetchall()
                             columns = result.keys()
                         except Exception:
-                            logger.warning(f"⚠️  Konnte Tabelle {table_name} nicht lesen")
+                            logger.warning(f"Konnte Tabelle {table_name} nicht lesen")
                             continue
                     
-                    logger.info(f"   → {len(rows)} Zeilen zu migrieren")
+                    logger.info(f"   -> {len(rows)} Zeilen zu migrieren")
                     
                     if len(rows) == 0:
-                        logger.info("   → Tabelle ist leer, skip data insert")
+                        logger.info("   -> Tabelle ist leer, skip data insert")
                         self.migration_log.append({
                             "step": f"migrate_table_{table_name}",
                             "status": "success",
@@ -190,10 +190,10 @@ class SQLiteToPostgreSQLMigrator:
                                     postgres_conn.execute(text(query), row)
                                     
                                     if (i + 1) % 100 == 0:
-                                        logger.debug(f"   → {i + 1} Zeilen inserted")
+                                        logger.debug(f"   -> {i + 1} Zeilen inserted")
                                         
                                 except Exception as e:
-                                    logger.warning(f"   ⚠️  Zeile {i} konnte nicht migriert werden: {e}")
+                                    logger.warning(f"   Zeile {i} konnte nicht migriert werden: {e}")
                     
                     self.migration_log.append({
                         "step": f"migrate_table_{table_name}",
@@ -204,7 +204,7 @@ class SQLiteToPostgreSQLMigrator:
                     })
                     
                 except Exception as e:
-                    logger.error(f"❌ Fehler bei Tabelle {table_name}: {e}")
+                    logger.error(f"Fehler bei Tabelle {table_name}: {e}")
                     self.migration_log.append({
                         "step": f"migrate_table_{table_name}",
                         "status": "error",
@@ -213,15 +213,15 @@ class SQLiteToPostgreSQLMigrator:
                     })
                     return False
             
-            logger.info("✅ Migration erfolgreich abgeschlossen")
+            logger.info("Migration erfolgreich abgeschlossen")
             return True
             
         except ImportError:
-            logger.error("❌ SQLAlchemy nicht installiert")
+            logger.error("SQLAlchemy nicht installiert")
             logger.error("   Führe aus: pip install sqlalchemy")
             return False
         except Exception as e:
-            logger.error(f"❌ Migration fehlgeschlagen: {e}")
+            logger.error(f"Migration fehlgeschlagen: {e}")
             self.migration_log.append({
                 "step": "migrate",
                 "status": "error",
@@ -234,34 +234,34 @@ class SQLiteToPostgreSQLMigrator:
         """Führe komplette Migration durch."""
         try:
             logger.info("=" * 60)
-            logger.info("  SQLite → PostgreSQL Migration")
+            logger.info("  SQLite -> PostgreSQL Migration")
             logger.info("=" * 60)
             
             if self.dry_run:
-                logger.info("🧪 DRY-RUN MODE (keine Daten werden geschrieben)")
+                logger.info("DRY-RUN MODE (keine Daten werden geschrieben)")
             
             # 1. Backup
             self.backup_sqlite_database()
             
             # 2. Verifiziere SQLite
             if verify and not self.verify_sqlite_database():
-                logger.error("❌ SQLite Verifikation fehlgeschlagen")
+                logger.error("SQLite Verifikation fehlgeschlagen")
                 return False
             
             # 3. Migriere Daten
             if not self.migrate_database():
-                logger.error("❌ Migration fehlgeschlagen")
+                logger.error("Migration fehlgeschlagen")
                 return False
             
             logger.info("=" * 60)
-            logger.info("  ✅ Migration erfolgreich abgeschlossen!")
+            logger.info("  Migration erfolgreich abgeschlossen!")
             logger.info("=" * 60)
             
             self.save_migration_log()
             return True
             
         except Exception as e:
-            logger.error(f"❌ Kritischer Fehler: {e}")
+            logger.error(f"Kritischer Fehler: {e}")
             self.save_migration_log()
             return False
     
@@ -285,7 +285,7 @@ class SQLiteToPostgreSQLMigrator:
         with open(log_path, "w") as f:
             json.dump(log_data, f, indent=2)
         
-        logger.info(f"📝 Log gespeichert: {log_path}")
+        logger.info(f"Log gespeichert: {log_path}")
 
 
 async def main():

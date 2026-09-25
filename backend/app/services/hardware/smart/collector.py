@@ -61,7 +61,7 @@ def _read_real_smart_data() -> SmartStatusResponse:
         elif dev_type == 'scsi' and protocol.upper() == 'ATA':
             # SATA drives behind Linux SCSI layer: use SAT for correct health status
             dev_type = 'sat'
-            logger.debug("SMART: overriding type scsi→sat for ATA device %s", device_name)
+            logger.debug("SMART: overriding type scsi->sat for ATA device %s", device_name)
 
         _result, data = _run_smartctl(smartctl_path, dev_type, device_name)
         if data is None:
@@ -76,7 +76,7 @@ def _read_real_smart_data() -> SmartStatusResponse:
                 data = data_sat
                 # Remember this override so we don't retry next cycle
                 _device_type_overrides[device_name] = 'sat'
-                logger.info("SMART: cached device type override %s → sat", device_name)
+                logger.info("SMART: cached device type override %s -> sat", device_name)
 
         logger.debug("SMART raw JSON keys for %s: %s", device_name, list(data.keys()))
         logger.debug("SMART smart_status for %s: %s", device_name, data.get('smart_status'))

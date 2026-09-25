@@ -47,6 +47,18 @@ def setup_logging() -> None:
     for handler in root_logger.handlers[:]:
         root_logger.removeHandler(handler)
 
+    # Escape what the console can't encode instead of losing the line (#495).
+    # On Windows stdout is often cp1252 (pipes, Git Bash, IDE runners); an
+    # emoji in a message made StreamHandler raise, and logging's handleError()
+    # printed a traceback and dropped the line. The encoding itself stays as
+    # is, so a reader decoding with the console's codepage sees no mojibake.
+    # On the UTF-8 prod host nothing changes.
+    if hasattr(sys.stdout, "reconfigure"):
+        try:
+            sys.stdout.reconfigure(errors="backslashreplace")
+        except (ValueError, OSError):
+            pass  # detached or already-closed stream: keep the default
+
     # Add console handler
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(log_level)

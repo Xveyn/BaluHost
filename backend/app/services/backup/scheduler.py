@@ -98,14 +98,14 @@ class BackupScheduler:
             stats["filename"] = backup.filename
             stats["size_bytes"] = backup.size_bytes
 
-            logger.info(f"[BackupScheduler] ✅ Backup created successfully: {backup.filename}")
+            logger.info(f"[BackupScheduler] Backup created successfully: {backup.filename}")
             logger.info(f"[BackupScheduler] Size: {backup.size_bytes / (1024*1024):.2f} MB")
 
         except Exception as e:
             stats["status"] = "failed"
             stats["completed_at"] = datetime.now(timezone.utc).isoformat()
             stats["error"] = str(e)
-            logger.error(f"[BackupScheduler] ❌ Backup failed: {e}", exc_info=True)
+            logger.error(f"[BackupScheduler] Backup failed: {e}", exc_info=True)
 
         return stats
 

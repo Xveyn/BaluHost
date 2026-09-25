@@ -63,12 +63,12 @@ class PostgreSQLMigrator:
             with engine.connect() as conn:
                 conn.execute(text("VACUUM INTO ?"), [str(backup_path)])
             
-            logger.info(f"✅ Backup erstellt: {backup_path}")
+            logger.info(f"Backup erstellt: {backup_path}")
             self.migration_log.append(f"Backup erstellt: {backup_path}")
             
             return backup_path
         except Exception as e:
-            logger.error(f"❌ Backup fehlgeschlagen: {e}")
+            logger.error(f"Backup fehlgeschlagen: {e}")
             raise
     
     async def create_target_database(self) -> bool:
@@ -85,12 +85,12 @@ class PostgreSQLMigrator:
                 result = conn.execute(text("SELECT 1"))
                 assert result.scalar() == 1
             
-            logger.info("✅ PostgreSQL Verbindung erfolgreich")
+            logger.info("PostgreSQL Verbindung erfolgreich")
             self.migration_log.append("PostgreSQL Datenbank verbunden")
             return True
             
         except Exception as e:
-            logger.error(f"❌ PostgreSQL Verbindung fehlgeschlagen: {e}")
+            logger.error(f"PostgreSQL Verbindung fehlgeschlagen: {e}")
             self.migration_log.append(f"Fehler: {e}")
             return False
     
@@ -134,15 +134,15 @@ class PostgreSQLMigrator:
                             try:
                                 postgres_conn.execute(text(query), row)
                             except Exception as e:
-                                logger.warning(f"    ⚠️  Konnte Zeile nicht migrieren: {e}")
+                                logger.warning(f"    Konnte Zeile nicht migrieren: {e}")
                 
                 self.migration_log.append(f"Migrierte Tabelle {table_name}: {len(rows)} Zeilen")
             
-            logger.info("✅ Tabellen migriert")
+            logger.info("Tabellen migriert")
             return True
             
         except Exception as e:
-            logger.error(f"❌ Tabellen-Migration fehlgeschlagen: {e}")
+            logger.error(f"Tabellen-Migration fehlgeschlagen: {e}")
             self.migration_log.append(f"Fehler bei Migration: {e}")
             return False
     
@@ -165,7 +165,7 @@ class PostgreSQLMigrator:
             # Prüfe ob alle Tabellen vorhanden
             missing = sqlite_tables - postgres_tables
             if missing:
-                logger.error(f"❌ Fehlende Tabellen in PostgreSQL: {missing}")
+                logger.error(f"Fehlende Tabellen in PostgreSQL: {missing}")
                 return False
             
             # Prüfe Zeilenzahl
@@ -183,18 +183,18 @@ class PostgreSQLMigrator:
                     
                     if sqlite_count != postgres_count:
                         logger.warning(
-                            f"⚠️  Zeilenzahl-Unterschied für {table_name}: "
+                            f"Zeilenzahl-Unterschied für {table_name}: "
                             f"SQLite={sqlite_count}, PostgreSQL={postgres_count}"
                         )
                     else:
-                        logger.info(f"✅ {table_name}: {postgres_count} Zeilen OK")
+                        logger.info(f"{table_name}: {postgres_count} Zeilen OK")
             
-            logger.info("✅ Verifizierung erfolgreich")
+            logger.info("Verifizierung erfolgreich")
             self.migration_log.append("Verifizierung erfolgreich")
             return True
             
         except Exception as e:
-            logger.error(f"❌ Verifizierung fehlgeschlagen: {e}")
+            logger.error(f"Verifizierung fehlgeschlagen: {e}")
             self.migration_log.append(f"Verifizierungsfehler: {e}")
             return False
     
@@ -223,10 +223,10 @@ class PostgreSQLMigrator:
             
             # 4. Verifiziere
             if verify and not await self.verify_migration():
-                logger.warning("⚠️  Verifizierung mit Warnungen abgeschlossen")
+                logger.warning("Verifizierung mit Warnungen abgeschlossen")
             
             logger.info("="*60)
-            logger.info("  ✅ Migration erfolgreich abgeschlossen!")
+            logger.info("  Migration erfolgreich abgeschlossen!")
             logger.info("="*60)
             
             # Speichere Log
@@ -235,7 +235,7 @@ class PostgreSQLMigrator:
             return True
             
         except Exception as e:
-            logger.error(f"❌ Kritischer Fehler: {e}")
+            logger.error(f"Kritischer Fehler: {e}")
             return False
     
     def save_migration_log(self):

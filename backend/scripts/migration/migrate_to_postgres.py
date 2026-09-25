@@ -117,10 +117,10 @@ def migrate_table_data(source_engine, target_engine, table_name: str) -> int:
         count = len(source_rows)
 
         if count == 0:
-            logger.info(f"  → No data to migrate in {table_name}")
+            logger.info(f"  -> No data to migrate in {table_name}")
             return 0
 
-        logger.info(f"  → Found {count} rows")
+        logger.info(f"  -> Found {count} rows")
 
         # Insert into target
         for i, row in enumerate(source_rows, 1):
@@ -134,17 +134,17 @@ def migrate_table_data(source_engine, target_engine, table_name: str) -> int:
             # Commit in batches of 100
             if i % 100 == 0:
                 target_session.commit()
-                logger.info(f"  → Migrated {i}/{count} rows...")
+                logger.info(f"  -> Migrated {i}/{count} rows...")
 
         # Final commit
         target_session.commit()
-        logger.info(f"  ✓ Successfully migrated {count} rows")
+        logger.info(f"  Successfully migrated {count} rows")
 
         return count
 
     except Exception as e:
         target_session.rollback()
-        logger.error(f"  ✗ Error migrating {table_name}: {e}")
+        logger.error(f"  Error migrating {table_name}: {e}")
         raise
 
     finally:
@@ -197,7 +197,7 @@ def verify_migration(source_engine, target_engine) -> bool:
                 )
                 all_match = False
             else:
-                logger.info(f"  ✓ {table_name}: {source_count} rows")
+                logger.info(f"  {table_name}: {source_count} rows")
 
         return all_match
 
@@ -246,7 +246,7 @@ def main():
         return 1
 
     logger.info("=" * 60)
-    logger.info("BaluHost: SQLite → PostgreSQL Migration")
+    logger.info("BaluHost: SQLite -> PostgreSQL Migration")
     logger.info("=" * 60)
     logger.info(f"Source: {args.sqlite_path}")
     logger.info(f"Target: {args.postgres_url.split('@')[-1]}")  # Hide credentials
@@ -276,10 +276,10 @@ def main():
             # Verify only
             logger.info("Verification mode: checking existing migration")
             if verify_migration(source_engine, target_engine):
-                logger.info("\n✓ Migration verification PASSED")
+                logger.info("\nMigration verification PASSED")
                 return 0
             else:
-                logger.error("\n✗ Migration verification FAILED")
+                logger.error("\nMigration verification FAILED")
                 return 1
 
         # Step 3: Run migrations to create schema
@@ -315,7 +315,7 @@ def main():
         if verify_migration(source_engine, target_engine):
             logger.info("")
             logger.info("=" * 60)
-            logger.info("✓ MIGRATION COMPLETED SUCCESSFULLY")
+            logger.info("MIGRATION COMPLETED SUCCESSFULLY")
             logger.info("=" * 60)
             logger.info("")
             logger.info("Next steps:")
@@ -326,7 +326,7 @@ def main():
             logger.info("")
             return 0
         else:
-            logger.error("\n✗ MIGRATION VERIFICATION FAILED")
+            logger.error("\nMIGRATION VERIFICATION FAILED")
             logger.error("Please review the errors above and try again.")
             return 1
 
