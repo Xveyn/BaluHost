@@ -52,6 +52,41 @@ class TestPanelData:
         assert item["tone"] == "neutral"
         assert item["value"] == "24.07. · 3h 04m"
 
+    async def test_date_is_the_servers_local_date_under_sqlite_too(self, db_session, monkeypatch):
+        # 23:30 UTC on the 24th is 01:30 on the 25th in Berlin. SQLite hands
+        # the value back naive; formatting it as UTC showed the 24th (#470).
+        import app.plugins.installed.steam_gaming as steam_gaming
+
+        monkeypatch.setattr(steam_gaming, "_display_tz", lambda: timezone(timedelta(hours=2)))
+        start = datetime(2026, 7, 24, 23, 30, tzinfo=timezone.utc)
+        db_session.add(SteamSession(
+            app_id="333", game_name="Hades", started_at=start,
+            last_seen_at=start + timedelta(minutes=12), ended_at=start + timedelta(minutes=12),
+        ))
+        db_session.commit()
+
+        data = await SteamGamingPlugin().get_dashboard_data(db_session)
+
+        assert data["items"][0]["value"] == "25.07. · 12m"
+
+    def test_sqlite_and_postgres_shapes_format_the_same(self, monkeypatch):
+        # SQLite: naive UTC. psycopg2: aware in the session time zone. Both
+        # must end up as the same displayed date.
+        import app.plugins.installed.steam_gaming as steam_gaming
+
+        berlin_summer = timezone(timedelta(hours=2))
+        monkeypatch.setattr(steam_gaming, "_display_tz", lambda: berlin_summer)
+        end = datetime(2026, 7, 25, 0, 0, tzinfo=timezone.utc)
+
+        def row(started_at: datetime) -> SteamSession:
+            return SteamSession(app_id="1", started_at=started_at, last_seen_at=end, ended_at=end)
+
+        sqlite_shape = datetime(2026, 7, 24, 23, 30)  # naive, meant as UTC
+        pg_shape = datetime(2026, 7, 25, 1, 30, tzinfo=berlin_summer)
+
+        assert steam_gaming._panel_value(row(sqlite_shape), end) == steam_gaming._panel_value(row(pg_shape), end)
+        assert steam_gaming._panel_value(row(sqlite_shape), end).startswith("25.07.")
+
     async def test_unresolved_name_falls_back_to_the_app_id(self, db_session):
         db_session.add(SteamSession(
             app_id="999", game_name=None, started_at=T0, last_seen_at=T0, ended_at=T0,

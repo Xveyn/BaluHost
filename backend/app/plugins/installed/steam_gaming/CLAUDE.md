@@ -186,6 +186,11 @@ degrades to the generic plug icon. `Gamepad2` and `Monitor` are known-good.
   `resolvePluginString`; `*_text` fields are the literal fallback.
 - Durations are formatted digits-only (`3h 04m`, `12m`) so no string needs
   translating.
+- Panel dates are converted explicitly to the server's local zone
+  (`_display_tz()`, None = system zone) before formatting. The value's own
+  offset is not a reference: SQLite returns naive UTC, psycopg2 an aware value
+  in the DB session's zone, so formatting it directly made dev and prod show
+  different dates for a session started around midnight (#470).
 
 ## Tests
 
