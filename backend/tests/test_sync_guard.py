@@ -11,7 +11,13 @@ def _make_app():
     """Create a minimal FastAPI app with the guard dependency."""
     from app.api.deps import require_sync_allowed
 
+    from app.core.exception_handlers import register_exception_handlers
+
     test_app = FastAPI()
+    # The app's real handlers: without them a 5xx passes through unscrubbed
+    # and this file could not see that the scrubber ate the sleep payload and
+    # the Retry-After header in production.
+    register_exception_handlers(test_app)
 
     @test_app.get("/test-guarded")
     async def guarded_endpoint(request: Request, _=Depends(require_sync_allowed)):
@@ -51,6 +57,8 @@ class TestRequireSyncAllowed:
         data = resp.json()
         assert data["detail"]["sleep_state"] == "soft_sleep"
         assert data["detail"]["next_wake_at"] is not None
+        assert data["detail"]["retry_after_seconds"] > 0
+        assert resp.headers.get("retry-after") == str(data["detail"]["retry_after_seconds"])
 
     def test_soft_sleep_allows_manual_sync(self):
         """Manual sync is allowed even during soft sleep (auto-wake handles it)."""

@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 
 from app.api import deps
 from app.core.database import get_db
+from app.core.exceptions import InsufficientStorageError
 from app.schemas.user import UserPublic
 from app.services.files.chunked_upload import get_chunked_upload_manager
 from app.services.files.operations import (
@@ -126,9 +127,8 @@ async def chunked_init(
     # Space pre-check (quota-based in dev, real disk space in prod)
     available = await calculate_available_bytes_async()
     if payload.total_size > available:
-        raise HTTPException(
-            status.HTTP_507_INSUFFICIENT_STORAGE,
-            detail=f"Not enough space. Need {payload.total_size} bytes, available {available}.",
+        raise InsufficientStorageError(
+            f"Not enough space. Need {payload.total_size} bytes, available {available}."
         )
 
     mgr = get_chunked_upload_manager()
@@ -230,9 +230,8 @@ async def chunked_complete(
         temp_path.unlink(missing_ok=True)
         progress_mgr = get_upload_progress_manager()
         await progress_mgr.fail_upload(upload_id, "Not enough space")
-        raise HTTPException(
-            status.HTTP_507_INSUFFICIENT_STORAGE,
-            detail=f"Not enough space. Need {needed} bytes, available {available}.",
+        raise InsufficientStorageError(
+            f"Not enough space. Need {needed} bytes, available {available}."
         )
 
     await asyncio.to_thread(shutil.move, str(temp_path), str(destination))

@@ -114,3 +114,50 @@ def test_http_400_detail_passes_through(raw_client):
     r = raw_client.get("/__test__/http-400")
     assert r.status_code == 400
     assert r.json()["detail"] == "bad filename ../x"
+
+
+# --- headers and structured payloads (scrubber follow-up to #591) ----------
+
+
+@_fault_router.get("/__test__/http-503-with-header")
+def _raise_http_503_with_header():
+    raise HTTPException(status_code=503, detail="raw secret=hunter2", headers={"Retry-After": "120"})
+
+
+@_fault_router.get("/__test__/service-error-structured")
+def _raise_structured():
+    raise ServiceUnavailableError(
+        "Sync blocked",
+        detail={"message": "Sync blocked", "retry_after_seconds": 120},
+        headers={"Retry-After": "120"},
+    )
+
+
+@_fault_router.get("/__test__/insufficient-storage")
+def _raise_insufficient_storage():
+    from app.core.exceptions import InsufficientStorageError
+
+    raise InsufficientStorageError("Not enough space. Need 10 bytes, available 3.")
+
+
+def test_scrubbed_5xx_keeps_its_headers(raw_client):
+    # Headers are set deliberately by the raising code (Retry-After,
+    # WWW-Authenticate); scrubbing the text must not drop them.
+    r = raw_client.get("/__test__/http-503-with-header")
+    assert r.status_code == 503
+    assert r.json()["detail"] == "Internal server error"
+    assert "hunter2" not in r.text
+    assert r.headers.get("retry-after") == "120"
+
+
+def test_service_error_can_carry_a_structured_detail_and_headers(raw_client):
+    r = raw_client.get("/__test__/service-error-structured")
+    assert r.status_code == 503
+    assert r.json()["detail"] == {"message": "Sync blocked", "retry_after_seconds": 120}
+    assert r.headers.get("retry-after") == "120"
+
+
+def test_insufficient_storage_is_a_507_with_its_message(raw_client):
+    r = raw_client.get("/__test__/insufficient-storage")
+    assert r.status_code == 507
+    assert r.json()["detail"] == "Not enough space. Need 10 bytes, available 3."
