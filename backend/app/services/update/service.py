@@ -212,13 +212,24 @@ class UpdateService:
             # For now, use latest
             pass
 
+        # The GitHub-based check yields a tag but no commit; the runner needs
+        # a SHA (#216). Resolve before recording, so a failure leaves no row.
+        target_commit = target.commit
+        if isinstance(self.backend, ProdUpdateBackend) and not target_commit:
+            target_commit = self.backend.resolve_tag_commit(target.tag or "") or ""
+            if not target_commit:
+                return UpdateStartResponse(
+                    success=False,
+                    message=f"Could not resolve release tag {target.tag!r} to a commit",
+                )
+
         # Create update record
         update = UpdateHistory(
             from_version=current.version,
             to_version=target.version,
             channel=check_result.channel,
             from_commit=current.commit,
-            to_commit=target.commit,
+            to_commit=target_commit,
             user_id=user_id,
             status=UpdateStatus.PENDING.value,
             changelog="\n".join(
@@ -241,7 +252,7 @@ class UpdateService:
             success, error = self.backend.launch_update_script(
                 update_id=update.id,
                 from_commit=current.commit,
-                to_commit=target.commit,
+                to_commit=target_commit,
                 from_version=current.version,
                 to_version=target.version,
             )

@@ -45,6 +45,16 @@ logger = logging.getLogger(__name__)
 # else before it reaches `git checkout` (blocks option-injection like --force).
 _COMMIT_RE = re.compile(r"^[0-9a-fA-F]{7,40}$")
 
+# Release tags as the GitHub API reports them (v1.38.0, v1.37.1-pre.43). The tag
+# becomes a git argument, so anything else is rejected before git sees it.
+_TAG_RE = re.compile(r"^v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?$")
+
+_UPDATE_UNIT = "baluhost-update.service"
+# SubStates in which the runner process is actually alive. With
+# --remain-after-exit a finished runner stays ActiveState=active but moves to
+# SubState=exited, so ActiveState alone can't tell "running" from "done".
+_UNIT_RUNNING_SUBSTATES = frozenset({"running", "start", "start-pre", "start-post"})
+
 
 class ProdUpdateBackend(UpdateBackend):
     """Production backend using Git and systemctl."""
@@ -187,6 +197,43 @@ class ProdUpdateBackend(UpdateBackend):
     @staticmethod
     def _is_valid_commit(commit: str) -> bool:
         return bool(commit) and bool(_COMMIT_RE.match(commit))
+
+    def resolve_tag_commit(self, tag: str) -> Optional[str]:
+        """Resolve a release tag to its commit SHA, fetching tags if needed.
+
+        The GitHub-based update check only knows the tag; the runner needs a
+        SHA (#216). Returns None if the tag is malformed or unknown.
+        """
+        if not tag or not _TAG_RE.match(tag):
+            return None
+
+        ref = f"refs/tags/{tag}^{{commit}}"
+        ok, sha, _ = self._run_git("rev-parse", "--verify", "--quiet", ref)
+        if not ok:
+            self._run_git("fetch", "--tags", "--quiet")
+            ok, sha, _ = self._run_git("rev-parse", "--verify", "--quiet", ref)
+
+        if ok and self._is_valid_commit(sha):
+            return sha
+        return None
+
+    @staticmethod
+    def update_unit_running() -> Optional[bool]:
+        """Whether the detached update runner process is alive.
+
+        None if systemd can't be asked. A unit that no longer exists (e.g.
+        after a reboot) reports SubState=dead, i.e. False.
+        """
+        try:
+            result = subprocess.run(
+                ["systemctl", "show", _UPDATE_UNIT, "-p", "SubState", "--value"],
+                capture_output=True, text=True, timeout=5,
+            )
+        except Exception:
+            return None
+        if result.returncode != 0:
+            return None
+        return result.stdout.strip() in _UNIT_RUNNING_SUBSTATES
 
     async def apply_updates(
         self, target_commit: str, callback: Optional[ProgressCallback] = None
