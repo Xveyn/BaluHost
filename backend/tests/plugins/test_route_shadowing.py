@@ -10,7 +10,11 @@ import logging
 
 from fastapi import APIRouter, FastAPI
 
-from app.plugins.route_shadowing import find_shadowed_plugin_routes, warn_shadowed_plugin_routes
+from app.plugins.route_shadowing import (
+    find_shadowed_plugin_routes,
+    flatten_routes,
+    warn_shadowed_plugin_routes,
+)
 
 
 def _core_app() -> FastAPI:
@@ -98,7 +102,7 @@ def test_lifespan_mount_warns_and_still_mounts(caplog):
     _mount_plugin_router(app, _plugin_router(build))
 
     assert any("/api/plugins/demo/config" in r.getMessage() for r in caplog.records)
-    assert "/api/plugins/demo/health" in {getattr(r, "path", None) for r in app.routes}
+    assert "/api/plugins/demo/health" in {getattr(r, "path", None) for r in flatten_routes(app.routes)}
 
 
 def test_real_core_routes_shadow_a_plugin_config_route(caplog):

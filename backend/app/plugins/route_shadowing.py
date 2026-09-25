@@ -15,7 +15,7 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
-from typing import Iterable
+from typing import Iterable, Iterator
 
 from fastapi import APIRouter
 from starlette.routing import BaseRoute
@@ -34,6 +34,24 @@ class ShadowedRoute:
     core_path: str
 
 
+def flatten_routes(routes: Iterable[BaseRoute]) -> Iterator[BaseRoute]:
+    """Yield the leaf routes, whatever FastAPI version built the list.
+
+    Up to ~0.135 ``include_router()`` copied every route into the parent, so
+    ``app.routes`` was already flat. Newer versions (0.141 in CI) append one
+    included-router node per ``include_router()`` instead, exposing its leaves
+    via ``effective_route_contexts()`` - with the same ``path``, ``methods``,
+    ``tags`` and ``path_regex`` attributes. Duck-typed on that method rather
+    than on the (private) class, so both shapes work.
+    """
+    for route in routes:
+        contexts = getattr(route, "effective_route_contexts", None)
+        if callable(contexts):
+            yield from contexts()
+        else:
+            yield route
+
+
 def _plugin_name(route: BaseRoute) -> str | None:
     """Bundled plugin routes carry the tag ``plugin:<name>`` (PluginManager.get_router)."""
     for tag in getattr(route, "tags", None) or []:
@@ -50,10 +68,10 @@ def find_shadowed_plugin_routes(
     Only bundled plugin routes are checked; the catch-all for sandboxed plugins
     carries no plugin tag and is meant to lose against every core route.
     """
-    existing = [r for r in existing_routes if getattr(r, "path_regex", None) is not None]
+    existing = [r for r in flatten_routes(existing_routes) if getattr(r, "path_regex", None) is not None]
     found: list[ShadowedRoute] = []
 
-    for route in plugin_router.routes:
+    for route in flatten_routes(plugin_router.routes):
         plugin = _plugin_name(route)
         if plugin is None:
             continue
