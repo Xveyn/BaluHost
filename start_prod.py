@@ -112,6 +112,32 @@ def resolve_backend_python() -> str:
     return sys.executable
 
 
+def build_backend_cmd(backend_python: str) -> List[str]:
+    """uvicorn command line for the production backend.
+
+    Carries the same proxy trust as deploy/install/templates/baluhost-backend.service
+    (#621): behind nginx, request.client.host is 127.0.0.1 without
+    --proxy-headers, so is_private_or_local_ip() would pass every client and
+    the LAN gates (Bluetooth pairing, game launch, ...) would be open to the
+    internet. Trust is pinned to 127.0.0.1 so a direct client can't spoof
+    X-Forwarded-For. tests/test_start_prod_proxy_headers.py keeps both paths
+    in step.
+    """
+    return [
+        backend_python,
+        "-m",
+        "uvicorn",
+        "app.main:app",
+        "--host", PROD_CONFIG["backend_host"],
+        "--port", str(PROD_CONFIG["backend_port"]),
+        "--workers", str(PROD_CONFIG["workers"]),
+        "--access-log",
+        "--log-level", "info",
+        "--proxy-headers",
+        "--forwarded-allow-ips=127.0.0.1",
+    ]
+
+
 def resolve_npm_binary() -> Optional[str]:
     """Resolve npm binary, returns None if not found."""
     resolved = shutil.which("npm")
@@ -370,17 +396,7 @@ def main() -> int:
             local_ip = "localhost"
 
         # Backend command - production mode without reload
-        backend_cmd = [
-            backend_python,
-            "-m",
-            "uvicorn",
-            "app.main:app",
-            "--host", PROD_CONFIG["backend_host"],
-            "--port", str(PROD_CONFIG["backend_port"]),
-            "--workers", str(PROD_CONFIG["workers"]),
-            "--access-log",
-            "--log-level", "info",
-        ]
+        backend_cmd = build_backend_cmd(backend_python)
 
         print(f"\n[phase 2] Starting services...")
         print(f"[info] Backend binding to {PROD_CONFIG['backend_host']}:{PROD_CONFIG['backend_port']}")
