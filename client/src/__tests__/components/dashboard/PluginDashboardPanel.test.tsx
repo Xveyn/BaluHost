@@ -117,6 +117,57 @@ describe('socket authentication', () => {
   });
 });
 
+describe('empty state (#469)', () => {
+  // The route answers null for "no panel enabled" and a panel with data: null
+  // for "enabled, nothing to show yet" (e.g. steam_gaming before the first
+  // session). Only the first may say "no plugin configured".
+
+  async function mountWith(panel: unknown) {
+    const rendered = renderWithProviders(<PluginDashboardPanel />, {
+      auth: { username: 'sven' },
+      api: {
+        [PANEL_ROUTE]: panel,
+        [WS_TOKEN_ROUTE]: { token: 'ws-abc' },
+      },
+    });
+    await tick(100);
+    return rendered;
+  }
+
+  it('shows the configure placeholder when no panel is enabled', async () => {
+    await mountWith(null);
+
+    expect(screen.getByText('Kein Plugin konfiguriert')).toBeInTheDocument();
+  });
+
+  it('shows the panel title and a neutral hint when the panel has no data yet', async () => {
+    await mountWith({ ...PANEL, data: null });
+
+    expect(screen.getByText('Leistung')).toBeInTheDocument();
+    expect(screen.getByText('Noch keine Daten')).toBeInTheDocument();
+    expect(screen.queryByText('Kein Plugin konfiguriert')).not.toBeInTheDocument();
+  });
+
+  it('fills an empty panel from a live update', async () => {
+    await mountWith({ ...PANEL, data: null });
+    await act(async () => FakeWebSocket.last!.serverAccept());
+
+    await act(async () =>
+      FakeWebSocket.last!.serverSend({
+        type: 'dashboard_panel_update',
+        payload: {
+          panel_type: 'stat',
+          plugin_name: 'tapo_smart_plug',
+          data: { value: '42 W', meta: 'NAS-Steckdose' },
+        },
+      }),
+    );
+
+    expect(screen.getByText('42 W')).toBeInTheDocument();
+    expect(screen.queryByText('Noch keine Daten')).not.toBeInTheDocument();
+  });
+});
+
 describe('updates', () => {
   it('keeps REST polling while the socket is open (#306)', async () => {
     const { api } = await mount();

@@ -21,6 +21,7 @@ import { StatPanel } from './panels/StatPanel';
 import { StatusPanel } from './panels/StatusPanel';
 import { ChartPanel } from './panels/ChartPanel';
 import { PanelPlaceholder } from './panels/PanelPlaceholder';
+import { PanelEmpty } from './panels/PanelEmpty';
 import { resolvePluginString } from '../../lib/pluginI18n';
 import type { PluginTranslations } from '../../api/plugins';
 
@@ -156,7 +157,7 @@ export const PluginDashboardPanel: React.FC = () => {
     );
   }
 
-  if (!panel || !panel.data) {
+  if (!panel) {
     return <PanelPlaceholder />;
   }
 
@@ -178,6 +179,12 @@ export const PluginDashboardPanel: React.FC = () => {
     accent: panel.accent,
     onClick: handleClick,
   };
+
+  // Enabled but nothing to show yet (#469): the route sends the panel with
+  // data: null. "No plugin configured" would be wrong here.
+  if (!panel.data) {
+    return <PanelEmpty {...rendererProps} />;
+  }
 
   switch (panel.panel_type) {
     case 'gauge':
