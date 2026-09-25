@@ -44,6 +44,48 @@ class TestUpdateUser:
         assert closed_users == []
 
 
+class TestUpdateUserAudit:
+    """The audit details compared against old_user after update_user() had
+    already mutated that same identity-mapped object, so role and email
+    changes were never recorded."""
+
+    @pytest.fixture
+    def audit_details(self, monkeypatch) -> list[dict]:
+        import app.api.routes.users as users_routes
+
+        recorded: list[dict] = []
+
+        class _Audit:
+            def log_user_management(self, action, details=None, target_user=None, **kwargs):
+                if action == "user_updated":
+                    recorded.append(details or {})
+                    self.last_target = target_user
+
+        audit = _Audit()
+        monkeypatch.setattr(users_routes, "get_audit_logger_db", lambda: audit)
+        self.audit = audit
+        return recorded
+
+    def test_rename_is_audited_under_the_old_name(
+        self, client: TestClient, admin_headers, regular_user, closed_users, audit_details
+    ):
+        old_name = regular_user.username
+        r = client.put(f"/api/users/{regular_user.id}", json={"username": "renamed"}, headers=admin_headers)
+        assert r.status_code == 200
+        assert self.audit.last_target == old_name
+
+    def test_role_change_is_audited(self, client: TestClient, admin_headers, regular_user, closed_users, audit_details):
+        old_role = regular_user.role
+        r = client.put(f"/api/users/{regular_user.id}", json={"role": "admin"}, headers=admin_headers)
+        assert r.status_code == 200
+        assert audit_details == [{"role_changed": f"{old_role} -> admin"}]
+
+    def test_email_change_is_audited(self, client: TestClient, admin_headers, regular_user, closed_users, audit_details):
+        r = client.put(f"/api/users/{regular_user.id}", json={"email": "new@example.com"}, headers=admin_headers)
+        assert r.status_code == 200
+        assert audit_details == [{"email_changed": True}]
+
+
 class TestToggleActive:
     def test_toggle_closes_sockets(self, client: TestClient, admin_headers, regular_user, closed_users):
         r = client.patch(f"/api/users/{regular_user.id}/toggle-active", headers=admin_headers)

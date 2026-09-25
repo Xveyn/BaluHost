@@ -149,6 +149,7 @@ async def update_user(
     # Scalars, not old_user: update_user() loads the same identity-mapped
     # object and mutates it, so old_user shows the new values afterwards.
     prev_role, prev_active = old_user.role, old_user.is_active
+    prev_email, prev_username = old_user.email, old_user.username
 
     record = user_service.update_user(user_id, payload, db=db)
     if not record:
@@ -164,9 +165,9 @@ async def update_user(
 
     # Log changes
     details = {}
-    if payload.role and payload.role != old_user.role:
-        details["role_changed"] = f"{old_user.role} -> {payload.role}"
-    if payload.email and payload.email != old_user.email:
+    if payload.role and payload.role != prev_role:
+        details["role_changed"] = f"{prev_role} -> {payload.role}"
+    if payload.email and payload.email != prev_email:
         details["email_changed"] = True
     if payload.password:
         details["password_changed"] = True
@@ -174,7 +175,7 @@ async def update_user(
     audit_logger.log_user_management(
         action="user_updated",
         admin_user=current_admin.username,
-        target_user=old_user.username,
+        target_user=prev_username,
         details=details,
         success=True,
         db=db
