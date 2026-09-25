@@ -1,4 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+// ?raw (typed by vite/client) instead of node:fs - the test TS project that
+// `npm run build` checks has no Node types.
+import pluginPageSource from '../../components/PluginPage.tsx?raw';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import type { PluginUIInfo } from '../../api/plugins';
@@ -58,6 +61,37 @@ describe('PluginPage (#454)', () => {
     renderAt('legacy');
 
     expect(screen.getByTestId('sandbox-host')).toBeInTheDocument();
+  });
+
+  it('shows translated keys, not raw ones, for a plugin that is not enabled (#674)', () => {
+    renderAt('ghost_plugin');
+
+    expect(screen.queryByTestId('sandbox-host')).not.toBeInTheDocument();
+    expect(screen.getByText('page.notFoundTitle')).toBeInTheDocument();
+    expect(screen.getByText('page.notFoundDesc')).toBeInTheDocument();
+    expect(screen.getByText('page.goToDashboard')).toBeInTheDocument();
+    // The old branch hardcoded an English sentence next to two raw keys.
+    expect(screen.queryByText(/is not enabled or does not exist/)).not.toBeInTheDocument();
+  });
+
+  it('uses only keys that exist in both plugins.json locales (#674)', () => {
+    // The mock echoes keys, so a missing key looks fine in every render test.
+    // Read the component source and check each literal t('...') key.
+    const keys = [...pluginPageSource.matchAll(/\bt\(\s*'([^']+)'/g)].map((m) => m[1]);
+    expect(keys.length).toBeGreaterThan(0);
+
+    const lookup = (locale: Record<string, unknown>, key: string) =>
+      key.split('.').reduce<unknown>(
+        (node, part) => (node && typeof node === 'object' ? (node as Record<string, unknown>)[part] : undefined),
+        locale,
+      );
+    for (const locale of [en, de]) {
+      const missing = keys.filter((k) => typeof lookup(locale, k) !== 'string');
+      expect(missing).toEqual([]);
+    }
+    for (const locale of [en, de]) {
+      expect(locale.page.notFoundDesc).toContain('{{name}}');
+    }
   });
 
   it('ships the new strings in both locales, with the name placeholder', () => {

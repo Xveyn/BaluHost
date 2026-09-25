@@ -4,7 +4,9 @@
   "page": {
     "noOwnPageTitle": "No page of its own",
     "noOwnPageDesc": "\"{{name}}\" is enabled, but it has no page of its own. It is used from the top bar or the system menu.",
-    "goToDashboard": "Go to dashboard"
+    "goToDashboard": "Go to dashboard",
+    "notFoundTitle": "Plugin not available",
+    "notFoundDesc": "\"{{name}}\" is not enabled or not installed."
   },
   "tabs": {
     "installed": "Installed",
