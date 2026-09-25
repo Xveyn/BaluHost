@@ -43,7 +43,9 @@ MAX_PAYLOAD_BYTES = 7500
 # Bounded so a burst cannot grow without limit. Oldest goes first.
 QUEUE_MAXSIZE = 1000
 
-VALID_KINDS = frozenset({"user", "admins", "all"})
+# "close_user" is a command, not a broadcast: every process closes that user's
+# sockets (#468). It carries no payload to any client.
+VALID_KINDS = frozenset({"user", "admins", "all", "close_user"})
 
 Deliver = Callable[["WsEnvelope"], Awaitable[None]]
 
@@ -74,8 +76,10 @@ def _safe_reason(exc: BaseException) -> str:
 class WsEnvelope:
     """One broadcast, with the addressing the WebSocketManager needs.
 
-    kind is the audience: a single user, every admin, or everyone. msg_type is
-    the type that reaches the wire unchanged — the client matches on it.
+    kind is the audience: a single user, every admin, or everyone — or
+    "close_user", which closes one user's sockets instead of writing to them.
+    msg_type is the type that reaches the wire unchanged — the client matches
+    on it.
     """
 
     kind: str
