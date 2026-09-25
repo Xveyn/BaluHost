@@ -11,7 +11,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timezone, tzinfo
 from typing import Dict, List, Optional
 
 from sqlalchemy.orm import Session
@@ -93,12 +93,25 @@ def _format_duration(seconds: float) -> str:
     return f"{minutes}m"
 
 
+def _display_tz() -> Optional[tzinfo]:
+    """Time zone the panel's dates are shown in: the server's (None = local).
+
+    A seam so tests can pin it; the box's zone is the owner's, which is the
+    right reference for "when did I play this".
+    """
+    return None
+
+
 def _panel_value(row: SteamSession, now: datetime) -> str:
     """Running sessions show the bare duration; finished ones prepend the date."""
     duration = _format_duration(ledger.duration_seconds(row, now))
     if row.ended_at is None:
         return duration
-    return f"{ledger.as_utc(row.started_at):%d.%m.} · {duration}"
+    # Explicit conversion, not the value's own offset: SQLite returns naive
+    # UTC, psycopg2 an aware value in the DB session's zone, so without it the
+    # date depended on the driver (#470).
+    started_local = ledger.as_utc(row.started_at).astimezone(_display_tz())
+    return f"{started_local:%d.%m.} · {duration}"
 
 
 def _start_menu_item() -> PluginMenuItem:
