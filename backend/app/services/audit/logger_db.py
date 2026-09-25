@@ -70,9 +70,19 @@ class AuditLoggerDB:
         if not self._enabled:
             return None
         
-        # Serialize details to JSON if provided
-        details_json = json.dumps(details) if details else None
-        
+        # Serialize details to JSON if provided. Must never raise: callers log
+        # after an action that already happened, and an exception here would
+        # turn it into a 500 (#477). default=str keeps datetimes, paths and
+        # enums readable; anything still unserializable (e.g. tuple keys)
+        # drops only the details, never the entry itself.
+        details_json = None
+        if details:
+            try:
+                details_json = json.dumps(details, default=str)
+            except (TypeError, ValueError) as e:
+                logger.warning("Audit details for %s/%s not serializable, dropped: %s",
+                               event_type, action, e)
+
         audit_entry = AuditLog(
             event_type=event_type,
             user=user,
