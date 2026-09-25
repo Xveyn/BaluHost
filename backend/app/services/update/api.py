@@ -121,9 +121,21 @@ def finalize_pending_updates(db: Session) -> int:
             logger.info(f"Update {update.id} finalized as failed: {error_msg}")
             finalized += 1
 
+        elif ProdUpdateBackend.update_unit_running() is False:
+            # The file still says "running", but the runner is gone — killed
+            # mid-step (reboot, OOM). Nothing will ever write a final status,
+            # and a row left in a running state blocks every later update.
+            step = data.get("current_step") or update.current_step or "unknown step"
+            logger.warning(
+                f"Update {update.id} stuck in '{file_status}' with no runner alive. "
+                f"Marking as failed."
+            )
+            update.fail(f"Update runner stopped during: {step}")
+            finalized += 1
+
         else:
-            # Still running (e.g. installing/restarting) — the script may
-            # still be active. Update progress from file but don't finalize.
+            # Still running (e.g. installing/restarting), or systemd can't be
+            # asked — don't guess. Update progress from file but don't finalize.
             progress = data.get("progress_percent", update.progress_percent)
             step = data.get("current_step", update.current_step)
             update.set_progress(progress, step)
