@@ -86,7 +86,7 @@ def _audit(
             user=user.username,
             resource="manage_displays",
             details={"action": "display_apply"},
-            success=True,
+            success=success,  # the real outcome, not True (#647)
         )
 
 

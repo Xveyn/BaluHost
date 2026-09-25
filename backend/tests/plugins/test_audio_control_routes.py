@@ -348,3 +348,51 @@ class TestCuratedMessagesSurviveTheScrubber:
         )
         assert resp.status_code == 502
         assert resp.json()["detail"] == "Aktion fehlgeschlagen"
+
+
+
+class TestDelegatedSecurityEvent:
+    """Non-admin writes: the security event carries the real outcome (#647)."""
+
+    @staticmethod
+    def _client(monkeypatch, backend):
+        security: list[dict] = []
+
+        class _Recorder:
+            def log_event(self, **kwargs):
+                pass
+
+            def log_security_event(self, **kwargs):
+                security.append(kwargs)
+
+        class _Delegated:
+            username = "someone"
+            role = "user"
+            id = 2
+
+        monkeypatch.setattr(plugin_module, "get_audit_logger_db", lambda: _Recorder())
+        monkeypatch.setattr(service_module, "get_audio_service", lambda: AudioService(backend=backend))
+        from app.core.exception_handlers import register_exception_handlers
+
+        app = FastAPI()
+        register_exception_handlers(app)
+        app.include_router(AudioControlPlugin().get_router(), prefix="/api/plugins/audio_control")
+        app.dependency_overrides[require_power_control_audio] = lambda: _Delegated()
+        return TestClient(app, raise_server_exceptions=False), security
+
+    def test_failed_mute_is_a_failed_security_event(self, monkeypatch):
+        class _Failing(DevAudioBackend):
+            async def set_sink_mute(self, sink_id, muted):
+                return False, "pactl: Failure"
+
+        client, security = self._client(monkeypatch, _Failing())
+        resp = client.put("/api/plugins/audio_control/sinks/61/mute", json={"muted": True})
+        assert resp.status_code == 502
+        assert security[-1]["action"] == "delegated_power_action"
+        assert security[-1]["success"] is False
+
+    def test_successful_mute_is_a_successful_security_event(self, monkeypatch):
+        client, security = self._client(monkeypatch, DevAudioBackend())
+        resp = client.put("/api/plugins/audio_control/sinks/61/mute", json={"muted": True})
+        assert resp.status_code == 200
+        assert security[-1]["success"] is True

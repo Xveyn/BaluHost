@@ -58,7 +58,9 @@ def _audit(action: str, user: UserPublic, success: bool, detail: str) -> None:
             user=user.username,
             resource="control_audio",
             details={"action": action},
-            success=True,
+            # The real outcome, not True (#647): a security-log filter for
+            # failures must see a delegated action that failed.
+            success=success,
         )
 
 
