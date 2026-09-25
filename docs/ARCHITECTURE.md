@@ -164,7 +164,7 @@ baluhost/
 ├── deploy/                    # Deployment configs
 │   ├── nginx/                 # Reverse proxy configs
 │   ├── systemd/               # Service files
-│   └── ...                    # Samba, Prometheus, Grafana
+│   └── ...                    # Samba, NFS, WSDD, Avahi
 │
 ├── docs/                      # Documentation
 ├── .github/workflows/         # 7 CI/CD pipelines
@@ -455,10 +455,11 @@ class TelemetrySnapshot:
 
 ## 📊 Monitoring & Observability
 
-### Production Monitoring Stack (ACTIVE)
-- **Prometheus metrics endpoint** (`/api/metrics`) with 40+ custom metrics
-- **Grafana dashboards** for system visualization
-- **20+ alert rules** across 6 severity groups
+### Production Monitoring
+Built in, no external stack: the monitoring worker below writes the time series,
+the web UI shows them, and alerts go out as push/in-app notifications. The
+Prometheus endpoint (`/api/metrics`) and the Compose/Grafana/alert-rule stack
+that once came with it were removed as unused (stack 2026-03, endpoint #494).
 - **Structured JSON logging** for log aggregation
 - **Per-thread CPU monitoring** (Task Manager-style)
 
@@ -542,10 +543,9 @@ The Scheduler Service provides unified management for all background jobs with e
 ### Metrics Categories
 | Category | Metrics | Endpoint |
 |----------|---------|----------|
-| System | CPU, memory, disk, network | `/api/metrics` |
+| System | CPU, memory, disk, network | `/api/monitoring/*` |
 | RAID | Array status, sync progress | `/api/system/raid/status` |
 | SMART | Disk health, temperature | `/api/system/smart/status` |
-| Application | HTTP requests, DB connections | `/api/metrics` |
 | Power | CPU frequency, consumption | `/api/power/status` |
 | Fans | RPM, PWM, temperature | `/api/fans/status` |
 | Energy | Watts, kWh, cost | `/api/energy/status` |

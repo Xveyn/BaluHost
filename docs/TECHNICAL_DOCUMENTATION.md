@@ -611,7 +611,7 @@ DELETE /api/users/{id}      - Delete user (Admin)
 ### 8. System Monitoring & Telemetry
 
 **Services:** `app/services/system.py`, `app/services/telemetry.py`, `app/services/sensors.py`, `app/services/disk_monitor.py`  
-**API Route:** `app/api/routes/system.py`, `app/api/routes/metrics.py` (Prometheus)  
+**API Route:** `app/api/routes/system.py`  
 **Schemas:** `app/schemas/system.py`
 
 #### Implemented Features:
@@ -637,14 +637,7 @@ DELETE /api/users/{id}      - Delete user (Admin)
 - **Frequency Sources:** cpufreq scaling, /proc/cpuinfo
 - **Graceful Degradation:** Warning-level logging for missing sensors, continues with available data
 
-##### 8.4 Prometheus Metrics
-- **CPU Metrics:** `baluhost_cpu_usage_percent`, `baluhost_cpu_frequency_mhz`, `baluhost_cpu_temperature_celsius`
-- **Memory Metrics:** `baluhost_memory_*_bytes`, `baluhost_memory_usage_percent`
-- **Disk Metrics:** I/O, SMART health, temperatures
-- **RAID Metrics:** Array status, sync progress
-- **Application Metrics:** HTTP requests, database stats, user activity
-
-##### 8.5 Hardware Requirements & Setup
+##### 8.4 Hardware Requirements & Setup
 **Linux Systems (Recommended):**
 ```bash
 # Install lm-sensors for enhanced temperature monitoring
@@ -663,7 +656,7 @@ sensors
 - In containers/VMs: Falls back to available system interfaces
 - Dev-mode: Includes sensor diagnostics in logs
 
-##### 8.6 Disk I/O Monitor
+##### 8.5 Disk I/O Monitor
 - **Real-time monitoring** of all physical disks
 - Sampling: 1 second
 - History: 120 samples (2 minutes)
@@ -675,12 +668,12 @@ sensors
   - Linux: `sda`, `sdb`, `nvme0n1`, ...
 - **Audit Logging:** Automatic summary every 60 seconds
 
-##### 8.7 Storage Info
+##### 8.6 Storage Info
 - Total storage & usage
 - Available storage
 - Quota information
 
-##### 8.8 Process List
+##### 8.7 Process List
 - Top N processes by CPU/RAM
 - PID, Name, CPU%, Memory%
 

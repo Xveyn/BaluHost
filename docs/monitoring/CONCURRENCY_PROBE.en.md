@@ -120,11 +120,6 @@ two come from exact accounting and describe the demand the pool actually saw.
   floor, not blocking), on Linux ~1 ms plus the time other already-runnable
   tasks take. Read the PR2 before/after comparison against *this* baseline, not
   against an implied zero.
-- **`baluhost_database_connections`** (Prometheus, `/api/metrics`) is not a
-  fleet-wide number: it reports checked-out connections in whichever of the 4
-  workers happened to serve that scrape, at scrape time, including the
-  connection the scrape itself holds. Consecutive scrapes bounce between
-  processes.
 
 ## Capacity limit that must hold
 
