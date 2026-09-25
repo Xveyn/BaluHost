@@ -75,8 +75,6 @@
       "order": 5,
       "visibility": "admin",
       "articles": [
-        { "slug": "monitoring", "path": "monitoring/MONITORING", "titleDe": "Monitoring-Setup", "titleEn": "Monitoring Setup", "icon": "bar-chart-3", "order": 1 },
-        { "slug": "monitoring-quickstart", "path": "monitoring/MONITORING_QUICKSTART", "titleDe": "Monitoring Schnellstart", "titleEn": "Monitoring Quickstart", "icon": "zap", "order": 2 },
         { "slug": "disk-io", "path": "monitoring/DISK_IO_MONITOR", "titleDe": "Disk-I/O-Monitor", "titleEn": "Disk I/O Monitor", "icon": "hard-drive", "order": 3 },
         { "slug": "telemetry-config", "path": "monitoring/TELEMETRY_CONFIG_RECOMMENDATIONS", "titleDe": "Telemetrie-Konfiguration", "titleEn": "Telemetry Configuration", "icon": "settings", "order": 4 }
       ]

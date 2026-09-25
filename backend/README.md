@@ -223,7 +223,6 @@ app/
       rate_limit_config.py # Rate Limiting Config
       vcl.py             # Version Control Light (File Versioning)
       server_profiles.py # Remote Server Profiles
-      metrics.py         # Prometheus Metrics
       smart_devices.py   # Unified Smart Device API
       tapo.py            # Tapo Smart Plug (Legacy-Compat)
       energy.py          # Energy Monitoring
@@ -533,7 +532,6 @@ CREATE TABLE file_metadata (
 
 ### Monitoring
 - `GET /api/monitoring/status` - Monitoring status
-- `GET /api/metrics` - Prometheus metrics
 
 ### Admin
 - `GET /api/admin/db/health` - Database health

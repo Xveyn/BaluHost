@@ -38,7 +38,7 @@ The same machine doubles as a KDE Plasma desktop and — thanks to the Radeon GP
 | **Proxy** | Nginx (port 80, rate limiting, security headers) |
 | **Backend** | systemd-managed, 4 Uvicorn workers on port 8000, auto-restart |
 | **Testing** | <!-- STATS:TEST_COUNT:START -->3677 tests<!-- STATS:TEST_COUNT:END --> across <!-- STATS:TEST_FILES:START -->345 test files<!-- STATS:TEST_FILES:END -->, CI/CD via GitHub Actions |
-| **Monitoring** | Prometheus / Grafana ready |
+| **Monitoring** | Built-in (monitoring worker, dashboards, push notifications) |
 
 ---
 
@@ -63,7 +63,6 @@ The same machine doubles as a KDE Plasma desktop and — thanks to the Radeon GP
 - Memory, network throughput, disk I/O metrics
 - Historical telemetry with Recharts visualizations
 - Monitoring orchestrator with configurable collectors
-- Prometheus metrics export
 
 ### Power & Hardware
 - CPU frequency scaling (AMD Ryzen & Intel)

@@ -154,6 +154,4 @@ On deploy failure:
 ## Monitoring
 
 - **Built-in**: CPU, memory, network, disk I/O collectors (baluhost-monitoring service)
-- **Prometheus**: Metrics export at `/api/monitoring/prometheus`
-- **Grafana**: Dashboard templates in `deploy/grafana/`
 - **Health endpoint**: `GET /api/system/health`

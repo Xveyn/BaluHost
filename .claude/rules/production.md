@@ -12,7 +12,7 @@
 - Nginx reverse proxy with rate limiting
 - Test suite (size: see the Testing row in `README.md` — machine-maintained by `scripts/generate_readme_stats.py`, so it is not restated here)
 - CI/CD pipeline (GitHub Actions)
-- Comprehensive monitoring (Prometheus/Grafana ready)
+- Built-in monitoring (monitoring worker, dashboards, push notifications; no Prometheus endpoint since #494)
 - Localization (i18n) — i18next with `de` + `en`, 22 namespaces each (`client/src/i18n/locales/`), switcher in Settings and the setup wizard. Remaining hardcoded English strings are tracked in #406
 
 **Optional/Future:**

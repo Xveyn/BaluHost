@@ -124,11 +124,6 @@ tatsächlich gesehen hat.
   sind dieser Boden, keine Blockade), unter Linux ~1 ms plus die Laufzeit
   anderer bereits lauffähiger Tasks. Den Vorher-/Nachher-Vergleich in PR2 gegen
   *diese* Basis lesen, nicht gegen eine implizite Null.
-- **`baluhost_database_connections`** (Prometheus, `/api/metrics`) ist keine
-  flottenweite Zahl: gemeldet werden die entnommenen Verbindungen desjenigen
-  der 4 Worker, der den Scrape bedient hat, zum Zeitpunkt des Scrapes,
-  einschließlich der Verbindung, die der Scrape selbst hält. Aufeinander
-  folgende Scrapes springen zwischen Prozessen.
 
 ## Kapazitätsgrenze, die eingehalten werden muss
 

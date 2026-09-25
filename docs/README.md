@@ -27,8 +27,6 @@ Willkommen zur technischen Dokumentation des BaluHost NAS Managers.
 - **[REVERSE_PROXY_SETUP.de.md](deployment/REVERSE_PROXY_SETUP.de.md)** - Reverse-Proxy-Setup
 
 ### [monitoring/](monitoring/) - Monitoring & Performance
-- **[MONITORING.de.md](monitoring/MONITORING.de.md)** - Monitoring-Setup (Prometheus/Grafana)
-- **[MONITORING_QUICKSTART.de.md](monitoring/MONITORING_QUICKSTART.de.md)** - Monitoring Quick-Start
 - **[DISK_IO_MONITOR.de.md](monitoring/DISK_IO_MONITOR.de.md)** - Disk I/O Monitor
 - **[TELEMETRY_CONFIG_RECOMMENDATIONS.de.md](monitoring/TELEMETRY_CONFIG_RECOMMENDATIONS.de.md)** - Telemetrie-Konfiguration
 
