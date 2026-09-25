@@ -113,7 +113,7 @@ class NotificationScheduler:
                         )
                         if result["success"]:
                             stats["sent"] += 1
-                            logger.info(f"[NotificationScheduler] ✅ Sent {most_urgent_type} warning to {device.device_name}")
+                            logger.info(f"[NotificationScheduler] Sent {most_urgent_type} warning to {device.device_name}")
                             for lt, _ in less_urgent:
                                 cls._record_superseded(db, device, lt)
                             stats["skipped"] += len(less_urgent)
@@ -124,7 +124,7 @@ class NotificationScheduler:
                                 "warning": most_urgent_type,
                                 "error": result.get("error"),
                             })
-                            logger.info(f"[NotificationScheduler] ❌ Failed to send {most_urgent_type} to {device.device_name}: {result.get('error')}")
+                            logger.warning(f"[NotificationScheduler] Failed to send {most_urgent_type} to {device.device_name}: {result.get('error')}")
                             # Don't supersede the less-urgent ones — the failed
                             # warning retries on the next run.
                     else:
@@ -132,7 +132,7 @@ class NotificationScheduler:
                         # superseded / max retries) → suppress the rest too.
                         stats["skipped"] += 1
                         if reason:
-                            logger.info(f"[NotificationScheduler] ⏭️ Skipped {most_urgent_type} for {device.device_name}: {reason}")
+                            logger.info(f"[NotificationScheduler] Skipped {most_urgent_type} for {device.device_name}: {reason}")
                         for lt, _ in less_urgent:
                             cls._record_superseded(db, device, lt)
                         stats["skipped"] += len(less_urgent)
@@ -143,12 +143,12 @@ class NotificationScheduler:
                         "device": device.device_name,
                         "error": str(e)
                     })
-                    logger.info(f"[NotificationScheduler] ❌ Error processing device {device.device_name}: {e}")
+                    logger.warning(f"[NotificationScheduler] Error processing device {device.device_name}: {e}")
             
-            logger.info(f"[NotificationScheduler] ✅ Completed: {stats['sent']} sent, {stats['skipped']} skipped, {stats['failed']} failed")
+            logger.info(f"[NotificationScheduler] Completed: {stats['sent']} sent, {stats['skipped']} skipped, {stats['failed']} failed")
             
         except Exception as e:
-            logger.info(f"[NotificationScheduler] ❌ Critical error: {e}")
+            logger.error(f"[NotificationScheduler] Critical error: {e}")
             stats["errors"].append({"error": f"Critical: {str(e)}"})
         
         return stats

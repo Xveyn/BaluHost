@@ -196,7 +196,7 @@ class PiholeApiClient:
             return resp.json()
 
         except (httpx.HTTPError, ValueError) as exc:
-            logger.error("Pi-hole API request failed: %s %s → %s: %s", method, path, type(exc).__name__, exc)
+            logger.error("Pi-hole API request failed: %s %s -> %s: %s", method, path, type(exc).__name__, exc)
             raise
 
     async def get(self, path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:

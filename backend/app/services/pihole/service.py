@@ -204,9 +204,9 @@ class PiholeService:
         _backend_created_at = time.time()
         has_pw = "with password" if password else "no password"
         if effective_mode == "docker":
-            logger.info("Pi-hole backend initialized: %s → http://127.0.0.1:%d (%s)", effective_mode, config.web_port, has_pw)
+            logger.info("Pi-hole backend initialized: %s -> http://127.0.0.1:%d (%s)", effective_mode, config.web_port, has_pw)
         elif effective_mode == "remote":
-            logger.info("Pi-hole backend initialized: %s → %s (%s)", effective_mode, config.pihole_url, has_pw)
+            logger.info("Pi-hole backend initialized: %s -> %s (%s)", effective_mode, config.pihole_url, has_pw)
         else:
             logger.info("Pi-hole backend initialized: %s", effective_mode)
         return _backend
@@ -279,7 +279,7 @@ class PiholeService:
             config.last_failover_at = datetime.now(timezone.utc)
             self._db.commit()
             _fail_count = 0
-            logger.info("Pi-hole failback: Primary (Pi) restored, upstream → %s", config.remote_pihole_url)
+            logger.info("Pi-hole failback: Primary (Pi) restored, upstream -> %s", config.remote_pihole_url)
 
         elif not remote_ok and not config.failover_active:
             _fail_count += 1
@@ -671,7 +671,7 @@ class PiholeService:
                 registered.append(hostname)
 
             if registered:
-                logger.info("Registered local DNS records in Pi-hole: %s → %s", registered, nas_ip)
+                logger.info("Registered local DNS records in Pi-hole: %s -> %s", registered, nas_ip)
             else:
                 logger.debug("Local DNS records already up-to-date in Pi-hole")
 
