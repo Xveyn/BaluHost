@@ -18,6 +18,7 @@ plugins/
 ├── manifest.py          # Plugin manifest parsing and validation
 ├── marketplace.py       # Marketplace index fetch and caching
 ├── resolver.py          # Dependency/version resolution
+├── route_shadowing.py   # Startup warning for plugin routes a core /api/plugins/{name}/ route shadows (#521)
 ├── core_versions.py     # Core API version table (loaded from core_versions.json)
 ├── core_versions.json   # JSON data: core API ↔ plugin version constraints
 ├── scope_catalog.py     # Catalog of grantable capability scopes (admin scope-picker at enable time)
@@ -73,7 +74,15 @@ Two plugin trust tiers with different isolation:
 1. Create directory in `plugins/installed/my_plugin/`
 2. Create `__init__.py` exporting a class that extends `PluginBase`
 3. Implement `metadata` property returning `PluginMetadata`
-4. Override `get_router()` for API routes, `get_background_tasks()` for periodic work
+4. Override `get_router()` for API routes, `get_background_tasks()` for periodic work.
+   **Reserved sub-paths (#521):** the core owns these under `/api/plugins/{name}/`
+   and is registered first, so it wins on a method+path collision and the
+   plugin route is never reached: `""` (GET/DELETE), `toggle`, `config`
+   (GET/PUT), `dashboard-panel`, `menu-actions/{id}`, `ui/{path}`, `_storage`,
+   `_storage/{key}`, `_audit/scope-denied`. That order is deliberate (a plugin
+   must not take over `toggle` or `_storage`); `core/lifespan.py:_mount_plugin_router()`
+   logs a warning per shadowed route at startup (`app/plugins/route_shadowing.py`).
+   Settings routes are therefore better named `settings` than `config`.
 5. Override `get_dashboard_panel()` + `get_dashboard_data()` for dashboard integration.
    `DashboardPanelSpec.admin_only=True` beschränkt ein Panel auf privilegierte
    Nutzer. Durchgesetzt wird das **im Core** an zwei Stellen, nicht im Plugin:

@@ -30,6 +30,8 @@ from app.services.service_status import (
 from app.services.ws_bus import build_bus
 
 if TYPE_CHECKING:
+    from fastapi import APIRouter
+
     from app.services.websocket_manager import WebSocketManager
 
 logger = logging.getLogger(__name__)
@@ -69,6 +71,21 @@ _ws_bus = None  # cross-process broadcast bus, one per worker process
 # weak reference to a task, so anything not held here may be garbage-collected
 # mid-flight — and without a reference `_shutdown()` has nothing to cancel.
 _BACKGROUND_TASKS: "set[asyncio.Task]" = set()
+
+
+def _mount_plugin_router(app: FastAPI, plugin_router: "APIRouter") -> None:
+    """Mount the plugin router, first reporting routes the core shadows (#521).
+
+    The core /api/plugins/{name}/... routes are registered earlier and win on
+    a method+path collision - on purpose, a plugin must not take over toggle,
+    config or _storage. The warning makes that loss visible at startup instead
+    of surfacing as a core-shaped response the plugin never sent.
+    """
+    from app.plugins.route_shadowing import warn_shadowed_plugin_routes
+
+    warn_shadowed_plugin_routes(app.routes, plugin_router, settings.api_prefix)
+    app.include_router(plugin_router, prefix=settings.api_prefix)
+    logger.info(f"Mounted {len(plugin_router.routes)} plugin routes")
 
 
 def _spawn_background(coro, name: str) -> "asyncio.Task":
@@ -802,8 +819,7 @@ async def _startup(app: FastAPI) -> None:
             )
         plugin_router = _plugin_manager.get_router()
         if plugin_router.routes:
-            app.include_router(plugin_router, prefix=settings.api_prefix)
-            logger.info(f"Mounted {len(plugin_router.routes)} plugin routes")
+            _mount_plugin_router(app, plugin_router)
         _plugin_manager.emit_hook("on_system_startup")
         logger.info("Plugin system initialized")
     except Exception as e:

@@ -127,6 +127,15 @@ The bridge enforces two rules for every `BaluHost.api` call:
 1. **Own routes** — any path that starts with `/api/plugins/{your-plugin-name}/` is always allowed (GET, POST, PUT, PATCH, DELETE).
 2. **Core routes** — any other `/api/...` path requires a matching scope declared in `plugin.json` and granted by the user.
 
+**Reserved sub-paths.** A few paths under your own prefix belong to the core and
+always answer before your plugin does, with a core-shaped response: the bare
+`/api/plugins/{name}` (GET/DELETE), `toggle`, `config` (GET/PUT),
+`dashboard-panel`, `menu-actions/{id}`, `ui/…`, `_storage`, `_storage/{key}` and
+`_audit/scope-denied`. Don't define routes there — use e.g. `settings` instead of
+`config`. Bundled plugins get a startup warning for such a route (#521);
+sandboxed plugins don't, because their routes aren't known until a request
+arrives.
+
 ### Core scope catalog (v1)
 
 | Scope key | Allowed paths | Methods |
