@@ -86,9 +86,11 @@ def test_linux_disable_missing_kscreen_returns_false():
 
 
 # --- status reflects display power: any active display -> RUNNING, none -> STOPPED ---
+# uid passed explicitly like the tests above: the default is os.getuid(),
+# which does not exist on Windows (#529).
 
 def test_linux_status_displays_on_maps_running():
-    b = LinuxDesktopBackend()
+    b = LinuxDesktopBackend(uid=1000)
     with patch("app.services.power.desktop_backend.get_active_display_count",
                new=AsyncMock(return_value=1)):
         status = asyncio.run(b.get_status())
@@ -96,7 +98,7 @@ def test_linux_status_displays_on_maps_running():
 
 
 def test_linux_status_no_displays_maps_stopped():
-    b = LinuxDesktopBackend()
+    b = LinuxDesktopBackend(uid=1000)
     with patch("app.services.power.desktop_backend.get_active_display_count",
                new=AsyncMock(return_value=0)):
         status = asyncio.run(b.get_status())
@@ -104,7 +106,7 @@ def test_linux_status_no_displays_maps_stopped():
 
 
 def test_linux_status_error_maps_unknown():
-    b = LinuxDesktopBackend()
+    b = LinuxDesktopBackend(uid=1000)
     with patch("app.services.power.desktop_backend.get_active_display_count",
                new=AsyncMock(side_effect=OSError("boom"))):
         status = asyncio.run(b.get_status())
