@@ -5,6 +5,7 @@ Write-through: HDD is always authoritative. Cache failures never block
 file delivery. Per-array: each RAID array has its own config and entries.
 """
 import hashlib
+import re
 import logging
 import os
 import shutil
@@ -21,6 +22,15 @@ from app.models.ssd_file_cache import SSDCacheEntry, SSDCacheConfig
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+
+def _last_path_part(path: str) -> str:
+    """Last component of a path written with either separator.
+
+    Separator-agnostic on purpose: a stored cache_path may come from Windows
+    (dev) or Linux (prod), and pathlib on the running OS only knows its own.
+    """
+    return re.split(r"[\\/]", path.rstrip("\\/"))[-1]
 
 
 def _default_cache_path(array_name: str) -> str:
@@ -66,8 +76,11 @@ class SSDFileCacheService:
                 if str(p).startswith("/mnt/cache-vcl/filecache") and settings.is_dev_mode:
                     config.cache_path = expected
                     self.db.flush()
-                elif not str(p).endswith(f"/{self.array_name}"):
-                    # Old singleton path missing array suffix
+                elif _last_path_part(str(config.cache_path)) != self.array_name:
+                    # Old singleton path missing array suffix. Compared by the
+                    # last component, not endswith("/md0"): a Windows path ends
+                    # in "\\md0", and the string test appended another "/md0"
+                    # on every call (#636).
                     config.cache_path = f"{config.cache_path}/{self.array_name}"
                     self.db.flush()
         if not config:
