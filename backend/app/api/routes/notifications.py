@@ -629,6 +629,12 @@ async def notification_websocket(
             logger.warning(f"WebSocket: User not found for token sub={user_sub}")
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
             return
+        if not user.is_active:
+            # A ws token lives 60 s, so one minted just before a deactivation
+            # would otherwise still open a socket (#468).
+            logger.warning(f"WebSocket: Inactive user_id={user.id} refused")
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
         user_id = user.id
         is_admin = user.role == "admin"
         logger.info(f"WebSocket: Authenticated user_id={user_id}, is_admin={is_admin}")

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File, Request, Response
 from sqlalchemy.orm import Session
 from pathlib import Path
+import logging
 import uuid
 import shutil
 
@@ -11,8 +12,24 @@ from app.core.database import get_db
 from app.schemas.user import UserCreate, UserPublic, UserUpdate, UsersResponse
 from app.services import users as user_service
 from app.services.audit.logger_db import get_audit_logger_db
+from app.services.websocket_manager import get_websocket_manager
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+async def _close_user_websockets(user_id: int) -> None:
+    """Drop the user's WebSockets after a role/status change or deletion (#468).
+
+    Their is_admin is a snapshot from connect time. Best effort: the change is
+    already committed, and a failed close only means the old behaviour (the
+    snapshot lives until the socket drops), not a failed request.
+    """
+    try:
+        await get_websocket_manager().close_user_connections(user_id)
+    except Exception as e:
+        logger.warning("Could not close WebSockets of user %s: %s", user_id, e)
 
 _AVATAR_EXT_BY_TYPE = {
     "image/jpeg": ".jpg",
@@ -129,9 +146,16 @@ async def update_user(
         )
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
+    # Scalars, not old_user: update_user() loads the same identity-mapped
+    # object and mutates it, so old_user shows the new values afterwards.
+    prev_role, prev_active = old_user.role, old_user.is_active
+
     record = user_service.update_user(user_id, payload, db=db)
     if not record:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    if record.role != prev_role or record.is_active != prev_active:
+        await _close_user_websockets(record.id)
 
     # Sync Samba password if changed and SMB is enabled
     if payload.password and record.smb_enabled:
@@ -191,7 +215,9 @@ async def delete_user(
         await samba_service.reload_samba()
 
     username = user.username
+    deleted_id = user.id
     user_service.delete_user(user_id, db=db)
+    await _close_user_websockets(deleted_id)
 
     audit_logger.log_user_management(
         action="user_deleted",
@@ -220,9 +246,14 @@ async def bulk_delete_users(
 
     for user_id in user_ids:
         user = user_service.get_user(user_id, db=db)
-        if user and user_service.delete_user(user_id, db=db):
+        if user is None:
+            failed_ids.append(user_id)
+            continue
+        deleted_id, deleted_username = user.id, user.username
+        if user_service.delete_user(user_id, db=db):
             deleted_count += 1
-            deleted_usernames.append(user.username)
+            deleted_usernames.append(deleted_username)
+            await _close_user_websockets(deleted_id)
         else:
             failed_ids.append(user_id)
 
@@ -266,6 +297,8 @@ async def toggle_user_active(
     user = user_service.toggle_active(user_id, db=db)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    await _close_user_websockets(user.id)
 
     audit_logger.log_user_management(
         action="user_status_toggled",

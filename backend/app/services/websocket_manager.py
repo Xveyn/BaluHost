@@ -33,6 +33,11 @@ MAX_CONNECTIONS_TOTAL = 100
 # client with a full TCP window freeze delivery for every user in this process.
 SEND_TIMEOUT_SECONDS = 5.0
 
+# Close code for "your role or account status changed" (#468). Anything but
+# 1000 makes the client reconnect (useNotificationSocket), and the reconnect
+# reads the role fresh from the database.
+WS_CLOSE_SESSION_CHANGED = 4001
+
 
 class ConnectionLimitExceeded(Exception):
     """Raised when a user exceeds MAX_CONNECTIONS_PER_USER or the process MAX_CONNECTIONS_TOTAL."""
@@ -193,6 +198,17 @@ class WebSocketManager:
             )
         )
 
+    async def close_user_connections(self, user_id: int) -> None:
+        """Close every socket of one user, in every process (#468).
+
+        A connection's is_admin is a snapshot from connect time. Call this
+        after a change that invalidates it — role, is_active, deletion — so
+        the client reconnects and gets a fresh one (or is refused).
+        """
+        await self._bus.publish(
+            WsEnvelope(kind="close_user", msg_type="session_changed", payload=None, user_id=user_id)
+        )
+
     async def send_unread_count(self, user_id: int, count: int) -> None:
         """Publish an updated unread count for one user's connections."""
         await self._bus.publish(
@@ -243,6 +259,8 @@ class WebSocketManager:
         sent_count = 0
 
         async with self._lock:
+            if env.kind == "close_user":
+                return await self._close_user_locked(env.user_id)
             if env.kind == "user":
                 if env.user_id is None:
                     logger.warning("deliver_local: kind=user without user_id, dropped")
@@ -303,6 +321,36 @@ class WebSocketManager:
                     self._admin_users.discard(user_id)
 
         return sent_count
+
+    async def _close_user_locked(self, user_id: Optional[int]) -> int:
+        """Close and forget one user's sockets. Caller holds self._lock.
+
+        The connections are removed before closing, so a close that fails or
+        hangs can't leave a stale is_admin snapshot behind.
+
+        Returns:
+            Number of connections in *this* process that were closed.
+        """
+        if user_id is None:
+            logger.warning("deliver_local: kind=close_user without user_id, dropped")
+            return 0
+
+        connections = self._user_connections.pop(user_id, [])
+        self._admin_users.discard(user_id)
+
+        for conn in connections:
+            try:
+                async with asyncio.timeout(SEND_TIMEOUT_SECONDS):
+                    await conn.websocket.close(code=WS_CLOSE_SESSION_CHANGED)
+            except Exception as e:
+                logger.warning(f"Failed to close socket of user {user_id}: {e}")
+
+        if connections:
+            logger.info(
+                f"WebSocket closed after session change: user_id={user_id}, "
+                f"connections={len(connections)}"
+            )
+        return len(connections)
 
     def get_connected_user_ids(self) -> list[int]:
         """Get list of all connected user IDs.
