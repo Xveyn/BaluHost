@@ -133,7 +133,7 @@ async def desktop_disable(
             user=current_user.username,
             resource="toggle_desktop",
             details={"action": "desktop_disable"},
-            success=True,
+            success=ok,  # the real outcome, not True (#647)
         )
     if ok:
         try:
@@ -176,7 +176,7 @@ async def desktop_enable(
             user=current_user.username,
             resource="toggle_desktop",
             details={"action": "desktop_enable"},
-            success=True,
+            success=ok,  # the real outcome, not True (#647)
         )
     if ok:
         try:

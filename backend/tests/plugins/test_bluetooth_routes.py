@@ -119,6 +119,27 @@ class TestPairRoute:
         assert events[-1]["action"] == "bluetooth_pair_denied"
         assert events[-1]["success"] is False
 
+    def test_a_non_admin_denied_outside_the_lan_is_a_failed_security_event(self, monkeypatch, audit):
+        # #647: the delegated_power_action security event was hardcoded to
+        # success=True, so filtering the security log for failures hid exactly
+        # these refusals - stolen account plus radio range.
+        _, security = audit
+        _Lan.value = False
+        app, _, _ = _make(monkeypatch, user=_Other)
+        resp = TestClient(app).post(f"{BASE}/devices/{KEYBOARD}/pair")
+        assert resp.status_code == 403
+        assert security[-1]["action"] == "delegated_power_action"
+        assert security[-1]["success"] is False
+        assert security[-1]["details"]["action"] == "bluetooth_pair_denied"
+        assert security[-1]["ip_address"] == "testclient"
+
+    def test_a_non_admin_success_stays_a_successful_security_event(self, monkeypatch, audit):
+        _, security = audit
+        app, _, _ = _make(monkeypatch, user=_Other)
+        resp = TestClient(app).post(f"{BASE}/adapter/power", json={"powered": True})
+        assert resp.status_code == 200
+        assert security[-1]["success"] is True
+
     def test_a_malformed_address_is_400(self, monkeypatch):
         app, _, _ = _make(monkeypatch)
         assert TestClient(app).post(f"{BASE}/devices/nonsense/pair").status_code == 400

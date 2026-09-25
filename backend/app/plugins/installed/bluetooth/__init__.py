@@ -42,7 +42,10 @@ def _client_host(request: Request) -> Optional[str]:
     return request.client.host if request.client else None
 
 
-def _audit(action: str, user: UserPublic, success: bool, details: dict) -> None:
+def _audit(
+    action: str, user: UserPublic, success: bool, details: dict,
+    ip_address: Optional[str] = None,
+) -> None:
     """Audit fuer Koppeln, Entfernen und Adapter an/aus — nie mit Code oder PIN."""
     audit_logger = get_audit_logger_db()
     audit_logger.log_event(
@@ -59,7 +62,10 @@ def _audit(action: str, user: UserPublic, success: bool, details: dict) -> None:
             user=user.username,
             resource="manage_bluetooth",
             details={"action": action},
-            success=True,
+            # The real outcome, not True (#647): a refused pairing from outside
+            # the LAN is exactly what a failures filter must find.
+            success=success,
+            ip_address=ip_address,
         )
 
 
@@ -155,18 +161,21 @@ async def pair_device(
     aussen wird auditiert: er ist genau das Muster, gegen das diese Pruefung
     steht (gestohlenes Konto plus Funkreichweite).
     """
+    client_host = _client_host(request)
+
     def on_finished(device: DeviceInfo, stage: str, error: Optional[str]) -> None:
         _audit("bluetooth_pair", current_user, stage == "succeeded", {
             "address": device.address, "kind": kind_for_icon(device.icon),
             "stage": stage, "error": error,
-        })
+        }, ip_address=client_host)
 
     try:
         session_id = await service_module.get_bluetooth_service().start_pairing(
-            address, current_user.id, _client_host(request), on_finished,
+            address, current_user.id, client_host, on_finished,
         )
     except ForbiddenError:
-        _audit("bluetooth_pair_denied", current_user, False, {"reason": "not_local"})
+        _audit("bluetooth_pair_denied", current_user, False, {"reason": "not_local"},
+               ip_address=client_host)
         raise
     return PairStartResponse(session_id=session_id)
 

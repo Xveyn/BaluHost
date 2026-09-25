@@ -355,6 +355,40 @@ class TestAuditLogging:
         assert security_events[0]["action"] == "delegated_power_action"
         assert security_events[0]["resource"] == "manage_displays"
 
+    def test_a_non_admin_rejection_is_a_failed_delegated_power_action(self, monkeypatch):
+        # #647: the security event was hardcoded to success=True.
+        security_events: list[dict] = []
+
+        class _RecordingAuditLogger:
+            def log_event(self, **kwargs):
+                pass
+
+            def log_security_event(self, **kwargs):
+                security_events.append(kwargs)
+
+        monkeypatch.setattr(plugin_module, "get_audit_logger_db", lambda: _RecordingAuditLogger())
+
+        class _Dead:
+            async def get_layout(self):
+                return DisplayLayout(available=False, detail="KWin nicht erreichbar")
+
+            async def apply(self, wanted, live_outputs):
+                raise AssertionError("darf nicht laufen")
+
+        service = DisplayService(backend=_Dead())
+        monkeypatch.setattr(service_module, "get_display_service", lambda: service)
+        app = FastAPI()
+        register_exception_handlers(app)
+        app.include_router(DisplayOutputPlugin().get_router(), prefix=BASE)
+        app.dependency_overrides[require_power_manage_displays] = lambda: _NonAdminUser()
+
+        resp = TestClient(app).post(f"{BASE}/apply", json={"outputs": [
+            {"name": "DP-3", "selected": True},
+        ]})
+        assert resp.status_code == 502
+        assert security_events[-1]["action"] == "delegated_power_action"
+        assert security_events[-1]["success"] is False
+
     def test_an_admin_gets_no_delegated_power_action_entry(self, audit_client):
         client, _, security_events = audit_client
         resp = client.post(f"{BASE}/apply", json={"outputs": [
