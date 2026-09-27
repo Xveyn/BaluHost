@@ -111,6 +111,13 @@ export interface PluginDetail {
   config: Record<string, unknown>;
   config_schema?: Record<string, unknown>;
   translations?: PluginTranslations;
+  /**
+   * The plugin ships a router that was not mounted at startup, so its
+   * endpoints 404 until the backend restarts (#619). Also true for such a
+   * plugin while it is disabled — only meaningful together with `is_enabled`.
+   * Absent = older backend.
+   */
+  restart_required?: boolean;
 }
 
 export interface PluginToggleRequest {

@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { Settings } from 'lucide-react';
+import { AlertTriangle, Settings } from 'lucide-react';
 import type { PluginDetail } from '../../../api/plugins';
 import { PluginDetailsCard } from './PluginDetailsCard';
 import { PluginPermissionsCard } from './PluginPermissionsCard';
@@ -36,6 +36,20 @@ export function PluginDetailsSidebar({
         </div>
       ) : plugin ? (
         <>
+          {/* restart_required alone is also true for a disabled router plugin
+              (#619) - the notice only applies once it is switched on. */}
+          {plugin.is_enabled && plugin.restart_required && (
+            <div
+              role="alert"
+              className="flex gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4"
+            >
+              <AlertTriangle className="h-5 w-5 flex-shrink-0 text-amber-400" aria-hidden="true" />
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-amber-200">{t('restartRequired.title')}</p>
+                <p className="text-sm text-amber-100/80">{t('restartRequired.description')}</p>
+              </div>
+            </div>
+          )}
           <PluginDetailsCard plugin={plugin} />
           <PluginPermissionsCard plugin={plugin} />
           {plugin.has_dashboard_panel && plugin.is_enabled && (
