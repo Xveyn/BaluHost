@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import platform
 import re
 import shutil
@@ -35,6 +36,24 @@ from app.services.hardware.raid.parsing import (
 
 logger = logging.getLogger(__name__)
 
+# Where Debian puts the admin tools this backend needs (mdadm, mkfs.*). sudo's
+# default secure_path contains both, systemd's PATH for the service too - an
+# interactive user shell usually does not.
+_SYSTEM_SBIN_DIRS: tuple[str, ...] = ("/usr/sbin", "/sbin")
+
+
+def _which_system(cmd: str) -> Optional[str]:
+    """``shutil.which`` over the caller's PATH plus the system sbin dirs.
+
+    A plain ``shutil.which`` answers for whoever is asking: from the service it
+    found mdadm, from a diagnostic shell without /usr/sbin on PATH the same box
+    reported "RAID not available" (#605). The caller's PATH is searched first,
+    so an explicit override still wins.
+    """
+    search = [p for p in os.environ.get("PATH", "").split(os.pathsep) if p]
+    search += [d for d in _SYSTEM_SBIN_DIRS if d not in search]
+    return shutil.which(cmd, path=os.pathsep.join(search))
+
 
 class MdadmRaidBackend:
     _MDSTAT_PATH = Path("/proc/mdstat")
@@ -46,7 +65,9 @@ class MdadmRaidBackend:
 
     @staticmethod
     def is_supported() -> bool:
-        return platform.system().lower() == "linux" and shutil.which("mdadm") is not None
+        # Detection only: execution goes through `sudo -n mdadm`, which resolves
+        # the binary via sudo's own secure_path regardless of the caller.
+        return platform.system().lower() == "linux" and _which_system("mdadm") is not None
 
     def get_status(self) -> RaidStatusResponse:
         mdstat_info = self._read_mdstat()
@@ -576,10 +597,13 @@ class MdadmRaidBackend:
 
         # Format the disk
         mkfs_cmd = f"mkfs.{payload.filesystem}"
-        if not shutil.which(mkfs_cmd):
+        # mkfs runs WITHOUT sudo (not in _SUDO_COMMANDS), so the caller's PATH
+        # would also decide whether it executes - run the path that was found.
+        mkfs_path = _which_system(mkfs_cmd)
+        if not mkfs_path:
             raise RuntimeError(f"Command '{mkfs_cmd}' not found on this system")
 
-        cmd = [mkfs_cmd]
+        cmd = [mkfs_path]
         if payload.label:
             if payload.filesystem in ["ext4", "ext3"]:
                 cmd.extend(["-L", payload.label])
