@@ -20,6 +20,10 @@ Notes:
   protection then degrades to BaluHost's own per-loop guards (which catch
   BaluHost-initiated suspends but not third-party desktop daemons).
 - Dev mode / Windows / missing binary → no-op (returns False, logs once).
+- The `--why` text is fixed per subprocess. `update_reason()` swaps it
+  make-before-break (#604): the new lock is taken and confirmed alive before
+  the old one is dropped, so there is no instant without a block lock. For
+  those few milliseconds `systemd-inhibit --list` shows two BaluHost lines.
 """
 from __future__ import annotations
 
@@ -39,18 +43,25 @@ class CoreUptimeInhibitor:
 
     def __init__(self) -> None:
         self._proc: Optional[subprocess.Popen] = None
+        self._reason: Optional[str] = None
         self._binary_missing_logged = False
 
     def is_held(self) -> bool:
         """True iff the inhibitor subprocess is currently alive."""
         return self._proc is not None and self._proc.poll() is None
 
+    @property
+    def reason(self) -> Optional[str]:
+        """The `--why` text of the lock currently held, or None."""
+        return self._reason if self.is_held() else None
+
     def acquire(self, reason: str) -> bool:
         """Acquire the block-sleep inhibitor. Idempotent — no-op if already held.
 
         Returns True on success (or already held), False if acquisition failed
         (binary missing, polkit denied, etc.). Failures are logged but do not
-        raise so the caller can degrade gracefully.
+        raise so the caller can degrade gracefully. Changing the text of a
+        held lock is `update_reason()`'s job, not this method's.
         """
         if self.is_held():
             return True
@@ -62,7 +73,72 @@ class CoreUptimeInhibitor:
                 self._proc.returncode,
             )
             self._proc = None
+            self._reason = None
 
+        proc = self._spawn(reason)
+        if proc is None:
+            return False
+
+        self._proc = proc
+        self._reason = reason
+        logger.info(
+            "Core uptime sleep inhibitor acquired (pid=%s, reason=%s)",
+            proc.pid, reason,
+        )
+        return True
+
+    def update_reason(self, reason: str) -> bool:
+        """Re-label the held lock so `systemd-inhibit --list` tells the truth.
+
+        Make-before-break: the replacement lock is spawned and confirmed alive
+        BEFORE the old subprocess is terminated. Swapping the other way round
+        would leave a short window without any block lock, and a third-party
+        suspend arriving in it would go through (#604).
+
+        Returns True if the held lock now carries ``reason`` (including when it
+        already did), False if nothing is held or the replacement could not be
+        taken — in that case the old lock stays in place with its old text.
+        """
+        if not self.is_held():
+            return False
+        if reason == self._reason:
+            return True
+
+        new_proc = self._spawn(reason)
+        if new_proc is None:
+            logger.warning(
+                "Could not re-label core uptime inhibitor to %r — keeping the "
+                "held lock with its old reason %r",
+                reason, self._reason,
+            )
+            return False
+
+        old_proc, old_reason = self._proc, self._reason
+        self._proc = new_proc
+        self._reason = reason
+        self._terminate(old_proc)
+        logger.info(
+            "Core uptime sleep inhibitor re-labelled (pid=%s, reason=%s, was %s)",
+            new_proc.pid, reason, old_reason,
+        )
+        return True
+
+    def release(self) -> None:
+        """Release the inhibitor by terminating the subprocess. Idempotent."""
+        if self._proc is None:
+            return
+        self._terminate(self._proc)
+        logger.info("Core uptime sleep inhibitor released")
+        self._proc = None
+        self._reason = None
+
+    def _spawn(self, reason: str) -> Optional[subprocess.Popen]:
+        """Start a `systemd-inhibit` holder and confirm it survived startup.
+
+        Returns the live subprocess, or None (binary missing, spawn error,
+        polkit denial). Never touches ``self._proc`` — the callers decide what
+        replaces what, which is what makes the make-before-break swap possible.
+        """
         binary = shutil.which(_SYSTEMD_INHIBIT)
         if binary is None:
             if not self._binary_missing_logged:
@@ -73,10 +149,10 @@ class CoreUptimeInhibitor:
                     _SYSTEMD_INHIBIT,
                 )
                 self._binary_missing_logged = True
-            return False
+            return None
 
         try:
-            self._proc = subprocess.Popen(
+            proc = subprocess.Popen(
                 [
                     binary,
                     "--what=sleep",
@@ -91,51 +167,43 @@ class CoreUptimeInhibitor:
             )
         except OSError as exc:
             logger.warning("Failed to spawn %s: %s", _SYSTEMD_INHIBIT, exc)
-            return False
+            return None
 
         # Brief settle window — if polkit denies (e.g. missing rules.d entry
         # for a system service without an active session), systemd-inhibit
         # exits immediately. Detect that here so the caller knows acquisition
         # actually failed instead of silently looping every loop tick.
         time.sleep(0.2)
-        if self._proc.poll() is not None:
+        if proc.poll() is not None:
             stderr_output = ""
-            if self._proc.stderr is not None:
+            if proc.stderr is not None:
                 try:
-                    stderr_output = self._proc.stderr.read().decode("utf-8", errors="replace").strip()
+                    stderr_output = proc.stderr.read().decode("utf-8", errors="replace").strip()
                 except Exception:
                     pass
             logger.warning(
                 "%s exited immediately (rc=%s) — likely polkit denial. "
                 "Install /etc/polkit-1/rules.d/50-baluhost-inhibit-sleep.rules. stderr=%r",
-                _SYSTEMD_INHIBIT, self._proc.returncode, stderr_output,
+                _SYSTEMD_INHIBIT, proc.returncode, stderr_output,
             )
-            self._proc = None
-            return False
+            return None
+        return proc
 
-        logger.info(
-            "Core uptime sleep inhibitor acquired (pid=%s, reason=%s)",
-            self._proc.pid, reason,
-        )
-        return True
-
-    def release(self) -> None:
-        """Release the inhibitor by terminating the subprocess. Idempotent."""
-        if self._proc is None:
+    @staticmethod
+    def _terminate(proc: subprocess.Popen) -> None:
+        """Stop a holder subprocess; escalate to kill after 3s."""
+        if proc.poll() is not None:
             return
-        if self._proc.poll() is None:
+        try:
+            proc.terminate()
             try:
-                self._proc.terminate()
-                try:
-                    self._proc.wait(timeout=3.0)
-                except subprocess.TimeoutExpired:
-                    logger.warning(
-                        "Core uptime inhibitor pid=%s did not terminate in 3s — killing",
-                        self._proc.pid,
-                    )
-                    self._proc.kill()
-                    self._proc.wait(timeout=1.0)
-            except OSError as exc:
-                logger.warning("Error releasing core uptime inhibitor: %s", exc)
-        logger.info("Core uptime sleep inhibitor released")
-        self._proc = None
+                proc.wait(timeout=3.0)
+            except subprocess.TimeoutExpired:
+                logger.warning(
+                    "Core uptime inhibitor pid=%s did not terminate in 3s — killing",
+                    proc.pid,
+                )
+                proc.kill()
+                proc.wait(timeout=1.0)
+        except OSError as exc:
+            logger.warning("Error releasing core uptime inhibitor: %s", exc)
