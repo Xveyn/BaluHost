@@ -11,6 +11,7 @@ from alembic import context
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # Import app models and config
+from app.core.alembic_compare import compare_type
 from app.core.database import DATABASE_URL
 from app.models.base import Base
 # Import all models to ensure they are registered with Base
@@ -78,7 +79,10 @@ def run_migrations_online() -> None:
 
     with connectable.connect() as connection:
         context.configure(
-            connection=connection, target_metadata=target_metadata
+            connection=connection,
+            target_metadata=target_metadata,
+            # Silences the one known SQLite-only phantom diff (#549), nothing else.
+            compare_type=compare_type,
         )
 
         with context.begin_transaction():
