@@ -10,6 +10,7 @@ Warum Verhalten statt Text: Der Test zu #689 selbst (test_deploy_proxy_headers)
 las nur den Template-Text und blieb gruen, waehrend die Box ungeschuetzt lief.
 """
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -302,3 +303,48 @@ def test_ohne_root_und_ohne_testnaht_bricht_ab(box):
     assert result.returncode != 0
     assert "must run as root" in result.stderr
     assert list(box.systemd.iterdir()) == []
+
+
+# ─── Paritaet und sudoers ────────────────────────────────────────────
+
+MODULE_10 = REPO / "deploy" / "install" / "modules" / "10-systemd-services.sh"
+CI_DEPLOY = REPO / "deploy" / "scripts" / "ci-deploy.sh"
+DEPLOY_SUDOERS = REPO / "deploy" / "install" / "templates" / "baluhost-deploy-sudoers"
+
+
+def _bash_array(path: Path, name: str) -> set[str]:
+    text = path.read_text(encoding="utf-8")
+    match = re.search(rf"^{name}=\((.*?)\)", text, re.MULTILINE | re.DOTALL)
+    assert match, f"{name}=( … ) nicht gefunden in {path.name}"
+    return set(re.findall(r"baluhost-[a-z-]+", match.group(1)))
+
+
+def test_alle_vier_unit_listen_sind_gleich():
+    """Eine Unit, die nur in einer Liste steht, verfehlt still entweder den
+    Installer, den Deploy-Abgleich, den Neustart oder den Drift-Check."""
+    from app.services.unit_drift import MANAGED_UNITS
+
+    expected = set(UNITS)
+    assert _bash_array(SCRIPT, "UNITS") == expected
+    assert _bash_array(MODULE_10, "SERVICES") == expected
+    assert _bash_array(CI_DEPLOY, "SERVICES") == expected
+    assert set(MANAGED_UNITS) == expected
+
+
+def test_die_vorlage_erlaubt_genau_dieses_skript():
+    zeilen = [
+        z for z in DEPLOY_SUDOERS.read_text(encoding="utf-8").splitlines()
+        if not z.lstrip().startswith("#") and "install-systemd-units.sh" in z
+    ]
+    assert len(zeilen) == 2, zeilen
+    for z in zeilen:
+        assert z.startswith("@@BALUHOST_USER@@ ALL=(root) NOPASSWD: ")
+        assert "SETENV" not in z
+        assert "*" not in z
+        # Nichts hinter dem Skriptpfad: ohne Argumente kann der Deploy-User
+        # dem Skript nichts unterschieben.
+        assert z.endswith("@@INSTALL_DIR@@/deploy/scripts/install-systemd-units.sh")
+    # Verankert gegen den Doppelpunkt, siehe test_ci_deploy_permission_sync:
+    # "/bin/bash " steckt in "/usr/bin/bash ".
+    pfade = {re.search(r"NOPASSWD:\s+(\S+)", z).group(1) for z in zeilen}
+    assert pfade == {"/bin/bash", "/usr/bin/bash"}
