@@ -353,20 +353,31 @@ class SleepManagerService:
         gaming_active = self._is_gaming_active(config)
         should_hold = core_active or aa_active or presence_active or gaming_active
 
-        if should_hold and not self._core_uptime_inhibitor.is_held():
-            parts = []
-            if core_active:
-                parts.append("core_uptime")
-            if aa_active:
-                parts.append("always_awake")
-            if presence_active:
-                parts.append("user_present")
-            if gaming_active:
-                parts.append("gaming")
-            reason = "_and_".join(parts) + "_active"
+        if not should_hold:
+            if self._core_uptime_inhibitor.is_held():
+                self._core_uptime_inhibitor.release()
+            return
+
+        parts = []
+        if core_active:
+            parts.append("core_uptime")
+        if aa_active:
+            parts.append("always_awake")
+        if presence_active:
+            parts.append("user_present")
+        if gaming_active:
+            parts.append("gaming")
+        reason = "_and_".join(parts) + "_active"
+
+        if self._core_uptime_inhibitor.is_held():
+            # Keep the --why text current, not frozen at acquisition time:
+            # `systemd-inhibit --list` is the one place this is visible from
+            # outside, and a stale text there misled the #603 verification
+            # (#604). No-op while the text is unchanged; the swap itself is
+            # make-before-break, so the lock never lapses.
+            self._core_uptime_inhibitor.update_reason(reason)
+        else:
             self._core_uptime_inhibitor.acquire(reason)
-        elif not should_hold and self._core_uptime_inhibitor.is_held():
-            self._core_uptime_inhibitor.release()
 
     def _next_core_start_for_guard(self) -> Optional[datetime]:
         """Provider used by CoreUptimeRtcGuard. Returns None on any failure

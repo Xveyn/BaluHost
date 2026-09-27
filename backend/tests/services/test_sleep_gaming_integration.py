@@ -277,3 +277,38 @@ def test_inhibitor_is_held_while_gaming():
 
     mock_acquire.assert_called_once()
     assert "gaming" in mock_acquire.call_args.args[0]
+
+
+# --- #604: the held lock's --why text follows the suppressors ---------------
+
+def _reconcile_while_held(svc, cfg, *, in_core: bool, gaming: bool):
+    with patch.object(svc, "_is_always_awake", return_value=False), \
+         patch.object(svc, "_is_user_present", return_value=False), \
+         patch.object(svc, "_is_gaming_active", return_value=gaming), \
+         patch.object(svc._core_uptime_inhibitor, "is_held", return_value=True), \
+         patch.object(svc._core_uptime_inhibitor, "acquire") as mock_acquire, \
+         patch.object(svc._core_uptime_inhibitor, "release") as mock_release, \
+         patch.object(svc._core_uptime_inhibitor, "update_reason") as mock_update:
+        svc._reconcile_sleep_inhibitor(cfg, in_core=in_core)
+    mock_acquire.assert_not_called()
+    mock_release.assert_not_called()
+    return mock_update
+
+
+def test_held_lock_picks_up_a_game_started_after_acquisition():
+    """The case observed on 2026-09-09: lock taken for core uptime, game
+    started later, `systemd-inhibit --list` still said core_uptime_active."""
+    svc = _build_service()
+
+    mock_update = _reconcile_while_held(svc, _config(), in_core=True, gaming=True)
+
+    mock_update.assert_called_once_with("core_uptime_and_gaming_active")
+
+
+def test_held_lock_drops_a_suppressor_that_ended():
+    """Game over, core uptime still running: the lock stays, 'gaming' goes."""
+    svc = _build_service()
+
+    mock_update = _reconcile_while_held(svc, _config(), in_core=True, gaming=False)
+
+    mock_update.assert_called_once_with("core_uptime_active")

@@ -277,7 +277,10 @@ async def test_schedule_loop_releases_inhibitor_when_leaving_window():
                side_effect=lambda *a, **k: next(in_core_sequence)), \
          patch.object(svc._core_uptime_inhibitor, "acquire") as mock_acquire, \
          patch.object(svc._core_uptime_inhibitor, "release") as mock_release, \
+         patch.object(svc._core_uptime_inhibitor, "update_reason"), \
          patch.object(svc._core_uptime_inhibitor, "is_held", side_effect=[True, True, False, False]):
+        # update_reason (#604) is mocked like acquire/release: the real one
+        # calls is_held() itself and would eat an entry of the side_effect list.
         svc._is_running = True
         svc._current_state = SleepState.AWAKE
         svc._was_in_core_uptime = True
