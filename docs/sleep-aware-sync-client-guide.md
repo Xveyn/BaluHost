@@ -173,10 +173,9 @@ Diese Endpoints senden 503 bei `X-Sync-Trigger: auto/scheduled` waehrend Sleep:
 |---|---|
 | `POST /api/sync/changes` | Delta-Sync |
 | `GET /api/sync/state` | File-State |
-| `POST /api/sync/upload/start` | Chunked Upload starten |
-| `POST /api/sync/upload/{id}/chunk/{n}` | Chunk hochladen |
-| `POST /api/sync/upload/{id}/resume` | Upload fortsetzen |
 | `POST /api/sync/report-folders` | Folder-Report |
+
+Die früheren Progressive-Upload-Routen unter `/api/sync/upload/*` wurden entfernt (#632); große Dateien laufen über den Chunked Upload unter `/api/files`.
 
 **Nicht betroffen** (funktionieren immer):
 - `GET /api/sync/preflight`
