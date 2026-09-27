@@ -24,6 +24,7 @@
 - Repo läuft mit `core.autocrlf=true`: Tests, die Shell-Dateien aus dem Repo ausführen, müssen sie mit `\n`-Zeilenenden in `tmp_path` kopieren.
 - Commits enden mit `Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>`.
 - Volle Backend-Suite gehört der CI; lokal laufen die in jedem Task genannten Testdateien.
+- `backend/tests/test_ci_deploy_companion_cargo.py` hat unter Windows 3 vorbestehende Fehlschläge (auch auf unverändertem `main`, Plan-Review 2026-09-27) und steht deshalb in keiner lokalen Testliste; die CI prüft sie.
 
 ## Review Focus
 
@@ -31,7 +32,7 @@
 2. **Pfade mit Leerzeichen** (`INSTALL_DIR`, `SYSTEMD_DIR`, `UNIT_BACKUP_DIR`): Alle Expansionen sind gequotet, nichts zerfällt in Wörter. → Task 1, Fixture baut alle Verzeichnisse mit Leerzeichen im Namen.
 3. **Zweiter Lauf direkt nach einem ersetzenden Lauf**: Er ist ein No-op ohne `daemon-reload`, sonst würde jeder Deploy die Units anfassen. → Task 1, `test_zweiter_lauf_ist_ein_noop`.
 4. **Backup-Verzeichnis existiert noch nicht**: Es wird beim ersten Ersetzen angelegt. → Task 1, `test_eine_abweichende_unit_wird_ersetzt_mit_backup` (Fixture legt es nicht an).
-5. **Manueller Aufruf mit `BALUHOST_USER`, während `User=` leer ist**: Die Override hat Vorrang. → Task 1, `test_benutzer_override_hat_vorrang`.
+5. **Manueller Aufruf mit `BALUHOST_USER`, während `User=` einen anderen Benutzer nennt**: Die Override hat Vorrang (nicht nur Rückfall). → Task 1, `test_benutzer_override_hat_vorrang`.
 
 ---
 
@@ -59,7 +60,7 @@
 
 **Interfaces:**
 - Consumes: `process_template <template> <output> KEY=VALUE…` und `log_error` aus `deploy/install/lib/common.sh` (unverändert).
-- Produces: Skript unter festem Pfad, aufrufbar als `bash <INSTALL_DIR>/deploy/scripts/install-systemd-units.sh` ohne Argumente. stdout: je ersetzter Unit `CHANGED: <unit>`, am Ende `OK: all 4 units up to date` oder `OK: <n> unit(s) replaced`. Exit 0 bei Erfolg, ≠ 0 bei jedem Fehler. Umgebung (nur Test/manuell): `SYSTEMD_DIR`, `UNIT_BACKUP_DIR`, `BALUHOST_UNITS_ALLOW_NONROOT=1`, `BALUHOST_USER`. Array im Skript: `UNITS=(baluhost-backend baluhost-scheduler baluhost-webdav baluhost-monitoring)` in genau dieser einzeiligen Form (Task 2 parst sie).
+- Produces: Skript unter festem Pfad, aufrufbar als `bash <INSTALL_DIR>/deploy/scripts/install-systemd-units.sh` ohne Argumente. stdout: je ersetzter Unit `CHANGED: <unit>`, am Ende `OK: all 4 units up to date`, `OK: all 4 units up to date, stale systemd state fixed by daemon-reload` oder `OK: <n> unit(s) replaced`. `daemon-reload` läuft, wenn etwas ersetzt wurde **oder** eine verwaltete Unit `NeedDaemonReload=yes` meldet. Exit 0 bei Erfolg, ≠ 0 bei jedem Fehler. Umgebung (nur Test/manuell): `SYSTEMD_DIR`, `UNIT_BACKUP_DIR`, `BALUHOST_UNITS_ALLOW_NONROOT=1`, `BALUHOST_USER`. Array im Skript: `UNITS=(baluhost-backend baluhost-scheduler baluhost-webdav baluhost-monitoring)` in genau dieser einzeiligen Form (Task 2 parst sie).
 
 - [ ] **Step 1: Testdatei mit Harness und allen Verhaltenstests schreiben**
 
@@ -78,7 +79,6 @@ Warum Verhalten statt Text: Der Test zu #689 selbst (test_deploy_proxy_headers)
 las nur den Template-Text und blieb gruen, waehrend die Box ungeschuetzt lief.
 """
 import os
-import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -94,6 +94,7 @@ BASH = shutil.which("bash")
 
 _STUB_SYSTEMCTL = """#!/bin/bash
 echo "systemctl $*" >> "$FAKE_LOG"
+if [[ "$1" == "show" && "$*" == *NeedDaemonReload* ]]; then echo "${FAKE_NEED_RELOAD:-no}"; exit 0; fi
 if [[ "$1" == "show" ]]; then echo "${FAKE_USER-sven}"; exit 0; fi
 if [[ "$1" == "daemon-reload" ]]; then exit "${FAKE_RELOAD_RC:-0}"; fi
 exit 0
@@ -223,6 +224,21 @@ def test_zweiter_lauf_ist_ein_noop(box):
     assert {u: box.installed(u).stat().st_mtime_ns for u in UNITS} == before
 
 
+def test_gleiche_dateien_aber_systemd_veraltet_laedt_trotzdem_neu(box):
+    """Der Fall nach einem gescheiterten daemon-reload: die Dateien stimmen
+    schon, systemd faehrt aber noch die alte Fassung (NeedDaemonReload=yes).
+    Ein erneuter Aufruf -- genau das, was die Reparaturzeile des Drift-Checks
+    empfiehlt -- muss das beheben, statt 'up to date' zu melden."""
+    _in_sync(box)
+
+    result = box.run(FAKE_NEED_RELOAD="yes")
+
+    assert result.returncode == 0, result.stderr
+    assert "CHANGED" not in result.stdout
+    assert box.reloads() == 1
+    assert "daemon-reload" in result.stdout
+
+
 def test_eine_abweichende_unit_wird_ersetzt_mit_backup(box):
     _in_sync(box)
     drifted = box.installed("baluhost-webdav")
@@ -272,7 +288,10 @@ def test_gerenderte_unit_ist_byte_gleich_mit_process_template(box):
 
 
 def test_benutzer_override_hat_vorrang(box):
-    result = box.run(FAKE_USER="", BALUHOST_USER="sven")
+    """systemctl meldet einen anderen (unbekannten) Benutzer: nur wenn die
+    Override wirklich Vorrang hat, kommt User=sven heraus -- ein blosser
+    Rueckfall auf BALUHOST_USER bestuende diesen Test nicht."""
+    result = box.run(FAKE_USER="ghost", BALUHOST_USER="sven")
 
     assert result.returncode == 0, result.stderr
     assert "User=sven" in box.installed("baluhost-backend").read_text(encoding="utf-8")
@@ -325,7 +344,7 @@ def test_leerer_dienstbenutzer_bricht_ab(box):
     result = box.run(FAKE_USER="")
 
     assert result.returncode != 0
-    assert "service user unknown" in result.stderr
+    assert "BALUHOST_USER is unset" in result.stderr
     assert list(box.systemd.iterdir()) == []
 
 
@@ -436,13 +455,16 @@ if [[ "$EUID" -ne 0 && "${BALUHOST_UNITS_ALLOW_NONROOT:-}" != "1" ]]; then
 fi
 
 # ─── Dienstbenutzer ─────────────────────────────────────────────────
-# Aus User= der laufenden Unit, wie install-power-sudoers.sh. BALUHOST_USER
-# gilt nur fuer den manuellen Aufruf (siehe Test-Naehte oben).
-if [[ -z "${BALUHOST_USER:-}" ]]; then
-    BALUHOST_USER="$(systemctl show -p User --value baluhost-backend.service 2>/dev/null || true)"
+# Explizit > User= des laufenden Dienstes > Abbruch -- dasselbe Muster wie
+# install-power-sudoers.sh, festgenagelt in test_deploy_service_user_resolution.
+# BALUHOST_USER gilt nur fuer den manuellen Aufruf (siehe Test-Naehte oben).
+SERVICE_USER="$(systemctl show -p User --value baluhost-backend.service 2>/dev/null || true)"
+BALUHOST_USER="${BALUHOST_USER:-${SERVICE_USER:-}}"
+if [[ -z "$BALUHOST_USER" ]]; then
+    log_error "could not determine the service user from baluhost-backend.service (User=)"
+    log_error "and BALUHOST_USER is unset. Set BALUHOST_USER explicitly."
+    exit 1
 fi
-[[ -n "$BALUHOST_USER" ]] \
-    || fail "service user unknown: no User= on baluhost-backend.service and BALUHOST_USER unset."
 id -u "$BALUHOST_USER" >/dev/null 2>&1 \
     || fail "service user '$BALUHOST_USER' does not exist on this host."
 
@@ -472,6 +494,10 @@ done
 if ! verify_out="$(systemd-analyze verify "${rendered[@]}" 2>&1)"; then
     echo "$verify_out" >&2
     fail "systemd-analyze verify rejected the rendered units -- nothing installed."
+fi
+# Nicht-fatale Hinweise von verify gehoeren trotzdem ins Deploy-Log.
+if [[ -n "$verify_out" ]]; then
+    echo "$verify_out" >&2
 fi
 
 # ─── 3. Vergleichen und ersetzen ────────────────────────────────────
@@ -504,14 +530,29 @@ for unit in "${UNITS[@]}"; do
 done
 
 # ─── 4. Neu laden ───────────────────────────────────────────────────
-if [[ "$changed" -eq 0 ]]; then
+# Auch ohne eigene Aenderung, wenn systemd eine Unit als veraltet meldet: nach
+# einem gescheiterten daemon-reload stimmen die Dateien bereits, systemd faehrt
+# aber die alte Fassung. Ein erneuter Aufruf -- den der Drift-Check als
+# Reparatur empfiehlt -- muss genau diesen Fall beheben.
+stale=0
+for unit in "${UNITS[@]}"; do
+    if [[ "$(systemctl show -p NeedDaemonReload --value "$unit.service" 2>/dev/null || true)" == "yes" ]]; then
+        stale=1
+    fi
+done
+
+if [[ "$changed" -eq 0 && "$stale" -eq 0 ]]; then
     echo "OK: all ${#UNITS[@]} units up to date"
     exit 0
 fi
 
 systemctl daemon-reload \
     || fail "systemctl daemon-reload failed -- unit files are written, systemd still runs the old ones."
-echo "OK: $changed unit(s) replaced"
+if [[ "$changed" -eq 0 ]]; then
+    echo "OK: all ${#UNITS[@]} units up to date, stale systemd state fixed by daemon-reload"
+else
+    echo "OK: $changed unit(s) replaced"
+fi
 ```
 
 - [ ] **Step 4: Tests laufen lassen, alle grün**
@@ -535,6 +576,7 @@ git commit -m "feat(deploy): install-systemd-units.sh gleicht Units mit Template
 **Files:**
 - Modify: `deploy/install/templates/baluhost-deploy-sudoers` (Block „Idempotent permission-grant scripts", nach den `install-power-sudoers.sh`-Zeilen)
 - Test: `backend/tests/test_deploy_install_systemd_units.py` (anhängen)
+- Test: `backend/tests/test_deploy_service_user_resolution.py` (Skript in die geprüften Listen aufnehmen)
 
 **Interfaces:**
 - Consumes: `UNITS=(…)` aus Task 1 (einzeilig); `SERVICES=(…)` in `deploy/install/modules/10-systemd-services.sh` und `deploy/scripts/ci-deploy.sh` (mehrzeilig); `app.services.unit_drift.MANAGED_UNITS`.
@@ -542,7 +584,7 @@ git commit -m "feat(deploy): install-systemd-units.sh gleicht Units mit Template
 
 - [ ] **Step 1: Tests anhängen**
 
-An `backend/tests/test_deploy_install_systemd_units.py` anhängen:
+In `backend/tests/test_deploy_install_systemd_units.py` den Import-Block um `import re` ergänzen (alphabetisch zwischen `import os` und `import shutil`; erst dieser Task benutzt ihn, in Task 1 meldete ruff sonst F401) und anhängen:
 
 ```python
 # ─── Paritaet und sudoers ────────────────────────────────────────────
@@ -590,10 +632,16 @@ def test_die_vorlage_erlaubt_genau_dieses_skript():
     assert pfade == {"/bin/bash", "/usr/bin/bash"}
 ```
 
+In `backend/tests/test_deploy_service_user_resolution.py`:
+
+- `PERMISSION_SCRIPTS` um `"install-systemd-units.sh",` ergänzen (nach `"install-power-sudoers.sh",`) und den Kommentar darüber von „Die vier Skripte" auf „Die fünf Skripte" ändern.
+- `USER_RESOLVING_SCRIPTS` um `"install-systemd-units.sh",` ergänzen (nach `"install-deploy-sudoers.sh",`, vor dem Kommentar „Die beiden Vorbilder").
+- In `test_die_skripte_finden_ihre_vorlagen_ueber_den_eigenen_ort` das Tupel um `"install-systemd-units.sh"` ergänzen.
+
 - [ ] **Step 2: Tests laufen lassen**
 
-Run: `cd backend; python -m pytest tests/test_deploy_install_systemd_units.py -v --no-cov -p no:cacheprovider -k "listen or vorlage"`
-Expected: `test_alle_vier_unit_listen_sind_gleich` PASS (die Listen stimmen heute schon überein), `test_die_vorlage_erlaubt_genau_dieses_skript` FAIL mit `assert 0 == 2`.
+Run: `cd backend; python -m pytest tests/test_deploy_install_systemd_units.py tests/test_deploy_service_user_resolution.py -v --no-cov -p no:cacheprovider`
+Expected: `test_alle_vier_unit_listen_sind_gleich` PASS (die Listen stimmen heute schon überein), `test_die_vorlage_erlaubt_genau_dieses_skript` FAIL mit `assert 0 == 2`. `test_deploy_service_user_resolution.py` ist komplett PASS: Task 1 folgt dem festgenagelten Muster bereits, die Aufnahme sichert es nur gegen späteres Zerfallen.
 
 - [ ] **Step 3: sudoers-Vorlage ergänzen**
 
@@ -619,7 +667,7 @@ Expected: alle PASS (`test_deploy_sudoers_units.py` bleibt grün, weil die neuen
 - [ ] **Step 5: Commit**
 
 ```bash
-git add deploy/install/templates/baluhost-deploy-sudoers backend/tests/test_deploy_install_systemd_units.py
+git add deploy/install/templates/baluhost-deploy-sudoers backend/tests/test_deploy_install_systemd_units.py backend/tests/test_deploy_service_user_resolution.py
 git commit -m "feat(deploy): sudoers erlaubt install-systemd-units.sh (#689)" -m "Zwei exakte NOPASSWD-Zeilen ohne Argumente; Paritaetstest haelt die vier Unit-Listen (Modul 10, ci-deploy, unit_drift, neues Skript) gleich." -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ```
 
@@ -896,7 +944,7 @@ Den gesamten Kommentarblock über `run_permission_script()` (beginnt mit `# Fueh
 ```bash
 # Fuehrt eines der Permission-Skripte ueber sudo_repo_script aus. Jeder
 # Fehlschlag bleibt eine Warnung: udev/polkit/sudoers-Syncs sind opt-in und
-# duerfen einen Deploy nie abbrechen. Die `if`-Form im Kern ist Pflicht -- unter
+# duerfen einen Deploy nie abbrechen. Das `|| status=$?` ist Pflicht -- unter
 # `set -e` braeche ein gescheiterter Sync sonst den ganzen Deploy ab.
 run_permission_script() {
     local label="$1" script="$2" status=0
@@ -954,9 +1002,10 @@ In `deploy/scripts/ci-deploy.sh` zwischen `log_info "Frontend build complete."` 
 #   0: OK (die Ausgabe nennt ersetzte Units)
 #   2: sudoers-Zeile fehlt auf dieser Box -> warnen, mit installierten Units
 #      weiter (bis zur einmaligen Provisionierung der heutige Zustand)
-#   sonst: Template rendert nicht oder verify lehnt ab -> Rollback. Das Skript
-#      hat dann nichts geschrieben; neuer Code mit alten Units waere genau
-#      die stille Divergenz aus #689.
+#   sonst: Rollback. Rendert ein Template nicht oder lehnt verify ab, hat das
+#      Skript nichts geschrieben; scheitert es beim Schreiben selbst, schreibt
+#      der Rollback die alten Templates zurueck. Neuer Code mit alten Units
+#      waere genau die stille Divergenz aus #689.
 
 log_step "Systemd Units"
 
@@ -989,7 +1038,7 @@ Den Kommentarblock unter `# ─── 8c. Systemd Unit Drift Smoke-Check (non-fa
 
 - [ ] **Step 10: Tests laufen lassen**
 
-Run: `cd backend; python -m pytest tests/test_ci_deploy_unit_sync.py tests/test_ci_deploy_permission_sync.py tests/test_deploy_install_systemd_units.py tests/test_ci_deploy_companion_cargo.py tests/test_deploy_service_user_resolution.py tests/services/test_unit_drift.py -v --no-cov -p no:cacheprovider`
+Run: `cd backend; python -m pytest tests/test_ci_deploy_unit_sync.py tests/test_ci_deploy_permission_sync.py tests/test_deploy_install_systemd_units.py tests/test_deploy_service_user_resolution.py tests/services/test_unit_drift.py -v --no-cov -p no:cacheprovider`
 Expected: alle PASS. Insbesondere: `test_jedes_permission_skript_laeuft_ueber_den_helfer` (genau ein `sudo -n bash "$script"`), `test_die_handlungsanweisung_kann_den_naechsten_deploy_nicht_lahmlegen`, die drei Verhaltenstests mit `DEPLOY-CONTINUES`, `test_ci_deploy_runs_the_check_after_the_health_check_non_fatally`.
 
 - [ ] **Step 11: Syntax prüfen**
@@ -1010,6 +1059,7 @@ git commit -m "feat(deploy): ci-deploy gleicht systemd-Units ab und stellt sie i
 
 **Files:**
 - Modify: `backend/app/services/unit_drift.py` (Docstring Z. 1–22, Reparaturzeile in `check_units`)
+- Modify: `backend/app/services/CLAUDE.md:57` (Zeile `unit_drift.py`)
 - Modify: `backend/tests/services/test_unit_drift.py:192-195`
 - Modify: `.claude/rules/ci-cd-security.md` (Known Gaps nach Eintrag 11; Reviewer Checklist Zeile „Sudoers / systemd")
 
@@ -1062,6 +1112,12 @@ the deploy never touches, and boxes where step 6b could only warn because the
 sudoers entry was not provisioned yet.
 ```
 
+In `backend/app/services/CLAUDE.md` die Zeile für `unit_drift.py` ersetzen durch:
+
+```markdown
+| `unit_drift.py` | Deploy smoke-check (`python -m app.services.unit_drift`, run by `ci-deploy.sh` after the health check, always exit 0): installed units + effective `ExecStart` from `systemctl show` vs. the rendered templates, plus drop-ins and `NeedDaemonReload`. Since #689 the deploy renders the units itself (step 6b, `deploy/scripts/install-systemd-units.sh`); this stays as the independent second measurement — it also catches drop-ins and boxes where 6b could only warn. `baluhost-backend-local` is excluded until #717 |
+```
+
 - [ ] **Step 4: Tests laufen lassen**
 
 Run: `cd backend; python -m pytest tests/services/test_unit_drift.py -v --no-cov -p no:cacheprovider`
@@ -1078,13 +1134,13 @@ In `.claude/rules/ci-cd-security.md` die Checklist-Zeile ersetzen:
 Nach Known Gap 11 (endet mit `…instead of the box silently never rebooting.`) als neuen Absatz anfügen:
 
 ```markdown
-12. **The deploy user may run `install-systemd-units.sh` as root, and it writes unit files** — Added in `deploy/install/templates/baluhost-deploy-sudoers` (#689) so a unit-template change reaches the box on the next deploy instead of sitting in `/opt/baluhost/deploy/` — `--proxy-headers` sat in the template for months while the running backend lacked it, leaving every LAN gate open. Two exact entries (`/bin/bash` and `/usr/bin/bash` + the pinned script path), no arguments, no wildcards, no `SETENV`. Unlike the three `install-*-sudoers.sh` grants, it runs on **every** deploy (step 6b) and again in `rollback()`, not only behind `SYNC_PERMISSIONS=1`. The script renders units with arbitrary `User=`/`ExecStart=` from repo templates, so **whoever controls `main` has root on the box**. That was already true before — the three `install-*-sudoers.sh` scripts and the sudoers templates they install are repo-controlled too — this entry makes it explicit. Compensating controls: Layer 3 (`github.actor == 'Xveyn'`) and Layer 4 (`production` environment reviewer) gate every deploy; `systemd-analyze verify` rejects a malformed unit before anything is written; a failed sync rolls the deploy back. The sudoers line reaches an already-installed box only via a one-time manual `install-deploy-sudoers.sh` run (same bootstrap quirk as the `baluhost-backend-local` restart line, `security-agent.md` Known Gap 10); until then step 6b warns with the exact command and the installed units stay as they are.
+12. **The deploy user may run `install-systemd-units.sh` as root, and it writes unit files** — Added in `deploy/install/templates/baluhost-deploy-sudoers` (#689) so a unit-template change reaches the box on the next deploy instead of sitting in `/opt/baluhost/deploy/` — `--proxy-headers` sat in the template for months while the running backend lacked it, leaving every LAN gate open. Two exact entries (`/bin/bash` and `/usr/bin/bash` + the pinned script path), no arguments, no wildcards, no `SETENV`. Unlike the three `install-*-sudoers.sh` grants, it runs on **every** deploy (step 6b) and again in `rollback()`, not only behind `SYNC_PERMISSIONS=1`. The script renders units with arbitrary `User=`/`ExecStart=` from repo templates and runs as root from a file inside `$INSTALL_DIR`. The real boundary is therefore **whoever can write under `$INSTALL_DIR` as the deploy user has root** — and the deploy user is the service user (`@@BALUHOST_USER@@`), owns `/opt/baluhost` (`deploy/update/run-update.sh` `chown -R`s it) and runs the backend without `NoNewPrivileges`. Two paths lead there: a commit on `main`, and code execution inside the backend process, which could rewrite this script (or, already today, `install-power-sudoers.sh`) and run it via `sudo -n bash`. Neither path is new — the three `install-*-sudoers.sh` grants have had the same shape since they were added; this entry names the boundary instead of leaving it implicit. Compensating controls against the `main` path: Layer 3 (`github.actor == 'Xveyn'`) and Layer 4 (`production` environment reviewer) gate every deploy. Against the backend-RCE path there is none specific to this entry; the tighter pattern is gap 10's spawn wrapper (root-owned, outside `/opt/baluhost`). Separately, as **integrity** checks rather than security controls: `systemd-analyze verify` rejects a malformed unit before anything is written, and a failed sync rolls the deploy back — a deliberately malicious unit passes both. The sudoers line reaches an already-installed box only via a one-time manual `install-deploy-sudoers.sh` run (same bootstrap quirk as the `baluhost-backend-local` restart line, `security-agent.md` Known Gap 10); until then step 6b warns with the exact command and the installed units stay as they are.
 ```
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add backend/app/services/unit_drift.py backend/tests/services/test_unit_drift.py .claude/rules/ci-cd-security.md
+git add backend/app/services/unit_drift.py backend/app/services/CLAUDE.md backend/tests/services/test_unit_drift.py .claude/rules/ci-cd-security.md
 git commit -m "docs(deploy): Drift-Check und Sicherheitsregeln kennen den Unit-Abgleich (#689)" -m "Reparaturzeile zeigt auf install-systemd-units.sh statt auf Modul 10; ci-cd-security.md haelt die Grenze 'main == root' als Known Gap 12 fest und schaerft die Checklist fuer Unit-Templates." -m "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ```
 
@@ -1096,7 +1152,7 @@ git commit -m "docs(deploy): Drift-Check und Sicherheitsregeln kennen den Unit-A
 
 - [ ] **Step 1: Alle deploy-bezogenen Tests**
 
-Run: `cd backend; python -m pytest tests/test_deploy_install_systemd_units.py tests/test_ci_deploy_unit_sync.py tests/test_ci_deploy_permission_sync.py tests/test_ci_deploy_companion_cargo.py tests/test_deploy_sudoers_units.py tests/test_deploy_service_user_resolution.py tests/test_deploy_proxy_headers.py tests/test_deploy_nginx_upstream.py tests/test_deploy_nginx_auth_limit.py tests/test_deploy_crypto_keys_provisioned.py tests/test_hardware_sudoers_scope.py tests/test_raid_sudoers_scope.py tests/services/test_unit_drift.py -v --no-cov -p no:cacheprovider`
+Run: `cd backend; python -m pytest tests/test_deploy_install_systemd_units.py tests/test_ci_deploy_unit_sync.py tests/test_ci_deploy_permission_sync.py tests/test_deploy_sudoers_units.py tests/test_deploy_service_user_resolution.py tests/test_deploy_proxy_headers.py tests/test_deploy_nginx_upstream.py tests/test_deploy_nginx_auth_limit.py tests/test_deploy_crypto_keys_provisioned.py tests/test_hardware_sudoers_scope.py tests/test_raid_sudoers_scope.py tests/services/test_unit_drift.py -v --no-cov -p no:cacheprovider`
 Expected: alle PASS.
 
 - [ ] **Step 2: Bash-Syntax aller angefassten Skripte**
@@ -1113,5 +1169,5 @@ Expected: `All checks passed!`
 
 Im PR-Text aufführen (Spec, Abschnitt „Abnahme auf BaluNode"):
 1. Deploy ohne Provisionierung: Log zeigt in „Systemd Units" `NOT PERMITTED` + Reparaturbefehl, Deploy grün, Drift-Check PASS.
-2. `sudo env BALUHOST_USER=sven bash /opt/baluhost/deploy/scripts/install-deploy-sudoers.sh`, dann Deploy per `workflow_dispatch`: `OK: all 4 units up to date`, Drift-Check PASS.
+2. `sudo env BALUHOST_USER=sven bash /opt/baluhost/deploy/scripts/install-deploy-sudoers.sh`, dann Deploy per `workflow_dispatch`: `OK: all 4 units up to date`, Drift-Check PASS. Ein einmaliges `CHANGED:` beim ersten Lauf ist **kein** Fehlschlag: der Drift-Check ignoriert Leerzeichen am Zeilenende und Leerzeilen am Dateiende, `cmp` nicht. Maßgeblich ist, dass der nächste Lauf `up to date` meldet und die Dienste gesund sind.
 3. `sudo bash /opt/baluhost/deploy/scripts/install-systemd-units.sh` → kein `CHANGED`; `systemctl show baluhost-backend -p NeedDaemonReload` → `no`.

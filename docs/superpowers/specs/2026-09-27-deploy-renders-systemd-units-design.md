@@ -106,7 +106,11 @@ denselben Kern und entscheidet anhand des Status selbst. Der Aufruf `sudo -n bas
 `test_ci_deploy_permission_sync.py`).
 
 **Rollback** (automatisch nach gescheitertem Health-Check oder 6b, und
-`--rollback`). Nach `git reset --hard "$PREV_COMMIT"` und vor `restart_services`
+`--rollback`). Die Wiederherstellung alter Units gilt für den automatischen
+Rollback. `ci-deploy.sh --rollback` setzt heute auf `current_commit` zurück,
+also nach einem erfolgreichen Deploy auf den aktuellen Stand; der Abgleich ist
+dort ein No-op. Das ist ein vorbestehendes Verhalten des manuellen Rollbacks,
+nicht Teil dieses Designs. Nach `git reset --hard "$PREV_COMMIT"` und vor `restart_services`
 läuft das Skript noch einmal, **aus dem zurückgesetzten Baum**, also mit den
 alten Templates:
 
@@ -133,7 +137,9 @@ Das Skript läuft als root in sechs Schritten.
      wie in Modul 10 und `unit_drift.py`.
    - Der Dienstbenutzer kommt aus `systemctl show -p User --value
      baluhost-backend.service`. Eine Umgebungsvariable `BALUHOST_USER` hat für
-     den manuellen Aufruf Vorrang. Über den Deploy ist sie nicht setzbar: Die
+     den manuellen Aufruf Vorrang, im selben Muster wie die anderen
+     Permission-Skripte (`BALUHOST_USER="${BALUHOST_USER:-${SERVICE_USER:-}}"`,
+     festgenagelt in `test_deploy_service_user_resolution.py`). Über den Deploy ist sie nicht setzbar: Die
      sudoers-Zeile pinnt die Kommandozeile ohne `SETENV`, und `env_reset` verwirft
      die Umgebung.
    - Ist der Benutzer leer oder kennt `id -u` ihn nicht: Exit 1.
@@ -150,21 +156,28 @@ Das Skript läuft als root in sechs Schritten.
 3. **Prüfen, alles oder nichts.** `systemd-analyze verify` über alle vier
    gerenderten Dateien in einem Aufruf. Bei Exit ≠ 0 geht die Ausgabe auf stderr,
    und das Skript endet mit Exit 1, **bevor irgendeine Datei in `SYSTEMD_DIR`
-   angefasst ist**.
+   angefasst ist**. Nicht-fatale Hinweise von `verify` gehen im Erfolgsfall
+   ebenfalls auf stderr und landen so im Deploy-Log.
 4. **Vergleichen und ersetzen**, pro Unit:
    - `cmp -s` gegen `$SYSTEMD_DIR/<unit>.service`. Bei Gleichheit weiter mit der
      nächsten Unit.
    - Existiert die Datei, geht ein Backup nach
-     `$UNIT_BACKUP_DIR/<unit>.service.<YYYYmmddHHMMSS>`. `UNIT_BACKUP_DIR`
+     `$UNIT_BACKUP_DIR/<unit>.service.<YYYYmmdd-HHMMSS-Nanosekunden>` (fest
+     breit, damit die Glob-Sortierung chronologisch ist). `UNIT_BACKUP_DIR`
      ist per Default `/var/backups/baluhost/units`, bewusst nicht
      `/etc/systemd/system`. Pro Unit bleiben die neuesten 10.
    - `install -m 0644 -o root -g root` in eine Temp-Datei **in** `SYSTEMD_DIR`,
      dann `mv -f` auf den Zielnamen. Der Rename auf demselben Dateisystem ist
      atomar, systemd sieht nie eine halbe Datei.
    - Ausgabe `CHANGED: <unit>`.
-5. **Neu laden.** Nur wenn mindestens eine Unit ersetzt wurde: `systemctl
-   daemon-reload`. Scheitert der Reload: Exit 1.
-6. **Abschluss.** `OK: <n> unit(s) replaced` oder `OK: all 4 units up to date`,
+5. **Neu laden.** `systemctl daemon-reload`, wenn mindestens eine Unit ersetzt
+   wurde **oder** eine verwaltete Unit `NeedDaemonReload=yes` meldet. Der zweite
+   Fall ist der Zustand nach einem gescheiterten Reload: Die Dateien stimmen
+   schon, systemd fährt aber die alte Fassung. Ein erneuter Aufruf, den der
+   Drift-Check als Reparatur empfiehlt, muss ihn beheben. Scheitert der Reload:
+   Exit 1.
+6. **Abschluss.** `OK: <n> unit(s) replaced`, `OK: all 4 units up to date` oder
+   `OK: all 4 units up to date, stale systemd state fixed by daemon-reload`,
    Exit 0.
 
 Ein Fehler beim Schreiben mittendrin (etwa ein voller Datenträger) endet mit
@@ -201,17 +214,31 @@ sudo env BALUHOST_USER=sven bash /opt/baluhost/deploy/scripts/install-deploy-sud
 Bis dahin meldet Schritt 6b bei jedem Deploy die Warnung mit genau diesem Befehl
 (Benutzername per `$(id -un)` eingesetzt, wie bei `run_permission_script`). Das
 Verhalten ist fail-closed auf dem heutigen Stand. Der erste Deploy danach meldet
-`OK: all 4 units up to date`, weil der Drift-Check seit 2026-09-24 PASS meldet.
+voraussichtlich `OK: all 4 units up to date`, weil der Drift-Check seit
+2026-09-24 PASS meldet. Ein einmaliges `CHANGED:` wäre harmlos: Der Drift-Check
+ignoriert Leerzeichen am Zeilenende und Leerzeilen am Dateiende, `cmp` nicht.
 
 ## Vertrauensgrenze
 
-Das Skript schreibt Units mit frei wählbarem `User=` und `ExecStart=` und lässt
-systemd sie als root laden. Wer `main` kontrolliert, hat damit Root-Rechte auf der
-Box. **Das ist nicht neu:** Die drei `install-*-sudoers.sh` sind ebenso
-repo-kontrollierte Skripte, die der Deploy-User als root ausführen darf, und die
-sudoers-Vorlagen, die sie schreiben, stehen ebenfalls im Repo. Die Grenze
-„main == root" besteht faktisch schon heute. Kompensiert wird sie durch Layer 3
-(`github.actor == 'Xveyn'`) und Layer 4 (`production`-Environment mit Reviewer).
+Das Skript schreibt Units mit frei wählbarem `User=` und `ExecStart=` und läuft
+als root aus einer Datei unter `$INSTALL_DIR`. Die eigentliche Grenze lautet
+deshalb: **Wer als Deploy-Benutzer unter `$INSTALL_DIR` schreiben kann, hat
+root.** Der Deploy-Benutzer ist zugleich der Dienstbenutzer, gehört ihm
+`/opt/baluhost` (`deploy/update/run-update.sh` macht `chown -R`), und das Backend
+läuft ohne `NoNewPrivileges`. Zwei Wege führen dorthin:
+
+- ein Commit auf `main`;
+- Codeausführung im Backend-Prozess, die dieses Skript (oder heute schon
+  `install-power-sudoers.sh`) umschreibt und per `sudo -n bash` startet.
+
+**Beides ist nicht neu:** Die drei `install-*-sudoers.sh` haben seit jeher
+dieselbe Form. Neu ist nur, dass die Grenze benannt wird. Gegen den `main`-Weg
+kompensieren Layer 3 (`github.actor == 'Xveyn'`) und Layer 4
+(`production`-Environment mit Reviewer). Gegen den Backend-RCE-Weg gibt es keine
+eigene Kompensation; das engere Muster wäre der Spawn-Wrapper aus Known Gap 10
+(root-eigen, außerhalb von `/opt/baluhost`). `systemd-analyze verify` und der
+Rollback sind **Integritäts**prüfungen, keine Sicherheitskontrollen: Eine
+absichtlich bösartige Unit besteht beide.
 
 Festgehalten wird das in `.claude/rules/ci-cd-security.md`:
 - ein neuer Eintrag 12 unter „Known Gaps & Accepted Risks";
@@ -227,6 +254,12 @@ Festgehalten wird das in `.claude/rules/ci-cd-security.md`:
   Reparaturzeile (`WARN: fix: …`) zeigt auf
   `sudo bash <install-dir>/deploy/scripts/install-systemd-units.sh` statt auf den
   ganzen Modul-10-Lauf.
+- `backend/app/services/CLAUDE.md`: Die Zeile zu `unit_drift.py` sagt heute
+  „Exists because the deploy never renders units" und wird entsprechend
+  angepasst.
+- `backend/tests/test_deploy_service_user_resolution.py`: Das neue Skript kommt
+  in die Listen der geprüften Permission-Skripte, damit sein Muster der
+  Benutzerauflösung nicht später zerfällt.
 - `deploy/install/modules/10-systemd-services.sh` bleibt unverändert. Es rendert
   weiterhin selbst, mit demselben `process_template`.
 
