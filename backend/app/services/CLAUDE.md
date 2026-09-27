@@ -113,7 +113,7 @@ Business logic layer. Routes delegate to services — services contain the actua
 
 **`backup/`** — Backup/restore with scheduling
 
-**`sync/`** — Desktop sync client coordination, progressive sync
+**`sync/`** — Desktop sync client coordination, sync schedules, bandwidth limits. `progressive.py` no longer does uploads: the `/api/sync/upload/*` routes were removed in #632 (no client, no ownership check, no destination-path validation); it keeps the bandwidth-limit API and the expiry cleanup for leftover `chunked_uploads` rows. Chunked uploads go through `/api/files` (`routes/chunked_upload.py`)
 
 **`scheduler/`** — Unified scheduler: config, execution history, worker process
 

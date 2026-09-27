@@ -1,17 +1,15 @@
 """API endpoints for progressive sync, scheduling, and selective sync."""
 
-from fastapi import APIRouter, Depends, HTTPException, File, Request, Response, UploadFile, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
 from app.api import deps
-from app.api.deps import require_sync_allowed
 from app.core.database import get_db
 from app.models.user import User
 from app.services.sync.progressive import ProgressiveSyncService
 from app.services.sync.scheduler import SyncSchedulerService
 from app.core.rate_limiter import user_limiter, get_limit
 from app.schemas.sync import (
-    StartChunkedUploadRequest,
     SetBandwidthLimitRequest,
     CreateSyncScheduleRequest,
     UpdateSyncScheduleRequest,
@@ -32,114 +30,11 @@ def get_sync_scheduler_service(db: Session = Depends(get_db)) -> SyncSchedulerSe
 
 
 # ============================================================================
-# PROGRESSIVE/CHUNKED UPLOADS
+# PROGRESSIVE/CHUNKED UPLOADS - removed (#632)
 # ============================================================================
-
-@router.post("/upload/start")
-@user_limiter.limit(get_limit("sync_operations"))
-async def start_chunked_upload(
-    request: Request,
-    response: Response,
-    payload: StartChunkedUploadRequest,
-    device_id: str,
-    current_user: User = Depends(deps.get_current_user),
-    sync_service: ProgressiveSyncService = Depends(get_progressive_sync_service),
-    _guard=Depends(require_sync_allowed),
-):
-    """Start a chunked upload session for a large file."""
-    result = sync_service.start_chunked_upload(
-        user_id=current_user.id,
-        device_id=device_id,
-        file_path=payload.file_path,
-        file_name=payload.file_name,
-        total_size=payload.total_size,
-        chunk_size=payload.chunk_size
-    )
-    return result
-
-
-@router.post("/upload/{upload_id}/chunk/{chunk_number}")
-@user_limiter.limit(get_limit("sync_operations"))
-async def upload_chunk(
-    request: Request,
-    response: Response,
-    upload_id: str,
-    chunk_number: int,
-    chunk_hash: str,
-    chunk_file: UploadFile = File(...),
-    current_user: User = Depends(deps.get_current_user),
-    sync_service: ProgressiveSyncService = Depends(get_progressive_sync_service),
-    _guard=Depends(require_sync_allowed),
-):
-    """Upload a single chunk."""
-    chunk_data = await chunk_file.read()
-    
-    result = sync_service.upload_chunk(
-        upload_id=upload_id,
-        chunk_number=chunk_number,
-        chunk_data=chunk_data,
-        chunk_hash=chunk_hash
-    )
-    
-    if "error" in result:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=result["error"])
-    
-    return result
-
-
-@router.get("/upload/{upload_id}/progress")
-@user_limiter.limit(get_limit("sync_operations"))
-async def get_upload_progress(
-    request: Request,
-    response: Response,
-    upload_id: str,
-    current_user: User = Depends(deps.get_current_user),
-    sync_service: ProgressiveSyncService = Depends(get_progressive_sync_service)
-):
-    """Get progress of a chunked upload."""
-    progress = sync_service.get_upload_progress(upload_id)
-    
-    if not progress:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Upload not found")
-    
-    return progress
-
-
-@router.post("/upload/{upload_id}/resume")
-@user_limiter.limit(get_limit("sync_operations"))
-async def resume_upload(
-    request: Request,
-    response: Response,
-    upload_id: str,
-    current_user: User = Depends(deps.get_current_user),
-    sync_service: ProgressiveSyncService = Depends(get_progressive_sync_service),
-    _guard=Depends(require_sync_allowed),
-):
-    """Resume a paused chunked upload."""
-    result = sync_service.resume_upload(upload_id)
-    
-    if "error" in result:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=result["error"])
-    
-    return result
-
-
-@router.delete("/upload/{upload_id}")
-@user_limiter.limit(get_limit("sync_operations"))
-async def cancel_upload(
-    request: Request,
-    response: Response,
-    upload_id: str,
-    current_user: User = Depends(deps.get_current_user),
-    sync_service: ProgressiveSyncService = Depends(get_progressive_sync_service)
-):
-    """Cancel a chunked upload."""
-    success = sync_service.cancel_upload(upload_id)
-    
-    if not success:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Upload not found")
-    
-    return {"cancelled": True, "upload_id": upload_id}
+# /sync/upload/* had no client and lacked both an ownership check and
+# destination-path validation. Chunked uploads go through /api/files
+# (routes/chunked_upload.py), which jails the path.
 
 
 # ============================================================================

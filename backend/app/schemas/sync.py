@@ -92,34 +92,7 @@ class FileHistoryResponse(BaseModel):
 # PROGRESSIVE SYNC SCHEMAS
 # ============================================================================
 
-class StartChunkedUploadRequest(BaseModel):
-    """Start a chunked upload session."""
-    file_path: str
-    file_name: str
-    total_size: int
-    chunk_size: int = 5 * 1024 * 1024  # 5MB default
 
-
-class UploadChunkResponse(BaseModel):
-    """Response after uploading a chunk."""
-    chunk_number: int
-    uploaded_size: int
-    total_size: int
-    complete: bool
-
-
-class UploadProgressResponse(BaseModel):
-    """Progress of a chunked upload."""
-    upload_id: str
-    file_name: str
-    file_path: str
-    total_size: int
-    uploaded_size: int
-    chunk_size: int
-    chunks_uploaded: list[int]
-    is_completed: bool
-    created_at: str
-    last_updated: str
 
 
 class SetBandwidthLimitRequest(BaseModel):
