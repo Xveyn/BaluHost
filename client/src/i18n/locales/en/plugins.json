@@ -8,6 +8,10 @@
     "notFoundTitle": "Plugin not available",
     "notFoundDesc": "\"{{name}}\" is not enabled or not installed."
   },
+  "restartRequired": {
+    "title": "Backend restart required",
+    "description": "This plugin was enabled while the backend was running. Its endpoints only become available after a backend restart — until then its features answer with 404, even if its icon already shows in the top bar."
+  },
   "tabs": {
     "installed": "Installed",
     "marketplace": "Marketplace",

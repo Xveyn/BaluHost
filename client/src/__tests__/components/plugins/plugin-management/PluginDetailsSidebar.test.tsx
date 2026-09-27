@@ -9,6 +9,12 @@ vi.mock('../../../../components/plugins/plugin-management/PluginDashboardPanelCa
 vi.mock('../../../../components/plugins/plugin-management/PluginActionsCard', () => ({ PluginActionsCard: () => <div data-testid="actions" /> }));
 vi.mock('../../../../components/plugins/PluginSettingsSection', () => ({ PluginSettingsSection: () => <div data-testid="settings" /> }));
 import { PluginDetailsSidebar } from '../../../../components/plugins/plugin-management/PluginDetailsSidebar';
+import deLocaleJson from '../../../../i18n/locales/de/plugins.json';
+import enLocaleJson from '../../../../i18n/locales/en/plugins.json';
+
+type NoticeTexts = { restartRequired?: { title?: unknown; description?: unknown } };
+const deLocale = deLocaleJson as NoticeTexts;
+const enLocale = enLocaleJson as NoticeTexts;
 
 const detail = (over: Partial<PluginDetail> = {}): PluginDetail => ({
   name: 'demo', version: '1', display_name: 'Demo', description: '', author: '', category: 'general',
@@ -45,5 +51,42 @@ describe('PluginDetailsSidebar', () => {
     expect(screen.getByTestId('settings')).toBeInTheDocument();
     rerender(<PluginDetailsSidebar plugin={detail({ config_schema: undefined, is_enabled: true })} {...props} />);
     expect(screen.queryByTestId('settings')).not.toBeInTheDocument();
+  });
+
+  // #619: a router plugin enabled at runtime has no endpoints until the backend
+  // restarts. Without this notice its topbar entry looks ready and 404s.
+  describe('restart-required notice', () => {
+    it('shows the notice for an enabled plugin whose routes are not mounted yet', () => {
+      render(<PluginDetailsSidebar plugin={detail({ is_enabled: true, restart_required: true })} {...props} />);
+      expect(screen.getByRole('alert')).toHaveTextContent('restartRequired.title');
+      expect(screen.getByRole('alert')).toHaveTextContent('restartRequired.description');
+    });
+
+    it('hides the notice for a disabled plugin even though the backend reports restart_required', () => {
+      // router_restart_required() does not look at enablement: a router plugin
+      // that was off at startup reports true while it is still off.
+      render(<PluginDetailsSidebar plugin={detail({ is_enabled: false, restart_required: true })} {...props} />);
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    it('hides the notice when the routes are mounted', () => {
+      render(<PluginDetailsSidebar plugin={detail({ is_enabled: true, restart_required: false })} {...props} />);
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    it('hides the notice when an older backend omits the field', () => {
+      render(<PluginDetailsSidebar plugin={detail({ is_enabled: true })} {...props} />);
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    // The t() mock above echoes keys, so a missing locale entry would pass
+    // every render test. Check the real files instead.
+    it.each([
+      ['de', deLocale],
+      ['en', enLocale],
+    ])('has both notice texts in the %s locale', (_lang, locale) => {
+      expect(locale.restartRequired?.title).toEqual(expect.any(String));
+      expect(locale.restartRequired?.description).toEqual(expect.any(String));
+    });
   });
 });

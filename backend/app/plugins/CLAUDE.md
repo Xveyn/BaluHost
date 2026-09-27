@@ -130,6 +130,10 @@ Two plugin trust tiers with different isolation:
    (`PluginManager.router_restart_required()`); always false for plugins
    without a router and for external (sandboxed) plugins, whose requests are
    routed dynamically through the catch-all proxy with no restart needed.
+   It is **not** gated on enablement: a router plugin that was off at startup
+   reports true while still off. The Plugins page therefore shows its
+   restart notice only for `is_enabled && restart_required`
+   (`PluginDetailsSidebar.tsx`, #619).
 7. Override `get_ui_manifest()` with `menu_items` + `run_menu_action()` to
    contribute an action to the system (power) menu. `get_menu_items()` is not
    a separate override point: its default implementation derives the list
