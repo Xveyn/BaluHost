@@ -260,6 +260,17 @@ def test_verify_fehler_schreibt_nichts(box):
     assert box.reloads() == 0
 
 
+def test_verify_prueft_nur_die_eigenen_units(box):
+    """Seit systemd 250 zaehlt `verify` auch Fehler in geladenen Abhaengigkeiten
+    (postgresql.service ueber Wants=, network.target ...). Ein Distro-Update an
+    einer fremden Unit liesse dann JEDEN Deploy zurueckrollen -- geprueft
+    werden sollen nur unsere vier."""
+    assert box.run().returncode == 0
+    verify = [c for c in box.calls() if c.startswith("systemd-analyze verify")]
+    assert len(verify) == 1
+    assert verify[0].startswith("systemd-analyze verify --recursive-errors=no ")
+
+
 def test_uebrig_gebliebener_platzhalter_bricht_ab(box):
     tpl = box.templates / "baluhost-monitoring.service"
     tpl.write_text(tpl.read_text(encoding="utf-8") + "Description=@@UNBEKANNT@@\n",

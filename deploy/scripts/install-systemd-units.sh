@@ -106,7 +106,11 @@ for unit in "${UNITS[@]}"; do
 done
 
 # ─── 2. Pruefen, alles oder nichts ──────────────────────────────────
-if ! verify_out="$(systemd-analyze verify "${rendered[@]}" 2>&1)"; then
+# --recursive-errors=no: seit systemd 250 zaehlt verify sonst auch Fehler in
+# geladenen Abhaengigkeiten (postgresql.service ueber Wants=, network.target).
+# Ein Distro-Update an einer fremden Unit liesse dann jeden Deploy
+# zurueckrollen -- geprueft werden nur unsere eigenen Units.
+if ! verify_out="$(systemd-analyze verify --recursive-errors=no "${rendered[@]}" 2>&1)"; then
     echo "$verify_out" >&2
     fail "systemd-analyze verify rejected the rendered units -- nothing installed."
 fi
