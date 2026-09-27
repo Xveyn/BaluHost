@@ -4,12 +4,15 @@ Run as ``python -m app.services.unit_drift [--install-dir /opt/baluhost]``.
 ALWAYS exits 0 and prints ``PASS: …`` / ``WARN: …`` lines for the deploy log,
 like ``app.plugins.verify_index_signature``.
 
-Why this exists: ``ci-deploy.sh`` never renders unit files — only
-``deploy/install/modules/10-systemd-services.sh`` does, on a manual installer
-run. A template change therefore lands in the repo and under
-``/opt/baluhost/deploy/`` and stops there. ``--proxy-headers`` sat in the
-template for months while the running backend never had it, and the test for
-it read only the template text, so it stayed green the whole time.
+Why this exists: until #689 ``ci-deploy.sh`` never rendered unit files — only
+``deploy/install/modules/10-systemd-services.sh`` did, on a manual installer
+run. ``--proxy-headers`` sat in the template for months while the running
+backend never had it, and the test for it read only the template text, so it
+stayed green the whole time. Since #689 the deploy renders the units itself
+(step 6b, ``deploy/scripts/install-systemd-units.sh``); this check stays as the
+independent second measurement afterwards — it also catches drop-ins, which
+the deploy never touches, and boxes where step 6b could only warn because the
+sudoers entry was not provisioned yet.
 
 This check reads the box's actual state instead:
   1. the unit file systemd loaded (``FragmentPath``) vs. the rendered template,
@@ -155,7 +158,7 @@ def check_units(
         return [f"PASS: {len(MANAGED_UNITS)} systemd units match their templates"]
     if rerender:
         lines.append("WARN: fix: sudo bash "
-                     f"{install_dir}/deploy/install/install.sh --module 10-systemd-services"
+                     f"{install_dir}/deploy/scripts/install-systemd-units.sh"
                      " — then restart the affected units")
     return lines
 

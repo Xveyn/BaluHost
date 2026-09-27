@@ -189,10 +189,14 @@ def test_unknown_service_user_warns_instead_of_guessing():
     assert any("service user" in w for w in warns)
 
 
-def test_fix_hint_names_installer_module():
+def test_fix_hint_names_the_unit_sync_script():
+    """Die Reparatur ist der enge Abgleich aus #689, nicht der ganze
+    Modul-10-Lauf (der zusaetzlich sudoers, polkit und udev schreibt)."""
     box = FakeBox()
     box.shows["baluhost-webdav"] = _show(reload="yes")
-    assert any("--module 10-systemd-services" in line for line in box.run())
+    hint = next(line for line in box.run() if "fix:" in line)
+    assert f"sudo bash {INSTALL_DIR}/deploy/scripts/install-systemd-units.sh" in hint
+    assert "--module 10-systemd-services" not in hint
 
 
 def test_systemctl_failure_does_not_raise():

@@ -165,11 +165,19 @@ sudo() {
 '''
 
 
-def _helper_source() -> str:
+def _function_source(name: str) -> str:
     lines = _text().splitlines()
-    start = next(i for i, z in enumerate(lines) if z.startswith("run_permission_script() {"))
+    start = next(i for i, z in enumerate(lines) if z.startswith(f"{name}() {{"))
     end = next(i for i in range(start + 1, len(lines)) if lines[i].startswith("}"))
     return "\n".join(lines[start:end + 1])
+
+
+def _helper_source() -> str:
+    # run_permission_script stuetzt sich seit #689 auf den ausgelagerten Kern
+    # (sudo_repo_script) und die gemeinsame Anleitung; ohne sie liefe der
+    # Helfer im Harness ins Leere.
+    return "\n\n".join(_function_source(n) for n in (
+        "sudo_repo_script", "warn_deploy_sudoers_missing", "run_permission_script"))
 
 
 def _run_helper(tmp_path: Path, mode: str) -> subprocess.CompletedProcess:

@@ -24,6 +24,16 @@
 @@BALUHOST_USER@@ ALL=(root) NOPASSWD: /bin/bash @@INSTALL_DIR@@/deploy/scripts/install-power-sudoers.sh
 @@BALUHOST_USER@@ ALL=(root) NOPASSWD: /usr/bin/bash @@INSTALL_DIR@@/deploy/scripts/install-power-sudoers.sh
 
+# systemd-Unit-Abgleich (#689) -- anders als die drei Skripte darueber bei
+# JEDEM Deploy aufgerufen (Schritt 6b) und im Rollback. Das Skript schreibt
+# Units mit frei waehlbarem User=/ExecStart= -- wer als Deploy-Benutzer unter
+# @@INSTALL_DIR@@ schreiben kann (ein Commit auf main, aber auch Code im
+# Backend-Prozess), hat damit root; das galt ueber die drei install-*-Skripte
+# schon vorher.
+# Siehe .claude/rules/ci-cd-security.md, Known Gap 12.
+@@BALUHOST_USER@@ ALL=(root) NOPASSWD: /bin/bash @@INSTALL_DIR@@/deploy/scripts/install-systemd-units.sh
+@@BALUHOST_USER@@ ALL=(root) NOPASSWD: /usr/bin/bash @@INSTALL_DIR@@/deploy/scripts/install-systemd-units.sh
+
 # Companion (Tauri) install — only invoked when INSTALL_COMPANION=1 in
 # ci-deploy.sh; off by default. The script installs ONLY the .deb staged by
 # the deploy at <install-dir>/.companion/baluhost-companion.deb — still one

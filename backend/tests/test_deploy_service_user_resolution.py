@@ -33,12 +33,13 @@ DEPLOY_SUDOERS = TEMPLATES / "baluhost-deploy-sudoers"
 MODULE_10 = REPO / "deploy" / "install" / "modules" / "10-systemd-services.sh"
 CI_DEPLOY = SCRIPTS / "ci-deploy.sh"
 
-# Die vier Skripte, die die Deploy-sudoers-Vorlage als root freigibt, plus das
+# Die fuenf Skripte, die die Deploy-sudoers-Vorlage als root freigibt, plus das
 # Bootstrap-Skript, das diese Vorlage selbst rendert.
 PERMISSION_SCRIPTS = (
     "install-amd-gpu-permissions.sh",
     "install-hardware-sudoers.sh",
     "install-power-sudoers.sh",
+    "install-systemd-units.sh",
     "install-companion.sh",
     "install-deploy-sudoers.sh",
 )
@@ -47,6 +48,7 @@ PERMISSION_SCRIPTS = (
 USER_RESOLVING_SCRIPTS = (
     "install-amd-gpu-permissions.sh",
     "install-deploy-sudoers.sh",
+    "install-systemd-units.sh",
     # Die beiden Vorbilder -- mitgeprueft, damit das Muster nicht einseitig
     # wieder zerfaellt.
     "install-hardware-sudoers.sh",
@@ -142,7 +144,8 @@ def test_die_skripte_finden_ihre_vorlagen_ueber_den_eigenen_ort():
     """Wo das Skript liegt, liegt auch das Repo -- das ist die einzige Quelle,
     die auf jeder Box stimmt, ohne dass jemand sie durchreichen muss."""
     for name in ("install-deploy-sudoers.sh", "install-hardware-sudoers.sh",
-                 "install-power-sudoers.sh", "install-companion.sh"):
+                 "install-power-sudoers.sh", "install-companion.sh",
+                 "install-systemd-units.sh"):
         text = _text(name)
         assert 'BASH_SOURCE[0]' in text, \
             f"{name} leitet sein Install-Verzeichnis nicht aus dem eigenen Ort ab"
