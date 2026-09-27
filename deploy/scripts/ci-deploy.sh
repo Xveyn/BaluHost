@@ -3,7 +3,8 @@
 #
 # Triggered by GitHub Actions on push to main, or manually.
 # Performs: pre-checks → DB backup → git pull → backend update →
-#           alembic migration → frontend build → service restart → health check.
+#           alembic migration → frontend build → systemd unit sync →
+#           service restart → health check.
 #
 # On failure: automatic rollback to previous commit + alembic downgrade.
 #
@@ -196,6 +197,62 @@ restart_services() {
     log_info "All services restarted."
 }
 
+# ─── Repo-Skripte als root ────────────────────────────────────────────
+#
+# Fuehrt eines der version-kontrollierten Skripte unter deploy/scripts/ als root
+# aus und unterscheidet, WARUM es scheitert (#570, #588, #689).
+#
+# Der Grund fuer die Unterscheidung: /etc/sudoers.d/baluhost-deploy ist die
+# einzige sudoers-Datei, die dieser Deploy nicht neu rendern kann -- sie
+# enthaelt genau die Erlaubnis, mit der die anderen installiert werden. Neue
+# Zeilen der Vorlage erreichen eine bereits installierte Box deshalb nie, und
+# der Aufruf scheiterte dann hinter einer nichtssagenden Zeile.
+#
+# Gemessen wird die WIRKUNG, nicht die Erlaubnis. Eine Vorabfrage per
+# `sudo -n -l bash <script>` endet mit 0, sobald der Aufruf ueberhaupt erlaubt
+# waere, auch MIT Passwort -- der Deploy-Benutzer ist in der sudo-Gruppe, also
+# war jeder Aufruf "erlaubt" (#588, Deploy-Lauf 34236194380). Deshalb:
+#   - `-n` fragt nie nach einem Passwort: fehlt die NOPASSWD-Regel, scheitert
+#     der Aufruf sofort. Die Skripte sind idempotent, ein Fehlversuch schadet
+#     nicht.
+#   - `LC_ALL=C` haelt sudos eigene Meldung englisch (die Box spricht deutsch),
+#     damit "a password is required" erkennbar ist.
+#
+# Rueckgabe: 0 = OK, 1 = das Skript selbst ist gescheitert (sein stderr steht
+# im Log), 2 = die NOPASSWD-Regel fehlt. Was daraus folgt, entscheidet der
+# Aufrufer: die Permission-Syncs warnen immer, der Unit-Abgleich rollt bei 1
+# zurueck. Unter `set -e` nur als `sudo_repo_script … || status=$?` aufrufen.
+sudo_repo_script() {
+    local script="$1" err_file rc=0
+    err_file="$(mktemp)"
+    LC_ALL=C sudo -n bash "$script" 2>"$err_file" || rc=$?
+    if [[ "$rc" -ne 0 ]] && grep -q '^sudo: a password is required' "$err_file"; then
+        rm -f "$err_file"
+        return 2
+    fi
+    cat "$err_file" >&2
+    rm -f "$err_file"
+    if [[ "$rc" -ne 0 ]]; then
+        return 1
+    fi
+    return 0
+}
+
+# Die Anleitung fuer Status 2 -- an einer Stelle, damit Permission-Syncs und
+# Unit-Abgleich denselben, geprueften Befehl ausgeben.
+warn_deploy_sudoers_missing() {
+    local label="$1" script="$2"
+    log_warn "$label sync NOT PERMITTED: /etc/sudoers.d/baluhost-deploy on this box"
+    log_warn "  predates the entry for $(basename "$script"). One-time fix:"
+    # Der Benutzername wird HIER eingesetzt, nicht als $USER ausgegeben:
+    # die Anweisung wird typischerweise in einer root-Shell ausgefuehrt, wo
+    # $USER zu "root" wuerde. Die Datei wuerde dann fuer root gerendert, und
+    # der Deploy-Benutzer verloere still alle NOPASSWD-Rechte -- der
+    # naechste Deploy braeche beim Neustart der Dienste ab. `env` davor,
+    # weil sudo Zuweisungen in der Kommandozeile ohne SETENV ablehnt.
+    log_warn "    sudo env BALUHOST_USER=$(id -un) bash $INSTALL_DIR/deploy/scripts/install-deploy-sudoers.sh"
+}
+
 # ─── Companion (Tauri) Build + Install ────────────────────────────────
 #
 # Opt-in (INSTALL_COMPANION=1). Builds the BaluHost Companion desktop app from
@@ -304,6 +361,24 @@ rollback() {
             log_error "Alembic downgrade failed. Manual DB restore may be needed."
             log_error "Backup file: $BACKUP_DIR/$BACKUP_FILE"
         }
+    fi
+
+    # Units aus dem zurueckgesetzten Baum, also mit den ALTEN Templates (#689).
+    # Nur warnen: ein Rollback im Rollback gibt es nicht, und der Rollback soll
+    # so weit kommen wie moeglich. Hat Schritt 6b an verify scheitern lassen,
+    # ist nichts geschrieben worden und dies ein No-op.
+    local units_script="$INSTALL_DIR/deploy/scripts/install-systemd-units.sh"
+    if [[ -f "$units_script" ]]; then
+        local units_status=0
+        log_info "Restoring systemd units from $PREV_COMMIT templates..."
+        sudo_repo_script "$units_script" || units_status=$?
+        case "$units_status" in
+            0) log_info "Systemd units match $PREV_COMMIT." ;;
+            2) warn_deploy_sudoers_missing "Systemd units" "$units_script" ;;
+            *) log_warn "Systemd unit restore failed - restarting with the units as installed." ;;
+        esac
+    else
+        log_info "No install-systemd-units.sh at $PREV_COMMIT - units left as installed."
     fi
 
     restart_services
@@ -453,56 +528,24 @@ log_info "Backend dependencies updated."
 #   - GitHub: workflow_dispatch input "sync_permissions" = true
 #   - Manual: SYNC_PERMISSIONS=1 ./ci-deploy.sh
 
-# Fuehrt eines der Permission-Skripte als root aus und benennt eine fehlende
-# NOPASSWD-Regel als solche (#570, #588).
-#
-# Der Grund: /etc/sudoers.d/baluhost-deploy ist die einzige der vier
-# sudoers-Dateien, die dieser Deploy nicht neu rendern kann -- sie enthaelt
-# genau die Erlaubnis, mit der die anderen drei installiert werden. Neue Zeilen
-# der Vorlage erreichen eine bereits installierte Box deshalb nie, und der
-# Aufruf scheiterte dann hinter einer nichtssagenden WARN-Zeile.
-#
-# Gemessen wird die WIRKUNG, nicht die Erlaubnis. Die erste Fassung fragte
-# vorab `sudo -n -l bash <script>` -- das endet mit 0, sobald der Aufruf
-# ueberhaupt erlaubt waere, auch MIT Passwort. Der Deploy-Benutzer ist in der
-# sudo-Gruppe, also war jeder Aufruf "erlaubt", und die Diagnose erschien nie
-# (#588, Deploy-Lauf 34236194380). Jetzt:
-#   - `-n` fragt nie nach einem Passwort: fehlt die NOPASSWD-Regel, scheitert
-#     der Aufruf sofort. Die Skripte sind idempotent, ein Fehlversuch schadet
-#     nicht.
-#   - `LC_ALL=C` haelt sudos eigene Meldung englisch (die Box spricht deutsch),
-#     damit "a password is required" erkennbar ist.
-#   - Alles andere ist ein Fehlschlag des Skripts selbst und bleibt
-#     "sync failed" -- dort waere die Reparaturanleitung falsch.
-# Die `if`-Form ist Pflicht: unter `set -e` braeche ein gescheiterter Sync
-# sonst den ganzen Deploy ab, statt nur zu warnen.
+# Fuehrt eines der Permission-Skripte ueber sudo_repo_script aus. Jeder
+# Fehlschlag bleibt eine Warnung: udev/polkit/sudoers-Syncs sind opt-in und
+# duerfen einen Deploy nie abbrechen. Das `|| status=$?` ist Pflicht -- unter
+# `set -e` braeche ein gescheiterter Sync sonst den ganzen Deploy ab.
 run_permission_script() {
-    local label="$1" script="$2" err_file
+    local label="$1" script="$2" status=0
     if [[ ! -f "$script" ]]; then
         log_warn "$label script not found at $script (skipping)."
         return 0
     fi
     log_info "Re-applying $label..."
-    err_file="$(mktemp)"
-    if LC_ALL=C sudo -n bash "$script" 2>"$err_file"; then
-        cat "$err_file" >&2
-        log_info "$label sync OK."
-    elif grep -q '^sudo: a password is required' "$err_file"; then
-        log_warn "$label sync NOT PERMITTED: /etc/sudoers.d/baluhost-deploy on this box"
-        log_warn "  predates the entry for $(basename "$script"). One-time fix:"
-        # Der Benutzername wird HIER eingesetzt, nicht als $USER ausgegeben:
-        # die Anweisung wird typischerweise in einer root-Shell ausgefuehrt, wo
-        # $USER zu "root" wuerde. Die Datei wuerde dann fuer root gerendert, und
-        # der Deploy-Benutzer verloere still alle NOPASSWD-Rechte -- der
-        # naechste Deploy braeche beim Neustart der Dienste ab. `env` davor,
-        # weil sudo Zuweisungen in der Kommandozeile ohne SETENV ablehnt.
-        log_warn "    sudo env BALUHOST_USER=$(id -un) bash $INSTALL_DIR/deploy/scripts/install-deploy-sudoers.sh"
-        log_warn "  Until then $label stays at its installed state."
-    else
-        cat "$err_file" >&2
-        log_warn "$label sync failed (non-fatal - deploy continues)."
-    fi
-    rm -f "$err_file"
+    sudo_repo_script "$script" || status=$?
+    case "$status" in
+        0) log_info "$label sync OK." ;;
+        2) warn_deploy_sudoers_missing "$label" "$script"
+           log_warn "  Until then $label stays at its installed state." ;;
+        *) log_warn "$label sync failed (non-fatal - deploy continues)." ;;
+    esac
 }
 
 if [[ "${SYNC_PERMISSIONS:-0}" == "1" || "${SYNC_PERMISSIONS,,}" == "true" ]]; then
@@ -564,6 +607,35 @@ npm run build
 
 log_info "Frontend build complete."
 
+# ─── 6b. Systemd Units (#689) ────────────────────────────────────────
+#
+# Rendert die Unit-Templates und ersetzt abweichende Units, danach
+# daemon-reload; der Neustart in Schritt 7 laesst sie greifen. Frueher
+# schrieb nur Installer-Modul 10 Units, und eine Template-Aenderung blieb
+# unter $INSTALL_DIR/deploy/ liegen -- --proxy-headers fehlte der laufenden
+# Unit monatelang.
+#   0: OK (die Ausgabe nennt ersetzte Units)
+#   2: sudoers-Zeile fehlt auf dieser Box -> warnen, mit installierten Units
+#      weiter (bis zur einmaligen Provisionierung der heutige Zustand)
+#   sonst: Rollback. Rendert ein Template nicht oder lehnt verify ab, hat das
+#      Skript nichts geschrieben; scheitert es beim Schreiben selbst, schreibt
+#      der Rollback die alten Templates zurueck. Neuer Code mit alten Units
+#      waere genau die stille Divergenz aus #689.
+
+log_step "Systemd Units"
+
+UNITS_SCRIPT="$INSTALL_DIR/deploy/scripts/install-systemd-units.sh"
+units_status=0
+sudo_repo_script "$UNITS_SCRIPT" || units_status=$?
+case "$units_status" in
+    0) log_info "Systemd units in sync with their templates." ;;
+    2) warn_deploy_sudoers_missing "Systemd units" "$UNITS_SCRIPT"
+       log_warn "  Until then the installed units stay as they are (the drift check reports differences)." ;;
+    *) log_error "Systemd unit sync failed - rolling back."
+       rollback
+       exit 1 ;;
+esac
+
 # ─── 7. Service Restart ──────────────────────────────────────────────
 
 restart_services
@@ -592,12 +664,12 @@ if health_check; then
         || log_warn "Marketplace smoke-check could not run (non-fatal)."
 
     # ─── 8c. Systemd Unit Drift Smoke-Check (non-fatal, #689) ────────────
-    # This script never renders unit files — only the installer's module 10
-    # does. So a template change reaches /opt/baluhost/deploy/ and stops
-    # there; --proxy-headers sat in the template for months while the running
-    # backend lacked it. The check compares the installed units and systemd's
-    # effective ExecStart against the templates and WARNs on any difference.
-    # Read-only, needs no sudo, always exits 0.
+    # Schritt 6b hat die Units bereits aus den Templates gerendert. Dieser
+    # Check ist die unabhaengige zweite Messung danach: er vergleicht die
+    # installierten Units und systemds effektives ExecStart mit den Templates
+    # und WARNt bei jeder Differenz -- etwa einem Drop-in, das 6b nicht
+    # anfasst, oder einer Box, auf der 6b mangels sudoers-Zeile nur warnen
+    # konnte. Read-only, braucht kein sudo, endet immer mit 0.
     log_step "Systemd Unit Drift Smoke-Check"
     ( cd "$INSTALL_DIR/backend" && "$VENV_BIN/python" -m app.services.unit_drift --install-dir "$INSTALL_DIR" ) \
         || log_warn "Unit drift smoke-check could not run (non-fatal)."
