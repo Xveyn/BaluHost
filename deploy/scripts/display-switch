@@ -6,13 +6,26 @@ set -Eeuo pipefail   # -E: ERR-Trap auch in Funktionen aktiv
 trap 'die "Schritt fehlgeschlagen in Zeile $LINENO (letzter Befehl: $BASH_COMMAND)"' ERR
 
 # ---------- Konstanten ----------
+# Modi werden über Auflösung + Bildrate beschrieben, nicht über eine ID:
+# kscreen-doctor vergibt Mode-IDs global über alle Outputs und nummeriert sie
+# nach Reboot/Replug neu — eine hart codierte ID landete beim falschen Output
+# (#589). Die ID wird bei jedem Aufruf frisch aufgelöst (resolve_mode_id).
 TV_OUTPUT="DP-3"
-TV_MODE_ID="2"
+TV_MODE_W=3840
+TV_MODE_H=2160
+TV_MODE_HZ=120
 TV_VRR="automatic"
 
 MON_OUTPUT="HDMI-A-1"
-MON_MODE_ID="59"
+MON_MODE_W=2560
+MON_MODE_H=1440
+MON_MODE_HZ=144
 MON_VRR="never"
+
+# Maximale Abweichung der Bildrate vom Zielwert. Knapp genug, dass 120 nicht
+# auf einen 119.88-Modus ausweicht, wenn es exakt 120 gibt — der nächste
+# Treffer gewinnt ohnehin —, weit genug für 143.999 statt 144.
+MODE_HZ_TOLERANCE=0.5
 
 SINK_PATTERN_HDMI="hdmi-stereo"
 SINK_PATTERN_BT="bluez_output"
@@ -90,6 +103,54 @@ sys.exit(1)
 '
 }
 
+# resolve_mode_id <output> <width> <height> <refresh_hz>
+# Liest `kscreen-doctor -j` von stdin, gibt die ID des Modus von <output> aus,
+# dessen Auflösung exakt passt und dessen Bildrate am nächsten an <refresh_hz>
+# liegt (höchstens MODE_HZ_TOLERANCE daneben). Gleichstand -> kleinere ID.
+# Nur Modi DIESES Outputs zählen — IDs sind global vergeben.
+#
+# Warum nicht einfach der Name ("3840x2160@120")? libkscreen bildet ihn mit
+# qRound(refreshRate): 120.000 und 119.88 heißen beide "3840x2160@120", und
+# kscreen-doctor nimmt den ersten Treffer. Auf BaluNode sind das DP-3 Mode
+# 57 und 58 (gemessen 2026-09-08).
+# Exit-Code: 0 bei Treffer, 1 wenn Output oder Modus fehlt, 2 bei kaputtem JSON.
+resolve_mode_id() {
+    local output=${1:?output required} width=${2:?width required}
+    local height=${3:?height required} hz=${4:?refresh rate required}
+    python3 -c '
+import json, sys
+output, width, height = sys.argv[1], int(sys.argv[2]), int(sys.argv[3])
+hz, tolerance = float(sys.argv[4]), float(sys.argv[5])
+try:
+    d = json.load(sys.stdin)
+except Exception as e:
+    print(f"resolve_mode_id: invalid json: {e}", file=sys.stderr)
+    sys.exit(2)
+best = None
+for o in d.get("outputs", []):
+    if o.get("name") != output:
+        continue
+    for m in o.get("modes", []):
+        size = m.get("size") or {}
+        if size.get("width") != width or size.get("height") != height:
+            continue
+        mode_id = str(m.get("id", ""))
+        try:
+            diff = abs(float(m.get("refreshRate")) - hz)
+        except (TypeError, ValueError):
+            continue
+        if not mode_id or diff > tolerance:
+            continue
+        # IDs numerisch vergleichen, sonst wäre "10" kleiner als "9"
+        key = (diff, (0, int(mode_id)) if mode_id.isdigit() else (1, mode_id))
+        if best is None or key < best[0]:
+            best = (key, mode_id)
+if best is None:
+    sys.exit(1)
+print(best[1])
+' "$output" "$width" "$height" "$hz" "$MODE_HZ_TOLERANCE"
+}
+
 # desktop_state_from_isactive <isactive-stdout>
 # Maps `systemctl is-active sddm.service` stdout to up|down (pure, testable).
 desktop_state_from_isactive() {
@@ -160,16 +221,45 @@ ensure_desktop_up() {
     die "Desktop kam nicht innerhalb ${DESKTOP_WAIT_S}s hoch (kein $sock)"
 }
 
+# ---------- Display ----------
+
+# lookup_mode_id <output> <width> <height> <refresh_hz>
+# Löst die Mode-ID gegen den Live-Zustand auf und legt sie in MODE_ID ab.
+# Globale statt Ausgabe, damit `die` das Skript beendet und nicht nur eine
+# Command-Substitution-Subshell (dann schlüge die generische ERR-Trap zu).
+MODE_ID=""
+lookup_mode_id() {
+    local output=$1 width=$2 height=$3 hz=$4 json
+    local wanted="${width}x${height}@${hz}"
+
+    if ! json=$(kscreen-doctor -j 2>/dev/null); then
+        if [ "$DRY_RUN" = 1 ]; then
+            # Im Dry-Run läuft die Session evtl. noch gar nicht (sddm wird nur angezeigt)
+            log "(dry-run) kscreen-doctor -j nicht erreichbar — Mode-ID für $wanted bleibt offen"
+            MODE_ID="<id:$wanted>"
+            return 0
+        fi
+        die "kscreen-doctor -j fehlgeschlagen — läuft die Desktop-Session?"
+    fi
+
+    if MODE_ID=$(printf '%s\n' "$json" | resolve_mode_id "$output" "$width" "$height" "$hz"); then
+        log "Modus $wanted an $output hat aktuell ID $MODE_ID"
+        return 0
+    fi
+    die "Kein Modus $wanted (±${MODE_HZ_TOLERANCE} Hz) an $output gefunden — ist der Output angeschlossen? Verfügbar: kscreen-doctor -o"
+}
+
 # ---------- Subcommands (vorerst Stubs) ----------
 cmd_tv() {
-    log "Wechsle auf TV ($TV_OUTPUT, Mode $TV_MODE_ID)"
+    log "Wechsle auf TV ($TV_OUTPUT, ${TV_MODE_W}x${TV_MODE_H}@${TV_MODE_HZ})"
     ensure_desktop_up
+    lookup_mode_id "$TV_OUTPUT" "$TV_MODE_W" "$TV_MODE_H" "$TV_MODE_HZ"
 
     # Display: enable + disable in einem kscreen-doctor-Aufruf (atomar)
     run kscreen-doctor \
         "output.${MON_OUTPUT}.disable" \
         "output.${TV_OUTPUT}.enable" \
-        "output.${TV_OUTPUT}.mode.${TV_MODE_ID}" \
+        "output.${TV_OUTPUT}.mode.${MODE_ID}" \
         "output.${TV_OUTPUT}.position.0,0" \
         "output.${TV_OUTPUT}.vrrpolicy.${TV_VRR}"
 
@@ -189,13 +279,14 @@ cmd_tv() {
     fi
 }
 cmd_monitor() {
-    log "Wechsle auf Monitor ($MON_OUTPUT, Mode $MON_MODE_ID, VRR $MON_VRR)"
+    log "Wechsle auf Monitor ($MON_OUTPUT, ${MON_MODE_W}x${MON_MODE_H}@${MON_MODE_HZ}, VRR $MON_VRR)"
     ensure_desktop_up
+    lookup_mode_id "$MON_OUTPUT" "$MON_MODE_W" "$MON_MODE_H" "$MON_MODE_HZ"
 
     run kscreen-doctor \
         "output.${TV_OUTPUT}.disable" \
         "output.${MON_OUTPUT}.enable" \
-        "output.${MON_OUTPUT}.mode.${MON_MODE_ID}" \
+        "output.${MON_OUTPUT}.mode.${MODE_ID}" \
         "output.${MON_OUTPUT}.position.0,0" \
         "output.${MON_OUTPUT}.vrrpolicy.${MON_VRR}"
 
@@ -329,6 +420,68 @@ KSCREEN
     if [ "$got" != "down" ]; then log "FAIL desktop_state down(failed): got='$got' want='down'"; fail=1; fi
     got=$(desktop_state_from_isactive "")
     if [ "$got" != "down" ]; then log "FAIL desktop_state down(empty): got='$got' want='down'"; fail=1; fi
+
+    # Fixture: Auszug aus `kscreen-doctor -j` auf BaluNode (2026-09-08, dieselbe
+    # Aufnahme wie backend/tests/plugins/fixtures/kscreen_balunode.json).
+    # Die IDs sind echt: 2 gehört HDMI-A-1, 59 gehört DP-3 — genau die beiden,
+    # die das Skript früher hart codiert und dem jeweils ANDEREN Output
+    # gegeben hat (#589). 57/58 sind das Paar mit demselben Namen.
+    local kscreen_modes
+    kscreen_modes=$(cat <<'KSCREEN'
+{
+  "outputs": [
+    {"id":1,"name":"HDMI-A-1","connected":true,"enabled":true,"currentModeId":"1","modes":[
+      {"id":"1","name":"2560x1440@144","refreshRate":143.99899291992188,"size":{"width":2560,"height":1440}},
+      {"id":"2","name":"3840x2160@60","refreshRate":60,"size":{"width":3840,"height":2160}},
+      {"id":"5","name":"2560x1440@120","refreshRate":119.99800109863281,"size":{"width":2560,"height":1440}}
+    ]},
+    {"id":2,"name":"DP-3","connected":true,"enabled":false,"currentModeId":"57","modes":[
+      {"id":"56","name":"3840x2160@60","refreshRate":60,"size":{"width":3840,"height":2160}},
+      {"id":"58","name":"3840x2160@120","refreshRate":119.87999725341797,"size":{"width":3840,"height":2160}},
+      {"id":"57","name":"3840x2160@120","refreshRate":120,"size":{"width":3840,"height":2160}},
+      {"id":"59","name":"3840x2160@60","refreshRate":60,"size":{"width":3840,"height":2160}},
+      {"id":"67","name":"2560x1440@120","refreshRate":119.99800109863281,"size":{"width":2560,"height":1440}}
+    ]}
+  ]
+}
+KSCREEN
+)
+
+    # Test 8: TV 4K@120 -> 57 (exakt 120), nicht 58 (119.88, gleicher Name);
+    # 58 steht absichtlich vor 57, damit "erster Treffer" hier falsch wäre
+    expected="57"
+    got=$(echo "$kscreen_modes" | resolve_mode_id "DP-3" 3840 2160 120)
+    if [ "$got" != "$expected" ]; then log "FAIL resolve_mode_id tv: got='$got' want='$expected'"; fail=1; fi
+
+    # Test 9: Monitor 1440p@144 -> 1 (143.999 liegt in der Toleranz)
+    expected="1"
+    got=$(echo "$kscreen_modes" | resolve_mode_id "HDMI-A-1" 2560 1440 144)
+    if [ "$got" != "$expected" ]; then log "FAIL resolve_mode_id monitor: got='$got' want='$expected'"; fail=1; fi
+
+    # Test 10: 4K@60 an HDMI-A-1 -> 2, nie 56/59 von DP-3 (IDs sind global)
+    expected="2"
+    got=$(echo "$kscreen_modes" | resolve_mode_id "HDMI-A-1" 3840 2160 60)
+    if [ "$got" != "$expected" ]; then log "FAIL resolve_mode_id per-output: got='$got' want='$expected'"; fail=1; fi
+
+    # Test 11: Gleichstand (56 und 59 sind beide exakt 60) -> kleinere ID
+    expected="56"
+    got=$(echo "$kscreen_modes" | resolve_mode_id "DP-3" 3840 2160 60)
+    if [ "$got" != "$expected" ]; then log "FAIL resolve_mode_id tie: got='$got' want='$expected'"; fail=1; fi
+
+    # Test 12: Bildrate außerhalb der Toleranz -> kein Treffer, Exit 1
+    local rc=0
+    got=$(echo "$kscreen_modes" | resolve_mode_id "HDMI-A-1" 2560 1440 165) || rc=$?
+    if [ -n "$got" ] || [ "$rc" != 1 ]; then log "FAIL resolve_mode_id nomatch: got='$got' rc=$rc want=empty rc=1"; fail=1; fi
+
+    # Test 13: unbekannter Output -> kein Treffer, Exit 1
+    rc=0
+    got=$(echo "$kscreen_modes" | resolve_mode_id "DP-1" 3840 2160 120) || rc=$?
+    if [ -n "$got" ] || [ "$rc" != 1 ]; then log "FAIL resolve_mode_id unknown output: got='$got' rc=$rc want=empty rc=1"; fail=1; fi
+
+    # Test 14: kaputtes JSON -> Exit 2
+    rc=0
+    got=$(echo "not json" | resolve_mode_id "DP-3" 3840 2160 120 2>/dev/null) || rc=$?
+    if [ -n "$got" ] || [ "$rc" != 2 ]; then log "FAIL resolve_mode_id invalid json: got='$got' rc=$rc want=empty rc=2"; fail=1; fi
 
     if [ "$fail" = 0 ]; then
         log "OK: alle Parser-Tests bestanden"
