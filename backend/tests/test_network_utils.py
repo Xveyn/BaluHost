@@ -80,6 +80,36 @@ class TestIsPrivateOrLocalIP:
         """IPv6-mapped IPv4 public addresses."""
         assert is_private_or_local_ip("::ffff:8.8.8.8") is False
 
+    def test_wireguard_vpn_subnet(self):
+        """The box's WireGuard subnet counts as local — VPN is how you get home."""
+        assert is_private_or_local_ip("10.8.0.1") is True
+        assert is_private_or_local_ip("10.8.0.254") is True
+
+    # Ranges Python's ipaddress.is_private accepts but that are NOT our network
+    # (#642, #475). The gate must reject them regardless of Python version —
+    # these asserts are what catches a return to `ip.is_private`.
+    @pytest.mark.parametrize(
+        "ip",
+        [
+            "2001:0:4136:e378:8000:63bf:3fff:fdd2",  # Teredo 2001::/32
+            "2001:db8::1",  # IPv6 documentation 2001:db8::/32
+            "2001:2::1",  # benchmarking 2001:2::/48
+            "64:ff9b::c0a8:101",  # NAT64 64:ff9b::/96 (embeds 192.168.1.1)
+            "192.0.2.9",  # TEST-NET-1
+            "198.51.100.5",  # TEST-NET-2
+            "203.0.113.7",  # TEST-NET-3
+            "100.64.0.1",  # CGNAT 100.64.0.0/10 — deliberately not local
+            "100.127.255.254",
+            "198.18.0.1",  # benchmarking 198.18.0.0/15
+            "0.0.0.0",  # "this network"
+            "::",  # unspecified
+            "::ffff:203.0.113.7",  # mapped documentation range
+            "::ffff:100.64.0.1",  # mapped CGNAT
+        ],
+    )
+    def test_non_global_but_not_local_ranges_rejected(self, ip):
+        assert is_private_or_local_ip(ip) is False
+
     # Edge cases
     def test_none_input(self):
         assert is_private_or_local_ip(None) is False
