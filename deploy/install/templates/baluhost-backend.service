@@ -20,6 +20,11 @@ ExecStartPre=/usr/bin/rm -f /tmp/baluhost-primary.lock
 # from the local nginx upstream, so request.client.host is the real client IP
 # (per-client rate limiting + accurate audit IPs). The trust pin to 127.0.0.1
 # prevents X-Forwarded-For spoofing, incl. direct connections to :8000.
+# nginx must therefore proxy to 127.0.0.1:8000 literally, never "localhost"
+# (#641, pinned by tests/test_deploy_nginx_upstream.py). Changing --host to
+# listen on IPv6 or changing the trust list has to move BOTH ends together:
+# a proxy address outside the list makes every client look like the proxy,
+# and a loopback proxy is a local address to every LAN-only check.
 ExecStart=@@VENV_BIN@@/uvicorn app.main:app \
     --host 0.0.0.0 \
     --port 8000 \

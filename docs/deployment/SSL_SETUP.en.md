@@ -97,8 +97,8 @@ This script:
 sudo nano /etc/nginx/sites-available/baluhost.conf
 
 # Verify backend upstream is correct:
-# - Docker: server localhost:8000;
-# - Systemd: server unix:/run/baluhost/backend.sock;
+# - server 127.0.0.1:8000;   (127.0.0.1, never localhost - #641)
+# - NEVER unix:/run/baluhost/local.sock (local channel)
 
 # Enable site
 sudo ln -s /etc/nginx/sites-available/baluhost.conf /etc/nginx/sites-enabled/
