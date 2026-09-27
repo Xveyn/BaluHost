@@ -188,21 +188,23 @@ server {
 
 ### Backend-Upstream
 
-**Für Docker-Compose-Bereitstellung**:
 ```nginx
 upstream baluhost_backend {
-    server localhost:8000;
+    server 127.0.0.1:8000;
     keepalive 32;
 }
 ```
 
-**Für Systemd-Bereitstellung**:
-```nginx
-upstream baluhost_backend {
-    server unix:/run/baluhost/backend.sock;
-    keepalive 32;
-}
-```
+> **`127.0.0.1` verwenden, nie `localhost`.** uvicorn vertraut `X-Forwarded-For`
+> nur von `--forwarded-allow-ips=127.0.0.1`. `localhost` kann zu `::1` aufgelöst
+> werden; dann wird der Header ignoriert, jeder Client erscheint als `::1` — eine
+> lokale Adresse — und jede Nur-LAN-Prüfung (Sitzung entsperren,
+> Bluetooth-Kopplung, Recovery-Reset, Spielstart) steht dem ganzen Internet
+> offen (#641).
+>
+> **Nie auf `/run/baluhost/local.sock` proxien.** Dieser Socket ist der
+> vertrauenswürdige *lokale* Kanal für das Desktop-Tray; Internetverkehr
+> darüber wäre durchweg „lokal".
 
 ### Rate-Limiting-Zonen
 
