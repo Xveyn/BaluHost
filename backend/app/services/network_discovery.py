@@ -40,7 +40,16 @@ class NetworkDiscoveryService:
             return "127.0.0.1"
     
     def start(self):
-        """Start broadcasting the service via mDNS."""
+        """Start broadcasting the service via mDNS.
+
+        In dev mode nothing is announced unless MDNS_FORCE_ENABLED is set: a dev
+        instance would otherwise publish the same ``baluhost.local`` as the
+        production box on the same LAN (#678).
+        """
+        if settings.is_dev_mode and not settings.mdns_force_enabled:
+            logger.info("mDNS registration skipped (dev mode; set MDNS_FORCE_ENABLED=true to enable)")
+            return
+
         try:
             # Use configured hostname instead of system hostname
             hostname = self.hostname
@@ -113,11 +122,8 @@ class NetworkDiscoveryService:
             logger.info("  - Discovery enabled for local network")
             
         except Exception as e:
-            if settings.is_dev_mode:
-                logger.debug(f"mDNS service unavailable (expected in dev mode): {e}")
-            else:
-                logger.error(f"Failed to start mDNS service: {e}")
-                logger.warning("Network discovery will not be available")
+            logger.error(f"Failed to start mDNS service: {e}")
+            logger.warning("Network discovery will not be available")
     
     def stop(self):
         """Stop broadcasting the service."""
