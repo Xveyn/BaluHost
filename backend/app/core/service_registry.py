@@ -249,6 +249,8 @@ def register_all_services(
         get_status_fn=_get_network_discovery_status,
         stop_fn=lambda: discovery_service.stop() if discovery_service else None,
         start_fn=lambda: discovery_service.start() if discovery_service else None,
+        # Dev mode skips mDNS on purpose (#678) -- show that as disabled, not stopped.
+        config_enabled_fn=lambda: not settings.is_dev_mode or settings.mdns_force_enabled,
     )
 
     # Notification Scheduler (managed by scheduler_worker process)

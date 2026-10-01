@@ -91,6 +91,7 @@ class Settings(BaseSettings):
 
     # Network discovery (mDNS/Bonjour)
     mdns_hostname: str = "baluhost"  # Hostname for mDNS/Bonjour service (defaults to "baluhost")
+    mdns_force_enabled: bool = False  # env: MDNS_FORCE_ENABLED — announce over mDNS even in dev mode (default: dev stays silent, #678)
 
     # VPN Configuration
     vpn_encryption_key: str = ""  # Fernet key for encrypting VPN private/preshared keys

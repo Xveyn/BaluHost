@@ -14,7 +14,7 @@ Business logic layer. Routes delegate to services — services contain the actua
 | `disk_monitor.py` | Real-time disk I/O sampling |
 | `mobile.py` | Mobile device registration, QR code pairing |
 | `service_status.py` | Background service health registry for admin dashboard |
-| `network_discovery.py` | mDNS/Bonjour local network discovery |
+| `network_discovery.py` | mDNS/Bonjour local network discovery. Skipped in dev mode unless `MDNS_FORCE_ENABLED=true` (#678) — a dev instance would otherwise announce the production hostname |
 | `jobs.py` | Health monitor background task (disk space, SMART) |
 | `websocket_manager.py` | WebSocket connections; publish methods build envelopes for `ws_bus`, `deliver_local()` is the only code that writes to sockets (#685). `is_admin` is a connect-time snapshot: after a role/`is_active` change or deletion the user routes call `close_user_connections()` (bus kind `close_user`), the client reconnects and gets a fresh one (#468) |
 | `ws_bus.py` | Cross-process broadcast bus over Postgres LISTEN/NOTIFY; one listener connection per API process, outside the pool. Not durable by design |
