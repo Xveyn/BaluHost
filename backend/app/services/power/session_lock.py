@@ -298,6 +298,77 @@ def _audit_session_lock_action(
         )
 
 
+# Strong references to in-flight attempts. The event loop only keeps weak ones,
+# and an attempt that outlives its cancelled caller has nobody else holding it.
+_attempt_tasks: "set[asyncio.Task]" = set()
+
+
+def _forget_attempt(task: "asyncio.Task") -> None:
+    _attempt_tasks.discard(task)
+    if not task.cancelled() and task.exception() is not None:
+        # Nobody awaits an orphaned attempt, so asyncio would only say
+        # "exception was never retrieved" at garbage collection.
+        logger.error("session lock attempt failed", exc_info=task.exception())
+
+
+async def _attempt_and_audit(
+    operation: Callable[[], Tuple[bool, str]],
+    *,
+    action: str,
+    log_label: str,
+    crash_detail: str,
+    user: UserPublic,
+    client_host: Optional[str],
+) -> Tuple[bool, str]:
+    """Run the backend call in a thread, then audit it - as ONE unit.
+
+    The thread cannot be cancelled, only abandoned. A caller that gives up
+    (the plugin menu runs actions under ``asyncio.wait_for``) must therefore not
+    take the audit write with it: the session changes state either way, and the
+    entry has to say so (#643). :func:`_attempt_audited` shields this coroutine.
+    """
+    try:
+        ok, detail = await asyncio.to_thread(operation)
+    except Exception:
+        # The backend catches FileNotFoundError and TimeoutExpired itself, but
+        # not an OSError from a failing fork, a PermissionError or a decode
+        # error. No caller may die of it: the route already reported the
+        # displays as on, and the gaming mode still has to launch Big Picture.
+        logger.exception("%s raised for %s", log_label, user.username)
+        ok, detail = False, crash_detail
+
+    _audit_session_lock_action(
+        action=action, user=user, client_host=client_host, ok=ok, detail=detail
+    )
+    return ok, detail
+
+
+async def _attempt_audited(
+    operation: Callable[[], Tuple[bool, str]],
+    *,
+    action: str,
+    log_label: str,
+    crash_detail: str,
+    user: UserPublic,
+    client_host: Optional[str],
+) -> Tuple[bool, str]:
+    """Like :func:`_attempt_and_audit`, but cancelling the caller does not
+    cancel the attempt: it runs on, audits, and only the await is abandoned."""
+    task = asyncio.ensure_future(
+        _attempt_and_audit(
+            operation,
+            action=action,
+            log_label=log_label,
+            crash_detail=crash_detail,
+            user=user,
+            client_host=client_host,
+        )
+    )
+    _attempt_tasks.add(task)
+    task.add_done_callback(_forget_attempt)
+    return await asyncio.shield(task)
+
+
 async def unlock_if_permitted(
     *, user: UserPublic, client_host: Optional[str], db: Session
 ) -> Tuple[bool, str]:
@@ -305,7 +376,9 @@ async def unlock_if_permitted(
 
     This is the only place the gates are evaluated and the only place the audit
     entry is written - so no caller can unlock without leaving a trace, not
-    even a plugin.
+    even a plugin. That includes a caller that is cancelled mid-unlock (the
+    plugin menu's ``wait_for``): the thread still unlocks, so the attempt and
+    its audit entry run as one shielded task (#643).
 
     Args:
         user: The authenticated caller.
@@ -332,18 +405,13 @@ async def unlock_if_permitted(
     if not permitted:
         return False, "permission required: power:unlock_session"
 
-    try:
-        ok, detail = await asyncio.to_thread(get_session_lock_backend().unlock)
-    except Exception:
-        # The backend catches FileNotFoundError and TimeoutExpired itself, but
-        # not an OSError from a failing fork, a PermissionError or a decode
-        # error. Neither caller may die of it: the route already reported the
-        # displays as on, and the gaming mode still has to launch Big Picture.
-        logger.exception("session unlock raised for %s", user.username)
-        ok, detail = False, "unlock failed unexpectedly"
-
-    _audit_session_lock_action(
-        action="desktop_unlock_session", user=user, client_host=client_host, ok=ok, detail=detail
+    ok, detail = await _attempt_audited(
+        get_session_lock_backend().unlock,
+        action="desktop_unlock_session",
+        log_label="session unlock",
+        crash_detail="unlock failed unexpectedly",
+        user=user,
+        client_host=client_host,
     )
     if not ok:
         logger.warning("session unlock failed for %s: %s", user.username, detail)
@@ -387,17 +455,13 @@ async def lock_if_permitted(
     if not permitted:
         return False, "permission required: power:unlock_session"
 
-    try:
-        ok, detail = await asyncio.to_thread(get_session_lock_backend().lock)
-    except Exception:
-        # Same defensive posture as unlock: the backend catches
-        # FileNotFoundError/TimeoutExpired itself, but not e.g. an OSError
-        # from a failing fork. The caller must not die of it.
-        logger.exception("session lock raised for %s", user.username)
-        ok, detail = False, "lock failed unexpectedly"
-
-    _audit_session_lock_action(
-        action="desktop_lock_session", user=user, client_host=client_host, ok=ok, detail=detail
+    ok, detail = await _attempt_audited(
+        get_session_lock_backend().lock,
+        action="desktop_lock_session",
+        log_label="session lock",
+        crash_detail="lock failed unexpectedly",
+        user=user,
+        client_host=client_host,
     )
     if not ok:
         logger.warning("session lock failed for %s: %s", user.username, detail)

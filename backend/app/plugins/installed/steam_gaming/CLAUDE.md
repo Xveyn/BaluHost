@@ -140,7 +140,9 @@ Big Picture's own state is **not detectable from the outside** (measured
   the core's own 20s menu-action `wait_for`, so that cut-off can fire while
   `open_big_picture()` is still running on its worker thread — Big Picture may
   still open, but `mark_started()` never runs, so the menu keeps offering
-  "start" (#643).
+  "start" (#643). What a cut-off can no longer do is unlock without a trace:
+  `unlock_if_permitted()` runs thread and audit write as one shielded task, so
+  the entry exists even when the caller has already been cancelled.
 - End refuses while a game is running, and refuses to run `steam://close` when no
   Steam client is up (that URL would **start** Steam — see `launcher.py`).
   It does **not** turn displays off: that is its own power-menu entry.
