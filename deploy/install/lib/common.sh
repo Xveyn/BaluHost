@@ -148,6 +148,42 @@ process_template() {
     echo "$content" > "$output"
 }
 
+install_sudoers_file() {
+    # Render a sudoers template to <dest>, set 0440 and validate with visudo.
+    # A file that fails any step is removed so a broken rule never stays live.
+    # Usage: install_sudoers_file <template> <dest> [KEY=VALUE ...]
+    # Returns 0 on success or when the template is absent (warns and skips),
+    # 1 when writing, chmod or validation fails.
+    #
+    # Callers invoke this inside `if`, where errexit is OFF — so every command
+    # below guards itself instead of relying on `set -e` (#683).
+    local template="$1"
+    local dest="$2"
+    shift 2
+
+    if [[ ! -f "$template" ]]; then
+        log_warn "Sudoers template not found: $template (skipping)"
+        return 0
+    fi
+
+    if ! process_template "$template" "$dest" "$@"; then
+        log_error "Could not write sudoers file: $dest"
+        rm -f "$dest"
+        return 1
+    fi
+    if ! chmod 440 "$dest"; then
+        log_error "Could not set permissions on $dest"
+        rm -f "$dest"
+        return 1
+    fi
+    if ! visudo -cf "$dest" &>/dev/null; then
+        log_error "Sudoers syntax check failed! Removing $dest"
+        rm -f "$dest"
+        return 1
+    fi
+    log_info "Installed sudoers rule: $dest"
+}
+
 # ─── Idempotency Helpers ─────────────────────────────────────────────
 
 user_exists() {
