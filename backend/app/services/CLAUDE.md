@@ -118,6 +118,7 @@ Business logic layer. Routes delegate to services — services contain the actua
 **`scheduler/`** — Unified scheduler: config, execution history, worker process
 
 **`notifications/`** — Firebase push notifications, in-app events
+- `labels.py` — German display names for scheduler job ids and backup types; `events.py` applies them in the `emit_scheduler_*` / `emit_backup_*` helpers so templates never show `sync_check` or `database_only`. A new scheduler or backup type needs an entry here (a test enforces it)
 
 **`audit/`** — Audit logging (DB-backed), admin DB inspection with column redaction
 

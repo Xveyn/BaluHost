@@ -11,6 +11,7 @@ from typing import Optional, Any, Callable, Awaitable
 from dataclasses import dataclass
 from enum import Enum
 
+from app.services.notifications.labels import backup_type_label, scheduler_label
 from app.services.websocket_manager import get_websocket_manager
 
 logger = logging.getLogger(__name__)
@@ -232,7 +233,7 @@ EVENT_CONFIGS: dict[str, EventConfig] = {
         category="backup",
         notification_type="info",
         title_template="Backup erfolgreich",
-        message_template="Das {backup_type} Backup wurde erfolgreich erstellt. Größe: {size}",
+        message_template="Das Backup ({backup_type}) wurde erfolgreich erstellt. Größe: {size}",
         action_url="/admin/system-control?tab=backup",
     ),
     EventType.BACKUP_FAILED: EventConfig(
@@ -240,7 +241,7 @@ EVENT_CONFIGS: dict[str, EventConfig] = {
         category="backup",
         notification_type="warning",
         title_template="Backup fehlgeschlagen",
-        message_template="Das {backup_type} Backup ist fehlgeschlagen: {error}",
+        message_template="Das Backup ({backup_type}) ist fehlgeschlagen: {error}",
         action_url="/admin/system-control?tab=backup",
     ),
 
@@ -1053,7 +1054,7 @@ async def emit_backup_completed(backup_type: str, size: str) -> None:
     """Emit backup completed event."""
     await get_event_emitter().emit_for_admins(
         EventType.BACKUP_COMPLETED,
-        backup_type=backup_type,
+        backup_type=backup_type_label(backup_type),
         size=size,
     )
 
@@ -1062,7 +1063,7 @@ async def emit_backup_failed(backup_type: str, error: str) -> None:
     """Emit backup failed event."""
     await get_event_emitter().emit_for_admins(
         EventType.BACKUP_FAILED,
-        backup_type=backup_type,
+        backup_type=backup_type_label(backup_type),
         error=error,
     )
 
@@ -1071,7 +1072,7 @@ async def emit_scheduler_failed(scheduler_name: str, error: str) -> None:
     """Emit scheduler failed event."""
     await get_event_emitter().emit_for_admins(
         EventType.SCHEDULER_FAILED,
-        scheduler_name=scheduler_name,
+        scheduler_name=scheduler_label(scheduler_name),
         error=error,
     )
 
@@ -1217,7 +1218,7 @@ def emit_backup_completed_sync(backup_type: str, size: str) -> None:
     """Emit backup completed event (sync)."""
     get_event_emitter().emit_for_admins_sync(
         EventType.BACKUP_COMPLETED,
-        backup_type=backup_type,
+        backup_type=backup_type_label(backup_type),
         size=size,
     )
 
@@ -1226,7 +1227,7 @@ def emit_backup_failed_sync(backup_type: str, error: str) -> None:
     """Emit backup failed event (sync)."""
     get_event_emitter().emit_for_admins_sync(
         EventType.BACKUP_FAILED,
-        backup_type=backup_type,
+        backup_type=backup_type_label(backup_type),
         error=error,
     )
 
@@ -1235,7 +1236,7 @@ def emit_scheduler_failed_sync(scheduler_name: str, error: str) -> None:
     """Emit scheduler failed event (sync)."""
     get_event_emitter().emit_for_admins_sync(
         EventType.SCHEDULER_FAILED,
-        scheduler_name=scheduler_name,
+        scheduler_name=scheduler_label(scheduler_name),
         error=error,
     )
 
@@ -1338,7 +1339,7 @@ def emit_scheduler_completed_sync(scheduler_name: str) -> None:
     """Emit scheduler completed event (sync)."""
     get_event_emitter().emit_for_admins_sync(
         EventType.SCHEDULER_COMPLETED,
-        scheduler_name=scheduler_name,
+        scheduler_name=scheduler_label(scheduler_name),
     )
 
 
