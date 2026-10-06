@@ -84,6 +84,7 @@ alembic downgrade -1
 4. **Database inspection**: Use SQLite browser on `backend/baluhost.db`
 5. **Reset dev environment**: `python backend/scripts/debug/reset_dev_storage.py`
 6. **Test a specific feature**: Write pytest test, then implement feature (TDD)
+7. **Cleaning up leftovers**: `start_dev.py` and `kill_dev.py` end only processes that belong to *this checkout* (cwd or an absolute path under the repo root, see `dev_process_cleanup.py`) — never `/opt/baluhost` or other projects (#763). Linux only; without `/proc` the cleanup is skipped
 
 ## Common Issues & Solutions
 

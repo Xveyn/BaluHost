@@ -7,11 +7,17 @@ dev database auto-seeds the admin and skips the first-run wizard) and force
 """
 import importlib.util
 import pathlib
+import sys
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 
 
 def _load_start_dev():
+    # `python start_dev.py` has the repo root on sys.path (it is the script's
+    # directory); loading it by path does not, and it imports its sibling
+    # dev_process_cleanup.
+    if str(REPO_ROOT) not in sys.path:
+        sys.path.insert(0, str(REPO_ROOT))
     spec = importlib.util.spec_from_file_location("start_dev", REPO_ROOT / "start_dev.py")
     mod = importlib.util.module_from_spec(spec)
     assert spec and spec.loader
