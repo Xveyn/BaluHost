@@ -118,6 +118,11 @@ if grep -q "Installation Complete" <<<"$OUTPUT"; then
 else
     fail "completion banner missing"
 fi
+if ! grep -q "Installation Complete (warnings)" <<<"$OUTPUT"; then
+    pass "clean run shows no warnings banner"
+else
+    fail "clean run showed the warnings banner"
+fi
 if grep -q "VERIFY-RAN" <<<"$OUTPUT"; then
     pass "verify script ran (failing verify tolerated)"
 else
@@ -199,6 +204,131 @@ if grep -q "ROUNDTRIP-OK" <<<"$RT_OUTPUT"; then
     pass "config round-trip preserves special characters"
 else
     fail "config round-trip broke special characters: $RT_OUTPUT"
+fi
+cleanup
+
+# ─── Test 7: failing OPTIONAL module does not stop the run ──────────────────
+
+make_sandbox
+CONF="$SANDBOX/install.conf"
+cat > "$SANDBOX/modules/13-power-helpers.sh" <<'EOF'
+#!/bin/bash
+set -euo pipefail
+echo "MODULE-RAN: 13-power-helpers"
+exit 1
+EOF
+OUTPUT=$(bash "$SANDBOX/install.sh" --non-interactive --config "$CONF" 2>&1)
+RC=$?
+if [[ $RC -eq 0 ]]; then pass "optional failure: run exits 0"; else fail "optional failure: run exited $RC"; fi
+if grep -q "MODULE-RAN: 14-optional-features" <<<"$OUTPUT"; then
+    pass "optional failure: later module still ran"
+else
+    fail "optional failure: later module skipped"
+fi
+if grep -q "VERIFY-RAN" <<<"$OUTPUT"; then
+    pass "optional failure: verification still ran"
+else
+    fail "optional failure: verification skipped"
+fi
+if grep -q "Installation Complete (warnings)" <<<"$OUTPUT"; then
+    pass "optional failure: warnings banner shown"
+else
+    fail "optional failure: warnings banner missing"
+fi
+if grep -q -- "--module 13-power-helpers" <<<"$OUTPUT"; then
+    pass "optional failure: retry hint names the module"
+else
+    fail "optional failure: retry hint missing"
+fi
+if ! grep -q "Installation stopped" <<<"$OUTPUT"; then
+    pass "optional failure: no 'Installation stopped'"
+else
+    fail "optional failure: reported as stopped"
+fi
+cleanup
+
+# ─── Test 8: both optional modules fail ──────────────────────────────────────
+
+make_sandbox
+CONF="$SANDBOX/install.conf"
+for mod in 13-power-helpers 14-optional-features; do
+    cat > "$SANDBOX/modules/$mod.sh" <<EOF
+#!/bin/bash
+echo "MODULE-RAN: $mod"
+exit 1
+EOF
+done
+OUTPUT=$(bash "$SANDBOX/install.sh" --non-interactive --config "$CONF" 2>&1)
+RC=$?
+if [[ $RC -eq 0 ]]; then pass "two optional failures: run exits 0"; else fail "two optional failures: exited $RC"; fi
+if grep -q -- "--module 13-power-helpers" <<<"$OUTPUT" && grep -q -- "--module 14-optional-features" <<<"$OUTPUT"; then
+    pass "two optional failures: both modules listed"
+else
+    fail "two optional failures: list incomplete"
+fi
+cleanup
+
+# ─── Test 9: failing CORE module (11-nginx) still stops the run ─────────────
+
+make_sandbox
+CONF="$SANDBOX/install.conf"
+cat > "$SANDBOX/modules/11-nginx.sh" <<'EOF'
+#!/bin/bash
+echo "MODULE-RAN: 11-nginx"
+exit 1
+EOF
+OUTPUT=$(bash "$SANDBOX/install.sh" --non-interactive --config "$CONF" 2>&1)
+RC=$?
+if [[ $RC -ne 0 ]]; then pass "core failure: run exits nonzero"; else fail "core failure: exited 0"; fi
+if grep -q "Installation stopped at module: 11-nginx" <<<"$OUTPUT"; then
+    pass "core failure: stop message shown"
+else
+    fail "core failure: stop message missing"
+fi
+for mod in 12-start-services 13-power-helpers 14-optional-features; do
+    if ! grep -q "MODULE-RAN: $mod" <<<"$OUTPUT"; then
+        pass "core failure: $mod skipped"
+    else
+        fail "core failure: $mod ran after core failure"
+    fi
+done
+if ! grep -q "Installation Complete" <<<"$OUTPUT"; then
+    pass "core failure: no completion banner"
+else
+    fail "core failure: completion banner shown"
+fi
+cleanup
+
+# ─── Test 10: --module on an optional module propagates its exit code ───────
+
+make_sandbox
+CONF="$SANDBOX/install.conf"
+cat > "$SANDBOX/modules/13-power-helpers.sh" <<'EOF'
+#!/bin/bash
+exit 3
+EOF
+bash "$SANDBOX/install.sh" --module 13-power-helpers --config "$CONF" >/dev/null 2>&1
+RC=$?
+if [[ $RC -eq 3 ]]; then
+    pass "--module on optional module propagates exit code (3)"
+else
+    fail "--module on optional module exit code was $RC (expected 3)"
+fi
+cleanup
+
+# ─── Test 11: --list-modules marks optional modules ─────────────────────────
+
+make_sandbox
+LIST=$(bash "$SANDBOX/install.sh" --list-modules 2>&1)
+if grep -q "13-power-helpers (optional)" <<<"$LIST" && grep -q "14-optional-features (optional)" <<<"$LIST"; then
+    pass "--list-modules marks optional modules"
+else
+    fail "--list-modules does not mark optional modules: $LIST"
+fi
+if ! grep -q "12-start-services (optional)" <<<"$LIST"; then
+    pass "--list-modules does not mark core modules"
+else
+    fail "--list-modules marked a core module optional"
 fi
 cleanup
 
