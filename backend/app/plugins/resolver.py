@@ -266,6 +266,26 @@ def resolve_install(
             )
             continue
 
+        # `pkg @ https://...` / `pkg @ file:///...` is valid PEP 508 but makes pip
+        # fetch from an arbitrary URL or read a local file, which bypasses PyPI
+        # as the trust root and lets a manifest pick a server-side request target
+        # (#773). Dependencies come from the index; pin a version instead.
+        if req.url is not None:
+            conflicts.append(
+                Conflict(
+                    package=req.name,
+                    requirement=raw,
+                    found="direct URL",
+                    source="core",
+                    suggestion=(
+                        f"'{raw}' points at a URL; direct references are not "
+                        "allowed. Pin a released version, e.g. "
+                        f"'{req.name}==<version>'."
+                    ),
+                )
+            )
+            continue
+
         try:
             specifier = req.specifier
         except InvalidSpecifier:
