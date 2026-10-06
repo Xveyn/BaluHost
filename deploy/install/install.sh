@@ -43,6 +43,25 @@ readonly -a MODULES=(
     "14-optional-features"
 )
 
+# Modules whose failure must not stop the installation. The core NAS is fully
+# installed and started before these run (11-nginx and 12-start-services come
+# first); a failure here is reported as a warning at the end instead of
+# aborting the run. A module not listed here is core: its failure stops the run.
+readonly -a OPTIONAL_MODULES=(
+    "13-power-helpers"
+    "14-optional-features"
+)
+
+is_optional_module() {
+    local candidate="$1" mod
+    for mod in "${OPTIONAL_MODULES[@]}"; do
+        if [[ "$mod" == "$candidate" ]]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
 # ─── Usage ───────────────────────────────────────────────────────────
 usage() {
     cat <<EOF
@@ -67,7 +86,11 @@ EOF
 list_modules() {
     echo "Available modules:"
     for mod in "${MODULES[@]}"; do
-        echo "  $mod"
+        if is_optional_module "$mod"; then
+            echo "  $mod (optional)"
+        else
+            echo "  $mod"
+        fi
     done
 }
 
@@ -260,8 +283,15 @@ main() {
 
     # Run modules 02-14
     local failed=0
+    local -a warned_modules=()
     for mod in "${MODULES[@]:1}"; do  # Skip 01-preflight (already ran)
         if ! run_module "$mod"; then
+            if is_optional_module "$mod"; then
+                log_warn "Optional module $mod failed — continuing; the core installation is unaffected."
+                warned_modules+=("$mod")
+                load_config
+                continue
+            fi
             failed=1
             log_error "Installation stopped at module: $mod"
             log_error "Fix the issue and re-run: sudo $0 --module $mod"
@@ -281,11 +311,22 @@ main() {
         fi
 
         echo ""
-        echo -e "${GREEN}${BOLD}╔══════════════════════════════════════╗${NC}"
-        echo -e "${GREEN}${BOLD}║    Installation Complete!            ║${NC}"
-        echo -e "${GREEN}${BOLD}╚══════════════════════════════════════╝${NC}"
+        if [[ ${#warned_modules[@]} -eq 0 ]]; then
+            echo -e "${GREEN}${BOLD}╔══════════════════════════════════════╗${NC}"
+            echo -e "${GREEN}${BOLD}║    Installation Complete!            ║${NC}"
+            echo -e "${GREEN}${BOLD}╚══════════════════════════════════════╝${NC}"
+        else
+            echo -e "${YELLOW}${BOLD}╔══════════════════════════════════════╗${NC}"
+            echo -e "${YELLOW}${BOLD}║   Installation Complete (warnings)   ║${NC}"
+            echo -e "${YELLOW}${BOLD}╚══════════════════════════════════════╝${NC}"
+            echo ""
+            echo "  The core installation succeeded. These optional steps failed:"
+            for mod in "${warned_modules[@]}"; do
+                echo "    - $mod   (retry: sudo $0 --module $mod)"
+            done
+        fi
         echo ""
-        echo "  Web Interface:    http://localhost"
+        echo "  Web Interface:   http://localhost"
         echo "  API Docs:         http://localhost/docs"
         echo "  Admin User:       $ADMIN_USERNAME"
         echo ""

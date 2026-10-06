@@ -21,17 +21,31 @@ log_step "Starting BaluHost Services"
 require_root
 
 # --- Start all services ---
+# Only the backend is required for the installation to be usable. Scheduler and
+# WebDAV are secondary: a failure there (e.g. a WebDAV port conflict) is a
+# warning, so the health check below and modules 13/14 still run. The backend
+# is listed first. The status report further down shows any unit that is down.
 for service in "${SERVICES[@]}"; do
     if systemctl is-active "$service" &>/dev/null; then
         log_info "$service is already running, restarting..."
-        systemctl restart "$service"
+        verb=restart
     else
         log_info "Starting $service..."
-        systemctl start "$service"
+        verb=start
     fi
+
+    if systemctl "$verb" "$service"; then
+        continue
+    fi
+    if [[ "$service" == "baluhost-backend" ]]; then
+        log_error "$service failed to $verb — cannot continue."
+        log_error "Check: sudo journalctl -u $service -n 50 --no-pager"
+        exit 1
+    fi
+    log_warn "$service failed to $verb — continuing; check: sudo journalctl -u $service -n 50 --no-pager"
 done
 
-log_info "All services started."
+log_info "Service start commands issued."
 
 # --- Wait for backend to be ready ---
 log_step "Health Check"

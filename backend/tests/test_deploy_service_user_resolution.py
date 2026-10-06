@@ -188,8 +188,11 @@ def test_modul_10_setzt_jeden_platzhalter_der_vorlage_ein():
     assert tokens, "die Vorlage muss Platzhalter haben"
 
     modul = MODULE_10.read_text(encoding="utf-8")
+    # Seit #683 rendert Modul 10 ueber `install_sudoers_file` (lib/common.sh), das
+    # intern process_template aufruft; die Platzhalter stehen im Aufruf selbst,
+    # der bis zum naechsten `run_optional` reicht.
     aufruf = re.search(
-        r'process_template "\$DEPLOY_SUDOERS_TEMPLATE" "\$DEPLOY_SUDOERS_OUTPUT"(.*?)\n\s*chmod',
+        r'install_sudoers_file\s*\\\s*"\$TEMPLATE_DIR/baluhost-deploy-sudoers"(.*?)\nrun_optional',
         modul, re.S,
     )
     assert aufruf, "der Rendering-Aufruf fuer die Deploy-sudoers ist nicht auffindbar"
