@@ -31,7 +31,7 @@ import time
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional
 
-from dev_process_cleanup import terminate_owned_processes
+from dev_process_cleanup import clean_stale_state, terminate_owned_processes
 
 ROOT_DIR = Path(__file__).resolve().parent
 BACKEND_DIR = ROOT_DIR / "backend"
@@ -276,17 +276,17 @@ def main() -> int:
     if terminate_owned_processes(kill_patterns, ROOT_DIR, grace_seconds=3):
         time.sleep(1)  # let the ports be released
 
-    # Clean up stale lock file
-    lock_file = Path("/tmp/baluhost-primary.lock")
-    if lock_file.exists():
-        lock_file.unlink()
+    # Clean up stale primary-worker lock and SHM files from a previous run -
+    # but only if they are orphaned: /dev/shm is shared by the whole host, and a
+    # live monitoring_worker (of any install) must not lose its files (#763).
+    lock_removed, shm_removed = clean_stale_state(
+        Path("/tmp/baluhost-primary.lock"),
+        Path("/dev/shm/baluhost"),
+        ["monitoring_worker"],
+    )
+    if lock_removed:
         print("[cleanup] Removed stale primary worker lock file")
-
-    # Clean up stale SHM files from monitoring_worker
-    shm_dir = Path("/dev/shm/baluhost")
-    if shm_dir.exists():
-        import shutil as _shutil
-        _shutil.rmtree(shm_dir, ignore_errors=True)
+    if shm_removed:
         print("[cleanup] Removed stale /dev/shm/baluhost")
 
     try:

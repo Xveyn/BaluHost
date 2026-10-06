@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
 import signal
 import time
 from pathlib import Path
@@ -154,3 +155,74 @@ def terminate_owned_processes(
         print(f"[warning] Forcing kill for remaining processes: {remaining}")
         _signal_all(remaining, signal.SIGKILL)
     return len(pids)
+
+
+def _remove_lock_if_unheld(lock_path: Path) -> bool:
+    """Delete a flock-based lock file only if nobody holds the lock.
+
+    The kernel releases a flock when its holder dies, so a leftover file with no
+    holder blocks nothing - removing it is tidiness. Removing a HELD one is
+    harm: the holder keeps the lock on the old inode, the next process creates a
+    new one and locks that, and two processes believe they are the primary (see
+    ``_try_become_primary`` in app/core/lifespan.py). Probing with a
+    non-blocking flock asks the kernel instead of guessing from a PID.
+    """
+    try:
+        import fcntl  # POSIX only; the launchers are Linux-only anyway
+    except ImportError:
+        return False
+    try:
+        # No O_CREAT: probing must never create the file it is looking for.
+        fd = os.open(lock_path, os.O_RDWR)
+    except FileNotFoundError:
+        return False
+    except OSError as exc:
+        print(f"[cleanup] Cannot inspect {lock_path}: {exc}")
+        return False
+    try:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            print(f"[cleanup] {lock_path} is held by a running process - leaving it")
+            return False
+        try:
+            lock_path.unlink()
+        except OSError as exc:
+            print(f"[cleanup] Could not remove {lock_path}: {exc}")
+            return False
+        return True
+    finally:
+        os.close(fd)
+
+
+def clean_stale_state(
+    lock_path: Path, shm_dir: Path, shm_writer_patterns: Iterable[str]
+) -> "tuple[bool, bool]":
+    """Remove the primary-worker lock and the SHM dir - only if they are orphaned.
+
+    ``start_prod.py`` used to delete both unconditionally. ``PrivateTmp`` hides
+    the production unit's lock file from the host, but it does NOT cover
+    ``/dev/shm``: that directory is per host, so a launcher started from another
+    checkout wiped the telemetry, heartbeat and command files the live
+    ``monitoring_worker`` was writing.
+
+    The lock goes only if no process holds it. The SHM dir goes only if no
+    process matching ``shm_writer_patterns`` is running - of ANY install, since
+    the directory is shared. ``read_shm`` already discards files older than 30s,
+    so skipping the removal costs nothing but a few stale files; deleting live
+    ones is what hurt. When in doubt it leaves things alone.
+
+    Returns ``(lock_removed, shm_removed)``.
+    """
+    lock_removed = _remove_lock_if_unheld(lock_path)
+
+    shm_removed = False
+    if shm_dir.exists():
+        # root "/" = every readable process of this user: whoever writes there owns it.
+        writers = find_owned_processes(shm_writer_patterns, Path("/"))
+        if writers:
+            print(f"[cleanup] {shm_dir} is in use by PID(s) {writers} - leaving it")
+        else:
+            shutil.rmtree(shm_dir, ignore_errors=True)
+            shm_removed = True
+    return lock_removed, shm_removed

@@ -238,3 +238,96 @@ def test_launcher_scripts_do_not_shell_out_to_pkill_or_pgrep(script):
 
     assert not re.search(r"\bp(kill|grep)\b", source), f"{script} matches by command line again"
     assert "dev_process_cleanup" in source
+
+
+class TestCleanStaleState:
+    """start_prod.py used to delete the primary-worker lock and /dev/shm/baluhost
+    unconditionally. /dev/shm is NOT covered by PrivateTmp, so a launcher run from
+    another checkout wiped the live production telemetry. Only orphaned state may
+    go: a lock nobody holds, and a SHM dir nobody is writing to."""
+
+    @pytest.fixture
+    def state(self, tmp_path):
+        lock = tmp_path / "primary.lock"
+        shm = tmp_path / "shm"
+        shm.mkdir()
+        (shm / "telemetry.json").write_text("{}")
+        return lock, shm
+
+    @pytest.fixture
+    def lock_holder(self):
+        """A process holding flock on a file, like the primary worker."""
+        procs: list[subprocess.Popen] = []
+
+        def _hold(path):
+            proc = subprocess.Popen(
+                [
+                    sys.executable,
+                    "-c",
+                    "import fcntl, sys, time; f = open(sys.argv[1], 'a'); "
+                    "fcntl.flock(f, fcntl.LOCK_EX); print('locked', flush=True); time.sleep(60)",
+                    str(path),
+                ],
+                stdout=subprocess.PIPE,
+                text=True,
+            )
+            procs.append(proc)
+            assert proc.stdout.readline().strip() == "locked"
+            return proc
+
+        yield _hold
+        for proc in procs:
+            proc.kill()
+            proc.wait()
+            proc.stdout.close()
+
+    def test_lock_held_by_a_live_process_is_kept(self, state, lock_holder):
+        lock, shm = state
+        lock_holder(lock)
+
+        lock_removed, _ = cleanup.clean_stale_state(lock, shm, ["no-writer-763"])
+
+        assert lock_removed is False
+        assert lock.exists()
+
+    def test_lock_nobody_holds_is_removed(self, state):
+        lock, shm = state
+        lock.write_text("12345")
+
+        lock_removed, _ = cleanup.clean_stale_state(lock, shm, ["no-writer-763"])
+
+        assert lock_removed is True
+        assert not lock.exists()
+
+    def test_missing_lock_is_not_an_error(self, state):
+        lock, shm = state
+
+        lock_removed, _ = cleanup.clean_stale_state(lock, shm, ["no-writer-763"])
+
+        assert lock_removed is False
+
+    def test_shm_with_a_live_writer_is_kept(self, state, checkout, spawn):
+        lock, shm = state
+        spawn(checkout / "backend")  # command line carries MARKER
+
+        _, shm_removed = cleanup.clean_stale_state(lock, shm, [MARKER])
+
+        assert shm_removed is False
+        assert (shm / "telemetry.json").exists()
+
+    def test_shm_nobody_writes_is_removed(self, state):
+        lock, shm = state
+
+        _, shm_removed = cleanup.clean_stale_state(lock, shm, ["no-writer-763"])
+
+        assert shm_removed is True
+        assert not shm.exists()
+
+    def test_a_writer_of_ANOTHER_install_also_keeps_the_shm(self, state, elsewhere, spawn):
+        """The SHM dir is per host, not per checkout - whoever writes it, owns it."""
+        lock, shm = state
+        spawn(elsewhere)
+
+        _, shm_removed = cleanup.clean_stale_state(lock, shm, [MARKER])
+
+        assert shm_removed is False
