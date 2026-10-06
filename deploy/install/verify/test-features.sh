@@ -86,6 +86,28 @@ run_feature SAMBA
 [[ $? -ne 0 ]] && ok "run_feature propagates failure" || bad "run_feature swallowed failure"
 _run_script() { echo "script:$1 SERVICE_USER=${SERVICE_USER:-} STORAGE_GROUP=${STORAGE_GROUP:-} ARG1=${2:-}" >>"$MOCK_LOG"; }
 
+echo "== run_feature under 'if' (errexit off): failures must propagate =="
+# The caller (module 14) runs `if run_feature "$key"` — errexit is OFF inside the
+# whole function body. A failing apt install or setup script must still make
+# run_feature return non-zero (#683 trap).
+reset
+_apt_install() { echo "apt:$*" >>"$MOCK_LOG"; return 1; }
+if run_feature RAID; then bad "RAID counted as OK although apt install failed"; else ok "failed apt install fails the feature"; fi
+_apt_install() { echo "apt:$*" >>"$MOCK_LOG"; }
+
+reset
+_run_script() { echo "script:$1" >>"$MOCK_LOG"; return 1; }
+if run_feature VPN; then bad "VPN counted as OK although setup script failed"; else ok "failed setup script fails the feature"; fi
+
+reset
+if run_feature RAID; then bad "RAID counted as OK although hardware sudoers script failed"; else ok "failed hardware sudoers fails RAID"; fi
+[[ "$_HW_SUDOERS_DONE" == "false" ]] && ok "hardware sudoers not marked done after failure" || bad "hardware sudoers marked done despite failure"
+# A second feature must retry instead of trusting the failed attempt.
+: >"$MOCK_LOG"
+run_feature SMART >/dev/null 2>&1 || true
+[[ "$(logcount 'install-hardware-sudoers.sh')" == "1" ]] && ok "SMART retries hardware sudoers after RAID failure" || bad "SMART did not retry hardware sudoers"
+_run_script()  { echo "script:$1 SERVICE_USER=${SERVICE_USER:-} STORAGE_GROUP=${STORAGE_GROUP:-} ARG1=${2:-}" >>"$MOCK_LOG"; }
+
 echo ""
 echo "PASS=$PASS FAILED=$FAILED"
 [[ $FAILED -eq 0 ]]

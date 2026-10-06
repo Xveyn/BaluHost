@@ -91,9 +91,10 @@ _run_script() {
 _HW_SUDOERS_DONE=false
 install_hardware_sudoers_once() {
     [[ "$_HW_SUDOERS_DONE" == "true" ]] && return 0
+    # Explicit `|| return 1`: callers run this inside `if`, where errexit is off.
     BALUHOST_USER="$BALUHOST_USER" \
     TEMPLATE="$FEATURES_DEPLOY_DIR/install/templates/baluhost-hardware-sudoers" \
-        _run_script "$FEATURES_DEPLOY_DIR/scripts/install-hardware-sudoers.sh"
+        _run_script "$FEATURES_DEPLOY_DIR/scripts/install-hardware-sudoers.sh" || return 1
     _HW_SUDOERS_DONE=true
 }
 
@@ -131,6 +132,8 @@ feature_setup() {
 }
 
 # Install + configure one feature. Returns non-zero if any step fails.
+# Callers run this as `if run_feature …`, which switches errexit OFF for the
+# whole body — so every step propagates its failure explicitly.
 run_feature() {
     local key="$1"
     feature_precheck "$key" || true
@@ -139,7 +142,7 @@ run_feature() {
     if [[ -n "$pkgs" ]]; then
         log_info "Installing packages: $pkgs"
         # shellcheck disable=SC2086
-        _apt_install $pkgs
+        _apt_install $pkgs || return 1
     fi
-    feature_setup "$key"
+    feature_setup "$key" || return 1
 }
