@@ -521,6 +521,51 @@ def test_reset_before_suspend_clears_armed_state(db_session):
     assert same_instant(state.last_completed_due_at, to_utc(SUNDAY_0400))
 
 
+def test_reset_before_suspend_returns_the_message_for_a_dropped_appointment(db_session):
+    """#625: Der Termin verfiel bei jedem Auto-Suspend still. Der Reset liefert
+    jetzt den Meldetext (gesendet wird im async-Suspend-Pfad, mit Timeout)."""
+    _enable(db_session)
+    state = get_state(db_session)
+    state.phase = PHASE_ARMED
+    state.due_at = to_utc(SUNDAY_0400)
+    state.deadline_at = to_utc(SUNDAY_0400 + timedelta(hours=6))
+    state.last_skip_reason = scheduled_reboot.SKIP_DISPLAYS
+    db_session.commit()
+
+    message = scheduled_reboot.reset_before_suspend(db_session)
+
+    assert message is not None
+    assert "Displays aktiv" in message
+    # Der Suspend hat zu diesem Zeitpunkt noch nicht stattgefunden und kann
+    # scheitern - der Text darf nicht behaupten, er sei gelungen.
+    assert "ging stattdessen" not in message
+    assert "verworfen" in message
+    assert get_state(db_session).phase == PHASE_IDLE
+
+
+def test_reset_before_suspend_without_reason_falls_back_to_busy(db_session):
+    _enable(db_session)
+    state = get_state(db_session)
+    state.phase = PHASE_ARMED
+    state.due_at = to_utc(SUNDAY_0400)
+    state.deadline_at = to_utc(SUNDAY_0400 + timedelta(hours=6))
+    state.last_skip_reason = None
+    db_session.commit()
+
+    message = scheduled_reboot.reset_before_suspend(db_session)
+
+    assert scheduled_reboot.SKIP_REASON_LABELS[scheduled_reboot.SKIP_NOT_IDLE] in message
+
+
+def test_reset_before_suspend_returns_none_when_nothing_was_armed(db_session):
+    """Ohne scharfen Termin gibt es nichts zu melden - sonst käme bei jedem
+    gewöhnlichen Auto-Suspend eine Push."""
+    _enable(db_session)
+    assert get_state(db_session).phase == PHASE_IDLE
+
+    assert scheduled_reboot.reset_before_suspend(db_session) is None
+
+
 # --- Wieder-Suspend nach dem Neustart (Schnittstelle zu Task 8) -----------
 
 def test_resuspend_target_reports_the_wake_time(db_session):

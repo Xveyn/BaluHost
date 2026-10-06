@@ -1384,10 +1384,11 @@ class SleepManagerService:
         # (Spec 6d knüpft das Verfallen an den tatsächlichen Suspend).
         # MUSS vor `claim_wakeup` stehen: `reset_to_idle` räumt
         # `woke_for_reboot` und `resuspend_wake_at` mit ab.
+        dropped_reboot_message: Optional[str] = None
         try:
             db = SessionLocal()
             try:
-                scheduled_reboot.reset_before_suspend(db)
+                dropped_reboot_message = scheduled_reboot.reset_before_suspend(db)
             finally:
                 db.close()
         except Exception as exc:
@@ -1395,6 +1396,25 @@ class SleepManagerService:
                 "Zurücksetzen des Neustart-Termins vor dem Suspend fehlgeschlagen: %s",
                 exc,
             )
+
+        # Verworfenen Termin melden (#625): blockierende DB-/FCM-Aufrufe, also
+        # im Thread und mit Timeout — der Suspend darf nicht daran hängen.
+        if dropped_reboot_message:
+            try:
+                from app.services.notifications.events import emit_reboot_skipped_sync
+                await asyncio.wait_for(
+                    asyncio.to_thread(emit_reboot_skipped_sync, dropped_reboot_message),
+                    timeout=3.0,
+                )
+            except asyncio.TimeoutError:
+                logger.warning(
+                    "Meldung zum verworfenen Neustart-Termin nach 3s abgebrochen "
+                    "— Suspend läuft trotzdem weiter"
+                )
+            except Exception as exc:
+                logger.warning(
+                    "Meldung zum verworfenen Neustart-Termin fehlgeschlagen: %s", exc
+                )
 
         try:
             wake_at_utc = (

@@ -1469,7 +1469,7 @@ def emit_reboot_completed_sync(downtime_seconds: Optional[float]) -> None:
 
 
 def emit_reboot_skipped_sync(reason_label: str) -> None:
-    """Bei Fristablauf, Ausführungsfehler oder unklarem Ausgang."""
+    """Bei Fristablauf, Ausführungsfehler, unklarem Ausgang oder Suspend trotz scharfem Termin."""
     get_event_emitter().emit_for_admins_sync(
         EventType.REBOOT_SKIPPED,
         reason_label=reason_label,
