@@ -261,3 +261,43 @@ class TestBlacklistConstant:
     def test_contains_common_extensions(self):
         for pkg in ("numpy", "pandas", "pillow", "lxml"):
             assert pkg in C_EXTENSION_BLACKLIST
+
+
+class TestDirectReferences:
+    """`pkg @ url` is valid PEP 508 but makes pip fetch from an arbitrary URL or
+    read a local file, which bypasses PyPI as the trust root (#773)."""
+
+    @pytest.mark.parametrize("raw", [
+        "pkg @ https://evil.example/pkg-1.0-py3-none-any.whl",
+        "pkg @ http://localhost:8000/pkg-1.0-py3-none-any.whl",
+        "pkg @ file:///etc/pkg-1.0-py3-none-any.whl",
+        "pkg[extra] @ https://evil.example/pkg-1.0-py3-none-any.whl ; python_version >= '3.9'",
+    ])
+    def test_direct_url_requirement_is_a_conflict(self, core, raw):
+        result = resolve_install(_make_manifest(python_requirements=[raw]), core)
+
+        assert result.ok is False
+        assert result.isolated_to_install == []
+        assert [c.found for c in result.conflicts] == ["direct URL"]
+
+    def test_a_direct_url_never_reaches_pip_even_when_forced(self, core):
+        """`force` bypasses the conflict gate in the installer, not this list."""
+        raw = "pkg @ https://evil.example/pkg-1.0-py3-none-any.whl"
+        result = resolve_install(
+            _make_manifest(python_requirements=["requests==2.31.0", raw]), core
+        )
+
+        assert result.isolated_to_install == ["requests==2.31.0"]
+
+    @pytest.mark.parametrize("raw", [
+        "requests==2.31.0",
+        "requests>=2.0,<3",
+        "requests[socks]==2.31.0",
+        "requests==2.31.0; python_version >= '3.9'",
+        "tzdata",
+    ])
+    def test_ordinary_requirements_are_unaffected(self, core, raw):
+        result = resolve_install(_make_manifest(python_requirements=[raw]), core)
+
+        assert result.ok is True
+        assert result.isolated_to_install == [raw]

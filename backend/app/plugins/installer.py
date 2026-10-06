@@ -30,6 +30,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional, Sequence
 
+from packaging.requirements import InvalidRequirement, Requirement
+
 from app.plugins.core_versions import CoreVersions
 from app.plugins.manifest import ManifestError, load_manifest
 from app.plugins.marketplace import MarketplaceVersionEntry
@@ -109,6 +111,19 @@ def _default_fetcher(url: str) -> bytes:
         return resp.content
 
 
+def _checked_requirement(raw: str) -> str:
+    """*raw* if it is a plain PEP 508 requirement, else ``PipInstallError``."""
+    try:
+        req = Requirement(raw)
+    except InvalidRequirement as exc:
+        raise PipInstallError(f"Refusing to pass {raw!r} to pip: {exc}") from exc
+    if req.url is not None:
+        raise PipInstallError(
+            f"Refusing to pass {raw!r} to pip: direct URL references are not allowed"
+        )
+    return raw
+
+
 def _default_pip_runner(
     requirements: Sequence[str],
     target: Path,
@@ -123,6 +138,11 @@ def _default_pip_runner(
     """
     if not requirements:
         return
+    # The resolver already filters these, but the runner is injectable and a
+    # different module: do not rely on the caller having checked. Anything that
+    # is not a plain PEP 508 name-and-specifier must never reach pip, where it
+    # could be read as an option (`--no-binary=...`) or a direct URL (#773).
+    checked = [_checked_requirement(raw) for raw in requirements]
     target.mkdir(parents=True, exist_ok=True)
     cmd = [
         sys.executable,
@@ -141,7 +161,9 @@ def _default_pip_runner(
         core_versions.abi,
         "--target",
         str(target),
-        *requirements,
+        # Ends option parsing: whatever follows is a requirement, never a flag.
+        "--",
+        *checked,
     ]
     logger.info("Running pip: %s", " ".join(cmd))
     try:
