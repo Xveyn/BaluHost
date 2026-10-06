@@ -6,8 +6,10 @@ SteamGamingPlugin.run_menu_action so the launch route runs exactly the same
 steps instead of a second copy that would drift.
 
 No outer timeout here or in the callers' route: asyncio.wait_for only cancels
-the await, never the thread behind it, so a cut-off unlock would still unlock -
-without its audit entry (#643). Each step bounds itself instead.
+the await, never the thread behind it, so a cut-off step would still happen but
+the steps after it would not (#643). Each step bounds itself instead. The one
+step that must not go unrecorded - the unlock - is safe either way: its audit
+entry is written by a shielded task in session_lock.py.
 """
 from __future__ import annotations
 

@@ -1,6 +1,8 @@
 """Both gates for unlocking the desktop session, plus the audit trail."""
 from __future__ import annotations
 
+import asyncio
+import time
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -367,3 +369,72 @@ class TestLockNeverRaises:
         assert "permission check failed" in detail
         _silent_audit.log_event.assert_not_called()
         lock_called.lock.assert_not_called()
+
+
+class TestCancelledCallerStillLeavesATrail:
+    """#643: the plugin menu runs an action under ``asyncio.wait_for``, which
+    cancels the await but not the thread behind it. A session that was really
+    unlocked/locked after the caller gave up must still be audited."""
+
+    @staticmethod
+    async def _wait_for_audit(audit, timeout: float = 2.0) -> None:
+        deadline = asyncio.get_running_loop().time() + timeout
+        while not audit.log_event.called:
+            assert asyncio.get_running_loop().time() < deadline, "no audit entry written"
+            await asyncio.sleep(0.01)
+
+    async def test_unlock_cut_off_by_a_timeout_is_still_audited(
+        self, db_session, unlock_called, _silent_audit
+    ):
+        def slow_unlock():
+            time.sleep(0.3)
+            return True, "session 2 unlocked"
+
+        unlock_called.unlock.side_effect = slow_unlock
+
+        with pytest.raises(asyncio.TimeoutError):
+            await asyncio.wait_for(
+                session_lock.unlock_if_permitted(
+                    user=_admin(), client_host=LAN, db=db_session
+                ),
+                timeout=0.05,
+            )
+        await self._wait_for_audit(_silent_audit)
+
+        kwargs = _silent_audit.log_event.call_args.kwargs
+        assert kwargs["action"] == "desktop_unlock_session"
+        assert kwargs["success"] is True
+        assert kwargs["ip_address"] == LAN
+
+    async def test_lock_cut_off_by_a_timeout_is_still_audited(
+        self, db_session, lock_called, _silent_audit
+    ):
+        def slow_lock():
+            time.sleep(0.3)
+            return True, "session 2 locked"
+
+        lock_called.lock.side_effect = slow_lock
+
+        with pytest.raises(asyncio.TimeoutError):
+            await asyncio.wait_for(
+                session_lock.lock_if_permitted(
+                    user=_admin(), client_host=PUBLIC, db=db_session
+                ),
+                timeout=0.05,
+            )
+        await self._wait_for_audit(_silent_audit)
+
+        kwargs = _silent_audit.log_event.call_args.kwargs
+        assert kwargs["action"] == "desktop_lock_session"
+        assert kwargs["success"] is True
+
+    async def test_a_completing_caller_gets_exactly_one_audit_entry(
+        self, db_session, unlock_called, _silent_audit
+    ):
+        """The shielded task must not double-write on the normal path."""
+        await session_lock.unlock_if_permitted(
+            user=_admin(), client_host=LAN, db=db_session
+        )
+        await asyncio.sleep(0.05)
+
+        _silent_audit.log_event.assert_called_once()
