@@ -111,6 +111,22 @@ class TestInstaller:
         _, plugins = tree
         assert self._installer(plugins).uninstall("not_installed") is False
 
+    def test_uninstall_works_when_plugins_dir_is_a_symlink(self, tree):
+        base, plugins = tree
+        link = base / "plugins_link"
+        link.symlink_to(plugins, target_is_directory=True)
+
+        assert self._installer(link).uninstall("real_plugin") is True
+        assert not (plugins / "real_plugin").exists()
+
+    def test_uninstall_works_with_a_relative_plugins_dir(self, tree, monkeypatch):
+        base, plugins = tree
+        monkeypatch.chdir(base)
+
+        assert self._installer(Path("plugins")).uninstall("real_plugin") is True
+        assert not (plugins / "real_plugin").exists()
+        assert (base / "sibling_data" / "keep.txt").is_file()
+
     @pytest.mark.parametrize("name", ["..", "a/b", "Upper"])
     def test_install_refuses_unsafe_names_before_downloading(self, tree, name):
         from app.plugins.installer import InvalidPluginNameError

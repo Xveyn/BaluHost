@@ -21,6 +21,7 @@ from __future__ import annotations
 import hashlib
 import io
 import logging
+import os
 import shutil
 import subprocess
 import sys
@@ -157,6 +158,25 @@ def _default_pip_runner(
         ) from exc
 
 
+def _join_under(base: Path, name: str) -> Path:
+    """``base / name`` for a *name* that is a single safe path component.
+
+    Two layers on purpose. The allowlist (``is_valid_plugin_name``) is the rule
+    and rejects ``..``, separators and the empty string. The normalise-and-
+    contain check after it is what static analysis (CodeQL ``py/path-injection``)
+    recognises as a path sanitiser; it also keeps holding if the rule is ever
+    loosened, since the result must stay strictly below *base*. ``abspath``, not
+    ``realpath``: a ``plugins_dir`` that is itself a symlink must keep working.
+    """
+    if not is_valid_plugin_name(name):
+        raise InvalidPluginNameError(f"Invalid plugin name: {name!r}")
+    root = os.path.abspath(base)
+    full = os.path.abspath(os.path.join(root, name))
+    if not full.startswith(root + os.sep):
+        raise InvalidPluginNameError(f"Invalid plugin name: {name!r}")
+    return Path(full)
+
+
 class PluginInstaller:
     """Install, update, and uninstall plugins under a managed directory."""
 
@@ -185,12 +205,8 @@ class PluginInstaller:
         The name arrives from a URL segment (uninstall) or an index entry
         (install). ``..`` or ``a/b`` would otherwise make ``shutil.rmtree`` and
         ``_atomic_swap`` act on a parent or sibling of the plugins directory.
-        A name that matches the rule is a single path component, so the join
-        cannot leave ``plugins_dir``.
         """
-        if not is_valid_plugin_name(name):
-            raise InvalidPluginNameError(f"Invalid plugin name: {name!r}")
-        return self._plugins_dir / name
+        return _join_under(self._plugins_dir, name)
 
     def install(
         self,
@@ -344,7 +360,7 @@ class PluginInstaller:
         if root_manifest.exists():
             return extracted_root
 
-        named = extracted_root / plugin_name
+        named = _join_under(extracted_root, plugin_name)
         if (named / "plugin.json").exists():
             return named
 
