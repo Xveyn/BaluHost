@@ -176,12 +176,46 @@ install_sudoers_file() {
         rm -f "$dest"
         return 1
     fi
-    if ! visudo -cf "$dest" &>/dev/null; then
+    # Keep visudo's message: the file is deleted below, so it is the only
+    # diagnostic the operator gets.
+    local check
+    if ! check=$(visudo -cf "$dest" 2>&1); then
         log_error "Sudoers syntax check failed! Removing $dest"
+        [[ -z "$check" ]] || log_error "visudo: $check"
         rm -f "$dest"
         return 1
     fi
     log_info "Installed sudoers rule: $dest"
+}
+
+# ─── Optional steps ──────────────────────────────────────────────────
+# Labels of optional steps that failed; filled by run_optional, printed by
+# report_optional_failures so a skipped security rule does not hide in the log.
+OPTIONAL_FAILURES=()
+
+# Run one optional step. Never fails. The step runs inside an `if`, which
+# switches errexit OFF for its whole body — every command in it must guard
+# itself with `|| return 1` (#683).
+run_optional() {
+    local label="$1"
+    shift
+    if "$@"; then
+        return 0
+    fi
+    log_warn "$label: not installed — the core installation is unaffected."
+    OPTIONAL_FAILURES+=("$label")
+    return 0
+}
+
+report_optional_failures() {
+    if [[ ${#OPTIONAL_FAILURES[@]} -eq 0 ]]; then
+        return 0
+    fi
+    local label
+    log_warn "These optional steps were NOT installed:"
+    for label in "${OPTIONAL_FAILURES[@]}"; do
+        log_warn "  - $label"
+    done
 }
 
 # ─── Idempotency Helpers ─────────────────────────────────────────────

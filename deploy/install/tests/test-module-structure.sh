@@ -44,18 +44,21 @@ fi
 
 # ─── Module 12: only the backend start is fatal ──────────────────────────────
 M12="$INSTALL_SRC/modules/12-start-services.sh"
-# A bare `systemctl start|restart …` line would abort the module under set -e
-# for scheduler/webdav too. Starting must happen inside an `if`.
-BARE_START=$(awk '/^[[:space:]]*systemctl[[:space:]]+(start|restart)[[:space:]]/ {print NR": "$0}' "$M12")
+# A bare start/restart line would abort the module under set -e for
+# scheduler/webdav too. Starting must happen inside an `if`, in either the
+# literal shape or the `systemctl "$verb" "$service"` shape the module uses.
+BARE_START=$(awk '/^[[:space:]]*systemctl[[:space:]]+("?\$verb"?|start|restart)[[:space:]]/ {print NR": "$0}' "$M12")
 if [[ -z "$BARE_START" ]]; then
     pass "module 12: no unguarded systemctl start/restart"
 else
     fail "module 12: unguarded start: $BARE_START"
 fi
-if awk '/== "baluhost-backend"/ {b=1} /exit 1/ && b {found=1} END {exit !found}' "$M12"; then
-    pass "module 12: backend start failure is handled explicitly"
+# The backend branch must hard-exit right there — a later exit 1 (health check)
+# must not satisfy this.
+if awk '/== "baluhost-backend"/ {n=NR} n && NR>n && NR<=n+4 && /exit 1/ {found=1} END {exit !found}' "$M12"; then
+    pass "module 12: backend start failure exits explicitly"
 else
-    fail "module 12: no explicit backend failure handling"
+    fail "module 12: no explicit exit right after the backend check"
 fi
 
 # ─── Module 13: every single-line system command is guarded ──────────────────

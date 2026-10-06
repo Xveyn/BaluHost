@@ -24,6 +24,7 @@ trap 'rm -rf "$TMP"' EXIT
 mkdir -p "$TMP/bin"
 cat > "$TMP/bin/visudo" <<'EOT'
 #!/bin/bash
+[[ -z "${FAKE_VISUDO_MSG:-}" ]] || echo "$FAKE_VISUDO_MSG" >&2
 exit "${FAKE_VISUDO_RC:-0}"
 EOT
 chmod +x "$TMP/bin/visudo"
@@ -66,6 +67,40 @@ if [[ $RC -eq 0 && ! -e "$TMP/never" ]]; then pass "missing template skipped wit
 process_template "$TPL" "$TMP/no-such-dir/x" "BALUHOST_USER=x" >/dev/null 2>&1
 RC=$?
 if [[ $RC -ne 0 ]]; then pass "process_template fails for missing target dir"; else fail "process_template returned 0 for missing target dir"; fi
+
+# 6. visudo's own error text must reach the operator (the file is deleted
+# afterwards, so the message is the only diagnostic left).
+OUT=$(FAKE_VISUDO_RC=1 FAKE_VISUDO_MSG="parse error in line 3" install_sudoers_file "$TPL" "$TMP/diag-sudoers" "BALUHOST_USER=baluhost" 2>&1)
+if grep -q 'parse error in line 3' <<<"$OUT"; then
+    pass "visudo error text is shown"
+else
+    fail "visudo error text lost: $OUT"
+fi
+
+# 7. run_optional records a failed step and never fails itself; the report
+# lists it. An empty failure list reports nothing.
+ok_step() { return 0; }
+bad_step() { return 1; }
+OPTIONAL_FAILURES=()
+OUT=$(report_optional_failures 2>&1)
+RC=$?
+if [[ $RC -eq 0 && -z "$OUT" ]]; then pass "empty failure list reports nothing"; else fail "empty failure list: rc=$RC out='$OUT'"; fi
+run_optional "good step" ok_step >/dev/null 2>&1
+RC1=$?
+run_optional "bad step" bad_step >/dev/null 2>&1
+RC2=$?
+if [[ $RC1 -eq 0 && $RC2 -eq 0 ]]; then pass "run_optional always returns 0"; else fail "run_optional returned $RC1/$RC2"; fi
+if [[ ${#OPTIONAL_FAILURES[@]} -eq 1 && "${OPTIONAL_FAILURES[0]}" == "bad step" ]]; then
+    pass "only the failed step is recorded"
+else
+    fail "recorded failures: ${OPTIONAL_FAILURES[*]:-<none>}"
+fi
+OUT=$(report_optional_failures 2>&1)
+if grep -q 'bad step' <<<"$OUT" && grep -q 'NOT installed' <<<"$OUT"; then
+    pass "report lists the failed step"
+else
+    fail "report missing failed step: $OUT"
+fi
 
 echo ""
 echo "Results: $PASS passed, $FAIL failed"

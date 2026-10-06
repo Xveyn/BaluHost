@@ -83,21 +83,12 @@ fi
 # --- Optional extras ---
 # Everything below is best-effort: the four core services are already installed
 # and enabled above. A failure here is reported as a warning and never stops the
-# module (#683). `run_optional` calls each step inside an `if`, which switches
-# errexit OFF for the step's whole body — so every command in the functions below
-# guards itself with `|| return 1` / `|| { …; return 1; }`. Do not drop those
-# guards and do not add a hard module exit in this section
-# (test-module-structure.sh checks the latter).
-run_optional() {
-    local label="$1"
-    shift
-    if "$@"; then
-        return 0
-    fi
-    log_warn "$label: not installed — the core installation is unaffected."
-    return 0
-}
-
+# module (#683). `run_optional` (lib/common.sh) calls each step inside an `if`,
+# which switches errexit OFF for the step's whole body — so every command in the
+# functions below guards itself with `|| return 1` / `|| { …; return 1; }`. Do
+# not drop those guards and do not add a hard module exit in this section
+# (test-module-structure.sh checks the latter). Failed steps are collected and
+# listed once before the summary.
 install_plugin_wrapper() {
     local src="$SCRIPT_DIR/bin/spawn-plugin-worker.sh"
     local dst="/usr/local/sbin/baluhost-spawn-plugin-worker.sh"
@@ -313,6 +304,8 @@ run_optional "Bluetooth group" install_bluetooth_group
 log_step "Desktop Tray Unit"
 
 install_tray_user_unit
+
+report_optional_failures
 
 # --- Summary ---
 log_step "Systemd Summary"
