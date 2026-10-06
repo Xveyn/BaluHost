@@ -588,25 +588,36 @@ def should_defer_suspend(db: Session, sleep_service: "SleepManagerService") -> b
         return False
 
 
-def reset_before_suspend(db: Session) -> None:
+def reset_before_suspend(db: Session) -> Optional[str]:
     """Vor einem Suspend, der trotz `armed` stattfindet, aufräumen.
 
     Sonst stünde `phase=armed` mit einem `due_at` von gestern da, während die
     Weckzeit schon auf den Termin nächster Woche zeigt.
+
+    Liefert den Meldetext, wenn ein scharfer Termin verworfen wurde, sonst
+    `None` (#625). Gemeldet wird hier **nicht**: der Aufrufer sitzt im
+    async-Suspend-Pfad, und `emit_reboot_skipped_sync` macht blockierende
+    DB- und Firebase-Aufrufe — die gehören mit Timeout in einen Thread, wie
+    bei `emit_system_suspend`. Der Text gilt für jeden Auto-Suspend mit
+    scharfem Termin, nicht nur für einen fehlgeschlagenen Kernel-Suspend, und
+    sagt deshalb nicht, dass der Suspend gelang: der Reset läuft davor.
     """
     try:
         state = get_state(db)
         if state.phase != PHASE_ARMED:
-            return
+            return None
         reason = state.last_skip_reason or SKIP_NOT_IDLE
+        reason_label = SKIP_REASON_LABELS.get(reason, reason)
         close_execution(
             db, state.execution_id, SchedulerStatus.CANCELLED.value,
-            error=SKIP_REASON_LABELS.get(reason, reason),
+            error=reason_label,
         )
         reset_to_idle(db, state, completed_due_at=state.due_at)
+        return f"{reason_label}; der Termin wurde vor einem Suspend verworfen"
     except Exception as exc:
         logger.warning("Zurücksetzen vor dem Suspend fehlgeschlagen: %s", exc)
         _safe_rollback(db)
+        return None
 
 
 def resuspend_target(db: Session) -> tuple[bool, Optional[datetime]]:

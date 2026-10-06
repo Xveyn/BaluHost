@@ -1,7 +1,8 @@
 """Wechselwirkung zwischen Neustart-Automat und Sleep-Manager."""
+import asyncio
 import json
 from datetime import datetime, timedelta, timezone
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from sqlalchemy.orm import sessionmaker
@@ -123,7 +124,7 @@ async def test_suspend_path_converts_the_local_wake_time_before_claiming(db_sess
          patch.object(svc._backend, "suspend_system", side_effect=_suspend), \
          patch("app.services.power.sleep.scheduled_reboot.should_defer_suspend",
                return_value=False), \
-         patch("app.services.power.sleep.scheduled_reboot.reset_before_suspend"), \
+         patch("app.services.power.sleep.scheduled_reboot.reset_before_suspend", return_value=None), \
          patch("app.services.power.sleep.reboot_state.claim_wakeup",
                side_effect=_spy_claim), \
          patch("app.services.power.sleep.SessionLocal", factory), \
@@ -194,13 +195,8 @@ async def test_an_armed_occurrence_survives_a_suspend_that_never_happens(db_sess
     assert state.last_completed_due_at is None
 
 
-@pytest.mark.asyncio
-async def test_a_real_suspend_still_clears_the_armed_occurrence(db_session):
-    """Gegenprobe: findet der Suspend statt, verfällt der Termin wie gehabt.
-
-    Sonst stünde `phase=armed` mit einem `due_at` von gestern da, während die
-    Weckzeit schon auf den Termin nächster Woche zeigt.
-    """
+async def _suspend_with_armed_reboot(db_session, emit):
+    """Echter Suspend bei scharfem Termin; `emit` ersetzt die Meldung."""
     svc = SleepManagerService(DevSleepBackend())
     svc._current_state = SleepState.SOFT_SLEEP
     _enable(db_session)
@@ -219,15 +215,69 @@ async def test_a_real_suspend_still_clears_the_armed_occurrence(db_session):
          patch("app.services.power.sleep.scheduled_reboot.should_defer_suspend",
                return_value=False), \
          patch("app.services.power.sleep.SessionLocal", factory), \
+         patch("app.services.notifications.events.emit_reboot_skipped_sync", new=emit), \
          patch("app.services.notifications.events.emit_system_suspend", new=AsyncMock()), \
          patch("app.services.notifications.events.emit_system_resume", new=AsyncMock()):
-        ok = await svc.enter_true_suspend("idle", SleepTrigger.AUTO_IDLE, wake_at=None)
+        return await svc.enter_true_suspend("idle", SleepTrigger.AUTO_IDLE, wake_at=None)
+
+
+@pytest.mark.asyncio
+async def test_a_real_suspend_still_clears_the_armed_occurrence(db_session):
+    """Gegenprobe: findet der Suspend statt, verfällt der Termin wie gehabt.
+
+    Sonst stünde `phase=armed` mit einem `due_at` von gestern da, während die
+    Weckzeit schon auf den Termin nächster Woche zeigt. Seit #625 wird der
+    verworfene Termin dabei gemeldet.
+    """
+    emit = MagicMock()
+    ok = await _suspend_with_armed_reboot(db_session, emit)
 
     assert ok is True
     db_session.expire_all()
     state = get_state(db_session)
     assert state.phase == PHASE_IDLE
     assert same_instant(state.last_completed_due_at, to_utc(SUNDAY_0400))
+    emit.assert_called_once()
+    (message,), _ = emit.call_args
+    assert "verworfen" in message
+
+
+@pytest.mark.asyncio
+async def test_a_failing_notification_does_not_block_the_suspend(db_session):
+    """Die Meldung ist best-effort: scheitert sie, läuft der Suspend trotzdem,
+    und der Automat steht danach auf idle (nicht auf armed)."""
+    emit = MagicMock(side_effect=RuntimeError("fcm down"))
+    ok = await _suspend_with_armed_reboot(db_session, emit)
+
+    assert ok is True
+    db_session.expire_all()
+    assert get_state(db_session).phase == PHASE_IDLE
+
+
+@pytest.mark.asyncio
+async def test_a_hanging_notification_is_cut_off_after_the_timeout(db_session):
+    """Hängt die Push (FCM nicht erreichbar), darf der Suspend nicht daran
+    hängen - wie bei `emit_system_suspend` greift ein 3-s-Timeout."""
+    import time
+
+    def _slow(_message):
+        time.sleep(0.5)
+
+    real_wait_for = asyncio.wait_for
+
+    async def _short_wait_for(awaitable, timeout):
+        return await real_wait_for(awaitable, timeout=0.05)
+
+    started = time.monotonic()
+    with patch("app.services.power.sleep.asyncio.wait_for", new=_short_wait_for):
+        ok = await _suspend_with_armed_reboot(db_session, _slow)
+    elapsed = time.monotonic() - started
+
+    assert ok is True
+    # Ohne Timeout liefe der Aufruf die vollen 0,5 s der langsamen Meldung.
+    assert elapsed < 0.4, f"Suspend wartete {elapsed:.2f}s auf die Meldung"
+    db_session.expire_all()
+    assert get_state(db_session).phase == PHASE_IDLE
 
 
 @pytest.mark.asyncio
@@ -293,7 +343,7 @@ async def test_blocked_reboot_does_not_prevent_a_normal_suspend():
          patch.object(svc._backend, "suspend_system", side_effect=_suspend), \
          patch("app.services.power.sleep.scheduled_reboot.should_defer_suspend",
                return_value=False), \
-         patch("app.services.power.sleep.scheduled_reboot.reset_before_suspend"), \
+         patch("app.services.power.sleep.scheduled_reboot.reset_before_suspend", return_value=None), \
          patch("app.services.power.sleep.SessionLocal"), \
          patch("app.services.notifications.events.emit_system_suspend", new=AsyncMock()), \
          patch("app.services.notifications.events.emit_system_resume", new=AsyncMock()):
