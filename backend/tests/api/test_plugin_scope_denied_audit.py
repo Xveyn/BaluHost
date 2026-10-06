@@ -17,7 +17,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 
-ROUTE = "/api/plugins/my-plugin/_audit/scope-denied"
+ROUTE = "/api/plugins/my_plugin/_audit/scope-denied"
 VALID_BODY = {"method": "get", "url": "/api/users"}
 
 

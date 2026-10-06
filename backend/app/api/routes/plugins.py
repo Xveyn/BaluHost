@@ -20,6 +20,7 @@ from app.middleware.plugin_gate import invalidate_plugin_cache
 from app.plugins.base import MenuActionResult, PluginBase
 from app.plugins.manifest import load_manifest
 from app.plugins.manager import PluginManager, PluginLoadError
+from app.plugins.naming import PluginNameParam
 from app.plugins.permissions import PermissionManager
 from app.plugins.scope_catalog import SCOPE_CATALOG, CATALOG_KEYS
 from app.services import plugin_service
@@ -171,7 +172,7 @@ async def get_ui_manifest(
 @user_limiter.limit(get_limit("admin_operations"))
 async def get_plugin_details(
     request: Request, response: Response,
-    name: str,
+    name: PluginNameParam,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     plugin_manager: PluginManager = Depends(get_plugin_manager),
@@ -286,7 +287,7 @@ async def get_plugin_details(
 @user_limiter.limit(get_limit("admin_operations"))
 async def toggle_plugin(
     request: Request, response: Response,
-    name: str,
+    name: PluginNameParam,
     body: PluginToggleRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin),
@@ -462,7 +463,7 @@ async def _toggle_external(
 async def toggle_dashboard_panel(
     request: Request,
     response: Response,
-    name: str,
+    name: PluginNameParam,
     body: DashboardPanelToggleRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin),
@@ -518,7 +519,7 @@ async def toggle_dashboard_panel(
 async def report_scope_denied(
     request: Request,
     response: Response,
-    name: str,
+    name: PluginNameParam,
     body: ScopeDeniedReport,
     current_user: User = Depends(get_current_user),
 ) -> dict:
@@ -545,7 +546,7 @@ async def report_scope_denied(
 @router.get("/{name}/_storage")
 @user_limiter.limit(get_limit("admin_operations"))
 async def storage_list_keys(
-    request: Request, response: Response, name: str,
+    request: Request, response: Response, name: PluginNameParam,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict:
@@ -556,7 +557,7 @@ async def storage_list_keys(
 @router.get("/{name}/_storage/{key}")
 @user_limiter.limit(get_limit("admin_operations"))
 async def storage_get(
-    request: Request, response: Response, name: str, key: str,
+    request: Request, response: Response, name: PluginNameParam, key: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict:
@@ -570,7 +571,7 @@ async def storage_get(
 @router.put("/{name}/_storage/{key}")
 @user_limiter.limit(get_limit("admin_operations"))
 async def storage_set(
-    request: Request, response: Response, name: str, key: str,
+    request: Request, response: Response, name: PluginNameParam, key: str,
     body: PluginStorageSetRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -586,7 +587,7 @@ async def storage_set(
 @router.delete("/{name}/_storage/{key}", status_code=status.HTTP_204_NO_CONTENT)
 @user_limiter.limit(get_limit("admin_operations"))
 async def storage_delete(
-    request: Request, response: Response, name: str, key: str,
+    request: Request, response: Response, name: PluginNameParam, key: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> Response:
@@ -599,7 +600,7 @@ async def storage_delete(
 @user_limiter.limit(get_limit("admin_operations"))
 async def get_plugin_config(
     request: Request, response: Response,
-    name: str,
+    name: PluginNameParam,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin),
     plugin_manager: PluginManager = Depends(get_plugin_manager),
@@ -637,7 +638,7 @@ async def get_plugin_config(
 @user_limiter.limit(get_limit("admin_operations"))
 async def update_plugin_config(
     request: Request, response: Response,
-    name: str,
+    name: PluginNameParam,
     body: PluginConfigUpdateRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin),
@@ -696,7 +697,7 @@ async def update_plugin_config(
 @user_limiter.limit(get_limit("admin_operations"))
 async def serve_plugin_asset(
     request: Request, response: Response,
-    name: str,
+    name: PluginNameParam,
     file_path: str,
     db: Session = Depends(get_db),
     plugin_manager: PluginManager = Depends(get_plugin_manager),
@@ -750,19 +751,23 @@ async def serve_plugin_asset(
     # Construct file path
     plugin_path = plugin_manager.plugins_dir / name / "ui" / file_path
 
-    # Security: ensure path doesn't escape plugin directory
+    # Security: ensure path doesn't escape the plugin's ui/ directory.
     try:
         plugin_path = plugin_path.resolve()
         allowed_base = (plugin_manager.plugins_dir / name / "ui").resolve()
-        if not str(plugin_path).startswith(str(allowed_base)):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Access denied",
-            )
     except Exception:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid path",
+        )
+    # Outside the try: raised inside it, this 403 was swallowed by the
+    # `except Exception` and reached the client as 400.
+    # A path check, not a string-prefix check: "…/demo/ui_private/x" starts
+    # with "…/demo/ui" but is not inside it.
+    if not plugin_path.is_relative_to(allowed_base):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied",
         )
 
     if not plugin_path.exists():
@@ -801,6 +806,10 @@ async def uninstall_plugin(
 ):
     """Uninstall a plugin (remove from database, files remain).
 
+    ``name`` is deliberately a plain ``str``: this route does no filesystem
+    work, and a row stored under a name the current rule rejects must stay
+    removable (the other ``{name}`` routes take ``PluginNameParam``, #634).
+
     Admin only. Disables the plugin and removes its database record.
     Plugin files in the plugins directory are not removed.
     """
@@ -824,7 +833,7 @@ async def uninstall_plugin(
 async def run_plugin_menu_action(
     request: Request,
     response: Response,
-    name: str,
+    name: PluginNameParam,
     action_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin),

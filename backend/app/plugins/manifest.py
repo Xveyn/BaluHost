@@ -13,6 +13,8 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field, ValidationError
 
+from app.plugins.naming import PLUGIN_NAME_PATTERN
+
 from app.plugins.base import PluginMetadata
 
 
@@ -51,7 +53,7 @@ class PluginManifest(BaseModel):
 
     manifest_version: int = Field(..., description="Schema version, must be supported")
 
-    name: str
+    name: str = Field(pattern=PLUGIN_NAME_PATTERN)
     version: str
     display_name: str
     description: str

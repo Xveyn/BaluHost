@@ -15,6 +15,7 @@ plugins/
 ├── permissions.py       # PluginPermission enum, DANGEROUS_PERMISSIONS list
 ├── dashboard_panel.py   # Dashboard panel bridge for plugin data
 ├── installer.py         # Plugin install/uninstall/upgrade mechanics
+├── naming.py            # The one plugin-name rule (`^[a-z0-9_]{1,64}$`, same set as the spawn wrapper); `PluginNameParam` applies it to every `{name}` route (#634)
 ├── manifest.py          # Plugin manifest parsing and validation
 ├── marketplace.py       # Marketplace index fetch and caching
 ├── resolver.py          # Dependency/version resolution
@@ -59,6 +60,20 @@ Two plugin trust tiers with different isolation:
   **detached ed25519 signature (fail-closed)** before it is trusted — an empty or
   unrecognised trusted-key list causes the index to be rejected; see `signing.py`
   and `services/plugin_marketplace.py`.
+
+## Plugin names are path components
+
+A plugin name from a URL or an index entry becomes `plugins_dir / name`, a module
+name and an argument of the root-run spawn wrapper. Validate it with
+`naming.is_valid_plugin_name()` before building any path from it: `PluginManager.load_plugin()`,
+`PluginInstaller.install()`/`uninstall()` do, and the `/api/plugins/{name}` and
+`/api/plugins/marketplace/{plugin_name}` routes take `PluginNameParam` (422 before the
+handler runs). The rule is also enforced where a name enters the system —
+`PluginManifest.name` and `MarketplaceEntry.name` — so a plugin cannot be listed yet
+unmanageable. A new route or helper that joins a name onto a directory needs the same.
+`DELETE /api/plugins/{name}` stays a plain `str` on purpose: it only touches the DB, and a
+stale row under a name the rule rejects must remain removable.
+`..` reaching `shutil.rmtree` in `uninstall()` was the case that motivated this.
 
 ## Plugin Lifecycle
 
