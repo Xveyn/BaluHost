@@ -50,7 +50,14 @@ def _make_supervisor(tmp_path, router, *, plugin_dir, plugin_name):
     passes the copy as --plugin-dir to the worker.
     """
     short_dir = tmp_path / os.path.basename(plugin_dir)
-    shutil.copytree(plugin_dir, short_dir, ignore=shutil.ignore_patterns("__pycache__"))
+    for root, dirs, files in os.walk(plugin_dir):
+        dirs[:] = [d for d in dirs if d != "__pycache__"]
+        target = short_dir / os.path.relpath(root, plugin_dir)
+        target.mkdir(parents=True, exist_ok=True)
+        for name in files:
+            # copyfile, not copytree/copy2: those also copy permissions and
+            # timestamps, which the rootless CI container may refuse.
+            shutil.copyfile(os.path.join(root, name), target / name)
     return SandboxSupervisor(plugin_name, str(short_dir), capability_router=router)
 
 
