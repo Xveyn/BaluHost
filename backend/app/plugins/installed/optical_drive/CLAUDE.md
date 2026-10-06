@@ -90,6 +90,15 @@ that as its own change with its own test, not a drive-by edit.
   `POST /jobs/{id}/cancel` on the wrong worker returns 400.
 - Everything is lost on restart; a burn in flight is orphaned, not resumed.
 
+**Jobs have an owner (#633).** `OpticalJob.owner_id` is set from `current_user.id` by
+every route that starts a job (`owner_id=` keyword on the service methods) and is
+`exclude=True`, so it never reaches a response. `get_jobs()`, `get_job()` and
+`cancel_job()` take `(user_id, privileged)` as required arguments — there is no
+unfiltered accessor to reach for by mistake. A foreign job answers exactly like an
+unknown one (404 / 400), privileged users (`is_privileged()`) see and cancel all,
+and a job without an owner is visible to privileged users only. A new job-starting
+route must pass `owner_id=current_user.id`. Test: `tests/plugins/test_optical_drive_job_ownership.py`.
+
 **The stored config is re-read per request (#522).** The route dependency
 `get_service()` calls `service_with_current_config(db)`, which applies
 `self.get_config(db)` to the per-worker singleton, so every worker follows the

@@ -6,7 +6,7 @@ import asyncio
 import logging
 import re
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from .models import JobStatus, JobType, OpticalJob
 
@@ -19,7 +19,9 @@ logger = logging.getLogger(__name__)
 class ReadingMixin:
     """Mixin providing disc reading and audio ripping operations."""
 
-    async def read_iso(self, device: str, output_path: str) -> OpticalJob:
+    async def read_iso(
+        self, device: str, output_path: str, *, owner_id: Optional[int] = None
+    ) -> OpticalJob:
         """Copy a data disc to an ISO file.
 
         Args:
@@ -37,7 +39,9 @@ class ReadingMixin:
         # Ensure parent directory exists
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
 
-        job = self._create_job(device, JobType.READ_ISO, output_path=output_path)
+        job = self._create_job(
+            device, JobType.READ_ISO, output_path=output_path, owner_id=owner_id
+        )
 
         async def _do_read_iso():
             try:
@@ -101,7 +105,9 @@ class ReadingMixin:
         self._job_tasks[job.id] = task
         return job
 
-    async def rip_audio_cd(self, device: str, output_dir: str) -> OpticalJob:
+    async def rip_audio_cd(
+        self, device: str, output_dir: str, *, owner_id: Optional[int] = None
+    ) -> OpticalJob:
         """Rip all tracks from an audio CD to WAV files.
 
         Args:
@@ -119,7 +125,9 @@ class ReadingMixin:
         # Ensure output directory exists
         Path(output_dir).mkdir(parents=True, exist_ok=True)
 
-        job = self._create_job(device, JobType.RIP_AUDIO, output_path=output_dir)
+        job = self._create_job(
+            device, JobType.RIP_AUDIO, output_path=output_dir, owner_id=owner_id
+        )
 
         async def _do_rip():
             try:
@@ -201,7 +209,9 @@ class ReadingMixin:
         self,
         device: str,
         track_number: int,
-        output_path: str
+        output_path: str,
+        *,
+        owner_id: Optional[int] = None,
     ) -> OpticalJob:
         """Rip a single audio track to a WAV file.
 
@@ -220,7 +230,9 @@ class ReadingMixin:
 
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
 
-        job = self._create_job(device, JobType.RIP_TRACK, output_path=output_path)
+        job = self._create_job(
+            device, JobType.RIP_TRACK, output_path=output_path, owner_id=owner_id
+        )
         job.current_track = track_number
         job.total_tracks = 1
 

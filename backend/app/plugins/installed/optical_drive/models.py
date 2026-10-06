@@ -102,6 +102,11 @@ class OpticalJob(BaseModel):
     error: Optional[str] = Field(default=None, description="Error message if failed")
     current_track: Optional[int] = Field(default=None, description="Current track being processed")
     total_tracks: Optional[int] = Field(default=None, description="Total tracks to process")
+    owner_id: Optional[int] = Field(
+        default=None,
+        exclude=True,
+        description="User who started the job; internal, never serialized (#633)",
+    )
 
 
 # Request Models
