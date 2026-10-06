@@ -55,9 +55,12 @@ def _make_supervisor(tmp_path, router, *, plugin_dir, plugin_name):
         target = short_dir / os.path.relpath(root, plugin_dir)
         target.mkdir(parents=True, exist_ok=True)
         for name in files:
-            # copyfile, not copytree/copy2: those also copy permissions and
-            # timestamps, which the rootless CI container may refuse.
-            shutil.copyfile(os.path.join(root, name), target / name)
+            src = os.path.join(root, name)
+            # Regular files only: a worker that other tests spawned with this
+            # directory as its socket dir leaves a stale plugin-*.sock behind,
+            # and a socket cannot be opened for copying (ENXIO).
+            if os.path.isfile(src) and not name.endswith(".sock"):
+                shutil.copyfile(src, target / name)
     return SandboxSupervisor(plugin_name, str(short_dir), capability_router=router)
 
 
