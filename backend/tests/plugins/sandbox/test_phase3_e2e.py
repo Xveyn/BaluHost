@@ -8,6 +8,10 @@ Proves:
 """
 import os
 import shutil
+import tempfile
+from pathlib import Path
+
+import pytest
 
 import app.plugins.sandbox.capabilities as caps
 from app.plugins.sandbox.capabilities import CapabilityRouter
@@ -40,19 +44,34 @@ class _MemStore:
         return self.d.pop((p, u, k), None) is not None
 
 
-def _make_supervisor(tmp_path, router, *, plugin_dir, plugin_name):
+@pytest.fixture
+def short_dir():
+    """A directory with a very short path, for the worker's Unix socket.
+
+    pytest's tmp_path is not short enough: under xdist it becomes
+    /tmp/pytest-of-<user>/pytest-N/popen-gwN/<long test name>/..., which with the
+    socket file name exceeds the ~107 byte AF_UNIX limit.
+    """
+    path = tempfile.mkdtemp(prefix="p3-")
+    try:
+        yield path
+    finally:
+        shutil.rmtree(path, ignore_errors=True)
+
+
+def _make_supervisor(short_dir, router, *, plugin_dir, plugin_name):
     """Construct a real SandboxSupervisor with the default spawn, wired to router.
 
     The worker's Unix socket is created inside the plugin directory, and an
     AF_UNIX path is limited to ~107 bytes.  A checkout under a deep path pushes
     the in-repo fixture directory over that limit ("AF_UNIX path too long"), so
-    the fixture is copied to the short pytest tmp_path first.  The supervisor
+    the fixture is copied to a short temp directory first.  The supervisor
     passes the copy as --plugin-dir to the worker.
     """
-    short_dir = tmp_path / os.path.basename(plugin_dir)
+    target_dir = Path(short_dir) / os.path.basename(plugin_dir)
     for root, dirs, files in os.walk(plugin_dir):
         dirs[:] = [d for d in dirs if d != "__pycache__"]
-        target = short_dir / os.path.relpath(root, plugin_dir)
+        target = target_dir / os.path.relpath(root, plugin_dir)
         target.mkdir(parents=True, exist_ok=True)
         for name in files:
             src = os.path.join(root, name)
@@ -61,7 +80,7 @@ def _make_supervisor(tmp_path, router, *, plugin_dir, plugin_name):
             # and a socket cannot be opened for copying (ENXIO).
             if os.path.isfile(src) and not name.endswith(".sock"):
                 shutil.copyfile(src, target / name)
-    return SandboxSupervisor(plugin_name, str(short_dir), capability_router=router)
+    return SandboxSupervisor(plugin_name, str(target_dir), capability_router=router)
 
 
 # ---------------------------------------------------------------------------
@@ -69,7 +88,7 @@ def _make_supervisor(tmp_path, router, *, plugin_dir, plugin_name):
 # ---------------------------------------------------------------------------
 
 
-async def test_e2e_storage_and_metrics_granted(tmp_path):
+async def test_e2e_storage_and_metrics_granted(short_dir):
     """POST /save -> GET /load round-trips the value; storage is bound to user_id=11.
     GET /metrics returns the injected metrics_reader snapshot.
     """
@@ -88,7 +107,7 @@ async def test_e2e_storage_and_metrics_granted(tmp_path):
             },
             notifier=lambda ctx, payload: notifications.append(payload),
         )
-        sup = _make_supervisor(tmp_path, router, plugin_dir=FIXTURE, plugin_name="sample")
+        sup = _make_supervisor(short_dir, router, plugin_dir=FIXTURE, plugin_name="sample")
         await sup.start()
         try:
             save_resp = await sup.dispatch("POST", "/save", "hello", CTX)
@@ -108,7 +127,7 @@ async def test_e2e_storage_and_metrics_granted(tmp_path):
         caps.plugin_storage_service = orig
 
 
-async def test_e2e_denied_scope_returns_500_and_does_not_notify(tmp_path):
+async def test_e2e_denied_scope_returns_500_and_does_not_notify(short_dir):
     """With core.notify NOT granted, GET /forbidden -> 500; notifier never called."""
     notifications: list = []
     router = CapabilityRouter(
@@ -117,7 +136,7 @@ async def test_e2e_denied_scope_returns_500_and_does_not_notify(tmp_path):
         session_factory=lambda: object(),
         notifier=lambda ctx, payload: notifications.append(payload),
     )
-    sup = _make_supervisor(tmp_path, router, plugin_dir=FIXTURE, plugin_name="sample")
+    sup = _make_supervisor(short_dir, router, plugin_dir=FIXTURE, plugin_name="sample")
     await sup.start()
     try:
         resp = await sup.dispatch("GET", "/forbidden", b"", CTX)
