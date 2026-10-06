@@ -7,6 +7,7 @@ Proves:
 - a denied scope (core.notify) causes a 500 response and never invokes the notifier.
 """
 import os
+import shutil
 
 import app.plugins.sandbox.capabilities as caps
 from app.plugins.sandbox.capabilities import CapabilityRouter
@@ -42,12 +43,15 @@ class _MemStore:
 def _make_supervisor(tmp_path, router, *, plugin_dir, plugin_name):
     """Construct a real SandboxSupervisor with the default spawn, wired to router.
 
-    plugin_dir is the fixture directory; the supervisor passes it as --plugin-dir
-    to the worker.  tmp_path is accepted for signature symmetry with the test
-    fixtures (it provides an isolated temp directory should the socket dir ever
-    need to be separated from the plugin dir).
+    The worker's Unix socket is created inside the plugin directory, and an
+    AF_UNIX path is limited to ~107 bytes.  A checkout under a deep path pushes
+    the in-repo fixture directory over that limit ("AF_UNIX path too long"), so
+    the fixture is copied to the short pytest tmp_path first.  The supervisor
+    passes the copy as --plugin-dir to the worker.
     """
-    return SandboxSupervisor(plugin_name, plugin_dir, capability_router=router)
+    short_dir = tmp_path / os.path.basename(plugin_dir)
+    shutil.copytree(plugin_dir, short_dir, ignore=shutil.ignore_patterns("__pycache__"))
+    return SandboxSupervisor(plugin_name, str(short_dir), capability_router=router)
 
 
 # ---------------------------------------------------------------------------
