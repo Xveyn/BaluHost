@@ -29,7 +29,9 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Dict, List, Tuple, Iterable, Optional
+from typing import Dict, List, Tuple, Optional
+
+from dev_process_cleanup import clean_stale_state, terminate_owned_processes
 
 ROOT_DIR = Path(__file__).resolve().parent
 BACKEND_DIR = ROOT_DIR / "backend"
@@ -144,89 +146,6 @@ def resolve_npm_binary() -> Optional[str]:
     if resolved:
         return resolved
     return None
-
-
-def kill_existing_processes(patterns: Iterable[str], grace_seconds: int = 5) -> None:
-    """Kill any existing processes matching the given patterns.
-
-    This ensures a clean start by terminating lingering processes from
-    previous runs that could cause port conflicts.
-
-    Args:
-        patterns: Process patterns to match (passed to pgrep -f)
-        grace_seconds: Time to wait before force-killing
-    """
-    if os.name == "nt":
-        print("[warning] Process cleanup not supported on Windows")
-        return
-
-    pgrep = shutil.which("pgrep")
-    pkill = shutil.which("pkill")
-
-    def _run_pgrep(pattern: str) -> List[int]:
-        if not pgrep:
-            return []
-        try:
-            # Exclude our own process
-            res = subprocess.run(
-                [pgrep, "-f", pattern],
-                capture_output=True,
-                text=True
-            )
-            if res.returncode != 0 or not res.stdout:
-                return []
-            pids = [int(x) for x in res.stdout.split() if x.strip()]
-            # Exclude current process
-            current_pid = os.getpid()
-            return [pid for pid in pids if pid != current_pid]
-        except Exception:
-            return []
-
-    killed_any = False
-
-    for pat in patterns:
-        try:
-            pids = _run_pgrep(pat)
-            if pids:
-                print(f"[cleanup] Found {len(pids)} process(es) matching: {pat}")
-                killed_any = True
-                if pkill:
-                    # Try graceful terminate via pkill
-                    subprocess.run([pkill, "-f", "-TERM", pat], check=False)
-                else:
-                    for pid in pids:
-                        try:
-                            os.kill(pid, signal.SIGTERM)
-                        except ProcessLookupError:
-                            pass
-        except Exception as e:
-            print(f"[debug] Error while terminating pattern {pat}: {e}")
-
-    if killed_any:
-        print(f"[cleanup] Waiting {grace_seconds}s for graceful shutdown...")
-        time.sleep(grace_seconds)
-
-        # Force kill remaining processes
-        for pat in patterns:
-            try:
-                remaining = _run_pgrep(pat)
-                if remaining:
-                    print(f"[cleanup] Force killing {len(remaining)} remaining process(es) matching: {pat}")
-                    if pkill:
-                        subprocess.run([pkill, "-f", "-KILL", pat], check=False)
-                    else:
-                        for pid in remaining:
-                            try:
-                                os.kill(pid, signal.SIGKILL)
-                            except ProcessLookupError:
-                                pass
-            except Exception as e:
-                print(f"[debug] Error while forcing kill for pattern {pat}: {e}")
-
-        # Final wait to ensure ports are released
-        time.sleep(1)
-    else:
-        print("[cleanup] No existing processes found")
 
 
 def start_process(name: str, cmd: List[str], cwd: Path, env: Optional[Dict[str, str]] = None) -> subprocess.Popen:
@@ -352,19 +271,22 @@ def main() -> int:
         "npm run dev",
         "npm run preview",
     ]
-    kill_existing_processes(kill_patterns, grace_seconds=3)
+    # Only processes of THIS install (cwd or a path under ROOT_DIR) - a dev
+    # instance or another checkout on the same host is not ours to stop (#763).
+    if terminate_owned_processes(kill_patterns, ROOT_DIR, grace_seconds=3):
+        time.sleep(1)  # let the ports be released
 
-    # Clean up stale lock file
-    lock_file = Path("/tmp/baluhost-primary.lock")
-    if lock_file.exists():
-        lock_file.unlink()
+    # Clean up stale primary-worker lock and SHM files from a previous run -
+    # but only if they are orphaned: /dev/shm is shared by the whole host, and a
+    # live monitoring_worker (of any install) must not lose its files (#763).
+    lock_removed, shm_removed = clean_stale_state(
+        Path("/tmp/baluhost-primary.lock"),
+        Path("/dev/shm/baluhost"),
+        ["monitoring_worker"],
+    )
+    if lock_removed:
         print("[cleanup] Removed stale primary worker lock file")
-
-    # Clean up stale SHM files from monitoring_worker
-    shm_dir = Path("/dev/shm/baluhost")
-    if shm_dir.exists():
-        import shutil as _shutil
-        _shutil.rmtree(shm_dir, ignore_errors=True)
+    if shm_removed:
         print("[cleanup] Removed stale /dev/shm/baluhost")
 
     try:

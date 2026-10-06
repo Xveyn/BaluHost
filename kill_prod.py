@@ -4,12 +4,15 @@ Usage:
     Linux: python3 kill_prod.py
     With sudo (for systemd services): sudo python3 kill_prod.py
 
-This script terminates all uvicorn/gunicorn (backend) production processes
-gracefully with SIGTERM, then forces SIGKILL after a grace period if needed.
+This script stops the BaluHost systemd services, then terminates the
+uvicorn/gunicorn (backend) and worker processes of THIS install gracefully with
+SIGTERM, forcing SIGKILL after a grace period if needed. Processes of another
+checkout (e.g. a dev instance) are left alone (#763). The systemd services are
+stopped by name, whichever install they belong to.
 
 Platform Support:
-    - Linux/Debian: Uses pkill/pgrep or direct process signals
-    - macOS: Uses pkill/pgrep or direct process signals
+    - Linux/Debian: Scans /proc (see dev_process_cleanup.py)
+    - macOS: No /proc, so the process cleanup is skipped with a message
     - Windows: Not supported for production
 """
 
@@ -17,119 +20,14 @@ from __future__ import annotations
 
 import os
 import shutil
-import signal
 import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import List
+
+from dev_process_cleanup import find_owned_processes, terminate_owned_processes
 
 ROOT_DIR = Path(__file__).resolve().parent
-
-
-def kill_unix_processes(patterns: List[str], grace_seconds: int = 5) -> int:
-    """Kill processes on Unix/Linux using pkill/pgrep or direct signals.
-
-    Args:
-        patterns: List of command patterns to match (used with pgrep -f)
-        grace_seconds: Seconds to wait before forcing SIGKILL
-
-    Returns:
-        Number of processes that were killed
-    """
-    pgrep = shutil.which("pgrep")
-    pkill = shutil.which("pkill")
-
-    total_killed = 0
-
-    def _run_pgrep(pattern: str) -> List[int]:
-        """Get PIDs matching pattern, excluding current process."""
-        if not pgrep:
-            return []
-        try:
-            res = subprocess.run(
-                [pgrep, "-f", pattern],
-                capture_output=True,
-                text=True,
-                check=False
-            )
-            if res.returncode != 0 or not res.stdout:
-                return []
-            pids = [int(x) for x in res.stdout.split() if x.strip()]
-            # Exclude current process
-            current_pid = os.getpid()
-            return [pid for pid in pids if pid != current_pid]
-        except Exception:
-            return []
-
-    # Phase 1: Graceful termination with SIGTERM
-    print("[info] Attempting graceful termination (SIGTERM)...")
-    for pat in patterns:
-        try:
-            pids = _run_pgrep(pat)
-            if not pids:
-                print(f"[info] No processes found matching: {pat}")
-                continue
-
-            total_killed += len(pids)
-            print(f"[info] Terminating {len(pids)} process(es) matching: {pat}")
-            print(f"       PIDs: {', '.join(str(p) for p in pids)}")
-
-            if pkill:
-                subprocess.run([pkill, "-f", "-TERM", pat], check=False)
-            else:
-                for pid in pids:
-                    try:
-                        os.kill(pid, signal.SIGTERM)
-                    except ProcessLookupError:
-                        pass
-                    except PermissionError:
-                        print(f"[warning] Permission denied for PID {pid} - try with sudo")
-                    except Exception as e:
-                        print(f"[debug] Error killing PID {pid}: {e}")
-        except Exception as e:
-            print(f"[debug] Error while terminating pattern {pat}: {e}")
-
-    if total_killed == 0:
-        return 0
-
-    # Wait grace period
-    if grace_seconds > 0:
-        print(f"[info] Waiting {grace_seconds} seconds for processes to terminate...")
-        time.sleep(grace_seconds)
-
-    # Phase 2: Force kill remaining processes with SIGKILL
-    print("[info] Checking for remaining processes...")
-    remaining_count = 0
-    for pat in patterns:
-        try:
-            pids = _run_pgrep(pat)
-            if not pids:
-                continue
-
-            remaining_count += len(pids)
-            print(f"[warning] Force killing {len(pids)} process(es) matching: {pat}")
-            print(f"          PIDs: {', '.join(str(p) for p in pids)}")
-
-            if pkill:
-                subprocess.run([pkill, "-f", "-KILL", pat], check=False)
-            else:
-                for pid in pids:
-                    try:
-                        os.kill(pid, signal.SIGKILL)
-                    except ProcessLookupError:
-                        pass
-                    except PermissionError:
-                        print(f"[warning] Permission denied for PID {pid} - try with sudo")
-                    except Exception as e:
-                        print(f"[debug] Error killing PID {pid}: {e}")
-        except Exception as e:
-            print(f"[debug] Error while forcing kill for pattern {pat}: {e}")
-
-    if remaining_count == 0:
-        print("[success] All processes terminated gracefully")
-
-    return total_killed
 
 
 def stop_systemd_services() -> bool:
@@ -218,7 +116,7 @@ def main() -> int:
     ]
 
     try:
-        killed_count = kill_unix_processes(kill_patterns, grace_seconds=5)
+        killed_count = terminate_owned_processes(kill_patterns, ROOT_DIR, grace_seconds=5)
 
         if killed_count == 0 and not systemd_stopped:
             print("\n[info] No BaluHost production processes were running")
@@ -229,24 +127,14 @@ def main() -> int:
         print("\n[phase 3] Verifying cleanup...")
         time.sleep(1)
 
-        pgrep = shutil.which("pgrep")
-        if pgrep:
-            remaining = False
-            for pat in ["uvicorn.*app.main", "gunicorn.*app.main"]:
-                result = subprocess.run(
-                    [pgrep, "-f", pat],
-                    capture_output=True,
-                    check=False
-                )
-                if result.returncode == 0:
-                    remaining = True
-                    break
-
-            if remaining:
-                print("[warning] Some processes may still be running")
-                print("         Try: sudo python3 kill_prod.py")
-            else:
-                print("[success] All BaluHost processes confirmed stopped")
+        remaining = find_owned_processes(
+            ["uvicorn.*app.main", "gunicorn.*app.main"], ROOT_DIR
+        )
+        if remaining:
+            print("[warning] Some processes may still be running")
+            print("         Try: sudo python3 kill_prod.py")
+        else:
+            print("[success] All BaluHost processes of this install confirmed stopped")
 
     except Exception as e:
         print(f"[error] Failed to kill processes: {e}")
