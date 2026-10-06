@@ -13,6 +13,8 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
+from app.plugins.naming import PLUGIN_NAME_PATTERN
+
 
 SUPPORTED_INDEX_VERSIONS = {1}
 
@@ -41,7 +43,7 @@ class MarketplaceVersionEntry(BaseModel):
 class MarketplaceEntry(BaseModel):
     """Marketplace listing for one plugin (name + all its versions)."""
 
-    name: str
+    name: str = Field(pattern=PLUGIN_NAME_PATTERN)
     latest_version: str
     versions: List[MarketplaceVersionEntry]
     display_name: str

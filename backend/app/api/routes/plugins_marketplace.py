@@ -20,10 +20,12 @@ from app.plugins.installer import (
     ArchiveError,
     ChecksumError,
     DownloadError,
+    InvalidPluginNameError,
     ManifestMismatchError,
     PipInstallError,
     ResolverConflictError,
 )
+from app.plugins.naming import PluginNameParam
 from app.plugins.resolver import InstalledPluginRequirement
 from app.schemas.plugin_marketplace import (
     ConflictResponse,
@@ -131,7 +133,7 @@ async def list_marketplace(
 async def install_plugin(
     request: Request,
     response: Response,
-    plugin_name: str,
+    plugin_name: PluginNameParam,
     payload: InstallRequest,
     current_user: User = Depends(require_local_admin),
     service: MarketplaceService = Depends(get_marketplace_service),
@@ -172,7 +174,7 @@ async def install_plugin(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="download failed",
         ) from exc
-    except (ArchiveError, ManifestMismatchError, IndexParseError) as exc:
+    except (ArchiveError, ManifestMismatchError, IndexParseError, InvalidPluginNameError) as exc:
         logger.warning("invalid plugin artifact for %r: %s", plugin_name, exc)
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -205,12 +207,20 @@ async def install_plugin(
 async def uninstall_plugin(
     request: Request,
     response: Response,
-    plugin_name: str,
+    plugin_name: PluginNameParam,
     current_user: User = Depends(require_local_admin),
     service: MarketplaceService = Depends(get_marketplace_service),
 ) -> Response:
     """Remove an installed marketplace plugin from the filesystem."""
-    removed = service.uninstall(plugin_name)
+    try:
+        removed = service.uninstall(plugin_name)
+    except InvalidPluginNameError as exc:
+        # PluginNameParam already refuses these; this is the second line.
+        logger.warning("marketplace uninstall refused for %r: %s", plugin_name, exc)
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="invalid plugin name",
+        ) from exc
     if not removed:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

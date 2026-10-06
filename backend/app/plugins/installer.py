@@ -21,6 +21,7 @@ from __future__ import annotations
 import hashlib
 import io
 import logging
+import os
 import shutil
 import subprocess
 import sys
@@ -35,6 +36,7 @@ from packaging.requirements import InvalidRequirement, Requirement
 from app.plugins.core_versions import CoreVersions
 from app.plugins.manifest import ManifestError, load_manifest
 from app.plugins.marketplace import MarketplaceVersionEntry
+from app.plugins.naming import is_valid_plugin_name
 from app.plugins.resolver import (
     InstalledPluginRequirement,
     ResolveResult,
@@ -50,6 +52,10 @@ DEFAULT_MAX_DOWNLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
 
 class InstallError(Exception):
     """Base class for all installer failures."""
+
+
+class InvalidPluginNameError(InstallError):
+    """The plugin name is not a safe single path component (#634)."""
 
 
 class DownloadError(InstallError):
@@ -174,6 +180,25 @@ def _default_pip_runner(
         ) from exc
 
 
+def _join_under(base: Path, name: str) -> Path:
+    """``base / name`` for a *name* that is a single safe path component.
+
+    Two layers on purpose. The allowlist (``is_valid_plugin_name``) is the rule
+    and rejects ``..``, separators and the empty string. The normalise-and-
+    contain check after it is what static analysis (CodeQL ``py/path-injection``)
+    recognises as a path sanitiser; it also keeps holding if the rule is ever
+    loosened, since the result must stay strictly below *base*. ``abspath``, not
+    ``realpath``: a ``plugins_dir`` that is itself a symlink must keep working.
+    """
+    if not is_valid_plugin_name(name):
+        raise InvalidPluginNameError(f"Invalid plugin name: {name!r}")
+    root = os.path.abspath(base)
+    full = os.path.abspath(os.path.join(root, name))
+    if not full.startswith(root + os.sep):
+        raise InvalidPluginNameError(f"Invalid plugin name: {name!r}")
+    return Path(full)
+
+
 class PluginInstaller:
     """Install, update, and uninstall plugins under a managed directory."""
 
@@ -196,9 +221,14 @@ class PluginInstaller:
     def plugins_dir(self) -> Path:
         return self._plugins_dir
 
-    @property
-    def core_versions(self) -> CoreVersions:
-        return self._core_versions
+    def _plugin_path(self, name: str) -> Path:
+        """``plugins_dir / name`` for a name that is safe to join.
+
+        The name arrives from a URL segment (uninstall) or an index entry
+        (install). ``..`` or ``a/b`` would otherwise make ``shutil.rmtree`` and
+        ``_atomic_swap`` act on a parent or sibling of the plugins directory.
+        """
+        return _join_under(self._plugins_dir, name)
 
     def install(
         self,
@@ -221,9 +251,13 @@ class PluginInstaller:
             Metadata describing the landed artifact.
 
         Raises:
-            DownloadError, ChecksumError, ArchiveError, ManifestMismatchError,
-            ResolverConflictError, PipInstallError.
+            InvalidPluginNameError, DownloadError, ChecksumError, ArchiveError,
+            ManifestMismatchError, ResolverConflictError, PipInstallError.
         """
+        # Before the download: the name also feeds the staging prefix, the
+        # archive layout lookup and the final path.
+        final_path = self._plugin_path(plugin_name)
+
         archive = self._download(entry)
         self._verify_checksum(archive, entry.checksum_sha256)
 
@@ -268,7 +302,6 @@ class PluginInstaller:
             except PipInstallError:
                 raise
 
-            final_path = self._plugins_dir / plugin_name
             self._atomic_swap(plugin_dir_in_archive, final_path)
 
             return InstalledArtifact(
@@ -283,10 +316,11 @@ class PluginInstaller:
         """Remove a plugin directory (code + isolated site-packages).
 
         Returns ``True`` if something was removed, ``False`` if the plugin
-        directory did not exist. Does **not** touch the ``InstalledPlugin``
+        directory did not exist. Raises ``InvalidPluginNameError`` for a name
+        that is not a single safe path component. Does **not** touch the ``InstalledPlugin``
         database row or call ``on_uninstall`` — those belong to the API layer.
         """
-        target = self._plugins_dir / name
+        target = self._plugin_path(name)
         if not target.exists():
             return False
         shutil.rmtree(target)
@@ -348,7 +382,7 @@ class PluginInstaller:
         if root_manifest.exists():
             return extracted_root
 
-        named = extracted_root / plugin_name
+        named = _join_under(extracted_root, plugin_name)
         if (named / "plugin.json").exists():
             return named
 

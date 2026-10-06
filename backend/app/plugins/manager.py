@@ -31,6 +31,7 @@ from app.plugins.base import BackgroundTaskSpec, PluginBase
 from app.plugins.events import EventManager, get_event_manager, start_event_manager, stop_event_manager
 from app.plugins.hooks import create_plugin_manager
 from app.plugins.manifest import ManifestError, PluginManifest, load_manifest
+from app.plugins.naming import is_valid_plugin_name
 from app.plugins.permissions import PermissionManager
 from app.services.audit.logger_db import get_audit_logger_db
 
@@ -335,6 +336,12 @@ class PluginManager:
         """
         if name in self._plugins:
             return self._plugins[name]
+
+        # Before any path is built from it: "..", "a/b" or "" would otherwise
+        # point the fallback below at a parent directory and exec its
+        # __init__.py (#634).
+        if not is_valid_plugin_name(name):
+            raise PluginLoadError(f"Invalid plugin name: {name!r}")
 
         # Resolve which directory this plugin lives in.
         discovered = self.get_discovered(name)
@@ -931,6 +938,8 @@ class PluginManager:
         ``PluginUIManifest.bundle_path`` is deliberately not consulted: the
         bootstrap never read it, and bundled plugins spell it inconsistently.
         """
+        if not is_valid_plugin_name(name):
+            return "bundle.js"
         try:
             manifest = load_manifest(self.plugins_dir / name)
         except Exception:
@@ -948,6 +957,8 @@ class PluginManager:
         them as disabled), but have no ``ui/`` directory. Without this check
         ``/plugins/<name>`` framed a sandbox host around a bundle that 404s.
         """
+        if not is_valid_plugin_name(name):
+            return False
         return (self.plugins_dir / name / "ui" / self.ui_bundle_name(name)).is_file()
 
     def get_plugin(self, name: str) -> Optional[PluginBase]:

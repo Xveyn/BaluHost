@@ -3,7 +3,7 @@ import pytest
 
 
 def test_plugins_uninstall_blocked_on_remote(remote_client, admin_headers):
-    resp = remote_client.delete("/api/plugins/some-plugin", headers=admin_headers)
+    resp = remote_client.delete("/api/plugins/some_plugin", headers=admin_headers)
     # Either 403 local_channel_required OR 404 if the local-channel check fires
     # first (it should). Verify the structured error format.
     assert resp.status_code == 403
@@ -12,7 +12,7 @@ def test_plugins_uninstall_blocked_on_remote(remote_client, admin_headers):
 
 def test_marketplace_install_blocked_on_remote(remote_client, admin_headers):
     resp = remote_client.post(
-        "/api/plugins/marketplace/some-plugin/install",
+        "/api/plugins/marketplace/some_plugin/install",
         json={"version": "1.0.0"},
         headers=admin_headers,
     )
@@ -22,7 +22,7 @@ def test_marketplace_install_blocked_on_remote(remote_client, admin_headers):
 
 def test_marketplace_uninstall_blocked_on_remote(remote_client, admin_headers):
     resp = remote_client.delete(
-        "/api/plugins/marketplace/some-plugin",
+        "/api/plugins/marketplace/some_plugin",
         headers=admin_headers,
     )
     assert resp.status_code == 403
