@@ -1,10 +1,12 @@
-"""Terminate leftover dev processes - but only the ones that belong to THIS checkout.
+"""Terminate leftover processes - but only the ones that belong to THIS checkout.
 
-Shared by ``start_dev.py`` and ``kill_dev.py``. Both used to run ``pkill -f
+Shared by ``start_dev.py``, ``kill_dev.py``, ``start_prod.py`` and
+``kill_prod.py``. All four used to run ``pkill -f
 <pattern>``, which matches the entire command line and knows neither user nor
 directory. On a host where the production services run under the same user as
 the dev workspace (``/opt/baluhost`` next to ``~/projects/BaluHost``) that shot
-production down, and it also hit unrelated tools whose command line merely
+production down (and a prod launcher would have shot a dev instance), and it
+also hit unrelated tools whose command line merely
 contained ``vite`` or ``uvicorn`` (#763).
 
 A process is terminated only if BOTH hold:
@@ -127,19 +129,22 @@ def _signal_all(pids: Iterable[int], sig: signal.Signals) -> None:
 
 def terminate_owned_processes(
     patterns: Iterable[str], root: Path, grace_seconds: float = 3
-) -> None:
-    """SIGTERM, wait ``grace_seconds``, then SIGKILL what is left - owned only."""
+) -> int:
+    """SIGTERM, wait ``grace_seconds``, then SIGKILL what is left - owned only.
+
+    Returns how many processes were sent SIGTERM (0 without ``/proc``).
+    """
     if not PROC.is_dir():
-        print("[info] No /proc here - skipping cleanup of leftover dev processes")
-        return
+        print("[info] No /proc here - skipping cleanup of leftover processes")
+        return 0
 
     patterns = list(patterns)
     pids = find_owned_processes(patterns, root)
     if not pids:
-        print("[info] No leftover dev processes of this checkout found")
-        return
+        print("[info] No leftover processes of this checkout found")
+        return 0
 
-    print(f"[info] Terminating {len(pids)} leftover process(es) of this checkout: {pids}")
+    print(f"[info] Terminating {len(pids)} process(es) of this checkout: {pids}")
     _signal_all(pids, signal.SIGTERM)
     time.sleep(grace_seconds)
 
@@ -148,3 +153,4 @@ def terminate_owned_processes(
     if remaining:
         print(f"[warning] Forcing kill for remaining processes: {remaining}")
         _signal_all(remaining, signal.SIGKILL)
+    return len(pids)

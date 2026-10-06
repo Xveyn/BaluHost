@@ -206,3 +206,35 @@ class TestTerminateOwnedProcesses:
         cleanup.terminate_owned_processes([MARKER], checkout, grace_seconds=0)
 
         assert proc.poll() is None
+
+
+class TestReturnValue:
+    def test_returns_how_many_processes_it_terminated(self, checkout, elsewhere, spawn):
+        mine = [spawn(checkout / "backend"), spawn(checkout / "backend")]
+        spawn(elsewhere)
+
+        count = cleanup.terminate_owned_processes([MARKER], checkout, grace_seconds=0)
+
+        assert count == 2
+        for proc in mine:
+            proc.wait(timeout=5)
+
+    def test_returns_zero_when_nothing_is_ours(self, checkout, elsewhere, spawn):
+        spawn(elsewhere)
+
+        assert cleanup.terminate_owned_processes([MARKER], checkout, grace_seconds=0) == 0
+
+    def test_returns_zero_without_proc(self, checkout, monkeypatch, tmp_path):
+        monkeypatch.setattr(cleanup, "PROC", tmp_path / "no-proc-here")
+
+        assert cleanup.terminate_owned_processes([MARKER], checkout, grace_seconds=0) == 0
+
+
+@pytest.mark.parametrize("script", ["start_dev.py", "kill_dev.py", "start_prod.py", "kill_prod.py"])
+def test_launcher_scripts_do_not_shell_out_to_pkill_or_pgrep(script):
+    """All four launchers share dev_process_cleanup. A fresh `pkill -f` in one of
+    them brings #763 back for that script."""
+    source = (REPO_ROOT / script).read_text(encoding="utf-8")
+
+    assert not re.search(r"\bp(kill|grep)\b", source), f"{script} matches by command line again"
+    assert "dev_process_cleanup" in source
