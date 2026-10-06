@@ -507,13 +507,24 @@ class OpticalDriveService(ReadingMixin, BurningMixin, BrowsingMixin):
 
     # === Job Management ===
 
-    def get_jobs(self) -> List[OpticalJob]:
-        """Get all active and recent jobs."""
-        return list(self._jobs.values())
+    @staticmethod
+    def _may_access(job: OpticalJob, user_id: int, privileged: bool) -> bool:
+        """A job belongs to its owner; privileged users see all (#633).
 
-    def get_job(self, job_id: str) -> Optional[OpticalJob]:
-        """Get a specific job by ID."""
-        return self._jobs.get(job_id)
+        A job without an owner is visible to privileged users only.
+        """
+        return privileged or (job.owner_id is not None and job.owner_id == user_id)
+
+    def get_jobs(self, user_id: int, privileged: bool) -> List[OpticalJob]:
+        """Get the active and recent jobs the caller may see."""
+        return [j for j in self._jobs.values() if self._may_access(j, user_id, privileged)]
+
+    def get_job(self, job_id: str, user_id: int, privileged: bool) -> Optional[OpticalJob]:
+        """Get a job by ID; a job the caller may not see is reported as unknown."""
+        job = self._jobs.get(job_id)
+        if job is None or not self._may_access(job, user_id, privileged):
+            return None
+        return job
 
     def _create_job(
         self,
@@ -521,6 +532,7 @@ class OpticalDriveService(ReadingMixin, BurningMixin, BrowsingMixin):
         job_type: JobType,
         input_path: Optional[str] = None,
         output_path: Optional[str] = None,
+        owner_id: Optional[int] = None,
     ) -> OpticalJob:
         """Create a new job."""
         job = OpticalJob(
@@ -530,6 +542,7 @@ class OpticalDriveService(ReadingMixin, BurningMixin, BrowsingMixin):
             status=JobStatus.PENDING,
             input_path=input_path,
             output_path=output_path,
+            owner_id=owner_id,
         )
         self._jobs[job.id] = job
         return job
@@ -561,19 +574,21 @@ class OpticalDriveService(ReadingMixin, BurningMixin, BrowsingMixin):
         if total_tracks is not None:
             job.total_tracks = total_tracks
 
-    async def cancel_job(self, job_id: str) -> bool:
+    async def cancel_job(self, job_id: str, user_id: int, privileged: bool) -> bool:
         """Cancel a running job.
 
         Args:
             job_id: Job ID to cancel
+            user_id: Caller
+            privileged: Whether the caller may cancel other users' jobs
 
         Returns:
-            True if cancelled, False if not found or not running
+            True if cancelled, False if not found, not the caller's, or not running
         """
-        if job_id not in self._jobs:
+        job = self.get_job(job_id, user_id, privileged)
+        if job is None:
             return False
 
-        job = self._jobs[job_id]
         if job.status != JobStatus.RUNNING:
             return False
 

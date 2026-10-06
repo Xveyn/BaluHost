@@ -24,7 +24,9 @@ logger = logging.getLogger(__name__)
 class BurningMixin:
     """Mixin providing disc burning and blanking operations."""
 
-    async def burn_iso(self, device: str, iso_path: str, speed: int = 0) -> OpticalJob:
+    async def burn_iso(
+        self, device: str, iso_path: str, speed: int = 0, *, owner_id: Optional[int] = None
+    ) -> OpticalJob:
         """Burn an ISO image to disc.
 
         Args:
@@ -40,7 +42,9 @@ class BurningMixin:
         if not self.validate_source_file(iso_path):
             raise ValueError(f"Source ISO not found or not in allowed storage: {iso_path}")
 
-        job = self._create_job(device, JobType.BURN_ISO, input_path=iso_path)
+        job = self._create_job(
+            device, JobType.BURN_ISO, input_path=iso_path, owner_id=owner_id
+        )
 
         async def _do_burn():
             try:
@@ -100,7 +104,9 @@ class BurningMixin:
         self,
         device: str,
         wav_files: List[str],
-        speed: int = 0
+        speed: int = 0,
+        *,
+        owner_id: Optional[int] = None,
     ) -> OpticalJob:
         """Burn WAV files as an audio CD.
 
@@ -119,7 +125,9 @@ class BurningMixin:
             if not self.validate_source_file(wav_file):
                 raise ValueError(f"WAV file not found or not in allowed storage: {wav_file}")
 
-        job = self._create_job(device, JobType.BURN_AUDIO, input_path=",".join(wav_files))
+        job = self._create_job(
+            device, JobType.BURN_AUDIO, input_path=",".join(wav_files), owner_id=owner_id
+        )
         job.total_tracks = len(wav_files)
 
         async def _do_burn_audio():
@@ -189,7 +197,9 @@ class BurningMixin:
         self._job_tasks[job.id] = task
         return job
 
-    async def blank_disc(self, device: str, mode: BlankMode = BlankMode.FAST) -> OpticalJob:
+    async def blank_disc(
+        self, device: str, mode: BlankMode = BlankMode.FAST, *, owner_id: Optional[int] = None
+    ) -> OpticalJob:
         """Blank a rewritable disc.
 
         Args:
@@ -202,7 +212,7 @@ class BurningMixin:
         if not self.validate_device(device):
             raise ValueError(f"Invalid device path: {device}")
 
-        job = self._create_job(device, JobType.BLANK)
+        job = self._create_job(device, JobType.BLANK, owner_id=owner_id)
 
         async def _do_blank():
             try:

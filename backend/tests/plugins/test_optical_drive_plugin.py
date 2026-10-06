@@ -162,12 +162,12 @@ class TestJobManagement:
 
     def test_get_jobs_empty(self, service):
         """Should return empty list when no jobs."""
-        jobs = service.get_jobs()
+        jobs = service.get_jobs(0, True)
         assert jobs == []
 
     def test_get_job_not_found(self, service):
         """Should return None for non-existent job."""
-        job = service.get_job("non-existent-id")
+        job = service.get_job("non-existent-id", 0, True)
         assert job is None
 
     @pytest.mark.asyncio
@@ -175,7 +175,7 @@ class TestJobManagement:
         """Should update job progress."""
         job = service._create_job("/dev/sr0", JobType.READ_ISO)
         service._update_job(job.id, progress=50.0)
-        updated = service.get_job(job.id)
+        updated = service.get_job(job.id, 0, True)
         assert updated.progress_percent == 50.0
 
     @pytest.mark.asyncio
@@ -183,7 +183,7 @@ class TestJobManagement:
         """Should update job status."""
         job = service._create_job("/dev/sr0", JobType.READ_ISO)
         service._update_job(job.id, status=JobStatus.RUNNING)
-        updated = service.get_job(job.id)
+        updated = service.get_job(job.id, 0, True)
         assert updated.status == JobStatus.RUNNING
 
     @pytest.mark.asyncio
@@ -191,7 +191,7 @@ class TestJobManagement:
         """Should set completed_at when status is completed."""
         job = service._create_job("/dev/sr0", JobType.READ_ISO)
         service._update_job(job.id, status=JobStatus.COMPLETED)
-        updated = service.get_job(job.id)
+        updated = service.get_job(job.id, 0, True)
         assert updated.completed_at is not None
 
 

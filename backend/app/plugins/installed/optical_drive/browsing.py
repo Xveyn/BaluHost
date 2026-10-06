@@ -6,7 +6,7 @@ import asyncio
 import logging
 import re
 from pathlib import Path
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, List, Optional
 
 from .models import (
     DiscFile,
@@ -195,7 +195,9 @@ class BrowsingMixin:
         self,
         device: str,
         paths: List[str],
-        destination: str
+        destination: str,
+        *,
+        owner_id: Optional[int] = None,
     ) -> OpticalJob:
         """Extract files from a disc to a destination directory.
 
@@ -227,7 +229,8 @@ class BrowsingMixin:
         job = self._create_job(
             device,
             JobType.RIP_TRACK if drive_info.media_type == MediaType.CD_AUDIO else JobType.READ_ISO,
-            output_path=destination
+            output_path=destination,
+            owner_id=owner_id,
         )
 
         async def _do_extract():
@@ -618,7 +621,9 @@ Created for development testing purposes.
         self,
         iso_path: str,
         paths: List[str],
-        destination: str
+        destination: str,
+        *,
+        owner_id: Optional[int] = None,
     ) -> OpticalJob:
         """Extract files from an ISO file.
 
@@ -641,7 +646,8 @@ Created for development testing purposes.
             iso_path,  # Use ISO path as "device"
             JobType.READ_ISO,
             input_path=iso_path,
-            output_path=destination
+            output_path=destination,
+            owner_id=owner_id,
         )
 
         async def _do_extract():

@@ -64,6 +64,7 @@ class OpticalDrivePlugin(PluginBase):
         from fastapi import Depends, HTTPException, status
         from sqlalchemy.orm import Session
         from app.api.deps import get_current_user, get_db
+        from app.services.permissions import is_privileged
 
         from .models import (
             BlankDiscRequest,
@@ -174,7 +175,7 @@ class OpticalDrivePlugin(PluginBase):
             """Copy a data disc to an ISO file."""
             device = f"/dev/{device}" if not device.startswith("/dev/") else device
             try:
-                return await service.read_iso(device, request.output_path)
+                return await service.read_iso(device, request.output_path, owner_id=current_user.id)
             except ValueError as e:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
@@ -188,7 +189,7 @@ class OpticalDrivePlugin(PluginBase):
             """Rip all tracks from an audio CD to WAV files."""
             device = f"/dev/{device}" if not device.startswith("/dev/") else device
             try:
-                return await service.rip_audio_cd(device, request.output_dir)
+                return await service.rip_audio_cd(device, request.output_dir, owner_id=current_user.id)
             except ValueError as e:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
@@ -203,7 +204,9 @@ class OpticalDrivePlugin(PluginBase):
             """Rip a single audio track to a WAV file."""
             device = f"/dev/{device}" if not device.startswith("/dev/") else device
             try:
-                return await service.rip_audio_track(device, track_number, request.output_path)
+                return await service.rip_audio_track(
+                    device, track_number, request.output_path, owner_id=current_user.id
+                )
             except ValueError as e:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
@@ -250,7 +253,9 @@ class OpticalDrivePlugin(PluginBase):
             """Extract files from a disc to a destination directory."""
             device = f"/dev/{device}" if not device.startswith("/dev/") else device
             try:
-                return await service.extract_files(device, request.paths, request.destination)
+                return await service.extract_files(
+                    device, request.paths, request.destination, owner_id=current_user.id
+                )
             except ValueError as e:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
@@ -294,7 +299,9 @@ class OpticalDrivePlugin(PluginBase):
         ) -> OpticalJob:
             """Extract files from an ISO file."""
             try:
-                return await service.extract_from_iso(request.iso_path, request.paths, request.destination)
+                return await service.extract_from_iso(
+                    request.iso_path, request.paths, request.destination, owner_id=current_user.id
+                )
             except ValueError as e:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
@@ -324,7 +331,9 @@ class OpticalDrivePlugin(PluginBase):
             """Burn an ISO image to disc."""
             device = f"/dev/{device}" if not device.startswith("/dev/") else device
             try:
-                return await service.burn_iso(device, request.iso_path, request.speed)
+                return await service.burn_iso(
+                    device, request.iso_path, request.speed, owner_id=current_user.id
+                )
             except ValueError as e:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
@@ -338,7 +347,9 @@ class OpticalDrivePlugin(PluginBase):
             """Burn WAV files as an audio CD."""
             device = f"/dev/{device}" if not device.startswith("/dev/") else device
             try:
-                return await service.burn_audio_cd(device, request.wav_files, request.speed)
+                return await service.burn_audio_cd(
+                    device, request.wav_files, request.speed, owner_id=current_user.id
+                )
             except ValueError as e:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
@@ -352,7 +363,7 @@ class OpticalDrivePlugin(PluginBase):
             """Blank a rewritable disc."""
             device = f"/dev/{device}" if not device.startswith("/dev/") else device
             try:
-                return await service.blank_disc(device, request.mode)
+                return await service.blank_disc(device, request.mode, owner_id=current_user.id)
             except ValueError as e:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
@@ -363,8 +374,8 @@ class OpticalDrivePlugin(PluginBase):
             current_user=Depends(get_current_user),
             service: OpticalDriveService = Depends(get_service),
         ) -> JobListResponse:
-            """Get all active and recent jobs."""
-            jobs = service.get_jobs()
+            """Get the caller's active and recent jobs (all jobs for privileged users)."""
+            jobs = service.get_jobs(current_user.id, is_privileged(current_user))
             return JobListResponse(jobs=jobs, total=len(jobs))
 
         @router.get("/jobs/{job_id}", response_model=OpticalJob)
@@ -374,7 +385,7 @@ class OpticalDrivePlugin(PluginBase):
             service: OpticalDriveService = Depends(get_service),
         ) -> OpticalJob:
             """Get a specific job by ID."""
-            job = service.get_job(job_id)
+            job = service.get_job(job_id, current_user.id, is_privileged(current_user))
             if job is None:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
@@ -389,7 +400,9 @@ class OpticalDrivePlugin(PluginBase):
             service: OpticalDriveService = Depends(get_service),
         ) -> OperationResponse:
             """Cancel a running job."""
-            success = await service.cancel_job(job_id)
+            success = await service.cancel_job(
+                job_id, current_user.id, is_privileged(current_user)
+            )
             if success:
                 return OperationResponse(success=True, message="Job cancelled")
             else:
