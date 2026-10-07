@@ -4,6 +4,8 @@
 
 Real-time upload progress tracking using Server-Sent Events (SSE) to provide live feedback during file uploads.
 
+> **Status (as of #306):** This stream is *best effort* and **per process**. Progress lives in the memory of the worker that created the upload session; production runs several workers and the kernel distributes connections without affinity. A `progress-token` or stream request that lands on another worker answers 404 "Upload session not found". Unlike the WebSocket notifications (`ws_bus`), the manager is not connected to the bus. No client uses the stream today (web library `uploadProgress.ts` removed on 2026-02-09; BaluApp and BaluDeskQT do not call it). The frontend components and integration sections below are **historical**.
+
 ## Architecture
 
 ### Backend Components
@@ -23,7 +25,7 @@ Real-time upload progress tracking using Server-Sent Events (SSE) to provide liv
    - Creates upload sessions before processing files
    - Updates progress during upload processing
 
-### Frontend Components
+### Frontend Components (historical)
 
 1. **Upload Progress Library** (`client/src/lib/uploadProgress.ts`)
    - `UploadProgressStream` - Single file SSE connection
@@ -82,7 +84,7 @@ eventSource.onerror = () => {
 };
 ```
 
-### Frontend Integration
+### Frontend Integration (historical)
 
 #### Using the Hook
 
