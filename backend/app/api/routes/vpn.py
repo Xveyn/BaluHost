@@ -1,5 +1,6 @@
 """API routes for VPN configuration and management."""
 
+import asyncio
 import logging
 from datetime import datetime
 from typing import List, Literal, cast
@@ -103,7 +104,8 @@ async def fetch_config_by_type(
     else:
         # Generate a new per-client WireGuard config
         try:
-            vpn_response = VPNService.create_client_config(
+            vpn_response = await asyncio.to_thread(
+                VPNService.create_client_config,
                 db=db,
                 user_id=current_user.id,
                 device_name=body.device_name,
@@ -159,7 +161,8 @@ async def generate_vpn_config(
     audit_logger = get_audit_logger_db()
 
     try:
-        config = VPNService.create_client_config(
+        config = await asyncio.to_thread(
+            VPNService.create_client_config,
             db=db,
             user_id=current_user.id,
             device_name=config_data.device_name,
@@ -323,7 +326,7 @@ async def delete_vpn_client(
         )
 
     device_name = client.device_name
-    success = VPNService.delete_client(db, client_id)
+    success = await asyncio.to_thread(VPNService.delete_client, db, client_id)
 
     if not success:
         audit_logger.log_vpn_operation(
@@ -375,7 +378,7 @@ async def revoke_vpn_client(
             detail="Not authorized to revoke this VPN client"
         )
     
-    success = VPNService.revoke_client(db, client_id)
+    success = await asyncio.to_thread(VPNService.revoke_client, db, client_id)
     if not success:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -394,7 +397,7 @@ async def sync_server_config(
     """Regenerate and apply WireGuard server config from DB state (admin only)."""
     audit_logger = get_audit_logger_db()
 
-    success, message = VPNService.apply_server_config(db)
+    success, message = await asyncio.to_thread(VPNService.apply_server_config, db)
 
     audit_logger.log_vpn_operation(
         action="vpn_server_config_sync",
@@ -430,7 +433,7 @@ async def sync_server_keys(
     """
     audit_logger = get_audit_logger_db()
 
-    success, message = VPNService.sync_server_keys_from_interface(db)
+    success, message = await asyncio.to_thread(VPNService.sync_server_keys_from_interface, db)
 
     audit_logger.log_vpn_operation(
         action="vpn_server_keys_synced",
@@ -489,7 +492,8 @@ async def regenerate_client_config(
         )
 
     try:
-        config = VPNService.regenerate_client_config(
+        config = await asyncio.to_thread(
+            VPNService.regenerate_client_config,
             db=db,
             client_id=client_id,
             server_public_endpoint=config_data.server_public_endpoint,

@@ -1,4 +1,5 @@
 """Production backend using Git and systemctl."""
+import asyncio
 import json
 import logging
 import re
@@ -98,10 +99,14 @@ class ProdUpdateBackend(UpdateBackend):
         except Exception as e:
             return False, "", str(e)
 
+    async def _run_git_async(self, *args: str) -> tuple[bool, str, str]:
+        """``_run_git`` in a worker thread (git can block for up to 300 s, #302)."""
+        return await asyncio.to_thread(self._run_git, *args)
+
     async def get_current_version(self) -> VersionInfo:
         """Get current version from git tag (preferred) or pyproject.toml (fallback)."""
         # Try exact tag match first — succeeds for pre-release and stable tags
-        exact_ok, exact_tag, _ = self._run_git("describe", "--tags", "--exact-match")
+        exact_ok, exact_tag, _ = await self._run_git_async("describe", "--tags", "--exact-match")
         if exact_ok and exact_tag.strip():
             tag_name = exact_tag.strip()
             version = tag_name.lstrip("v")
@@ -118,11 +123,11 @@ class ProdUpdateBackend(UpdateBackend):
             is_dev_build = True
 
         # Commit metadata
-        success, commit, _ = self._run_git("rev-parse", "HEAD")
+        success, commit, _ = await self._run_git_async("rev-parse", "HEAD")
         if not success:
             commit = "unknown"
 
-        success, date_str, _ = self._run_git("log", "-1", "--format=%cI")
+        success, date_str, _ = await self._run_git_async("log", "-1", "--format=%cI")
         date = datetime.fromisoformat(date_str) if success and date_str else None
 
         return VersionInfo(
@@ -187,7 +192,7 @@ class ProdUpdateBackend(UpdateBackend):
         if callback:
             callback(10, "Fetching from remote...")
 
-        success, _, err = self._run_git("fetch", "--all", "--tags", "--prune")
+        success, _, err = await self._run_git_async("fetch", "--all", "--tags", "--prune")
 
         if callback:
             callback(100, "Fetch complete" if success else f"Fetch failed: {err}")
@@ -245,25 +250,25 @@ class ProdUpdateBackend(UpdateBackend):
             callback(10, "Stashing local changes...")
 
         # Stash any local changes
-        self._run_git("stash", "push", "-m", "pre-update-stash")
+        await self._run_git_async("stash", "push", "-m", "pre-update-stash")
 
         if callback:
             callback(30, f"Checking out {target_commit[:8]}...")
 
         # Checkout the target
-        success, _, err = self._run_git("checkout", target_commit)
+        success, _, err = await self._run_git_async("checkout", target_commit)
         if not success:
             # Try to restore
-            self._run_git("stash", "pop")
+            await self._run_git_async("stash", "pop")
             return False, f"Failed to checkout: {err}"
 
         if callback:
             callback(70, "Pulling latest changes...")
 
         # If on a branch, pull to ensure we're up to date
-        success, branch, _ = self._run_git("rev-parse", "--abbrev-ref", "HEAD")
+        success, branch, _ = await self._run_git_async("rev-parse", "--abbrev-ref", "HEAD")
         if success and branch not in ("HEAD", ""):
-            self._run_git("pull", "--rebase")
+            await self._run_git_async("pull", "--rebase")
 
         if callback:
             callback(100, "Update applied")
@@ -277,7 +282,7 @@ class ProdUpdateBackend(UpdateBackend):
 
         logger.info(f"Rolling back to {commit}")
 
-        success, _, err = self._run_git("checkout", commit)
+        success, _, err = await self._run_git_async("checkout", commit)
         if not success:
             return False, f"Rollback failed: {err}"
 
@@ -416,7 +421,7 @@ class ProdUpdateBackend(UpdateBackend):
     async def get_commit_history(self) -> CommitHistoryResponse:
         """Get full commit history grouped by version tags."""
         # Get all tags sorted by semver
-        success, tags_output, _ = self._run_git("tag", "-l", "--sort=version:refname")
+        success, tags_output, _ = await self._run_git_async("tag", "-l", "--sort=version:refname")
         if not success:
             return CommitHistoryResponse(total_commits=0, groups=[])
 
@@ -431,11 +436,11 @@ class ProdUpdateBackend(UpdateBackend):
         for tag in tags:
             if prev_ref is None:
                 # First tag: all commits up to this tag
-                success, log_output, _ = self._run_git(
+                success, log_output, _ = await self._run_git_async(
                     "log", tag, f"--pretty=format:{log_format}", "--no-merges"
                 )
             else:
-                success, log_output, _ = self._run_git(
+                success, log_output, _ = await self._run_git_async(
                     "log", f"{prev_ref}..{tag}", f"--pretty=format:{log_format}", "--no-merges"
                 )
 
@@ -445,7 +450,7 @@ class ProdUpdateBackend(UpdateBackend):
                 commits = []
 
             # Get tag date
-            ok, date_str, _ = self._run_git("log", "-1", "--format=%aI", tag)
+            ok, date_str, _ = await self._run_git_async("log", "-1", "--format=%aI", tag)
             tag_date = date_str if ok and date_str else None
 
             total += len(commits)
@@ -460,7 +465,7 @@ class ProdUpdateBackend(UpdateBackend):
 
         # Check for unreleased commits (last tag → HEAD)
         if tags:
-            success, log_output, _ = self._run_git(
+            success, log_output, _ = await self._run_git_async(
                 "log", f"{tags[-1]}..HEAD", f"--pretty=format:{log_format}", "--no-merges"
             )
             if success and log_output.strip():
@@ -487,7 +492,7 @@ class ProdUpdateBackend(UpdateBackend):
             raise ValueError(f"Invalid commit hash format: {commit_hash}")
 
         # Get commit info
-        success, info_output, _ = self._run_git(
+        success, info_output, _ = await self._run_git_async(
             "log", "-1", "--pretty=format:%H|%h|%s|%aI|%an", commit_hash
         )
         if not success or not info_output.strip():
@@ -500,15 +505,15 @@ class ProdUpdateBackend(UpdateBackend):
         full_hash, short_hash, subject, date_str, author = parts
 
         # Get diff stat
-        success, stat_output, _ = self._run_git("diff", "--stat", f"{commit_hash}~1", commit_hash)
+        success, stat_output, _ = await self._run_git_async("diff", "--stat", f"{commit_hash}~1", commit_hash)
         stats = stat_output.strip().split("\n")[-1].strip() if success and stat_output.strip() else ""
 
         # Get changed files with status
-        success, ns_output, _ = self._run_git("diff", "--name-status", f"{commit_hash}~1", commit_hash)
+        success, ns_output, _ = await self._run_git_async("diff", "--name-status", f"{commit_hash}~1", commit_hash)
         files: list[DiffFile] = []
         if success and ns_output.strip():
             # Also get numstat for additions/deletions
-            ok_num, numstat_output, _ = self._run_git("diff", "--numstat", f"{commit_hash}~1", commit_hash)
+            ok_num, numstat_output, _ = await self._run_git_async("diff", "--numstat", f"{commit_hash}~1", commit_hash)
             numstat_map: dict[str, tuple[int, int]] = {}
             if ok_num and numstat_output.strip():
                 for ns_line in numstat_output.strip().split("\n"):
@@ -536,7 +541,7 @@ class ProdUpdateBackend(UpdateBackend):
                 ))
 
         # Get raw diff (truncated to 500KB)
-        success, diff_output, _ = self._run_git("diff", f"{commit_hash}~1", commit_hash)
+        success, diff_output, _ = await self._run_git_async("diff", f"{commit_hash}~1", commit_hash)
         diff_text = diff_output if success else ""
         max_diff_size = 500 * 1024
         if len(diff_text) > max_diff_size:

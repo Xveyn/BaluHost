@@ -1803,7 +1803,8 @@ class SleepManagerService:
             # "yes" and "challenge" as capable; "no"/"na" mean not capable.
             try:
                 import subprocess
-                result = subprocess.run(
+                result = await asyncio.to_thread(
+                    subprocess.run,
                     [
                         "busctl", "call", "org.freedesktop.login1",
                         "/org/freedesktop/login1",

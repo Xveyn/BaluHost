@@ -1,6 +1,7 @@
 """
 Linux production backend for sleep mode using real system commands.
 """
+import asyncio
 import json
 import logging
 import shutil
@@ -18,7 +19,15 @@ class LinuxSleepBackend(SleepBackend):
     """Linux production backend using real system commands."""
 
     async def _run_cmd(self, cmd: list[str], timeout: int = 10) -> tuple[bool, str]:
-        """Run a subprocess command safely with list args."""
+        """Run a subprocess command safely with list args.
+
+        Runs in a worker thread: ``subprocess.run`` blocks for up to ``timeout``
+        seconds and must not stall the event loop (#302).
+        """
+        return await asyncio.to_thread(self._run_cmd_sync, cmd, timeout)
+
+    @staticmethod
+    def _run_cmd_sync(cmd: list[str], timeout: int) -> tuple[bool, str]:
         try:
             result = subprocess.run(
                 cmd,
@@ -99,6 +108,10 @@ class LinuxSleepBackend(SleepBackend):
 
     async def get_wol_capability(self) -> list[str]:
         """Check which interfaces support WoL via ethtool."""
+        return await asyncio.to_thread(self._get_wol_capability_sync)
+
+    @staticmethod
+    def _get_wol_capability_sync() -> list[str]:
         interfaces = []
         # Get network interface names
         try:
@@ -130,6 +143,10 @@ class LinuxSleepBackend(SleepBackend):
 
     async def get_data_disk_devices(self) -> list[str]:
         """Get data disk devices excluding the OS disk (same pattern as RAID backend)."""
+        return await asyncio.to_thread(self._get_data_disk_devices_sync)
+
+    @staticmethod
+    def _get_data_disk_devices_sync() -> list[str]:
         try:
             result = subprocess.run(
                 ["lsblk", "-J", "-o", "NAME,TYPE,MOUNTPOINTS"],

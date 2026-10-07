@@ -163,7 +163,8 @@ class UpdateService:
         # In prod, also check if the systemd-run unit is still active
         if isinstance(self.backend, ProdUpdateBackend) and not running:
             try:
-                result = subprocess.run(
+                result = await asyncio.to_thread(
+                    subprocess.run,
                     ["sudo", "systemctl", "is-active", "baluhost-update.service"],
                     capture_output=True, text=True, timeout=5,
                 )
@@ -216,7 +217,9 @@ class UpdateService:
         # a SHA (#216). Resolve before recording, so a failure leaves no row.
         target_commit = target.commit
         if isinstance(self.backend, ProdUpdateBackend) and not target_commit:
-            target_commit = self.backend.resolve_tag_commit(target.tag or "") or ""
+            target_commit = await asyncio.to_thread(
+                self.backend.resolve_tag_commit, target.tag or ""
+            ) or ""
             if not target_commit:
                 return UpdateStartResponse(
                     success=False,
@@ -249,7 +252,8 @@ class UpdateService:
             update.set_progress(5, "Launching update runner...")
             self.db.commit()
 
-            success, error = self.backend.launch_update_script(
+            success, error = await asyncio.to_thread(
+                self.backend.launch_update_script,
                 update_id=update.id,
                 from_commit=current.commit,
                 to_commit=target_commit,
@@ -445,7 +449,7 @@ class UpdateService:
 
         # Prod mode: stop the systemd unit
         if isinstance(self.backend, ProdUpdateBackend):
-            success, error = self.backend.stop_update_service()
+            success, error = await asyncio.to_thread(self.backend.stop_update_service)
             if not success:
                 logger.warning(f"Failed to stop update service: {error}")
 
