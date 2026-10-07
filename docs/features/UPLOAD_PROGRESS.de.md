@@ -4,6 +4,8 @@
 
 Echtzeit-Upload-Fortschrittsverfolgung mittels Server-Sent Events (SSE) für Live-Feedback während Datei-Uploads.
 
+> **Status (Stand #306):** Diese Strecke ist *best effort* und gilt **pro Prozess**. Der Fortschritt liegt im Speicher des Workers, der die Upload-Sitzung angelegt hat; Produktion hat mehrere Worker, und der Kernel verteilt Verbindungen ohne Affinität. Ein `progress-token`- oder Stream-Aufruf, der bei einem anderen Worker landet, antwortet mit 404 „Upload session not found". Anders als die WebSocket-Benachrichtigungen (`ws_bus`) ist der Manager nicht an den Bus angeschlossen. Aktuell nutzt kein Client die Strecke (Web-Bibliothek `uploadProgress.ts` am 2026-02-09 entfernt, BaluApp und BaluDeskQT rufen sie nicht auf). Die Abschnitte zu Frontend-Komponenten und -Integration unten sind **historisch**.
+
 ## Architektur
 
 ### Backend-Komponenten
@@ -23,7 +25,7 @@ Echtzeit-Upload-Fortschrittsverfolgung mittels Server-Sent Events (SSE) für Liv
    - Erstellt Upload-Sitzungen vor der Dateiverarbeitung
    - Aktualisiert den Fortschritt während der Upload-Verarbeitung
 
-### Frontend-Komponenten
+### Frontend-Komponenten (historisch)
 
 1. **Upload Progress Library** (`client/src/lib/uploadProgress.ts`)
    - `UploadProgressStream` - SSE-Verbindung für einzelne Dateien
@@ -82,7 +84,7 @@ eventSource.onerror = () => {
 };
 ```
 
-### Frontend-Integration
+### Frontend-Integration (historisch)
 
 #### Verwendung des Hooks
 

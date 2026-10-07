@@ -1,4 +1,10 @@
-"""Upload progress SSE endpoint with scoped token auth."""
+"""Upload progress SSE endpoint with scoped token auth.
+
+Best effort and per process: the upload session lives only in the worker that
+created it (see ``services/upload_progress``), so ``progress-token`` and the
+stream answer 404 when a different worker handles the request. No known client
+uses these routes (#306).
+"""
 import asyncio
 import json
 import logging

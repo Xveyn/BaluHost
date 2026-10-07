@@ -1,4 +1,18 @@
-"""Upload progress tracking service using Server-Sent Events (SSE)."""
+"""Upload progress tracking service using Server-Sent Events (SSE).
+
+Per-process state: ``_progress`` and ``_listeners`` live in the memory of the
+worker that created the session. Production runs several API processes, and
+unlike the WebSocket broadcasts (``ws_bus``, #685) this manager is not
+connected to the bus. A progress-token or SSE request that lands on another
+worker than the one holding the session answers 404 "Upload session not
+found", and updates made on one worker never reach a listener on another.
+
+No client uses this stream today: the web client library was removed on
+2026-02-09 (e4153eff), and BaluApp and BaluDeskQT do not call it. If a client
+needs it again, either make it cross-process (publish progress over the bus,
+derive the initial state from the chunked-upload session in the database) or
+poll instead (#306).
+"""
 from __future__ import annotations
 
 import asyncio
