@@ -1,6 +1,7 @@
 """
 Linux hardware backend for fan control using hwmon sysfs.
 """
+import asyncio
 import errno
 import getpass
 import logging
@@ -807,7 +808,8 @@ class LinuxFanControlBackend(FanControlBackend):
             # Fehlende Rechte: sudo-tee-Fallback. -n, damit ein fehlender
             # sudoers-Eintrag sofort scheitert statt in den Timeout zu laufen.
             try:
-                result = subprocess.run(
+                result = await asyncio.to_thread(
+                    subprocess.run,
                     ["sudo", "-n", "tee", str(path)],
                     input=value.encode(),
                     capture_output=True,

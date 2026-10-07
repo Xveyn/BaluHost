@@ -1,3 +1,4 @@
+import asyncio
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
 from typing import Any
 from pydantic import BaseModel
@@ -346,7 +347,9 @@ async def trigger_smart_test(
 ) -> dict:
     """Trigger a SMART self-test on a given device (admin only)."""
     try:
-        msg = smart_service.run_smart_self_test(payload.device, payload.type)
+        msg = await asyncio.to_thread(
+            smart_service.run_smart_self_test, payload.device, payload.type
+        )
         return {"message": msg}
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
