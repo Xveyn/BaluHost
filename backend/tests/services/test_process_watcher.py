@@ -98,3 +98,39 @@ async def test_watcher_registers_then_releases_after_two_absent_ticks(monkeypatc
     await mgr._watch_tick()
     assert ("unregister", "game-session") in events
     assert mgr._game_demand_active is False
+
+
+@pytest.mark.asyncio
+async def test_watch_tick_scans_processes_off_the_event_loop(monkeypatch):
+    """#788: der psutil-Scan (~46 ms bei ~600 Prozessen) darf nicht im Loop-Thread laufen.
+
+    Auf dem primaeren Worker lief er alle 2 s direkt in `_watch_tick` und hielt
+    den Event-Loop jedes Mal an -- der dauerhafte ~50-ms-`loop_lag_p95`, den die
+    Concurrency-Sonde nur dort zeigt.
+    """
+    import threading
+
+    loop_thread = threading.get_ident()
+    seen: dict[str, int] = {}
+
+    mgr = PowerManagerService()
+    mgr._primary = True
+    mgr._watcher_absent_ticks = 0
+    mgr._game_demand_active = False
+    mgr._boost_max_override = None
+
+    def rules():
+        seen["rules"] = threading.get_ident()
+        return [{"kind": "game_session", "enabled": True, "pattern": None, "target_max_mhz": None}]
+
+    def snapshot():
+        seen["snapshot"] = threading.get_ident()
+        return []
+
+    monkeypatch.setattr(mgr, "_active_boost_rules", rules)
+    monkeypatch.setattr(pw, "snapshot_processes", snapshot)
+
+    await mgr._watch_tick()
+
+    assert seen["snapshot"] != loop_thread, "snapshot_processes lief im Event-Loop-Thread"
+    assert seen["rules"] != loop_thread, "_active_boost_rules lief im Event-Loop-Thread"

@@ -863,7 +863,10 @@ class PowerManagerService:
     async def _watch_tick(self) -> None:
         """One enforcement tick: check running processes against boost rules and update game-session demand."""
         from app.services.power import process_watcher
-        rules = self._active_boost_rules()
+        # Beides ist blockierende I/O (DB-Lesen, ~600x /proc/<pid>/cmdline via
+        # psutil, ~46 ms) und lief hier alle 2 s direkt im Event-Loop -- der
+        # dauerhafte ~50-ms-Lag des primaeren Workers (#788).
+        rules = await asyncio.to_thread(self._active_boost_rules)
         if not rules:
             if self._game_demand_active:
                 await self.unregister_demand("game-session")
@@ -872,7 +875,7 @@ class PowerManagerService:
             self._watcher_absent_ticks = 0
             return
 
-        procs = process_watcher.snapshot_processes()
+        procs = await asyncio.to_thread(process_watcher.snapshot_processes)
         hit, target = process_watcher.match_boost_rules(procs, rules)
 
         if hit:
