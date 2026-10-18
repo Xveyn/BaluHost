@@ -707,7 +707,7 @@ async def _startup(app: FastAPI) -> None:
                 hostname=settings.mdns_hostname,
                 webdav_ssl_enabled=settings.webdav_ssl_enabled,
             )
-            _discovery_service.start()
+            await _discovery_service.async_start()
         except Exception as e:
             logger.warning(f"Network discovery could not start: {e}")
     else:
@@ -958,7 +958,7 @@ async def _shutdown() -> None:
 
     # Stop network discovery
     if _discovery_service:
-        _discovery_service.stop()
+        await _discovery_service.async_stop()
 
     # Shutdown plugin system
     if _plugin_manager:

@@ -4,6 +4,7 @@ Allows automatic discovery of BaluHost servers in the local network
 """
 
 from zeroconf import ServiceInfo, Zeroconf
+import asyncio
 import socket
 import logging
 from typing import Optional
@@ -39,8 +40,24 @@ class NetworkDiscoveryService:
             logger.warning(f"Could not determine local IP: {e}")
             return "127.0.0.1"
     
+    async def async_start(self) -> None:
+        """`start()` ausserhalb des Event-Loops (#714).
+
+        zeroconf's synchrones `register_service()` wirft `EventLoopBlocked`, wenn
+        im aufrufenden Thread ein Event-Loop laeuft. Aus dem Lifespan und aus der
+        Dienststeuerung heraus ist das immer der Fall -- dort diese Methode nehmen.
+        """
+        await asyncio.to_thread(self.start)
+
+    async def async_stop(self) -> None:
+        """`stop()` ausserhalb des Event-Loops, aus demselben Grund wie `async_start()`."""
+        await asyncio.to_thread(self.stop)
+
     def start(self):
         """Start broadcasting the service via mDNS.
+
+        Blockierend und nur aus einem Thread ohne laufenden Event-Loop aufrufbar;
+        aus async-Code `async_start()` verwenden.
 
         In dev mode nothing is announced unless MDNS_FORCE_ENABLED is set: a dev
         instance would otherwise publish the same ``baluhost.local`` as the
@@ -122,11 +139,11 @@ class NetworkDiscoveryService:
             logger.info("  - Discovery enabled for local network")
             
         except Exception as e:
-            logger.error(f"Failed to start mDNS service: {e}")
+            logger.error("Failed to start mDNS service: %r", e)
             logger.warning("Network discovery will not be available")
     
     def stop(self):
-        """Stop broadcasting the service."""
+        """Stop broadcasting the service (blocking; async code uses `async_stop()`)."""
         if self.zeroconf:
             try:
                 if self.service_info:
@@ -138,7 +155,7 @@ class NetworkDiscoveryService:
                 self.zeroconf.close()
                 logger.info("mDNS service stopped")
             except Exception as e:
-                logger.error(f"Error stopping mDNS service: {e}")
+                logger.error("Error stopping mDNS service: %r", e)
 
     def get_status(self) -> dict:
         """
