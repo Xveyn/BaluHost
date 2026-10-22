@@ -133,6 +133,52 @@ Both affect only the companion app — not the web frontend and not the backend.
 
 ---
 
+## postcss-selector-parser — quadratic parse time (Tailwind 3 pin)
+
+| | |
+|---|---|
+| **Status** | `blocked` |
+| **Recorded** | 2026-10-22 |
+| **Package** | `postcss-selector-parser`, transitively via `tailwindcss`, `postcss-nested` and `@tailwindcss/typography` |
+| **Affected** | `< 7.1.6` — the lockfile holds 6.1.4 and 6.0.10 |
+| **Alert** | Dependabot #102 (GHSA-rj75-hqrm-r3gf), open |
+
+**Why blocked.** The patched version is 7.1.6, a major above everything we have,
+and every consumer pins the 6.x line:
+
+- `tailwindcss` 3.4.17 requires `^6.1.2`
+- `postcss-nested` 6.2.0 requires `^6.1.1`
+- `@tailwindcss/typography` 0.5.19 requires exactly `6.0.10`
+
+Dependabot therefore finds no ordinary bump, and none of the three can be moved by
+a lockfile edit. An npm `overrides` entry to 7.x would force the Tailwind build
+onto a parser API it was not written against — a risk to the whole stylesheet
+build for an advisory that does not reach production.
+
+Exposure is low: the parser runs at build time only (the lockfile marks it
+`dev`), over selectors that **we** and our CSS dependencies write. A flat selector
+of roughly 400 KB is needed to occupy a thread for tens of seconds. Nothing is
+shipped and no user input reaches it. The realistic target is the CI sandbox
+runner, and PR code already sits behind the `ci-tests` approval gate.
+
+**What the fix would cost.** Tailwind 3 → 4, which replaces the PostCSS plugin
+setup and the `tailwind.config` file — a migration of the whole frontend styling
+pipeline, not a dependency bump.
+
+> **Re-evaluation condition.** This falls as soon as **any** of the following
+> becomes true:
+> 1. `tailwindcss`, `postcss-nested` and `@tailwindcss/typography` all accept
+>    `postcss-selector-parser >= 7.1.6` within their declared ranges — then it is an
+>    ordinary bump,
+> 2. Tailwind 4 is on the table for other reasons — fix it as a side effect, or
+> 3. the parser starts running on input we do not write (for example selectors
+>    taken from user content at runtime) — then the exposure assessment is void and
+>    the override becomes worth its risk.
+>
+> The alert stays open in GitHub on purpose: it is deferred, not inapplicable.
+
+---
+
 ## Adding an entry
 
 1. Dismiss the finding in GitHub (where applicable) with a **short** justification
