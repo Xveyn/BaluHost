@@ -221,6 +221,112 @@ class TestOnPrepareForSleep:
         mock_release.assert_called_once()
 
 
+class TestOffLoop:
+    """Die blockierenden Schritte laufen im Thread, die Reihenfolge bleibt (#790).
+
+    logind haelt den Suspend, solange das Delay-Lock steht. Der Alarm muss
+    gesetzt sein, *bevor* das Lock faellt -- auch wenn `rtcwake` traege ist.
+    """
+
+    @pytest.mark.asyncio
+    async def test_alarm_is_set_before_lock_is_released_and_off_loop(self):
+        import threading
+        import time
+
+        loop_thread = threading.get_ident()
+        events: list[str] = []
+        threads: dict[str, int] = {}
+
+        guard = CoreUptimeRtcGuard(
+            next_core_start_provider=lambda: _dt.datetime(2026, 5, 6, 8, 0),
+            is_baluhost_suspend_in_progress=lambda: False,
+        )
+
+        def slow_alarm(wake_at):
+            threads["alarm"] = threading.get_ident()
+            time.sleep(0.15)  # traeger rtcwake
+            events.append("alarm")
+            return True
+
+        def release():
+            events.append("release")
+
+        ticks = 0
+
+        async def ticker():
+            nonlocal ticks
+            while True:
+                await asyncio.sleep(0.01)
+                ticks += 1
+
+        t = asyncio.create_task(ticker())
+        with patch.object(guard, "_set_rtc_alarm", side_effect=slow_alarm), \
+             patch.object(guard, "_release_delay_inhibitor", side_effect=release):
+            await guard.on_prepare_for_sleep(True)
+        t.cancel()
+
+        assert events == ["alarm", "release"]
+        assert threads["alarm"] != loop_thread, "rtcwake lief im Event-Loop-Thread"
+        assert ticks >= 5, "Event-Loop stand waehrend rtcwake still"
+
+    @pytest.mark.asyncio
+    async def test_acquire_settle_window_does_not_stall_the_loop(self):
+        import threading
+        import time
+
+        guard = _build_guard()
+        seen: list[int] = []
+
+        def slow_acquire():
+            seen.append(threading.get_ident())
+            time.sleep(0.15)  # entspricht dem 0,2-s-Settle-Fenster
+            return True
+
+        ticks = 0
+
+        async def ticker():
+            nonlocal ticks
+            while True:
+                await asyncio.sleep(0.01)
+                ticks += 1
+
+        t = asyncio.create_task(ticker())
+        with patch.object(guard, "_acquire_delay_inhibitor", side_effect=slow_acquire):
+            await guard.on_prepare_for_sleep(False)
+        t.cancel()
+
+        assert seen and seen[0] != threading.get_ident()
+        assert ticks >= 5
+
+    @pytest.mark.asyncio
+    async def test_resume_and_suspend_do_not_interleave_on_the_inhibitor(self):
+        """Resume (acquire im Thread) und gleich folgender Suspend (release)
+        teilen sich `_delay_proc`; ohne Serialisierung ueberholt das release
+        das noch laufende acquire und das Lock bliebe stehen."""
+        import time
+
+        events: list[str] = []
+        guard = _build_guard()
+
+        def acquire():
+            events.append("acquire-start")
+            time.sleep(0.1)
+            events.append("acquire-end")
+            return True
+
+        def release():
+            events.append("release")
+
+        with patch.object(guard, "_acquire_delay_inhibitor", side_effect=acquire), \
+             patch.object(guard, "_release_delay_inhibitor", side_effect=release):
+            await asyncio.gather(
+                guard.on_prepare_for_sleep(False),
+                guard.on_prepare_for_sleep(True),
+            )
+
+        assert events == ["acquire-start", "acquire-end", "release"]
+
+
 class TestSetRtcAlarm:
     """Subprocess invocation for `sudo rtcwake -m no -t <ts>`."""
 

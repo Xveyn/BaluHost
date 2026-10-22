@@ -652,7 +652,7 @@ async def _startup(app: FastAPI) -> None:
         recovered = recover_stale_benchmarks(bench_db)
         if recovered:
             logger.info("Recovered %d stale benchmark(s) from previous run", recovered)
-    kill_orphan_fio_processes()
+    await asyncio.to_thread(kill_orphan_fio_processes)
 
     # Ensure home directories for all users and Shared folder
     ensure_user_home_directories()
