@@ -142,6 +142,52 @@ async def test_prod_update_git_helper_still_honours_instance_patches(tmp_path, m
     assert await backend._run_git_async("a", "b") == (True, "a-b", "")
 
 
+@pytest.mark.asyncio
+async def test_shutdown_benchmarks_kills_orphan_fio_off_loop(monkeypatch):
+    """`pgrep` im Shutdown-Pfad (#790) -- sonst haengt ein Stall den Loop."""
+    from app.services.benchmark import lifecycle
+
+    monkeypatch.setattr(lifecycle.platform, "system", lambda: "Linux")
+    rec = _Recorder(returncode=1)  # pgrep: keine fio-Prozesse
+    monkeypatch.setattr(subprocess, "run", rec)
+    monkeypatch.setattr(lifecycle, "recover_stale_benchmarks", lambda db: 0)
+
+    await lifecycle.shutdown_benchmarks(MagicMock())
+
+    rec.assert_off_loop()
+
+
+def test_pgrep_for_orphan_fio_has_a_timeout(monkeypatch):
+    from app.services.benchmark import lifecycle
+
+    monkeypatch.setattr(lifecycle.platform, "system", lambda: "Linux")
+    seen = {}
+
+    def fake_run(cmd, **kwargs):
+        seen.update(kwargs)
+        return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    lifecycle.kill_orphan_fio_processes()
+
+    assert seen.get("timeout"), "pgrep ohne timeout kann den Aufrufer festhalten"
+
+
+def test_pgrep_timeout_is_swallowed(monkeypatch):
+    """Ein haengendes pgrep darf Start/Shutdown nicht abbrechen."""
+    from app.services.benchmark import lifecycle
+
+    monkeypatch.setattr(lifecycle.platform, "system", lambda: "Linux")
+
+    def hang(cmd, **kwargs):
+        raise subprocess.TimeoutExpired(cmd, kwargs["timeout"])
+
+    monkeypatch.setattr(subprocess, "run", hang)
+
+    lifecycle.kill_orphan_fio_processes()  # darf nicht werfen
+
+
 # ---------------------------------------------------------------------------
 # Statische Waechter
 # ---------------------------------------------------------------------------
@@ -204,6 +250,47 @@ _VPN_SUBPROCESS_METHODS = {
     "apply_server_config",
     "sync_server_keys_from_interface",
 }
+
+
+# Sync-Helfer, die intern subprocess aufrufen. Der AST-Waechter oben sieht
+# nur `subprocess.*` direkt in einer `async def`; ein Aufruf ueber diese
+# Helfer (#790) faellt dort durch. Datei -> Namen, die in einer `async def`
+# nur ueber `asyncio.to_thread(...)` erreicht werden duerfen.
+_SYNC_SUBPROCESS_HELPERS = {
+    "services/power/core_uptime_rtc_guard.py": {
+        "_set_rtc_alarm",
+        "_acquire_delay_inhibitor",
+        "_release_delay_inhibitor",
+    },
+    "services/benchmark/lifecycle.py": {"kill_orphan_fio_processes"},
+    "core/lifespan.py": {"kill_orphan_fio_processes"},
+}
+
+
+def _direct_helper_calls(rel: str, names: set[str]) -> list[str]:
+    """Direktaufrufe `name(...)` / `self.name(...)` im Koerper einer async def.
+
+    `asyncio.to_thread(self.name, ...)` uebergibt den Helfer nur als Wert und
+    ist deshalb kein Treffer.
+    """
+    tree = ast.parse((APP_DIR / rel).read_text(encoding="utf-8"))
+    found = []
+    for fn in ast.walk(tree):
+        if not isinstance(fn, ast.AsyncFunctionDef):
+            continue
+        for node in ast.walk(fn):
+            if not isinstance(node, ast.Call):
+                continue
+            f = node.func
+            name = f.attr if isinstance(f, ast.Attribute) else getattr(f, "id", None)
+            if name in names:
+                found.append(f"{rel}:{node.lineno} {fn.name} -> {name}")
+    return found
+
+
+@pytest.mark.parametrize("rel", sorted(_SYNC_SUBPROCESS_HELPERS))
+def test_sync_subprocess_helpers_not_called_directly_from_async_def(rel):
+    assert _direct_helper_calls(rel, _SYNC_SUBPROCESS_HELPERS[rel]) == []
 
 
 def test_vpn_routes_call_subprocess_backed_service_methods_via_to_thread():

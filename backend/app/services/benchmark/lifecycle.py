@@ -62,6 +62,7 @@ def kill_orphan_fio_processes() -> None:
             ["pgrep", "-x", "fio"],
             capture_output=True,
             text=True,
+            timeout=5,
         )
         if result.returncode != 0:
             return  # No fio processes found
@@ -97,7 +98,7 @@ async def shutdown_benchmarks(db: Session) -> None:
     recover_stale_benchmarks(db)
 
     # Kill orphan fio processes
-    kill_orphan_fio_processes()
+    await asyncio.to_thread(kill_orphan_fio_processes)
 
     # Clear tracking dicts
     _active_benchmarks.clear()

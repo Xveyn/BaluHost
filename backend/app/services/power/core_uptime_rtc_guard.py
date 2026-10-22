@@ -74,6 +74,12 @@ class CoreUptimeRtcGuard:
         self._baluhost_in_progress = is_baluhost_suspend_in_progress
         self._on_arm_failed = on_arm_failed
         self._delay_proc: Optional[subprocess.Popen] = None
+        # `_acquire_delay_inhibitor` / `_release_delay_inhibitor` run in a
+        # worker thread (they sleep and wait on a subprocess) and both mutate
+        # `_delay_proc`. Without serialising them, a resume immediately
+        # followed by a suspend would let the release overtake the acquire and
+        # leave the lock held (#790).
+        self._inhibitor_lock = asyncio.Lock()
         self._binary_missing_logged = False
         self._dbus_bus: Optional["MessageBus"] = None
         self._dbus_iface = None
@@ -170,6 +176,16 @@ class CoreUptimeRtcGuard:
         logger.info("Core uptime RTC guard: delay inhibitor released")
         self._delay_proc = None
 
+    async def _acquire_delay_inhibitor_async(self) -> bool:
+        """Acquire off the event loop — the settle window alone sleeps 0.2 s."""
+        async with self._inhibitor_lock:
+            return await asyncio.to_thread(self._acquire_delay_inhibitor)
+
+    async def _release_delay_inhibitor_async(self) -> None:
+        """Release off the event loop — terminate() can wait up to 3 s."""
+        async with self._inhibitor_lock:
+            await asyncio.to_thread(self._release_delay_inhibitor)
+
     # --- signal handler ---
 
     async def on_prepare_for_sleep(self, start: bool) -> None:
@@ -180,7 +196,7 @@ class CoreUptimeRtcGuard:
         start=False → system has just resumed. Re-acquire the delay lock.
         """
         if not start:
-            self._acquire_delay_inhibitor()
+            await self._acquire_delay_inhibitor_async()
             return
 
         # start=True: BaluHost-initiated suspends already wrote rtcwake themselves.
@@ -202,7 +218,9 @@ class CoreUptimeRtcGuard:
 
             armed = False
             try:
-                armed = bool(self._set_rtc_alarm(next_start))
+                # Awaited before the `finally` below releases the delay lock, so
+                # the alarm is still set before logind may proceed.
+                armed = bool(await asyncio.to_thread(self._set_rtc_alarm, next_start))
             except Exception as exc:
                 # Failure is non-fatal — system still suspends, but won't auto-wake.
                 logger.warning(
@@ -218,7 +236,7 @@ class CoreUptimeRtcGuard:
                     logger.warning("RTC arm-failure handler failed: %s", exc)
         finally:
             # Always release the delay lock so logind doesn't time out on us.
-            self._release_delay_inhibitor()
+            await self._release_delay_inhibitor_async()
 
     # --- rtcwake invocation ---
 
@@ -254,7 +272,7 @@ class CoreUptimeRtcGuard:
         Failures (no D-Bus, no systemd-inhibit, polkit denial) are logged but
         do not raise — the guard simply degrades to no-op.
         """
-        self._acquire_delay_inhibitor()
+        await self._acquire_delay_inhibitor_async()
 
         if not _DBUS_AVAILABLE:
             logger.info("dbus-next not available — RTC guard signal listener disabled")
@@ -292,7 +310,7 @@ class CoreUptimeRtcGuard:
 
     async def stop(self) -> None:
         """Release the delay inhibitor and disconnect from D-Bus."""
-        self._release_delay_inhibitor()
+        await self._release_delay_inhibitor_async()
         if self._dbus_bus is not None:
             try:
                 self._dbus_bus.disconnect()
