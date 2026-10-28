@@ -197,6 +197,29 @@ class OpticalDriveService(ReadingMixin, BurningMixin, BrowsingMixin):
         except (ValueError, OSError):
             return False
 
+    @staticmethod
+    def checked_members(paths: List[str]) -> List[str]:
+        """Member paths *inside* a disc or ISO, without the leading slash.
+
+        These go to ``7z`` as plain arguments. ``validate_path`` guards where the
+        output lands, not what is asked of the archive, so a member such as
+        ``-o/etc`` (a switch) or ``@/etc/passwd`` (a list file) must never get
+        there. The commands put ``--`` in front of them as well; this is the
+        second barrier, and it also keeps ``..`` out.
+        """
+        checked = []
+        for raw in paths:
+            member = raw.lstrip("/")
+            if (
+                not member
+                or "\x00" in member
+                or member[0] in "-@"
+                or ".." in member.split("/")
+            ):
+                raise ValueError(f"Invalid path inside the image: {raw!r}")
+            checked.append(member)
+        return checked
+
     def validate_source_file(self, path: str) -> bool:
         """Validate that a source file exists and is within allowed paths.
 

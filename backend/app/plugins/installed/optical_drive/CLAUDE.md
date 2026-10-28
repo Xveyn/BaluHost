@@ -92,6 +92,14 @@ barrier for everybody, and uses `Path.is_relative_to()` (a plain string prefix l
 same call.** Tests: `tests/plugins/test_optical_drive_paths.py` (the helper),
 `test_optical_drive_route_jail.py` (the routes).
 
+**Member paths are not covered by the jail.** `paths` of `extract` / `iso/extract`
+and the `path` of `iso/preview` name entries *inside* the archive and reach `7z`
+as plain arguments. `OpticalDriveService.checked_members()` rejects an empty
+member, NUL, `..` components and a leading `-` or `@` (a switch such as `-o…`
+that would override the jailed output dir, or a list file), and every `7z`
+command puts `--` in front of the members. Both are needed — keep them when
+touching these commands. Test: `tests/plugins/test_optical_drive_member_paths.py`.
+
 The UI default `/storage/extracted` (`ui/bundle.js`) is outside a normal user's
 home, so extraction with the default is refused for them with 403 until they type a
 path of their own — the bundle was deliberately left unchanged.

@@ -215,6 +215,7 @@ class BrowsingMixin:
             raise ValueError(f"Invalid device path: {device}")
         if not self.validate_path(destination):
             raise ValueError(f"Destination not in allowed storage: {destination}")
+        paths = self.checked_members(paths)
 
         # Ensure destination exists
         Path(destination).mkdir(parents=True, exist_ok=True)
@@ -337,7 +338,9 @@ class BrowsingMixin:
             return
 
         # Build 7z command to extract specific files
-        cmd = ["7z", "x", device, f"-o{destination}", "-y"]
+        # "--" ends option parsing: what follows is a member name, never a switch
+        # or an @listfile. `paths` was already run through checked_members().
+        cmd = ["7z", "x", device, f"-o{destination}", "-y", "--"]
         for path in paths:
             # 7z uses paths without leading slash
             cmd.append(path.lstrip("/"))
@@ -639,6 +642,7 @@ Created for development testing purposes.
             raise ValueError(f"ISO file not found or not in allowed storage: {iso_path}")
         if not self.validate_path(destination):
             raise ValueError(f"Destination not in allowed storage: {destination}")
+        paths = self.checked_members(paths)
 
         Path(destination).mkdir(parents=True, exist_ok=True)
 
@@ -665,7 +669,7 @@ Created for development testing purposes.
                         output_path.write_bytes(b"SIMULATED ISO EXTRACT" * 10)
                 else:
                     # Use 7z to extract
-                    cmd = ["7z", "x", iso_path, f"-o{destination}", "-y"]
+                    cmd = ["7z", "x", iso_path, f"-o{destination}", "-y", "--"]
                     for path in paths:
                         cmd.append(path.lstrip("/"))
 
@@ -722,7 +726,8 @@ Created for development testing purposes.
         if not self.validate_source_file(iso_path):
             raise ValueError(f"ISO file not found or not in allowed storage: {iso_path}")
 
-        file_path = "/" + file_path.strip("/")
+        (member,) = self.checked_members([file_path])
+        file_path = "/" + member
         name = Path(file_path).name.lower()
 
         # Determine content type
@@ -745,7 +750,7 @@ Created for development testing purposes.
 
         # Use 7z to extract to stdout
         ret, stdout, stderr = await self._run_command(
-            ["7z", "e", iso_path, "-so", file_path.lstrip("/")],
+            ["7z", "e", iso_path, "-so", "--", file_path.lstrip("/")],
             timeout=30
         )
 
