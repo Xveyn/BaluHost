@@ -193,10 +193,7 @@ class OpticalDriveService(ReadingMixin, BurningMixin, BrowsingMixin):
 
         try:
             resolved = Path(path).resolve()
-            return any(
-                str(resolved).startswith(str(root))
-                for root in allowed_roots
-            )
+            return any(resolved.is_relative_to(root) for root in allowed_roots)
         except (ValueError, OSError):
             return False
 
