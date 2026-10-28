@@ -488,7 +488,7 @@ async def test_schedule_loop_calls_reconcile_inhibitor_each_tick():
 
     reconcile_calls = []
 
-    def fake_reconcile(c, in_core):
+    def fake_reconcile(c, in_core, gaming_active=None):
         reconcile_calls.append((c, in_core))
 
     svc._reconcile_sleep_inhibitor = fake_reconcile
