@@ -328,7 +328,12 @@ class SleepManagerService:
             logger.warning("Failed to load core uptime windows: %s", e)
             return False, []
 
-    def _reconcile_sleep_inhibitor(self, config, in_core: bool) -> None:
+    def _reconcile_sleep_inhibitor(
+        self,
+        config,
+        in_core: bool,
+        gaming_active: Optional[bool] = None,
+    ) -> None:
         """Converge the logind block-sleep inhibitor to the desired state.
 
         The inhibitor is held while ANY of these is in effect: an active
@@ -346,11 +351,16 @@ class SleepManagerService:
             in_core: Whether we are currently inside a core-uptime window.
                      Caller passes the already-computed value to avoid
                      re-querying the DB on every tick.
+            gaming_active: Result of an already-run gaming check. Async
+                     callers pass the value from `_is_gaming_active_async`
+                     so the `/proc` scan stays off the event loop; None
+                     (sync callers) scans here.
         """
         core_active = bool(in_core)
         aa_active = self._is_always_awake(config)
         presence_active = self._is_user_present(config)
-        gaming_active = self._is_gaming_active(config)
+        if gaming_active is None:
+            gaming_active = self._is_gaming_active(config)
         should_hold = core_active or aa_active or presence_active or gaming_active
 
         if not should_hold:
@@ -558,6 +568,15 @@ class SleepManagerService:
             logger.warning("Gaming check failed (failing open toward suspend): %s", e)
             return False
 
+    async def _is_gaming_active_async(self, config) -> bool:
+        """`_is_gaming_active` for coroutines: the scan runs in a worker thread.
+
+        The game detector reads `/proc/<pid>/cmdline` for every process
+        (~45 ms on the production box), which stalled the event loop once per
+        schedule tick (#797). The check only reads, so it is thread-safe.
+        """
+        return await asyncio.to_thread(self._is_gaming_active, config)
+
     def _foreign_inhibitor(self, kind: str):
         """A third-party logind block inhibitor covering *kind*, or None.
 
@@ -607,7 +626,7 @@ class SleepManagerService:
 
                 # Soft sleep locks the CPU to the IDLE profile — the last
                 # thing a running game needs.
-                if self._is_gaming_active(config):
+                if await self._is_gaming_active_async(config):
                     self._consecutive_idle_checks = 0
                     self._idle_seconds = 0.0
                     continue
@@ -705,7 +724,10 @@ class SleepManagerService:
                 # every tick so a crashed inhibitor subprocess gets re-acquired,
                 # a master-toggle-off promptly releases, and Always-Awake also
                 # blocks third-party suspends.
-                self._reconcile_sleep_inhibitor(config, in_core=in_core)
+                gaming_active = await self._is_gaming_active_async(config)
+                self._reconcile_sleep_inhibitor(
+                    config, in_core=in_core, gaming_active=gaming_active,
+                )
 
                 # Suspend-on-exit: arm on the falling edge of an active window,
                 # fire a true suspend once the system is idle and unattended.
@@ -727,7 +749,7 @@ class SleepManagerService:
                     and config is not None
                     and not self._is_always_awake(config)
                     and not self._is_user_present(config)
-                    and not self._is_gaming_active(config)
+                    and not gaming_active
                     and self._foreign_inhibitor("sleep") is None
                     and self._is_system_idle(config, self._get_activity_metrics())
                 ):
@@ -770,7 +792,7 @@ class SleepManagerService:
                     and config is not None
                     and not self._is_always_awake(config)
                     and not self._is_user_present(config)
-                    and not self._is_gaming_active(config)
+                    and not gaming_active
                     and self._foreign_inhibitor("sleep") is None
                     and self._is_system_idle(config, self._get_activity_metrics())
                 ):
