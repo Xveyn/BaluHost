@@ -10,7 +10,6 @@ applies to everybody as the second barrier.
 import logging
 import os
 from pathlib import PurePosixPath
-from typing import Optional
 
 from fastapi import HTTPException, status
 
