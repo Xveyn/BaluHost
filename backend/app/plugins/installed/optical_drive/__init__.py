@@ -66,6 +66,8 @@ class OpticalDrivePlugin(PluginBase):
         from app.api.deps import get_current_user, get_db
         from app.services.permissions import is_privileged
 
+        from .paths import jail_user_path
+
         from .models import (
             BlankDiscRequest,
             BlankMediaInfo,
@@ -171,11 +173,15 @@ class OpticalDrivePlugin(PluginBase):
             request: ReadIsoRequest,
             current_user=Depends(get_current_user),
             service: OpticalDriveService = Depends(get_service),
+            db: Session = Depends(get_db),
         ) -> OpticalJob:
             """Copy a data disc to an ISO file."""
             device = f"/dev/{device}" if not device.startswith("/dev/") else device
+            output_path = jail_user_path(
+                request.output_path, current_user, db, write=True, action="optical_drive_read_iso"
+            )
             try:
-                return await service.read_iso(device, request.output_path, owner_id=current_user.id)
+                return await service.read_iso(device, output_path, owner_id=current_user.id)
             except ValueError as e:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
@@ -185,11 +191,15 @@ class OpticalDrivePlugin(PluginBase):
             request: RipAudioRequest,
             current_user=Depends(get_current_user),
             service: OpticalDriveService = Depends(get_service),
+            db: Session = Depends(get_db),
         ) -> OpticalJob:
             """Rip all tracks from an audio CD to WAV files."""
             device = f"/dev/{device}" if not device.startswith("/dev/") else device
+            output_dir = jail_user_path(
+                request.output_dir, current_user, db, write=True, action="optical_drive_rip_audio"
+            )
             try:
-                return await service.rip_audio_cd(device, request.output_dir, owner_id=current_user.id)
+                return await service.rip_audio_cd(device, output_dir, owner_id=current_user.id)
             except ValueError as e:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
@@ -200,12 +210,16 @@ class OpticalDrivePlugin(PluginBase):
             request: RipTrackRequest,
             current_user=Depends(get_current_user),
             service: OpticalDriveService = Depends(get_service),
+            db: Session = Depends(get_db),
         ) -> OpticalJob:
             """Rip a single audio track to a WAV file."""
             device = f"/dev/{device}" if not device.startswith("/dev/") else device
+            output_path = jail_user_path(
+                request.output_path, current_user, db, write=True, action="optical_drive_rip_track"
+            )
             try:
                 return await service.rip_audio_track(
-                    device, track_number, request.output_path, owner_id=current_user.id
+                    device, track_number, output_path, owner_id=current_user.id
                 )
             except ValueError as e:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
@@ -249,12 +263,16 @@ class OpticalDrivePlugin(PluginBase):
             request: ExtractFilesRequest,
             current_user=Depends(get_current_user),
             service: OpticalDriveService = Depends(get_service),
+            db: Session = Depends(get_db),
         ) -> OpticalJob:
             """Extract files from a disc to a destination directory."""
             device = f"/dev/{device}" if not device.startswith("/dev/") else device
+            destination = jail_user_path(
+                request.destination, current_user, db, write=True, action="optical_drive_extract"
+            )
             try:
                 return await service.extract_files(
-                    device, request.paths, request.destination, owner_id=current_user.id
+                    device, request.paths, destination, owner_id=current_user.id
                 )
             except ValueError as e:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
@@ -282,10 +300,14 @@ class OpticalDrivePlugin(PluginBase):
             request: IsoFileRequest,
             current_user=Depends(get_current_user),
             service: OpticalDriveService = Depends(get_service),
+            db: Session = Depends(get_db),
         ) -> DiscFileListResponse:
             """List files within an ISO file."""
+            iso_path = jail_user_path(
+                request.iso_path, current_user, db, write=False, action="optical_drive_iso_list"
+            )
             try:
-                return await service.list_iso_files(request.iso_path, request.path)
+                return await service.list_iso_files(iso_path, request.path)
             except ValueError as e:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
             except RuntimeError as e:
@@ -296,11 +318,18 @@ class OpticalDrivePlugin(PluginBase):
             request: IsoExtractRequest,
             current_user=Depends(get_current_user),
             service: OpticalDriveService = Depends(get_service),
+            db: Session = Depends(get_db),
         ) -> OpticalJob:
             """Extract files from an ISO file."""
+            iso_path = jail_user_path(
+                request.iso_path, current_user, db, write=False, action="optical_drive_iso_extract"
+            )
+            destination = jail_user_path(
+                request.destination, current_user, db, write=True, action="optical_drive_iso_extract"
+            )
             try:
                 return await service.extract_from_iso(
-                    request.iso_path, request.paths, request.destination, owner_id=current_user.id
+                    iso_path, request.paths, destination, owner_id=current_user.id
                 )
             except ValueError as e:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
@@ -310,10 +339,14 @@ class OpticalDrivePlugin(PluginBase):
             request: IsoFileRequest,
             current_user=Depends(get_current_user),
             service: OpticalDriveService = Depends(get_service),
+            db: Session = Depends(get_db),
         ) -> FilePreviewResponse:
             """Preview a file from within an ISO."""
+            iso_path = jail_user_path(
+                request.iso_path, current_user, db, write=False, action="optical_drive_iso_preview"
+            )
             try:
-                return await service.preview_iso_file(request.iso_path, request.path)
+                return await service.preview_iso_file(iso_path, request.path)
             except ValueError as e:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
             except RuntimeError as e:
@@ -327,12 +360,16 @@ class OpticalDrivePlugin(PluginBase):
             request: BurnIsoRequest,
             current_user=Depends(get_current_user),
             service: OpticalDriveService = Depends(get_service),
+            db: Session = Depends(get_db),
         ) -> OpticalJob:
             """Burn an ISO image to disc."""
             device = f"/dev/{device}" if not device.startswith("/dev/") else device
+            iso_path = jail_user_path(
+                request.iso_path, current_user, db, write=False, action="optical_drive_burn_iso"
+            )
             try:
                 return await service.burn_iso(
-                    device, request.iso_path, request.speed, owner_id=current_user.id
+                    device, iso_path, request.speed, owner_id=current_user.id
                 )
             except ValueError as e:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
@@ -343,12 +380,19 @@ class OpticalDrivePlugin(PluginBase):
             request: BurnAudioRequest,
             current_user=Depends(get_current_user),
             service: OpticalDriveService = Depends(get_service),
+            db: Session = Depends(get_db),
         ) -> OpticalJob:
             """Burn WAV files as an audio CD."""
             device = f"/dev/{device}" if not device.startswith("/dev/") else device
+            wav_files = [
+                jail_user_path(
+                    wav, current_user, db, write=False, action="optical_drive_burn_audio"
+                )
+                for wav in request.wav_files
+            ]
             try:
                 return await service.burn_audio_cd(
-                    device, request.wav_files, request.speed, owner_id=current_user.id
+                    device, wav_files, request.speed, owner_id=current_user.id
                 )
             except ValueError as e:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))

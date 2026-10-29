@@ -459,3 +459,23 @@ def test_service_follows_config_change(db_session, fresh_singleton):
     )
 
     assert plugin.service_with_current_config(db_session).config.auto_eject_after_operation is False
+
+
+class TestValidatePathPrefix:
+    """validate_path verglich Strings: /mnt/storage-evil galt als unter /mnt/storage."""
+
+    def test_sibling_with_same_prefix_is_rejected(self, tmp_path, monkeypatch):
+        from app.core.config import settings
+        from app.plugins.installed.optical_drive.service import OpticalDriveService
+
+        root = tmp_path / "storage"
+        root.mkdir()
+        (tmp_path / "storage-evil").mkdir()
+        monkeypatch.setattr(settings, "nas_storage_path", str(root))
+        monkeypatch.setattr(settings, "nas_backup_path", str(tmp_path / "backups"))
+        svc = OpticalDriveService()
+        svc._is_dev_mode = False
+
+        assert svc.validate_path(str(root / "alice" / "x.iso"))
+        assert svc.validate_path(str(root))
+        assert not svc.validate_path(str(tmp_path / "storage-evil" / "x.iso"))

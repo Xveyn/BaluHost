@@ -16,6 +16,7 @@ this file only covers what is specific to this plugin.
 | `reading.py` | 278 | `ReadingMixin` — ISO copy (`dd`), audio rip (`cdparanoia`) |
 | `burning.py` | 330 | `BurningMixin` — burn ISO / audio (`wodim`), blank, `dvd+rw-mediainfo` |
 | `browsing.py` | 768 | `BrowsingMixin` — disc + ISO listing (`isoinfo`, `7z`), extract, preview |
+| `paths.py` | 85 | `jail_user_path()` — per-user path jail the routes run every caller-supplied path through |
 | `models.py` | 236 | Pydantic request/response models, `MediaType`/`JobType`/`JobStatus` enums, `OpticalDriveConfig` |
 | `ui/bundle.js` | 894 | Plugin UI, hand-written against the sandbox runtime (`window.BaluHost`) |
 | `plugin.json` | — | Marketplace manifest (see "plugin.json vs. metadata") |
@@ -64,7 +65,7 @@ Every entry point re-validates; the mixins do **not** trust their caller.
 
 - `validate_device()` — `^/dev/sr[0-9]+$`. The only accepted device shape; this is
   what keeps a caller-supplied string out of `dd if=…`, `wodim dev=…` and `eject`.
-- `validate_path()` — resolves the path and requires it under
+- `validate_path()` — second barrier behind `jail_user_path()` (below); resolves the path and requires it under
   `settings.nas_storage_path` or `settings.nas_backup_path` (plus `./dev-storage`
   in dev mode). Used for every **output** path (ISO target, rip dir, extract
   destination).
@@ -75,11 +76,33 @@ Every entry point re-validates; the mixins do **not** trust their caller.
   Keep it that way — several args are user-influenced (`iso_path`, `output_path`,
   the WAV list, `speed`).
 
-**Known weakness, do not "clean up" silently:** `validate_path()` compares with
-`str(resolved).startswith(str(root))`, a plain string prefix without a separator
-check — a sibling directory such as `/mnt/storage-scratch` passes for the root
-`/mnt/storage`. Tightening it means comparing with `Path.is_relative_to()`; treat
-that as its own change with its own test, not a drive-by edit.
+**Per-user path jail (`paths.py:jail_user_path`).** Every route that takes a
+filesystem path from the caller runs it through `jail_user_path()` *before* the
+service sees it: `read/iso`, `read/audio[/{track}]`, `extract`, `iso/list`,
+`iso/extract`, `iso/preview`, `burn/iso`, `burn/audio` (each WAV). Non-privileged
+users get the same directories as in the file manager: the path must be absolute,
+is resolved with `realpath` (so `..` and symlinks cannot leave), must lie under
+`nas_storage_path`, and passes `api/routes/files.py:_jail_path()`. **Write targets**
+(`write=True`) are further limited to the own home and `Shared/` — a FileShare
+grant is enough to read from, not to write into. Backup paths are closed to
+normal users. Refusals are audited (`log_authorization_failure`) and answer with a
+generic 403. Admins are unrestricted here. `validate_path()` stays as the second
+barrier for everybody, and uses `Path.is_relative_to()` (a plain string prefix let
+`/mnt/storage-evil` pass for `/mnt/storage`). **A new route taking a path needs the
+same call.** Tests: `tests/plugins/test_optical_drive_paths.py` (the helper),
+`test_optical_drive_route_jail.py` (the routes).
+
+**Member paths are not covered by the jail.** `paths` of `extract` / `iso/extract`
+and the `path` of `iso/preview` name entries *inside* the archive and reach `7z`
+as plain arguments. `OpticalDriveService.checked_members()` rejects an empty
+member, NUL, `..` components and a leading `-` or `@` (a switch such as `-o…`
+that would override the jailed output dir, or a list file), and every `7z`
+command puts `--` in front of the members. Both are needed — keep them when
+touching these commands. Test: `tests/plugins/test_optical_drive_member_paths.py`.
+
+The UI default `/storage/extracted` (`ui/bundle.js`) is outside a normal user's
+home, so extraction with the default is refused for them with 403 until they type a
+path of their own — the bundle was deliberately left unchanged.
 
 ## Job model — per-process, in-memory
 
