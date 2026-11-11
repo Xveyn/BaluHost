@@ -48,6 +48,40 @@ async def test_asyncio_subprocess_of_systemd_inhibit_is_refused(
     attempts.clear()
 
 
+def test_executable_keyword_is_checked_too(forbid_real_logind_inhibitors):
+    """`Popen(["x"], executable=...)` runs the executable, whatever argv[0] says."""
+    attempts = forbid_real_logind_inhibitors
+
+    with pytest.raises(AssertionError, match="systemd-inhibit"):
+        subprocess.Popen(["harmless-name", "--version"], executable="/usr/bin/systemd-inhibit")
+
+    assert len(attempts) == 1
+    attempts.clear()
+
+
+def test_string_command_is_checked_too(forbid_real_logind_inhibitors):
+    attempts = forbid_real_logind_inhibitors
+
+    with pytest.raises(AssertionError, match="systemd-inhibit"):
+        subprocess.Popen("systemd-inhibit --version", shell=True)
+
+    assert len(attempts) == 1
+    attempts.clear()
+
+
+def test_guard_survives_a_monkeypatch_undo(forbid_real_logind_inhibitors, monkeypatch):
+    """Some tests call `monkeypatch.undo()` mid-test. The guard must not hang
+    on the test's own monkeypatch — it holds for the whole session."""
+    attempts = forbid_real_logind_inhibitors
+    monkeypatch.undo()
+
+    with pytest.raises(AssertionError, match="systemd-inhibit"):
+        subprocess.Popen(["systemd-inhibit", "--version"])
+
+    assert len(attempts) == 1
+    attempts.clear()
+
+
 def test_other_commands_still_run(forbid_real_logind_inhibitors):
     result = subprocess.run(
         [sys.executable, "-c", "print('systemd-inhibit')"],
