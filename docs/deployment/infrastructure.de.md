@@ -78,7 +78,7 @@ Entwickler ──push──> GitHub (main Branch)
 ### Rollback
 
 Bei fehlgeschlagenem Deploy:
-1. Automatisch: `ci-deploy.sh` setzt auf vorherigen Commit zurück + Alembic Downgrade
+1. Automatisch: `ci-deploy.sh` setzt auf vorherigen Commit zurück + Alembic Downgrade. Der Deploy-Job endet danach **rot**, auch wenn der Rollback gelingt, und es entsteht kein Pre-Release-Tag (#753). Ob der alte Stand wieder läuft, steht im Deploy-Log (`/var/log/baluhost/deploys/*.json`: `rolled_back` oder `rollback_failed`)
 2. Manuell: `ci-deploy.sh --rollback`
 3. Datenbank: `db-restore.sh <backup-datei.sql.gz>`
 
