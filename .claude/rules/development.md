@@ -69,6 +69,7 @@ alembic downgrade -1
 - Automatic seed data (admin/DevMode2024, user/User123)
 - Windows-compatible (no Linux dependencies required)
 - Mock VPN key generation (no `wg` command needed)
+- No logind sleep locks, no logind listener, no RTC write: `CoreUptimeInhibitor` and `CoreUptimeRtcGuard` are no-ops (#747). The gate is the mode, not the absence of `systemd-inhibit` — a dev instance on a systemd box would otherwise lock that box's suspend. The test suite additionally refuses to start `systemd-inhibit` at all (autouse fixture `forbid_real_logind_inhibitors` in `backend/tests/conftest.py`); a test of the spawn path mocks `subprocess.Popen` and sets `settings.is_dev_mode = False`, otherwise the gate returns before the spawn
 
 ### Production Mode (`NAS_MODE=prod`)
 - Real mdadm RAID commands

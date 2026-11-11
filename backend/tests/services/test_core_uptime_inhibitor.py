@@ -6,7 +6,14 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from app.core.config import settings
 from app.services.power.core_uptime_inhibitor import CoreUptimeInhibitor
+
+
+@pytest.fixture(autouse=True)
+def _prod_mode(monkeypatch):
+    """The spawn path only exists outside dev mode (#747); the suite runs in dev."""
+    monkeypatch.setattr(settings, "is_dev_mode", False)
 
 
 def _alive_proc(pid: int = 4242) -> MagicMock:
@@ -265,3 +272,52 @@ def test_update_reason_does_nothing_when_not_held():
 
     mock_popen.assert_not_called()
     assert inh.is_held() is False
+
+
+# --- dev mode (#747): no real logind lock from a dev instance or a test run ---
+
+
+def test_acquire_is_a_noop_in_dev_mode(monkeypatch):
+    """The binary exists on every systemd box — its presence must not be the gate."""
+    monkeypatch.setattr(settings, "is_dev_mode", True)
+    inh = CoreUptimeInhibitor()
+
+    with patch(f"{_MOD}.shutil.which", return_value="/usr/bin/systemd-inhibit"), \
+         patch(f"{_MOD}.time.sleep"), \
+         patch(f"{_MOD}.subprocess.Popen", return_value=_alive_proc()) as mock_popen:
+        ok = inh.acquire("core_uptime_active")
+
+    assert ok is False
+    assert inh.is_held() is False
+    assert inh.reason is None
+    mock_popen.assert_not_called()
+
+
+def test_update_reason_spawns_nothing_in_dev_mode(monkeypatch):
+    """A lock taken before the mode flipped is kept, but never replaced."""
+    inh, old = _held("core_uptime_active")
+    monkeypatch.setattr(settings, "is_dev_mode", True)
+
+    with patch(f"{_MOD}.shutil.which", return_value="/usr/bin/systemd-inhibit"), \
+         patch(f"{_MOD}.time.sleep"), \
+         patch(f"{_MOD}.subprocess.Popen", return_value=_alive_proc(pid=2222)) as mock_popen:
+        assert inh.update_reason("core_uptime_and_gaming_active") is False
+
+    mock_popen.assert_not_called()
+    old.terminate.assert_not_called()
+    assert inh._proc is old
+
+
+def test_dev_mode_noop_is_logged_once_only(monkeypatch):
+    monkeypatch.setattr(settings, "is_dev_mode", True)
+    inh = CoreUptimeInhibitor()
+
+    with patch(f"{_MOD}.shutil.which", return_value="/usr/bin/systemd-inhibit"), \
+         patch(f"{_MOD}.subprocess.Popen") as mock_popen, \
+         patch(f"{_MOD}.logger.info") as mock_info:
+        inh.acquire("first")
+        inh.acquire("second")
+        inh.acquire("third")
+
+    mock_popen.assert_not_called()
+    assert mock_info.call_count == 1
