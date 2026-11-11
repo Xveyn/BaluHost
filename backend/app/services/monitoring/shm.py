@@ -1,8 +1,26 @@
 """
-Shared-memory IPC via /dev/shm/baluhost/ (Linux) or %TEMP%/baluhost-shm/ (Windows).
+Shared-memory IPC via JSON files in a per-install directory.
 
 Provides atomic JSON read/write for inter-process communication between
 the monitoring_worker process and the main Uvicorn web workers.
+
+Where the files live (`SHM_DIR`, resolved once at import):
+
+- production on Linux: ``/dev/shm/baluhost``
+- dev mode on Linux:   ``/dev/shm/baluhost-dev``
+- Windows:             ``%TEMP%/baluhost-shm``
+- ``BALUHOST_SHM_DIR`` overrides all of the above
+
+``/dev/shm`` is per host, not per install, and ``PrivateTmp`` does not cover
+it. A dev instance next to production used to share the one directory: its
+monitoring worker wiped the live files on start (`cleanup_shm`) and then wrote
+mock data that production read back — including the disk temperatures the fan
+control acts on (#779). The mode decides, not the launcher, so a hand-started
+``uvicorn`` or worker is separated just like ``start_dev.py``.
+
+``BALUHOST_SHM_DIR`` is read from the process environment only — a line in
+``backend/.env`` has no effect. Every process of one install must resolve the
+same directory; they do as long as they share ``NAS_MODE`` and the variable.
 """
 
 from __future__ import annotations
@@ -14,14 +32,59 @@ import sys
 import tempfile
 import time
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Mapping, Optional
+
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-if sys.platform == "win32":
-    SHM_DIR = Path(tempfile.gettempdir()) / "baluhost-shm"
-else:
-    SHM_DIR = Path("/dev/shm/baluhost")
+SHM_DIR_ENV = "BALUHOST_SHM_DIR"
+
+_PROD_DIR = Path("/dev/shm/baluhost")
+_DEV_DIR = Path("/dev/shm/baluhost-dev")
+_OWNED_NAME_PREFIX = "baluhost"
+
+
+def resolve_shm_dir(
+    environ: Mapping[str, str],
+    *,
+    dev_mode: bool,
+    platform: str = sys.platform,
+) -> Path:
+    """Decide where this process keeps its SHM files.
+
+    Args:
+        environ: Process environment; only ``BALUHOST_SHM_DIR`` is read.
+        dev_mode: Whether the process runs in dev mode.
+        platform: ``sys.platform`` value (parameter for tests).
+
+    Returns:
+        The directory — the explicit override if set, else the mode default.
+
+    Raises:
+        ValueError: If the override is not an absolute path to a directory
+            whose name starts with ``baluhost``. `cleanup_shm()` deletes every
+            file in the directory, so it must never be pointed at one BaluHost
+            does not own; an invalid override fails loudly instead of silently
+            falling back to a directory another install may be using.
+    """
+    override = environ.get(SHM_DIR_ENV, "").strip()
+    if override:
+        path = Path(override)
+        if not path.is_absolute() or not path.name.startswith(_OWNED_NAME_PREFIX):
+            raise ValueError(
+                f"{SHM_DIR_ENV}={override!r} must be an absolute path to a directory "
+                f"whose name starts with '{_OWNED_NAME_PREFIX}' — every file in it "
+                f"is deleted on worker start"
+            )
+        return path
+
+    if platform == "win32":
+        return Path(tempfile.gettempdir()) / "baluhost-shm"
+    return _DEV_DIR if dev_mode else _PROD_DIR
+
+
+SHM_DIR = resolve_shm_dir(os.environ, dev_mode=settings.is_dev_mode)
 
 # SHM file names
 TELEMETRY_FILE = "telemetry.json"
