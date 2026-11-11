@@ -21,6 +21,9 @@ control acts on (#779). The mode decides, not the launcher, so a hand-started
 ``BALUHOST_SHM_DIR`` is read from the process environment only — a line in
 ``backend/.env`` has no effect. Every process of one install must resolve the
 same directory; they do as long as they share ``NAS_MODE`` and the variable.
+The override is meant for dev (a second checkout running at the same time).
+Production is not set up for it: ``baluhost-monitoring.service``
+(``ExecStopPost``) and ``start_prod.py`` clean the fixed production path.
 """
 
 from __future__ import annotations
@@ -62,26 +65,47 @@ def resolve_shm_dir(
         The directory — the explicit override if set, else the mode default.
 
     Raises:
-        ValueError: If the override is not an absolute path to a directory
-            whose name starts with ``baluhost``. `cleanup_shm()` deletes every
-            file in the directory, so it must never be pointed at one BaluHost
-            does not own; an invalid override fails loudly instead of silently
-            falling back to a directory another install may be using.
+        ValueError: If the override is not acceptable. `cleanup_shm()` deletes
+            every file in the directory, so it must never be pointed at one
+            BaluHost does not own. The rule is deliberately narrow: a real
+            directory (no symlink) whose name starts with ``baluhost``,
+            sitting directly in ``/dev/shm`` or the temp dir — the name alone
+            would also fit ``/opt/baluhost``. Dev mode additionally refuses
+            the production directory. An invalid override fails loudly instead
+            of silently falling back to a directory another install may use.
     """
     override = environ.get(SHM_DIR_ENV, "").strip()
     if override:
         path = Path(override)
-        if not path.is_absolute() or not path.name.startswith(_OWNED_NAME_PREFIX):
+        problem = _override_problem(path, dev_mode=dev_mode)
+        if problem:
             raise ValueError(
-                f"{SHM_DIR_ENV}={override!r} must be an absolute path to a directory "
-                f"whose name starts with '{_OWNED_NAME_PREFIX}' — every file in it "
-                f"is deleted on worker start"
+                f"{SHM_DIR_ENV}={override!r} {problem} — every file in the SHM "
+                f"directory is deleted when the monitoring worker starts and stops"
             )
         return path
 
     if platform == "win32":
         return Path(tempfile.gettempdir()) / "baluhost-shm"
     return _DEV_DIR if dev_mode else _PROD_DIR
+
+
+def _override_problem(path: Path, *, dev_mode: bool) -> Optional[str]:
+    """Why ``path`` must not be used as SHM directory, or None if it may."""
+    if not path.is_absolute():
+        return "is not an absolute path"
+    if not path.name.startswith(_OWNED_NAME_PREFIX):
+        return f"does not name a directory starting with '{_OWNED_NAME_PREFIX}'"
+    if path.parent not in (_PROD_DIR.parent, Path(tempfile.gettempdir())):
+        return (
+            f"must sit directly in {_PROD_DIR.parent} or {tempfile.gettempdir()} "
+            f"(a fitting name alone would also match the install directory)"
+        )
+    if path.is_symlink():
+        return "is a symlink, and the cleanup would follow it"
+    if dev_mode and path == _PROD_DIR:
+        return "is the production directory, which a dev-mode process must not share"
+    return None
 
 
 SHM_DIR = resolve_shm_dir(os.environ, dev_mode=settings.is_dev_mode)

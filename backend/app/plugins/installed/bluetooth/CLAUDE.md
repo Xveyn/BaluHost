@@ -37,8 +37,10 @@ runs as `baluhost-plugin` without that group and would not reach BlueZ.
   connection; BlueZ counts discovery per client, so parallel scans (or KDE's)
   are harmless.
 - **Pairing**: the accepting worker becomes the owner. Lock =
-  `flock` on `/tmp/baluhost-bluetooth-pairing.lock` (**not** in
-  `/dev/shm/baluhost/` — `cleanup_shm()` deletes everything there). Status in
+  `flock` on `/tmp/baluhost-bluetooth-pairing.lock` (**not** in the SHM
+  directory `shm.SHM_DIR` — `/dev/shm/baluhost/` in production,
+  `/dev/shm/baluhost-dev/` in dev mode; `cleanup_shm()` deletes everything
+  there). Status in
   `bluetooth_pairing.json` (0600, heartbeat 5 s, stale after 15 s), answers in
   `bluetooth_pairing_answer.json`. A dead owner releases the lock via the
   kernel and BlueZ aborts the pairing when its bus connection closes.

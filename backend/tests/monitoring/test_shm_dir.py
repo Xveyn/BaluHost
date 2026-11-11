@@ -62,6 +62,61 @@ class TestResolveShmDir:
                 {shm.SHM_DIR_ENV: foreign}, dev_mode=True, platform="linux",
             )
 
+    @pytest.mark.parametrize(
+        "elsewhere",
+        [
+            "/opt/baluhost",  # the install: cleanup would take .env.production
+            "/etc/baluhost",
+            "/var/lib/baluhost",
+            "/dev/shm/nested/baluhost-dev",
+            "/home/someone/baluhost-shm",
+        ],
+    )
+    def test_override_must_sit_directly_in_shm_or_the_temp_dir(self, elsewhere):
+        """A fitting name is not enough: the install directory is called
+        `baluhost` too."""
+        with pytest.raises(ValueError, match=shm.SHM_DIR_ENV):
+            shm.resolve_shm_dir(
+                {shm.SHM_DIR_ENV: elsewhere}, dev_mode=True, platform="linux",
+            )
+
+    def test_override_in_the_temp_dir_is_accepted(self):
+        target = Path(tempfile.gettempdir()) / "baluhost_test_shm_example"
+
+        resolved = shm.resolve_shm_dir(
+            {shm.SHM_DIR_ENV: str(target)}, dev_mode=True, platform="linux",
+        )
+
+        assert resolved == target
+
+    def test_override_must_not_be_a_symlink(self, tmp_path):
+        """`cleanup_shm()` iterates the directory and would follow the link."""
+        victim = tmp_path / "somebody_elses_files"
+        victim.mkdir()
+        link = Path(tempfile.gettempdir()) / f"baluhost-link-{os.getpid()}-{tmp_path.name}"
+        link.symlink_to(victim, target_is_directory=True)
+        try:
+            with pytest.raises(ValueError, match="symlink"):
+                shm.resolve_shm_dir(
+                    {shm.SHM_DIR_ENV: str(link)}, dev_mode=True, platform="linux",
+                )
+        finally:
+            link.unlink()
+
+    def test_dev_mode_refuses_the_production_directory(self):
+        """The override must not be a way to quietly undo the separation."""
+        with pytest.raises(ValueError, match="production"):
+            shm.resolve_shm_dir(
+                {shm.SHM_DIR_ENV: str(PROD_DIR)}, dev_mode=True, platform="linux",
+            )
+
+    def test_production_may_name_its_own_directory(self):
+        resolved = shm.resolve_shm_dir(
+            {shm.SHM_DIR_ENV: str(PROD_DIR)}, dev_mode=False, platform="linux",
+        )
+
+        assert resolved == PROD_DIR
+
     @pytest.mark.parametrize("dev_mode", [True, False])
     def test_windows_default_is_unchanged(self, dev_mode):
         resolved = shm.resolve_shm_dir({}, dev_mode=dev_mode, platform="win32")
@@ -72,9 +127,14 @@ class TestResolveShmDir:
 class TestSuiteIsolation:
     """The suite itself runs next to production on the dev box."""
 
-    def test_the_suite_writes_to_neither_shared_directory(self):
-        assert shm.SHM_DIR not in (PROD_DIR, DEV_DIR)
+    def test_the_suite_uses_a_directory_of_its_own(self):
+        """Not "neither of the two defaults" but "one conftest made itself":
+        a `BALUHOST_SHM_DIR` exported in the calling shell — the documented
+        way to run a second dev checkout — would otherwise point the suite at
+        the live directory of that instance."""
         assert shm.SHM_DIR == Path(os.environ[shm.SHM_DIR_ENV])
+        assert shm.SHM_DIR.parent == Path(tempfile.gettempdir())
+        assert shm.SHM_DIR.name.startswith("baluhost_test_shm_")
 
     def test_write_and_cleanup_stay_inside_the_suite_directory(self):
         shm.write_shm("probe_779.json", {"ok": True})
