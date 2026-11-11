@@ -140,6 +140,67 @@ from app.services.vpn import VPNService
 
 
 # ============================================================================
+# Host Protection
+# ============================================================================
+
+_SYSTEMD_INHIBIT = "systemd-inhibit"
+
+
+def _argv_of(popen_args: object) -> list[str]:
+    """Normalise the first `Popen` argument to a list of strings."""
+    if isinstance(popen_args, (str, bytes, os.PathLike)):
+        return [os.fsdecode(popen_args)]
+    try:
+        return [os.fsdecode(part) for part in popen_args]  # type: ignore[union-attr]
+    except TypeError:
+        return []
+
+
+@pytest.fixture(autouse=True)
+def forbid_real_logind_inhibitors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> Generator[list[list[str]], None, None]:
+    """Refuse to start `systemd-inhibit` from any test (#747).
+
+    The lock holder is its own process: it survives the end of pytest, is
+    adopted by the user manager and keeps blocking suspend on the machine the
+    tests ran on — observed on the production box for three days. A test that
+    needs the spawn path mocks `subprocess.Popen` itself; everything else must
+    not reach the binary.
+
+    Two layers, because the callers sit under broad `except Exception` blocks
+    that would swallow the refusal: the attempt raises on the spot AND is
+    recorded, and a recorded attempt fails the test at teardown. Yields the
+    record so the guard's own tests can clear their deliberate attempts.
+    """
+    import subprocess
+
+    attempts: list[list[str]] = []
+    real_popen = subprocess.Popen
+
+    # A subclass, not a function: tests build `MagicMock(spec=subprocess.Popen)`
+    # and asyncio's subprocess transport calls `subprocess.Popen(...)` too.
+    class _GuardedPopen(real_popen):  # type: ignore[type-arg,misc,valid-type]
+        def __init__(self, args, *rest, **kwargs):  # type: ignore[no-untyped-def]
+            argv = _argv_of(args)
+            if argv and os.path.basename(argv[0]) == _SYSTEMD_INHIBIT:
+                attempts.append(argv)
+                raise AssertionError(
+                    f"test tried to start a real logind lock: {argv!r} — "
+                    f"mock subprocess.Popen instead of spawning {_SYSTEMD_INHIBIT} (#747)"
+                )
+            super().__init__(args, *rest, **kwargs)
+
+    monkeypatch.setattr(subprocess, "Popen", _GuardedPopen)
+    yield attempts
+    if attempts:
+        pytest.fail(
+            f"test tried to start a real logind lock {len(attempts)}x: {attempts!r} — "
+            f"mock subprocess.Popen instead of spawning {_SYSTEMD_INHIBIT} (#747)"
+        )
+
+
+# ============================================================================
 # Database Fixtures
 # ============================================================================
 

@@ -6,7 +6,14 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from app.core.config import settings
 from app.services.power.core_uptime_rtc_guard import CoreUptimeRtcGuard
+
+
+@pytest.fixture(autouse=True)
+def _prod_mode(monkeypatch):
+    """The guard only acts outside dev mode (#747); the suite runs in dev."""
+    monkeypatch.setattr(settings, "is_dev_mode", False)
 
 
 def _build_guard():
@@ -417,3 +424,56 @@ def _failing_async(msg: str):
     async def _():
         raise RuntimeError(msg)
     return _
+
+
+class TestDevMode:
+    """Dev mode: no logind lock, no logind listener, no RTC write (#747)."""
+
+    def test_acquire_is_a_noop_in_dev_mode(self, monkeypatch):
+        monkeypatch.setattr(settings, "is_dev_mode", True)
+        guard = _build_guard()
+        with patch("app.services.power.core_uptime_rtc_guard.shutil.which",
+                   return_value="/usr/bin/systemd-inhibit"), \
+             patch("app.services.power.core_uptime_rtc_guard.time.sleep"), \
+             patch("app.services.power.core_uptime_rtc_guard.subprocess.Popen") as mock_popen:
+            ok = guard._acquire_delay_inhibitor()
+
+        assert ok is False
+        assert guard._delay_proc is None
+        mock_popen.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_start_does_not_subscribe_to_logind_in_dev_mode(self, monkeypatch):
+        """A dev instance on a systemd box would otherwise react to every real
+        suspend of that box and write its RTC alarm."""
+        monkeypatch.setattr(settings, "is_dev_mode", True)
+        guard = _build_guard()
+        with patch("app.services.power.core_uptime_rtc_guard._DBUS_AVAILABLE", True), \
+             patch("app.services.power.core_uptime_rtc_guard.MessageBus") as mock_bus, \
+             patch("app.services.power.core_uptime_rtc_guard.subprocess.Popen") as mock_popen:
+            await guard.start()
+
+        mock_bus.assert_not_called()
+        mock_popen.assert_not_called()
+        assert guard._dbus_bus is None
+        assert guard._delay_proc is None
+
+    @pytest.mark.asyncio
+    async def test_start_subscribes_outside_dev_mode(self):
+        """Counterpart: the gate is the mode, not a blanket switch-off."""
+        guard = _build_guard()
+        bus = MagicMock()
+        connect = MagicMock()
+
+        async def _connect():
+            connect()
+            raise RuntimeError("no system bus in the test")
+
+        bus.connect = _connect
+        with patch("app.services.power.core_uptime_rtc_guard._DBUS_AVAILABLE", True), \
+             patch("app.services.power.core_uptime_rtc_guard.MessageBus", return_value=bus), \
+             patch.object(guard, "_acquire_delay_inhibitor", return_value=True) as mock_acquire:
+            await guard.start()
+
+        mock_acquire.assert_called_once()
+        connect.assert_called_once()

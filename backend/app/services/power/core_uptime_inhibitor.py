@@ -20,6 +20,10 @@ Notes:
   protection then degrades to BaluHost's own per-loop guards (which catch
   BaluHost-initiated suspends but not third-party desktop daemons).
 - Dev mode / Windows / missing binary → no-op (returns False, logs once).
+  Dev mode is checked explicitly (#747): the binary exists on every systemd
+  box, so its presence alone would let a dev instance — or a test run — take
+  a real lock on the machine it happens to run on. The holder is its own
+  process and outlives whoever started it.
 - The `--why` text is fixed per subprocess. `update_reason()` swaps it
   make-before-break (#604): the new lock is taken and confirmed alive before
   the old one is dropped, so there is no instant without a block lock. For
@@ -33,6 +37,8 @@ import subprocess
 import time
 from typing import Optional
 
+from app.core.config import settings
+
 logger = logging.getLogger(__name__)
 
 _SYSTEMD_INHIBIT = "systemd-inhibit"
@@ -45,6 +51,7 @@ class CoreUptimeInhibitor:
         self._proc: Optional[subprocess.Popen] = None
         self._reason: Optional[str] = None
         self._binary_missing_logged = False
+        self._dev_mode_logged = False
 
     def is_held(self) -> bool:
         """True iff the inhibitor subprocess is currently alive."""
@@ -135,10 +142,19 @@ class CoreUptimeInhibitor:
     def _spawn(self, reason: str) -> Optional[subprocess.Popen]:
         """Start a `systemd-inhibit` holder and confirm it survived startup.
 
-        Returns the live subprocess, or None (binary missing, spawn error,
-        polkit denial). Never touches ``self._proc`` — the callers decide what
-        replaces what, which is what makes the make-before-break swap possible.
+        Returns the live subprocess, or None (dev mode, binary missing, spawn
+        error, polkit denial). Never touches ``self._proc`` — the callers
+        decide what replaces what, which is what makes the make-before-break
+        swap possible.
         """
+        if settings.is_dev_mode:
+            if not self._dev_mode_logged:
+                logger.info(
+                    "Dev mode — core uptime inhibitor disabled, no logind lock is taken",
+                )
+                self._dev_mode_logged = True
+            return None
+
         binary = shutil.which(_SYSTEMD_INHIBIT)
         if binary is None:
             if not self._binary_missing_logged:
