@@ -66,6 +66,7 @@ alembic downgrade -1
 - Enabled by default in `start_dev.py`
 - Creates sandbox storage in `backend/dev-storage/` (2x5GB RAID1 simulated)
 - Mock SMART data, RAID arrays, and system metrics
+- Own SHM directory `/dev/shm/baluhost-dev/` instead of production's `/dev/shm/baluhost/` (#779) — decided by the mode in `services/monitoring/shm.py`, so a hand-started `uvicorn` or worker is separated too. `BALUHOST_SHM_DIR` overrides it (a real environment variable, not a `backend/.env` line; must be a `baluhost*` directory directly in `/dev/shm` or the temp dir, because the monitoring worker empties it); two dev checkouts running at once need it, they would otherwise share the dev directory. The test suite ignores the variable and always uses a temp directory of its own
 - Automatic seed data (admin/DevMode2024, user/User123)
 - Windows-compatible (no Linux dependencies required)
 - Mock VPN key generation (no `wg` command needed)

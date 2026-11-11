@@ -87,7 +87,7 @@ Business logic layer. Routes delegate to services — services contain the actua
 - `process_tracker.py` — BaluHost process monitoring
 - `retention_manager.py` — Old sample cleanup
 - `worker_service.py` — Separate monitoring worker process (prod)
-- `shm.py` — Shared memory (JSON files in `/tmp/`) for inter-process communication
+- `shm.py` — Shared memory (JSON files) for inter-process communication. Directory `SHM_DIR`: `/dev/shm/baluhost/` in production, `/dev/shm/baluhost-dev/` in dev mode (#779 — `/dev/shm` is per host, a dev instance used to wipe and overwrite production's files), `%TEMP%/baluhost-shm/` on Windows; `BALUHOST_SHM_DIR` overrides (process environment only, not `backend/.env`; a dev aid — production's unit `ExecStopPost` and `start_prod.py` clean the fixed path; must be a `baluhost*` directory directly in `/dev/shm` or the temp dir). **Not** under `/tmp`, so `PrivateTmp` does not affect it. `cleanup_shm()` runs when the monitoring worker starts and stops and deletes **every** file in the directory — including those the web workers put there (`power_status.json`, `gpu_status.json`)
 
 **`power/`** — CPU frequency scaling, fan control, energy, sleep
 - `manager.py` — PowerManager: demand-based CPU profile selection
@@ -148,5 +148,5 @@ Business logic layer. Routes delegate to services — services contain the actua
 - **Dev/Prod backends**: Hardware services use a protocol/interface with separate `dev_backend` (mocks) and `linux_backend` (real commands). Selected based on `settings.is_dev_mode`
 - **Singletons**: Long-running services use `_instance` class attribute with `get_instance()` classmethod
 - **Background tasks**: Started via `asyncio.create_task()` in lifespan, stopped via cancellation
-- **Inter-process comms**: Monitoring worker writes JSON to `/tmp/baluhost_shm/`, web workers read it (`monitoring/shm.py`)
+- **Inter-process comms**: Monitoring worker writes JSON to `shm.SHM_DIR` (`/dev/shm/baluhost/` in production, `/dev/shm/baluhost-dev/` in dev mode), web workers read it (`monitoring/shm.py`)
 - **DB access in services**: Use `SessionLocal()` with try/finally for standalone calls, or accept `db: Session` parameter when called from routes

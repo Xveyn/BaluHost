@@ -61,6 +61,14 @@ _setenv("NAS_BACKUP_PATH", tempfile.mkdtemp(prefix=f"baluhost_test_backups_{_xdi
 # while SQLAlchemy holds it open (Windows: PermissionError).
 _tmp_db_dir = tempfile.mkdtemp(prefix=f"baluhost_test_db_{_xdist_worker_id}_")
 _setenv("DATABASE_URL", f"sqlite:///{_tmp_db_dir}/baluhost.db")
+# The SHM directory is per host, not per install: without an override the
+# suite would write into /dev/shm/baluhost-dev (shared with a running dev
+# instance and across xdist workers) — and before #779 into production's
+# /dev/shm/baluhost. Set unconditionally, NOT via _setenv: a value exported in
+# the calling shell (the documented way to run a second dev checkout) would be
+# the live directory of that instance. The name must start with "baluhost" and
+# sit in the temp dir (resolve_shm_dir).
+os.environ["BALUHOST_SHM_DIR"] = tempfile.mkdtemp(prefix=f"baluhost_test_shm_{_xdist_worker_id}_")
 # By default disable strict rate limits during tests to avoid flakiness.
 # Individual tests that need to assert rate-limit behavior should opt-in
 # by setting `ENABLE_RATE_LIMITS_IN_TESTS=1` in their own fixture or runtime.

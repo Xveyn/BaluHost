@@ -7,7 +7,8 @@ Services managed:
 - Monitoring Orchestrator (collectors, 5s interval, DB persistence)
 - Power Monitor (Tapo devices, 5s interval, DB persistence)
 
-Communicates with web workers via /dev/shm/baluhost/ (atomic JSON files).
+Communicates with web workers via atomic JSON files in `shm.SHM_DIR`
+(/dev/shm/baluhost/ in production, /dev/shm/baluhost-dev/ in dev mode).
 """
 
 from __future__ import annotations
