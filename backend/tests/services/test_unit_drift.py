@@ -253,7 +253,10 @@ def test_ci_deploy_runs_the_check_after_the_health_check_non_fatally():
     assert call in text, "ci-deploy.sh must run the unit drift smoke-check"
     # After a successful health check, not before: a WARN here must never
     # be able to trigger the rollback path.
-    assert text.index("if health_check; then") < text.index(call) < text.index("rollback\nfi")
+    # The anchor is the rollback call of the health check's else branch — the
+    # last one in the file. (It used to be "rollback\nfi"; since #753 an
+    # `exit 1` follows the rollback.)
+    assert text.index("if health_check; then") < text.index(call) < text.rindex("\n    rollback\n")
     line = next(l for l in text.splitlines() if call in l)
     following = text.splitlines()[text.splitlines().index(line) + 1]
     assert "|| log_warn" in following, "a failure to launch python must not fail the deploy"

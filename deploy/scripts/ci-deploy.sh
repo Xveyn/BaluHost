@@ -684,4 +684,9 @@ if health_check; then
 else
     log_error "Health check failed after deploy!"
     rollback
+    # Ein gesunder Rollback gibt 0 zurueck. Ohne dieses exit endete das ganze
+    # Skript gruen, und deploy-production.yml taggte per `if: success()` einen
+    # Commit, der nicht laeuft (#753). Rot heisst hier: der NEUE Commit laeuft
+    # nicht -- ob der alte wieder laeuft, steht im Deploy-Log (rolled_back).
+    exit 1
 fi
