@@ -15,7 +15,6 @@ import asyncio
 import json
 import logging
 import time
-from collections import deque
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
@@ -26,6 +25,8 @@ from app.core.database import SessionLocal
 from app.models.sleep import SleepConfig as SleepConfigModel, SleepStateLog, CoreUptimeWindow as CoreUptimeWindowModel
 from app.services.audit.logger_db import get_audit_logger_db
 from app.services.power import core_uptime as core_uptime_helpers
+from app.services.power import http_activity
+from app.services.power import sleep_runtime_store
 from app.services.power.core_uptime_inhibitor import CoreUptimeInhibitor
 from app.services.power.core_uptime_rtc_guard import CoreUptimeRtcGuard
 from app.services.power import reboot_state
@@ -102,21 +103,14 @@ from app.services.power.sleep_backend_linux import LinuxSleepBackend  # noqa: E4
 # Sleep Manager Service
 # ---------------------------------------------------------------------------
 
-# HTTP request counter for idle detection
-_http_request_timestamps: deque[float] = deque(maxlen=600)  # ~10 min of per-request timestamps
-
-
 def record_http_request() -> None:
-    """Record an HTTP request timestamp (called by middleware)."""
-    _http_request_timestamps.append(time.monotonic())
+    """Count one HTTP request for idle detection (called by middleware)."""
+    http_activity.record()
 
 
 def get_http_requests_per_minute() -> float:
-    """Calculate HTTP requests per minute over the last 60 seconds."""
-    now = time.monotonic()
-    cutoff = now - 60.0
-    count = sum(1 for t in _http_request_timestamps if t > cutoff)
-    return float(count)
+    """HTTP requests per minute, summed over all API processes (#823)."""
+    return http_activity.requests_per_minute()
 
 
 class SleepManagerService:
@@ -130,8 +124,25 @@ class SleepManagerService:
     _instance: Optional["SleepManagerService"] = None
     _lock = asyncio.Lock()
 
+    # How long a non-primary instance trusts the state it read from the store.
+    _PUBLISHED_STATE_TTL_SECONDS = 2.0
+
     def __init__(self, backend: SleepBackend) -> None:
         self._backend = backend
+        # "This instance runs the idle/schedule loops." Only that instance may
+        # hold the logind block lock — the loop is the one place that ever
+        # releases it (#817) — and only it publishes the sleep state for the
+        # other API processes (#823). Set by `start(monitoring=True)`, cleared
+        # by `stop()`. Fail-closed: an instance never told it is the primary
+        # takes no lock and publishes nothing. Must be set before the first
+        # `_current_state` assignment below.
+        self._is_primary: bool = False
+        self._state_publish_dirty: bool = False
+        self._publish_since: Optional[datetime] = None
+        self._published_cache: Optional[
+            tuple[float, Optional[tuple[SleepState, Optional[datetime]]]]
+        ] = None
+        self._clock = time.monotonic
         self._current_state = SleepState.AWAKE
         self._state_since: Optional[datetime] = None
         self._idle_seconds: float = 0.0
@@ -156,19 +167,94 @@ class SleepManagerService:
         # window OR an Always-Awake override is in effect. Both reasons block
         # third-party suspend (mate-screensaver, gnome-power-manager, logind
         # idle, manual `systemctl suspend`) at the logind layer. Reconciled
-        # every schedule-loop tick by `_reconcile_sleep_inhibitor`.
+        # every schedule-loop tick by `_reconcile_sleep_inhibitor`, and held
+        # by the primary only (`_is_primary`).
         self._core_uptime_inhibitor = CoreUptimeInhibitor()
-        # Only the worker that runs the schedule loop may hold that lock: the
-        # loop is the one place that ever releases it. Set by
-        # `start(monitoring=True)`, cleared by `stop()`. Fail-closed — an
-        # instance that was never told it is the primary takes no lock (#817).
-        self._owns_sleep_inhibitor: bool = False
         self._baluhost_suspend_in_progress: bool = False
         self._core_uptime_rtc_guard = CoreUptimeRtcGuard(
             next_core_start_provider=self._next_core_start_for_guard,
             is_baluhost_suspend_in_progress=lambda: self._baluhost_suspend_in_progress,
             on_arm_failed=self._clear_reboot_wakeup_claim,
         )
+
+    # --- Local state, published by the primary (#823) ---
+
+    @property
+    def _current_state(self) -> SleepState:
+        """This process's view of the state machine — what the machine runs on."""
+        return self._local_state
+
+    @_current_state.setter
+    def _current_state(self, state: SleepState) -> None:
+        # Every assignment goes through here, so no future transition can
+        # bypass publishing. Non-primary instances (and tests that build the
+        # service without starting it) never touch the database.
+        self._local_state = state
+        if self._is_primary:
+            self._publish_state(state, datetime.now(timezone.utc))
+
+    def _publish_state(self, state: SleepState, since: Optional[datetime]) -> bool:
+        """Write *state* to the shared store. Never raises.
+
+        A failure marks the state dirty; the schedule loop retries on its
+        next tick (`_retry_state_publish`). The state machine must never
+        notice a database problem here.
+        """
+        self._publish_since = since
+        try:
+            db = SessionLocal()
+            try:
+                ok = sleep_runtime_store.publish_state(db, state, since)
+            finally:
+                db.close()
+        except Exception as exc:
+            logger.warning("Publishing sleep state %s failed: %s", state, exc)
+            ok = False
+        self._state_publish_dirty = not ok
+        return ok
+
+    def _retry_state_publish(self) -> None:
+        """Republish the local state if the last attempt failed (primary only)."""
+        if self._is_primary and self._state_publish_dirty:
+            self._publish_state(self._local_state, self._publish_since)
+
+    def _read_published_state(self) -> Optional[tuple[SleepState, Optional[datetime]]]:
+        """The primary's published state, cached for a short TTL. Never raises."""
+        now = self._clock()
+        cached = self._published_cache
+        if cached is not None and now - cached[0] < self._PUBLISHED_STATE_TTL_SECONDS:
+            return cached[1]
+        try:
+            db = SessionLocal()
+            try:
+                value = sleep_runtime_store.read_state(db)
+            finally:
+                db.close()
+        except Exception as exc:
+            logger.debug("Reading the published sleep state failed: %s", exc)
+            value = None
+        self._published_cache = (now, value)
+        return value
+
+    def effective_state(self) -> tuple[SleepState, Optional[datetime]]:
+        """The sleep state this process should report, with its start time.
+
+        - Primary: its own state — it runs the state machine.
+        - Any other instance: if its local state is not AWAKE, a manual action
+          landed on this worker; that stays visible (forwarding actions to the
+          primary is a follow-up to #823). Otherwise the state the primary
+          published, falling back to the local state when none is readable.
+
+        For readers only. The state machine itself keeps using
+        `_current_state`.
+        """
+        local = self._local_state
+        if self._is_primary or local != SleepState.AWAKE:
+            return local, self._state_since
+        published = self._read_published_state()
+        if published is None:
+            return local, self._state_since
+        return published
 
     @classmethod
     async def get_instance(cls, backend: Optional[SleepBackend] = None) -> "SleepManagerService":
@@ -199,7 +285,10 @@ class SleepManagerService:
         config = self._load_config()
 
         if monitoring:
-            self._owns_sleep_inhibitor = True
+            self._is_primary = True
+            # Overwrite whatever an earlier primary left behind (crash,
+            # restart) before anyone relies on it.
+            self._publish_state(self._local_state, self._state_since)
             await self._core_uptime_rtc_guard.start()
 
             # Start idle detection loop
@@ -246,11 +335,19 @@ class SleepManagerService:
         if self._current_state == SleepState.SOFT_SLEEP:
             await self._exit_soft_sleep("service_shutdown")
 
+        # The last published word of a stopping primary is "awake": no loop
+        # is left to correct anything else, and followers would otherwise
+        # keep blocking syncs until the next primary starts. Explicit, because
+        # `_exit_soft_sleep` refuses some states (e.g. ENTERING_SUSPEND).
+        if self._is_primary:
+            self._publish_state(SleepState.AWAKE, datetime.now(timezone.utc))
+
         # Always release the logind inhibitor on shutdown so suspend works
         # again after BaluHost goes down (e.g. system shutdown / reboot).
-        # Ownership goes first: a request still running in this worker must
-        # not re-acquire a lock that no loop is left to release.
-        self._owns_sleep_inhibitor = False
+        # Primary role goes first: a request still running in this worker must
+        # neither re-acquire a lock that no loop is left to release nor
+        # publish a state that no loop is left to correct.
+        self._is_primary = False
         self._core_uptime_inhibitor.release()
 
         self._idle_task = None
@@ -372,7 +469,7 @@ class SleepManagerService:
                      so the `/proc` scan stays off the event loop; None
                      (sync callers) scans here.
         """
-        if not self._owns_sleep_inhibitor:
+        if not self._is_primary:
             # A lock in a worker without the loop is orphaned by definition.
             if self._core_uptime_inhibitor.is_held():
                 self._core_uptime_inhibitor.release()
@@ -706,6 +803,8 @@ class SleepManagerService:
                 await asyncio.sleep(60)
                 if not self._is_running:
                     break
+
+                self._retry_state_publish()
 
                 now = datetime.now()
                 config = self._load_config()
@@ -1651,9 +1750,11 @@ class SleepManagerService:
                 what=foreign.what, who=foreign.who, why=foreign.why, pid=foreign.pid,
             )
 
+        current_state, state_since = self.effective_state()
+
         return SleepStatusResponse(
-            current_state=self._current_state,
-            state_since=self._state_since,
+            current_state=current_state,
+            state_since=state_since,
             idle_seconds=self._idle_seconds,
             idle_threshold_seconds=idle_threshold,
             activity_metrics=metrics,
@@ -1926,5 +2027,5 @@ def get_service_status() -> dict:
         "last_error": _service._last_error,
         "last_error_at": _service._last_error_at.isoformat() if _service._last_error_at else None,
         "interval_seconds": 30.0,
-        "current_state": _service._current_state.value,
+        "current_state": _service.effective_state()[0].value,
     }

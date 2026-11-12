@@ -20,7 +20,7 @@ def _build_service():
     SleepManagerService._instance = None  # reset singleton
     svc = SleepManagerService(DevSleepBackend())
     # Geprueft wird der Abgleich im Primary: nur er haelt die logind-Sperre (#817).
-    svc._owns_sleep_inhibitor = True
+    svc._is_primary = True
     return svc
 
 

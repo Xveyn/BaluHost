@@ -28,8 +28,8 @@ from app.services.power.sleep import (
     SleepManagerService,
     record_http_request,
     get_http_requests_per_minute,
-    _http_request_timestamps,
 )
+from app.services.power import http_activity
 from app.models.sleep import SleepConfig as SleepConfigModel, SleepStateLog
 
 
@@ -362,18 +362,24 @@ class TestIdleDetection:
 class TestHttpRequestCounter:
     """Test the HTTP request per minute counter."""
 
-    def test_record_and_count(self):
-        _http_request_timestamps.clear()
+    @staticmethod
+    def _fresh_counter(monkeypatch, tmp_path, clock):
+        counter = http_activity.HttpActivityCounter(clock=clock, pid=1, shm_dir=tmp_path)
+        monkeypatch.setattr(http_activity, "_counter", counter)
+        return counter
+
+    def test_record_and_count(self, monkeypatch, tmp_path):
+        self._fresh_counter(monkeypatch, tmp_path, clock=lambda: 10_000.0)
         for _ in range(10):
             record_http_request()
         rpm = get_http_requests_per_minute()
         assert rpm == 10.0
 
-    def test_old_requests_not_counted(self):
-        import time
-        _http_request_timestamps.clear()
-        # Add a request with a timestamp in the past (>60s ago)
-        _http_request_timestamps.append(time.monotonic() - 120)
+    def test_old_requests_not_counted(self, monkeypatch, tmp_path):
+        now = [10_000.0]
+        self._fresh_counter(monkeypatch, tmp_path, clock=lambda: now[0])
+        record_http_request()  # recorded two minutes before the reading
+        now[0] += 120
         record_http_request()  # Add one recent request
         rpm = get_http_requests_per_minute()
         assert rpm == 1.0

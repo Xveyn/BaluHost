@@ -145,3 +145,27 @@ class PresenceSession(Base):
 
     def __repr__(self) -> str:
         return f"<PresenceSession({self.client_id}, user={self.user_id}, last={self.last_heartbeat_at})>"
+
+
+class SleepRuntimeState(Base):
+    """The primary's sleep state, readable by every API process (#823).
+
+    Singleton row (id=1). Only the process that runs the sleep loops writes
+    it; all others read it (pattern of `FanRuntimeState`).
+    """
+    __tablename__ = "sleep_runtime_state"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    current_state: Mapped[str] = mapped_column(
+        String(32), nullable=False, server_default="awake"
+    )
+    state_since: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+    updated_by_pid: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+
+    def __repr__(self) -> str:
+        return f"<SleepRuntimeState({self.current_state}, pid={self.updated_by_pid})>"

@@ -33,7 +33,7 @@ class TestRequireSyncAllowed:
         """Auto sync is allowed when NAS is awake."""
         app = _make_app()
         mock_manager = MagicMock()
-        mock_manager._current_state = SleepState.AWAKE
+        mock_manager.effective_state.return_value = (SleepState.AWAKE, None)
 
         with patch("app.services.power.sleep.get_sleep_manager", return_value=mock_manager):
             client = TestClient(app)
@@ -44,7 +44,7 @@ class TestRequireSyncAllowed:
         """Auto sync is blocked (503) when NAS is in soft sleep."""
         app = _make_app()
         mock_manager = MagicMock()
-        mock_manager._current_state = SleepState.SOFT_SLEEP
+        mock_manager.effective_state.return_value = (SleepState.SOFT_SLEEP, None)
         mock_config = MagicMock()
         mock_config.schedule_enabled = True
         mock_config.schedule_wake_time = "06:00"
@@ -64,7 +64,7 @@ class TestRequireSyncAllowed:
         """Manual sync is allowed even during soft sleep (auto-wake handles it)."""
         app = _make_app()
         mock_manager = MagicMock()
-        mock_manager._current_state = SleepState.SOFT_SLEEP
+        mock_manager.effective_state.return_value = (SleepState.SOFT_SLEEP, None)
 
         with patch("app.services.power.sleep.get_sleep_manager", return_value=mock_manager):
             client = TestClient(app)
@@ -75,7 +75,7 @@ class TestRequireSyncAllowed:
         """Missing X-Sync-Trigger header is treated as manual (backwards compat)."""
         app = _make_app()
         mock_manager = MagicMock()
-        mock_manager._current_state = SleepState.SOFT_SLEEP
+        mock_manager.effective_state.return_value = (SleepState.SOFT_SLEEP, None)
 
         with patch("app.services.power.sleep.get_sleep_manager", return_value=mock_manager):
             client = TestClient(app)
@@ -86,7 +86,7 @@ class TestRequireSyncAllowed:
         """Scheduled sync is blocked like auto sync."""
         app = _make_app()
         mock_manager = MagicMock()
-        mock_manager._current_state = SleepState.SOFT_SLEEP
+        mock_manager.effective_state.return_value = (SleepState.SOFT_SLEEP, None)
         mock_manager._load_config.return_value = None
 
         with patch("app.services.power.sleep.get_sleep_manager", return_value=mock_manager):

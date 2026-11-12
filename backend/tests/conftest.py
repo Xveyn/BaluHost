@@ -234,6 +234,30 @@ def forbid_real_logind_inhibitors() -> Generator[list[list[str]], None, None]:
         )
 
 
+@pytest.fixture(autouse=True)
+def _forget_published_sleep_state() -> Generator[None, None, None]:
+    """Drop the primary's published sleep state after each test (#823).
+
+    A test that runs a `SleepManagerService` as primary publishes its state
+    into the per-worker global database. Left there, a later test's
+    non-primary instance would read it through `effective_state()` and report
+    a soft sleep nobody asked for.
+    """
+    yield
+    from app.models.sleep import SleepRuntimeState
+
+    # Read first: almost no test publishes anything, and a DELETE with its
+    # commit after each of several thousand tests is measurable.
+    table = SleepRuntimeState.__table__
+    try:
+        with _global_engine.connect() as conn:
+            if conn.execute(table.select().limit(1)).first() is not None:
+                conn.execute(table.delete())
+                conn.commit()
+    except Exception:
+        pass
+
+
 # ============================================================================
 # Database Fixtures
 # ============================================================================
