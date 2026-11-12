@@ -136,8 +136,15 @@ class GpuPowerCommand(Base):
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    # pending | running | applied | failed
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     completed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # Deadline of the waiting caller: a pending row past it is failed instead
+    # of executed (#829). NULL on rows from before the column existed or from
+    # a process still running older code; those are judged by their age.
+    expires_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
 

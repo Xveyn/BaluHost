@@ -137,13 +137,10 @@ class PowerManagerService:
         if self._primary:
             return await self._primary_enable_dynamic_mode(config)
 
-        cmd_id = command_queue.enqueue_command(
+        return await command_queue.submit_command(
             "enable_dynamic_mode",
             payload=config.model_dump() if hasattr(config, "model_dump") else config.dict(),
         )
-        if cmd_id is None:
-            return False, "Failed to enqueue command"
-        return await command_queue.wait_for_completion(cmd_id)
 
     async def _primary_enable_dynamic_mode(self, config: DynamicModeConfig) -> Tuple[bool, Optional[str]]:
         """Primary-worker hardware path for ``enable_dynamic_mode``."""
@@ -214,10 +211,7 @@ class PowerManagerService:
         if self._primary:
             return await self._primary_disable_dynamic_mode()
 
-        cmd_id = command_queue.enqueue_command("disable_dynamic_mode")
-        if cmd_id is None:
-            return False, "Failed to enqueue command"
-        return await command_queue.wait_for_completion(cmd_id)
+        return await command_queue.submit_command("disable_dynamic_mode")
 
     async def _mark_dynamic_mode_off(self) -> None:
         """Clear dynamic mode locally and in both shared stores.
@@ -344,13 +338,10 @@ class PowerManagerService:
             return await self._primary_switch_backend(use_linux)
 
         previous_backend = (load_runtime_state().get("backend_kind") or "unknown").capitalize()
-        cmd_id = command_queue.enqueue_command(
-            "switch_backend", payload={"use_linux_backend": use_linux}
-        )
-        if cmd_id is None:
-            return False, previous_backend, "unknown"
-        success, _err = await command_queue.wait_for_completion(
-            cmd_id, timeout_s=command_queue.BACKEND_SWITCH_TIMEOUT_S
+        success, _err = await command_queue.submit_command(
+            "switch_backend",
+            payload={"use_linux_backend": use_linux},
+            timeout_s=command_queue.BACKEND_SWITCH_TIMEOUT_S,
         )
         if not success:
             return False, previous_backend, "unknown"
@@ -1010,7 +1001,7 @@ class PowerManagerService:
         if self._primary:
             return await self._primary_apply_profile(profile, reason=reason, duration_seconds=duration_seconds)
 
-        cmd_id = command_queue.enqueue_command(
+        return await command_queue.submit_command(
             "apply_profile",
             payload={
                 "profile": profile.value,
@@ -1018,9 +1009,6 @@ class PowerManagerService:
                 "duration_seconds": duration_seconds,
             },
         )
-        if cmd_id is None:
-            return False, "Failed to enqueue command"
-        return await command_queue.wait_for_completion(cmd_id)
 
     async def _primary_apply_profile(
         self,
