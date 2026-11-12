@@ -396,6 +396,8 @@ async def list_temp_sensors(
     # Refresh disk:* sources from the SMART summary SHM file before listing
     # so newly-discovered disks show up without a service restart.
     await service._refresh_disk_sources()
+    # Composites/Labels, die ein anderer Worker angelegt hat (#708).
+    service.sync_registry_from_db()
 
     sources = service._registry.all_sources()
     items: List[TempSensorInfo] = []
@@ -440,7 +442,9 @@ async def set_sensor_label(
         else:
             db.add(TempSensorLabel(sensor_id=sensor_id, custom_label=body.label))
         db.commit()
-    service._registry.set_label(sensor_id, body.label)
+    # Abgleich statt direktem set_label(): haelt die Signatur dieses Workers
+    # aktuell und nimmt Aenderungen anderer Worker gleich mit (#708).
+    service.sync_registry_from_db()
     return {"success": True, "sensor_id": sensor_id, "custom_label": body.label}
 
 
@@ -463,7 +467,7 @@ async def clear_sensor_label(
         if existing:
             db.delete(existing)
             db.commit()
-    service._registry.clear_label(sensor_id)
+    service.sync_registry_from_db()
     return {"success": True, "sensor_id": sensor_id}
 
 
@@ -483,6 +487,9 @@ async def list_composite_sensors(
     from app.models.fans import CompositeTempSensor
     import json as _json
     items: List[CompositeSensorInfo] = []
+    # Ohne Abgleich lieferte ein auf einem anderen Worker angelegter
+    # Composite hier current_temp=None (#708).
+    service.sync_registry_from_db()
     with service.db_session_factory() as db:
         rows = db.execute(select(CompositeTempSensor)).scalars().all()
         for row in rows:
@@ -533,8 +540,10 @@ async def create_composite_sensor(
         db.add(row)
         db.commit()
 
-    # Rebuild registry to include the new composite
-    await service._rebuild_registry()
+    # Gezielter Abgleich statt _rebuild_registry(): der baute ueber mehrere
+    # awaits neu auf, parallele Anfragen und der Regelkreis saehen solange eine
+    # halbleere Registry. Andere Worker holen sich den Composite selbst (#708).
+    service.sync_registry_from_db()
 
     return CompositeSensorInfo(
         id=new_id, name=body.name, function=body.function,
@@ -573,7 +582,7 @@ async def update_composite_sensor(
         db.commit()
         sids = _json.loads(row.source_ids_json)
 
-    await service._rebuild_registry()
+    service.sync_registry_from_db()
     current = await service._registry.get_temp(composite_id)
     return CompositeSensorInfo(id=composite_id, name=row.name, function=row.function,
                                source_ids=sids, current_temp=current)
@@ -603,7 +612,7 @@ async def delete_composite_sensor(
             cfg.temp_sensor_id = None
         db.delete(row)
         db.commit()
-    await service._rebuild_registry()
+    service.sync_registry_from_db()
     return {"success": True}
 
 

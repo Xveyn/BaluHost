@@ -209,6 +209,10 @@ class FanControlService:
 
     _instance: Optional["FanControlService"] = None
     _lock = asyncio.Lock()
+    # Zuletzt in die Registry uebernommener Stand von Composites und Labels
+    # (#708). None = noch nie abgeglichen. Klassenattribut statt __init__,
+    # damit auch per __new__ gebaute Instanzen (Tests) einen Startwert haben.
+    _db_sources_signature: Optional[Tuple[tuple, tuple]] = None
 
     def __init__(self, config: Settings, db_session_factory):
         if FanControlService._instance is not None:
@@ -1029,6 +1033,9 @@ class FanControlService:
     async def _rebuild_registry(self) -> None:
         """(Re)populate the registry with all current sources."""
         self._registry.clear()
+        # clear() hat auch die mix:-Quellen entfernt -- die Signatur muss mit,
+        # sonst hielte sync_registry_from_db() den leeren Stand fuer aktuell.
+        self._db_sources_signature = None
         if not self._backend:
             return
 
@@ -1068,11 +1075,9 @@ class FanControlService:
                 read_fn=self._make_disk_reader(device),
             ))
 
-        # Composite sensors from DB
-        await self._register_composites_from_db()
-
-        # Custom labels from DB
-        await self._load_sensor_labels()
+        # Composite sensors and custom labels from DB. Die werfende Variante:
+        # ein DB-Fehler beim Start soll sichtbar werden wie bisher.
+        self._apply_db_backed_sources()
 
     def _make_hwmon_reader(self, sensor_id: str):
         async def _read():
@@ -1152,28 +1157,103 @@ class FanControlService:
         for sid in current - {f"disk:{d}" for d in desired}:
             self._registry.unregister(sid)
 
-    async def _register_composites_from_db(self) -> None:
-        from app.models.fans import CompositeTempSensor
-        with self.db_session_factory() as db:
-            rows = db.execute(select(CompositeTempSensor)).scalars().all()
-            for row in rows:
-                try:
-                    source_ids = json.loads(row.source_ids_json)
-                except Exception:
-                    continue
-                self._registry.register(MixTempSource(
-                    composite_id=row.id,
-                    name=row.name,
-                    function=row.function,
-                    source_ids=source_ids,
-                    registry=self._registry,
-                ))
+    @staticmethod
+    def _load_db_backed_rows(db) -> Tuple[tuple, tuple]:
+        """Liest Composites und Labels als sortierte, vergleichbare Tupel.
 
-    async def _load_sensor_labels(self) -> None:
-        from app.models.fans import TempSensorLabel
+        Die Tupel SIND die Signatur: verglichen wird der Inhalt, nicht
+        count/max(updated_at) -- ein Update, das nur die Funktion tauscht,
+        aendert weder die Anzahl noch zuverlaessig den Zeitstempel (SQLite
+        loest func.now() auf Sekunden auf).
+        """
+        from app.models.fans import CompositeTempSensor, TempSensorLabel
+        composites = tuple(sorted(
+            (row.id, row.name, row.function, row.source_ids_json)
+            for row in db.execute(select(CompositeTempSensor)).scalars().all()
+        ))
+        labels = tuple(sorted(
+            (row.sensor_id, row.custom_label)
+            for row in db.execute(select(TempSensorLabel)).scalars().all()
+        ))
+        return composites, labels
+
+    def _apply_db_backed_sources(self) -> bool:
+        """Gleicht mix:-Quellen und Labels der Registry mit der DB ab.
+
+        Wirft bei einem DB-Fehler; fail-soft ist sync_registry_from_db().
+        Gibt True zurueck, wenn sich etwas geaendert hat.
+
+        Bewusst synchron: zwischen Lesen und Anwenden liegt kein await, also
+        sieht weder der Regelkreis noch eine parallele Anfrage auf diesem
+        Worker je einen halb abgeglichenen Stand. Und bewusst gezielt statt
+        registry.clear(): hwmon/gpu/disk kommen nicht aus der DB und bleiben
+        als dieselben Objekte stehen.
+        """
         with self.db_session_factory() as db:
-            for row in db.execute(select(TempSensorLabel)).scalars().all():
-                self._registry.set_label(row.sensor_id, row.custom_label)
+            signature = self._load_db_backed_rows(db)
+        if signature == self._db_sources_signature:
+            return False
+        composites, labels = signature
+
+        desired: Dict[str, Tuple[str, str, List[str]]] = {}
+        for cid, name, function, source_ids_json in composites:
+            try:
+                source_ids = json.loads(source_ids_json)
+            except Exception:
+                logger.warning("Composite %s: source_ids_json nicht lesbar, uebersprungen", cid)
+                continue
+            src = MixTempSource(composite_id=cid, name=name, function=function,
+                                source_ids=source_ids, registry=self._registry)
+            desired[src.id] = (name, function, source_ids)
+
+        for src in self._registry.all_sources():
+            if src.kind == "mix" and src.id not in desired:
+                self._registry.unregister(src.id)
+
+        for sid, (name, function, source_ids) in desired.items():
+            current = self._registry._sources.get(sid)
+            if (isinstance(current, MixTempSource)
+                    and current._registry is self._registry
+                    and (current.name, current.function, current.source_ids)
+                    == (name, function, source_ids)):
+                continue
+            self._registry.register(MixTempSource(
+                composite_id=sid, name=name, function=function,
+                source_ids=source_ids, registry=self._registry,
+            ))
+
+        # Labels kommen ausschliesslich aus der DB -- alles, was dort fehlt,
+        # ist geloescht worden (auf diesem oder einem anderen Worker).
+        desired_labels = {
+            TempSourceRegistry._normalize_id(sensor_id): label
+            for sensor_id, label in labels
+        }
+        for sid in set(self._registry._labels) - set(desired_labels):
+            self._registry.clear_label(sid)
+        for sid, label in desired_labels.items():
+            if self._registry._labels.get(sid) != label:
+                self._registry.set_label(sid, label)
+
+        self._db_sources_signature = signature
+        return True
+
+    def sync_registry_from_db(self) -> bool:
+        """Holt Composites und Labels anderer Worker in diese Registry (#708).
+
+        Jeder Uvicorn-Worker hat seine eigene Registry; die Composite- und
+        Label-Routen schreiben die DB, erreichen aber nur den Worker, der die
+        Anfrage bedient. Aufgerufen je Regelzyklus im Primary und in jeder
+        Route, die die Registry liest. Kostet zwei kleine SELECTs; angewandt
+        wird nur bei geaenderter Signatur.
+
+        Fail-soft: ein DB-Fehler laesst die bisherige Registry stehen und die
+        Signatur unberuehrt, der naechste Aufruf versucht es erneut.
+        """
+        try:
+            return self._apply_db_backed_sources()
+        except Exception as exc:
+            logger.warning("Registry-Abgleich mit der DB fehlgeschlagen: %s", exc)
+            return False
 
     async def _monitoring_loop(self):
         """Background monitoring loop."""
@@ -1216,6 +1296,17 @@ class FanControlService:
         """Monitor and control fans based on configuration."""
         if not self._backend:
             return
+
+        # Vor dem ersten get_temp(): ein auf einem Follower angelegter
+        # Composite waere hier sonst unbekannt -- kein Zielwert, und nach der
+        # Frist aus #534 ginge der Kanal still an die Board-Automatik (#708).
+        # Fail-soft, ein DB-Fehler laesst die bisherige Registry stehen.
+        self.sync_registry_from_db()
+        # Dieselbe Luecke fuer disk:* -- die Quellen kommen aus dem
+        # SMART-Summary im SHM, das beim Start des Backends noch fehlen kann,
+        # und nachgetragen hat sie bisher nur die Sensorlisten-Route in dem
+        # Worker, der sie bedient. Liest nur das SHM, keine Hardware.
+        await self._refresh_disk_sources()
 
         fans = await self._backend.get_fans()
         now_ts = _time.time()
@@ -1634,6 +1725,11 @@ class FanControlService:
             }
 
         fans = await self._backend.get_fans()
+
+        # Die Anzeige-Temperatur kommt bei einem mix:-Sensor aus der Registry
+        # -- auf einem Follower ohne Abgleich fiele sie still auf die
+        # Scan-Temperatur zurueck (#708).
+        self.sync_registry_from_db()
 
         # Load configs from DB
         with self.db_session_factory() as db:
