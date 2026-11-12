@@ -60,7 +60,7 @@ async def sync_preflight(
         )
 
     from app.schemas.sleep import SleepState
-    current_state = manager._current_state
+    current_state, _since = manager.effective_state()
     is_awake = current_state == SleepState.AWAKE
 
     schedule_info = None

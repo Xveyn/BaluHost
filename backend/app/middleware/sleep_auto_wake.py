@@ -67,6 +67,12 @@ class SleepAutoWakeMiddleware(BaseHTTPMiddleware):
                 from app.schemas.sleep import SleepState
 
                 manager = get_sleep_manager()
+                # Deliberately the LOCAL state, not effective_state(): a
+                # follower cannot wake the primary yet. Running exit_soft_sleep()
+                # here while only the primary sleeps would half-undo the sleep
+                # (resume services, drop the IDLE demand) while the primary
+                # keeps publishing soft_sleep. Forwarding is the follow-up to
+                # #823; until then only a request on the primary auto-wakes.
                 if manager and manager._current_state == SleepState.SOFT_SLEEP:
                     # Check X-Sync-Trigger header for sync paths
                     sync_trigger = request.headers.get("X-Sync-Trigger", "").lower()

@@ -69,7 +69,7 @@ class ActivityMetrics(BaseModel):
     disk_io_avg_mbps: float = Field(default=0.0, description="Average disk I/O in MB/s")
     active_uploads: int = Field(default=0, description="Number of active file uploads")
     active_downloads: int = Field(default=0, description="Number of active file downloads")
-    http_requests_per_minute: float = Field(default=0.0, description="HTTP requests per minute")
+    http_requests_per_minute: float = Field(default=0.0, description="HTTP requests per minute, summed over all API processes")
 
 
 # ---------------------------------------------------------------------------
@@ -209,7 +209,7 @@ class SleepConfigResponse(BaseModel):
     idle_timeout_minutes: int = Field(default=15, description="Minutes of idle before entering sleep")
     idle_cpu_threshold: float = Field(default=5.0, description="CPU usage % threshold for idle")
     idle_disk_io_threshold: float = Field(default=0.5, description="Disk I/O MB/s threshold for idle")
-    idle_http_threshold: float = Field(default=5.0, description="HTTP requests/min threshold for idle")
+    idle_http_threshold: float = Field(default=5.0, description="HTTP requests/min threshold for idle (compared against the sum over all API processes)")
     # Auto-escalation
     auto_escalation_enabled: bool = Field(default=False, description="Auto-escalate soft sleep to suspend")
     escalation_after_minutes: int = Field(default=60, description="Minutes in soft sleep before escalation")

@@ -515,7 +515,9 @@ async def require_sync_allowed(request: Request) -> None:
     if manager is None:
         return  # sleep manager not running -> allow
 
-    state = manager._current_state
+    # The primary's state, not this worker's: idle and schedule sleep run in
+    # the primary alone (#823).
+    state, _since = manager.effective_state()
     if state == SleepState.AWAKE:
         return  # system is awake -> allow
 
