@@ -359,11 +359,13 @@ async def test_follower_preflight_reports_the_primary_soft_sleep(session_factory
 
 
 @pytest.mark.asyncio
-async def test_follower_auto_wake_does_not_exit_soft_sleep_for_the_primary(session_factory):
-    """Ein Follower kann den Primary noch nicht wecken. Fuehrte er
-    exit_soft_sleep() lokal aus, setzte er Dienste fort und naehme den
-    IDLE-Demand weg, waehrend der Primary weiter soft_sleep veroeffentlicht."""
+async def test_follower_auto_wake_forwards_a_wake_to_the_primary(session_factory):
+    """A follower that sees the primary's soft sleep asks the primary to wake
+    (#823, part 2) -- through the queue, never with its own exit_soft_sleep(),
+    which would half-undo the sleep while the primary keeps sleeping."""
+    from app.middleware import sleep_auto_wake
     from app.middleware.sleep_auto_wake import SleepAutoWakeMiddleware
+    from app.services.power import sleep_command_queue
 
     _primary, follower = await _primary_asleep_and_follower()
     app = FastAPI()
@@ -373,8 +375,21 @@ async def test_follower_auto_wake_does_not_exit_soft_sleep_for_the_primary(sessi
     async def upload_stub():
         return {"ok": True}
 
-    with patch("app.services.power.sleep.get_sleep_manager", return_value=follower), \
-         patch.object(follower, "exit_soft_sleep", new=AsyncMock()) as exit_mock:
-        TestClient(app).post("/api/files/upload")
+    sleep_auto_wake._reset_auto_wake_state()
+    try:
+        with patch("app.services.power.sleep.get_sleep_manager", return_value=follower), \
+             patch.object(follower, "exit_soft_sleep", new=AsyncMock()) as exit_mock, \
+             patch.object(
+                 sleep_command_queue, "submit_command",
+                 new=AsyncMock(return_value=(True, None)),
+             ) as submit:
+            response = TestClient(app).post("/api/files/upload")
+    finally:
+        sleep_auto_wake._reset_auto_wake_state()
 
+    assert response.status_code == 200
     exit_mock.assert_not_called()
+    submit.assert_awaited_once()
+    command, payload = submit.call_args.args[0], submit.call_args.args[1]
+    assert command == "wake"
+    assert payload["reason"] == "auto_wake: POST /api/files/upload"

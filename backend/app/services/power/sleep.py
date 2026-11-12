@@ -12,9 +12,11 @@ from __future__ import annotations
 
 import abc
 import asyncio
+import enum
 import json
 import logging
 import time
+from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
@@ -26,6 +28,7 @@ from app.models.sleep import SleepConfig as SleepConfigModel, SleepStateLog, Cor
 from app.services.audit.logger_db import get_audit_logger_db
 from app.services.power import core_uptime as core_uptime_helpers
 from app.services.power import http_activity
+from app.services.power import sleep_command_queue
 from app.services.power import sleep_runtime_store
 from app.services.power.core_uptime_inhibitor import CoreUptimeInhibitor
 from app.services.power.core_uptime_rtc_guard import CoreUptimeRtcGuard
@@ -103,6 +106,35 @@ from app.services.power.sleep_backend_linux import LinuxSleepBackend  # noqa: E4
 # Sleep Manager Service
 # ---------------------------------------------------------------------------
 
+class SleepActionStatus(str, enum.Enum):
+    """Outcome of a requested sleep action (#823)."""
+    DONE = "done"
+    #: The primary's state machine said no (e.g. "wake" while awake).
+    REFUSED = "refused"
+    #: The action could not be handed to the primary, or its outcome is
+    #: unknown (no pickup, timeout, stale, database error).
+    UNAVAILABLE = "unavailable"
+
+
+@dataclass(frozen=True)
+class SleepActionResult:
+    """What `request_soft_sleep()` / `request_wake()` / `request_suspend()` return."""
+    status: SleepActionStatus
+    detail: Optional[str] = None
+
+    @property
+    def ok(self) -> bool:
+        return self.status is SleepActionStatus.DONE
+
+    @property
+    def refused(self) -> bool:
+        return self.status is SleepActionStatus.REFUSED
+
+    @property
+    def unavailable(self) -> bool:
+        return self.status is SleepActionStatus.UNAVAILABLE
+
+
 def record_http_request() -> None:
     """Count one HTTP request for idle detection (called by middleware)."""
     http_activity.record()
@@ -158,6 +190,8 @@ class SleepManagerService:
         self._idle_task: Optional[asyncio.Task] = None
         self._schedule_task: Optional[asyncio.Task] = None
         self._escalation_task: Optional[asyncio.Task] = None
+        # Primary only: executes sleep actions forwarded by followers (#823).
+        self._command_poll_task: Optional[asyncio.Task] = None
         self._soft_sleep_entered_at: Optional[datetime] = None
         self._started_at: Optional[datetime] = None
         self._error_count: int = 0
@@ -240,10 +274,11 @@ class SleepManagerService:
         """The sleep state this process should report, with its start time.
 
         - Primary: its own state — it runs the state machine.
-        - Any other instance: if its local state is not AWAKE, a manual action
-          landed on this worker; that stays visible (forwarding actions to the
-          primary is a follow-up to #823). Otherwise the state the primary
-          published, falling back to the local state when none is readable.
+        - Any other instance: the state the primary published, falling back
+          to the local state when none is readable. A local state other than
+          AWAKE still wins; since manual actions are forwarded to the primary
+          (`request_*`, #823) a follower's own state machine no longer moves,
+          so this only covers code that drives an instance directly.
 
         For readers only. The state machine itself keeps using
         `_current_state`.
@@ -297,6 +332,11 @@ class SleepManagerService:
             # Start schedule check loop
             self._schedule_task = asyncio.create_task(self._schedule_check_loop())
 
+            # Execute the sleep actions followers hand over (#823)
+            self._command_poll_task = asyncio.create_task(
+                sleep_command_queue.run_poll_loop(self)
+            )
+
             # If service starts INSIDE a core-uptime window OR with Always-Awake
             # active, immediately reconcile the logind inhibitor — the schedule
             # loop only fires in 60s and an idle desktop daemon could suspend us
@@ -323,7 +363,10 @@ class SleepManagerService:
         self._is_running = False
 
         # Cancel background tasks
-        for task in [self._idle_task, self._schedule_task, self._escalation_task]:
+        for task in [
+            self._idle_task, self._schedule_task, self._escalation_task,
+            self._command_poll_task,
+        ]:
             if task and not task.done():
                 task.cancel()
                 try:
@@ -353,6 +396,7 @@ class SleepManagerService:
         self._idle_task = None
         self._schedule_task = None
         self._escalation_task = None
+        self._command_poll_task = None
         logger.info("Sleep manager stopped")
 
     def _load_config(self) -> Optional[SleepConfigModel]:
@@ -1038,6 +1082,77 @@ class SleepManagerService:
         if target <= now:
             target += timedelta(days=1)
         return target
+
+    # --- Requested actions: routes and auto-wake (#823) ---
+    #
+    # Only the primary runs the state machine. A follower executing
+    # `enter_soft_sleep()` & co. itself would run a second, private state
+    # machine — the box half asleep, "wake" refused on every other worker.
+    # So these three are what callers outside the loops use: the primary
+    # executes directly, a follower forwards through `sleep_command_queue`.
+
+    async def request_soft_sleep(self, reason: str) -> SleepActionResult:
+        """Enter soft sleep (manual) — on the primary, wherever this is called."""
+        if self._is_primary:
+            return self._local_result(
+                await self.enter_soft_sleep(reason, SleepTrigger.MANUAL)
+            )
+        return await self._forward(
+            sleep_command_queue.COMMAND_SOFT, {"reason": reason}
+        )
+
+    async def request_wake(self, reason: str) -> SleepActionResult:
+        """Exit soft sleep — on the primary, wherever this is called."""
+        if self._is_primary:
+            return self._local_result(await self.exit_soft_sleep(reason))
+        return await self._forward(
+            sleep_command_queue.COMMAND_WAKE, {"reason": reason}
+        )
+
+    async def request_suspend(
+        self, reason: str, wake_at: Optional[datetime] = None,
+    ) -> SleepActionResult:
+        """True suspend (manual) — on the primary, wherever this is called.
+
+        On a real box this returns after resume.
+        """
+        if self._is_primary:
+            return self._local_result(
+                await self.enter_true_suspend(reason, SleepTrigger.MANUAL, wake_at=wake_at)
+            )
+        return await self._forward(
+            sleep_command_queue.COMMAND_SUSPEND,
+            {
+                "reason": reason,
+                "wake_at": wake_at.isoformat() if wake_at is not None else None,
+            },
+        )
+
+    @staticmethod
+    def _local_result(ok: bool) -> SleepActionResult:
+        return SleepActionResult(
+            SleepActionStatus.DONE if ok else SleepActionStatus.REFUSED
+        )
+
+    async def _forward(self, command: str, payload: dict) -> SleepActionResult:
+        """Hand *command* to the primary and map its answer. Never raises."""
+        payload = {**payload, "issued_at": sleep_command_queue.issued_now()}
+        try:
+            ok, error = await sleep_command_queue.submit_command(command, payload)
+        except Exception as exc:
+            return SleepActionResult(
+                SleepActionStatus.UNAVAILABLE, f"{type(exc).__name__}: {exc}"
+            )
+        finally:
+            # Whatever the answer: the primary's state may have changed while
+            # we waited (our command, or someone else's ahead of it). Don't
+            # serve the old one from the published-state cache.
+            self._published_cache = None
+        if ok:
+            return SleepActionResult(SleepActionStatus.DONE)
+        if error == sleep_command_queue.REFUSED:
+            return SleepActionResult(SleepActionStatus.REFUSED)
+        return SleepActionResult(SleepActionStatus.UNAVAILABLE, error)
 
     # --- Public API ---
 
