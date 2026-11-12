@@ -17,10 +17,13 @@ from app.services.service_status import (
 
 
 @pytest.fixture(autouse=True)
-def clear_registry():
+def isolated_registry():
+    """Leere Registry fuer den Test, danach der Stand von vorher."""
+    previous = dict(_service_registry)
     _service_registry.clear()
     yield
     _service_registry.clear()
+    _service_registry.update(previous)
 
 
 @pytest.fixture(autouse=True)
