@@ -17,6 +17,7 @@ from app.api.deps import (
 from app.core.rate_limiter import user_limiter, get_limit
 from app.schemas.power_permissions import MyPowerPermissionsResponse
 from app.core.database import get_db
+from app.core.exceptions import ServiceUnavailableError
 from sqlalchemy.orm import Session
 from app.services.audit.logger_db import get_audit_logger_db
 from app.models.user import User
@@ -29,7 +30,6 @@ from app.schemas.sleep import (
     EnterSoftSleepRequest,
     EnterSuspendRequest,
     WolRequest,
-    SleepTrigger,
     CoreUptimeWindowCreate,
     CoreUptimeWindowUpdate,
     CoreUptimeWindowResponse,
@@ -47,6 +47,24 @@ from app.schemas.sleep import OsSleepReportResponse, OsAutoSuspendResponse, OsAu
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+_UNAVAILABLE_DETAIL = "Sleep action could not be handed to the primary worker"
+
+
+def _raise_unless_done(result, action: str, refused_detail: str) -> None:
+    """Map a `SleepActionResult`: refused -> 409, unavailable -> 503 (#823).
+
+    The carried error text (timeout, stale, database) stays in the server log.
+    A `ServiceError` rather than `HTTPException(503)`: the global 5xx scrubber
+    would rewrite the latter's detail to "Internal server error".
+    """
+    if result.ok:
+        return
+    if result.refused:
+        raise HTTPException(status_code=409, detail=refused_detail)
+    logger.warning("Sleep action %s not executed: %s", action, result.detail)
+    raise ServiceUnavailableError(_UNAVAILABLE_DETAIL)
 
 
 def _get_manager():
@@ -79,9 +97,8 @@ async def enter_soft_sleep(
     """Enter soft sleep mode (admin or delegated users)."""
     manager = _get_manager()
     reason = (body.reason if body else None) or f"manual by {current_user.username}"
-    ok = await manager.enter_soft_sleep(reason, SleepTrigger.MANUAL)
-    if not ok:
-        raise HTTPException(status_code=409, detail="Cannot enter soft sleep from current state")
+    result = await manager.request_soft_sleep(reason)
+    _raise_unless_done(result, "soft", "Cannot enter soft sleep from current state")
     logger.info("Soft sleep activated by %s", current_user.username)
     if current_user.role != "admin":
         audit_logger = get_audit_logger_db()
@@ -105,9 +122,8 @@ async def wake_from_sleep(
 ) -> dict:
     """Exit soft sleep mode (admin or delegated users)."""
     manager = _get_manager()
-    ok = await manager.exit_soft_sleep(f"manual wake by {current_user.username}")
-    if not ok:
-        raise HTTPException(status_code=409, detail="Cannot wake from current state")
+    result = await manager.request_wake(f"manual wake by {current_user.username}")
+    _raise_unless_done(result, "wake", "Cannot wake from current state")
     logger.info("Manual wake triggered by %s", current_user.username)
     if current_user.role != "admin":
         audit_logger = get_audit_logger_db()
@@ -133,11 +149,10 @@ async def enter_suspend(
     """Enter true system suspend (admin or delegated users)."""
     manager = _get_manager()
     reason = (body.reason if body else None) or f"manual suspend by {current_user.username}"
-    ok = await manager.enter_true_suspend(
-        reason, SleepTrigger.MANUAL, wake_at=body.wake_at if body else None,
+    result = await manager.request_suspend(
+        reason, wake_at=body.wake_at if body else None,
     )
-    if not ok:
-        raise HTTPException(status_code=409, detail="Cannot suspend from current state")
+    _raise_unless_done(result, "suspend", "Cannot suspend from current state")
     logger.info("System suspend triggered by %s", current_user.username)
     if current_user.role != "admin":
         audit_logger = get_audit_logger_db()

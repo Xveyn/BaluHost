@@ -24,9 +24,11 @@ def _make_app() -> FastAPI:
 
 
 def _sleeping_manager() -> MagicMock:
+    from app.services.power.sleep import SleepActionResult, SleepActionStatus
+
     manager = MagicMock()
-    manager._current_state = SleepState.SOFT_SLEEP
-    manager.exit_soft_sleep = AsyncMock()
+    manager.effective_state.return_value = (SleepState.SOFT_SLEEP, None)
+    manager.request_wake = AsyncMock(return_value=SleepActionResult(SleepActionStatus.DONE))
     return manager
 
 
@@ -52,7 +54,7 @@ def test_presence_heartbeat_does_not_auto_wake_from_soft_sleep():
     with patch("app.services.power.sleep.record_http_request"), \
          patch("app.services.power.sleep.get_sleep_manager", return_value=manager):
         TestClient(app).post("/api/system/sleep/presence")
-    manager.exit_soft_sleep.assert_not_called()
+    manager.request_wake.assert_not_called()
 
 
 def test_other_request_still_auto_wakes_from_soft_sleep():
@@ -61,4 +63,4 @@ def test_other_request_still_auto_wakes_from_soft_sleep():
     with patch("app.services.power.sleep.record_http_request"), \
          patch("app.services.power.sleep.get_sleep_manager", return_value=manager):
         TestClient(app).post("/api/files/upload")
-    manager.exit_soft_sleep.assert_called_once()
+    manager.request_wake.assert_called_once()

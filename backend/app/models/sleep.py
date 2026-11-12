@@ -4,7 +4,7 @@ Database models for sleep mode.
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Integer, String, Float, Boolean, DateTime, Text, ForeignKey
+from sqlalchemy import Integer, String, Float, Boolean, DateTime, Text, ForeignKey, Index
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
 
@@ -169,3 +169,43 @@ class SleepRuntimeState(Base):
 
     def __repr__(self) -> str:
         return f"<SleepRuntimeState({self.current_state}, pid={self.updated_by_pid})>"
+
+
+class SleepCommand(Base):
+    """Cross-worker queue for manual sleep actions (#823).
+
+    Only the primary runs the sleep state machine. A follower that serves
+    ``POST /api/system/sleep/{soft,wake,suspend}`` or an auto-wake enqueues
+    a row here; the primary's poll loop executes it
+    (``services/power/sleep_command_queue.py``). Same columns as
+    ``power_commands``, driven by the same ``DbCommandQueue``.
+    """
+    __tablename__ = "sleep_commands"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    command: Mapped[str] = mapped_column(String(40), nullable=False)
+    # "soft" | "wake" | "suspend"
+
+    payload_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    requested_by: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    requested_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    # pending | running | applied | failed
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # Deadline of the waiting caller: a pending row past it is failed instead
+    # of executed (#829).
+    expires_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    __table_args__ = (
+        Index("idx_sleep_commands_status_requested", "status", "requested_at"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<SleepCommand(id={self.id}, command='{self.command}', status='{self.status}')>"

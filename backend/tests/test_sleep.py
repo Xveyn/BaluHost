@@ -509,6 +509,101 @@ class TestSleepApiEndpoints:
         assert response.status_code == 403
 
 
+class TestSleepActionRoutes:
+    """`/soft`, `/wake`, `/suspend` go through the `request_*` methods (#823).
+
+    Those hand the action to the primary worker; the route maps the three
+    outcomes: done -> 200, refused -> the old 409, unavailable -> 503.
+    """
+
+    ROUTES = [
+        ("/api/system/sleep/soft", "request_soft_sleep",
+         "Cannot enter soft sleep from current state"),
+        ("/api/system/sleep/wake", "request_wake",
+         "Cannot wake from current state"),
+        ("/api/system/sleep/suspend", "request_suspend",
+         "Cannot suspend from current state"),
+    ]
+
+    @staticmethod
+    def _manager(method: str, result):
+        from app.services.power.sleep import SleepManagerService
+
+        manager = MagicMock(spec=SleepManagerService)
+        setattr(manager, method, AsyncMock(return_value=result))
+        return manager
+
+    @pytest.mark.parametrize("path, method, _detail", ROUTES)
+    def test_done_returns_200(self, client, admin_headers, path, method, _detail):
+        from app.services.power.sleep import SleepActionResult, SleepActionStatus
+
+        manager = self._manager(method, SleepActionResult(SleepActionStatus.DONE))
+        with patch("app.api.routes.sleep.get_sleep_manager", return_value=manager):
+            response = client.post(path, headers=admin_headers)
+
+        assert response.status_code == 200
+        assert response.json()["success"] is True
+        getattr(manager, method).assert_awaited_once()
+
+    @pytest.mark.parametrize("path, method, detail", ROUTES)
+    def test_refused_returns_the_old_409(self, client, admin_headers, path, method, detail):
+        from app.services.power.sleep import SleepActionResult, SleepActionStatus
+
+        manager = self._manager(method, SleepActionResult(SleepActionStatus.REFUSED))
+        with patch("app.api.routes.sleep.get_sleep_manager", return_value=manager):
+            response = client.post(path, headers=admin_headers)
+
+        assert response.status_code == 409
+        assert detail in response.text
+
+    @pytest.mark.parametrize("path, method, _detail", ROUTES)
+    def test_unavailable_returns_503_without_the_internal_error(
+        self, client, admin_headers, path, method, _detail, caplog,
+    ):
+        from app.services.power.sleep import SleepActionResult, SleepActionStatus
+
+        manager = self._manager(
+            method,
+            SleepActionResult(SleepActionStatus.UNAVAILABLE, "Command timed out after 5.0s"),
+        )
+        with patch("app.api.routes.sleep.get_sleep_manager", return_value=manager), \
+             caplog.at_level("WARNING", logger="app.api.routes.sleep"):
+            response = client.post(path, headers=admin_headers)
+
+        assert response.status_code == 503
+        assert "Sleep action could not be handed to the primary worker" in response.text
+        assert "timed out" not in response.text
+        assert "Command timed out after 5.0s" in caplog.text
+
+    def test_routes_pass_the_same_reasons_as_before(self, client, admin_headers, admin_user):
+        from app.services.power.sleep import (
+            SleepActionResult, SleepActionStatus, SleepManagerService,
+        )
+
+        done = SleepActionResult(SleepActionStatus.DONE)
+        manager = MagicMock(spec=SleepManagerService)
+        manager.request_soft_sleep = AsyncMock(return_value=done)
+        manager.request_wake = AsyncMock(return_value=done)
+        manager.request_suspend = AsyncMock(return_value=done)
+        with patch("app.api.routes.sleep.get_sleep_manager", return_value=manager):
+            client.post("/api/system/sleep/soft", headers=admin_headers)
+            client.post("/api/system/sleep/wake", headers=admin_headers)
+            client.post("/api/system/sleep/suspend", headers=admin_headers)
+            client.post(
+                "/api/system/sleep/suspend", headers=admin_headers,
+                json={"reason": "night", "wake_at": "2030-01-01T06:30:00"},
+            )
+
+        name = admin_user.username
+        manager.request_soft_sleep.assert_awaited_once_with(f"manual by {name}")
+        manager.request_wake.assert_awaited_once_with(f"manual wake by {name}")
+        first, second = manager.request_suspend.await_args_list
+        assert first.args == (f"manual suspend by {name}",)
+        assert first.kwargs == {"wake_at": None}
+        assert second.args == ("night",)
+        assert second.kwargs["wake_at"] == datetime(2030, 1, 1, 6, 30)
+
+
 # ============================================================================
 # Schema Tests
 # ============================================================================
