@@ -21,7 +21,10 @@ from app.services.power.sleep_backend_dev import DevSleepBackend
 
 def _build_service():
     SleepManagerService._instance = None  # reset singleton
-    return SleepManagerService(DevSleepBackend())
+    svc = SleepManagerService(DevSleepBackend())
+    # Geprueft wird der Abgleich im Primary: nur er haelt die logind-Sperre (#817).
+    svc._owns_sleep_inhibitor = True
+    return svc
 
 
 def _config(suspend_on_exit=True, auto_escalation_enabled=False, auto_idle_enabled=False):
