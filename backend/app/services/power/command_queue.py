@@ -185,7 +185,9 @@ async def _process_one_pending(manager: "PowerManagerService") -> bool:
     Returns True if a command was processed (caller can poll again
     immediately), False if the queue was empty.
     """
-    pending = _claim_pending()
+    # The SELECT opens its own session (connect / pool ping) — keep it off the
+    # event loop; it runs every POLL_INTERVAL_S on the primary worker (#797).
+    pending = await asyncio.to_thread(_claim_pending)
     if pending is None:
         return False
 
