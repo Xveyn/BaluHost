@@ -230,6 +230,36 @@ class ServiceStatusCollector:
                 return service
         return None
 
+    def _reports_running(self, name: str) -> Optional[bool]:
+        """What the service itself reports right now.
+
+        The outcome of a control action is judged by this, not by whether the
+        control function raised: many services handle their errors internally
+        (#764). `get_service().state` alone is not enough either — DISABLED
+        hides whether the service runs. Returns None when the status cannot
+        be read; that is no evidence of success in either direction.
+        """
+        status_fn = _service_registry.get(name, {}).get("get_status")
+        if status_fn is None:
+            return None
+        try:
+            return status_fn().get("is_running") is not False
+        except Exception:
+            return None
+
+    @staticmethod
+    def _start_outcome(
+        running: Optional[bool], state: ServiceStateEnum, done: str,
+    ) -> tuple[bool, str]:
+        """(success, message) for an action that should leave the service running."""
+        if running:
+            return True, f"Service {done} successfully"
+        if running is None:
+            return False, "Service state could not be determined"
+        if state == ServiceStateEnum.DISABLED:
+            return False, "Service is disabled by configuration and is not running"
+        return False, "Service did not reach running state"
+
     async def restart_service(self, name: str, force: bool = False) -> ServiceRestartResponse:
         """
         Restart a specific service.
@@ -298,14 +328,20 @@ class ServiceStatusCollector:
                 new_service = self.get_service(name)
                 new_state = new_service.state if new_service else ServiceStateEnum.STOPPED
 
-                logger.info(f"Service '{name}' restarted: {previous_state} -> {new_state}")
+                success, message = self._start_outcome(
+                    self._reports_running(name), new_state, "restarted")
+                logger.log(
+                    logging.INFO if success else logging.WARNING,
+                    "Service '%s' restart: %s -> %s (%s)",
+                    name, previous_state, new_state, message,
+                )
 
                 return ServiceRestartResponse(
-                    success=True,
+                    success=success,
                     service_name=name,
                     previous_state=previous_state,
                     current_state=new_state,
-                    message="Service restarted successfully",
+                    message=message,
                 )
 
             except Exception as e:
@@ -371,14 +407,25 @@ class ServiceStatusCollector:
                 new_service = self.get_service(name)
                 new_state = new_service.state if new_service else ServiceStateEnum.STOPPED
 
-                logger.info(f"Service '{name}' stopped: {previous_state} -> {new_state}")
+                running = self._reports_running(name)
+                if running is False:
+                    success, message = True, "Service stopped successfully"
+                elif running is None:
+                    success, message = False, "Service state could not be determined"
+                else:
+                    success, message = False, "Service is still running"
+                logger.log(
+                    logging.INFO if success else logging.WARNING,
+                    "Service '%s' stop: %s -> %s (%s)",
+                    name, previous_state, new_state, message,
+                )
 
                 return ServiceStopResponse(
-                    success=True,
+                    success=success,
                     service_name=name,
                     previous_state=previous_state,
                     current_state=new_state,
-                    message="Service stopped successfully",
+                    message=message,
                 )
 
             except Exception as e:
@@ -444,14 +491,20 @@ class ServiceStatusCollector:
                 new_service = self.get_service(name)
                 new_state = new_service.state if new_service else ServiceStateEnum.STOPPED
 
-                logger.info(f"Service '{name}' started: {previous_state} -> {new_state}")
+                success, message = self._start_outcome(
+                    self._reports_running(name), new_state, "started")
+                logger.log(
+                    logging.INFO if success else logging.WARNING,
+                    "Service '%s' start: %s -> %s (%s)",
+                    name, previous_state, new_state, message,
+                )
 
                 return ServiceStartResponse(
-                    success=True,
+                    success=success,
                     service_name=name,
                     previous_state=previous_state,
                     current_state=new_state,
-                    message="Service started successfully",
+                    message=message,
                 )
 
             except Exception as e:
