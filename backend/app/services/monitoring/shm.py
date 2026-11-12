@@ -1,8 +1,29 @@
 """
-Shared-memory IPC via /dev/shm/baluhost/ (Linux) or %TEMP%/baluhost-shm/ (Windows).
+Shared-memory IPC via JSON files in a per-install directory.
 
 Provides atomic JSON read/write for inter-process communication between
 the monitoring_worker process and the main Uvicorn web workers.
+
+Where the files live (`SHM_DIR`, resolved once at import):
+
+- production on Linux: ``/dev/shm/baluhost``
+- dev mode on Linux:   ``/dev/shm/baluhost-dev``
+- Windows:             ``%TEMP%/baluhost-shm``
+- ``BALUHOST_SHM_DIR`` overrides all of the above
+
+``/dev/shm`` is per host, not per install, and ``PrivateTmp`` does not cover
+it. A dev instance next to production used to share the one directory: its
+monitoring worker wiped the live files on start (`cleanup_shm`) and then wrote
+mock data that production read back — including the disk temperatures the fan
+control acts on (#779). The mode decides, not the launcher, so a hand-started
+``uvicorn`` or worker is separated just like ``start_dev.py``.
+
+``BALUHOST_SHM_DIR`` is read from the process environment only — a line in
+``backend/.env`` has no effect. Every process of one install must resolve the
+same directory; they do as long as they share ``NAS_MODE`` and the variable.
+The override is meant for dev (a second checkout running at the same time).
+Production is not set up for it: ``baluhost-monitoring.service``
+(``ExecStopPost``) and ``start_prod.py`` clean the fixed production path.
 """
 
 from __future__ import annotations
@@ -14,14 +35,80 @@ import sys
 import tempfile
 import time
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Mapping, Optional
+
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-if sys.platform == "win32":
-    SHM_DIR = Path(tempfile.gettempdir()) / "baluhost-shm"
-else:
-    SHM_DIR = Path("/dev/shm/baluhost")
+SHM_DIR_ENV = "BALUHOST_SHM_DIR"
+
+_PROD_DIR = Path("/dev/shm/baluhost")
+_DEV_DIR = Path("/dev/shm/baluhost-dev")
+_OWNED_NAME_PREFIX = "baluhost"
+
+
+def resolve_shm_dir(
+    environ: Mapping[str, str],
+    *,
+    dev_mode: bool,
+    platform: str = sys.platform,
+) -> Path:
+    """Decide where this process keeps its SHM files.
+
+    Args:
+        environ: Process environment; only ``BALUHOST_SHM_DIR`` is read.
+        dev_mode: Whether the process runs in dev mode.
+        platform: ``sys.platform`` value (parameter for tests).
+
+    Returns:
+        The directory — the explicit override if set, else the mode default.
+
+    Raises:
+        ValueError: If the override is not acceptable. `cleanup_shm()` deletes
+            every file in the directory, so it must never be pointed at one
+            BaluHost does not own. The rule is deliberately narrow: a real
+            directory (no symlink) whose name starts with ``baluhost``,
+            sitting directly in ``/dev/shm`` or the temp dir — the name alone
+            would also fit ``/opt/baluhost``. Dev mode additionally refuses
+            the production directory. An invalid override fails loudly instead
+            of silently falling back to a directory another install may use.
+    """
+    override = environ.get(SHM_DIR_ENV, "").strip()
+    if override:
+        path = Path(override)
+        problem = _override_problem(path, dev_mode=dev_mode)
+        if problem:
+            raise ValueError(
+                f"{SHM_DIR_ENV}={override!r} {problem} — every file in the SHM "
+                f"directory is deleted when the monitoring worker starts and stops"
+            )
+        return path
+
+    if platform == "win32":
+        return Path(tempfile.gettempdir()) / "baluhost-shm"
+    return _DEV_DIR if dev_mode else _PROD_DIR
+
+
+def _override_problem(path: Path, *, dev_mode: bool) -> Optional[str]:
+    """Why ``path`` must not be used as SHM directory, or None if it may."""
+    if not path.is_absolute():
+        return "is not an absolute path"
+    if not path.name.startswith(_OWNED_NAME_PREFIX):
+        return f"does not name a directory starting with '{_OWNED_NAME_PREFIX}'"
+    if path.parent not in (_PROD_DIR.parent, Path(tempfile.gettempdir())):
+        return (
+            f"must sit directly in {_PROD_DIR.parent} or {tempfile.gettempdir()} "
+            f"(a fitting name alone would also match the install directory)"
+        )
+    if path.is_symlink():
+        return "is a symlink, and the cleanup would follow it"
+    if dev_mode and path == _PROD_DIR:
+        return "is the production directory, which a dev-mode process must not share"
+    return None
+
+
+SHM_DIR = resolve_shm_dir(os.environ, dev_mode=settings.is_dev_mode)
 
 # SHM file names
 TELEMETRY_FILE = "telemetry.json"

@@ -66,9 +66,11 @@ alembic downgrade -1
 - Enabled by default in `start_dev.py`
 - Creates sandbox storage in `backend/dev-storage/` (2x5GB RAID1 simulated)
 - Mock SMART data, RAID arrays, and system metrics
+- Own SHM directory `/dev/shm/baluhost-dev/` instead of production's `/dev/shm/baluhost/` (#779) — decided by the mode in `services/monitoring/shm.py`, so a hand-started `uvicorn` or worker is separated too. `BALUHOST_SHM_DIR` overrides it (a real environment variable, not a `backend/.env` line; must be a `baluhost*` directory directly in `/dev/shm` or the temp dir, because the monitoring worker empties it); two dev checkouts running at once need it, they would otherwise share the dev directory. The test suite ignores the variable and always uses a temp directory of its own
 - Automatic seed data (admin/DevMode2024, user/User123)
 - Windows-compatible (no Linux dependencies required)
 - Mock VPN key generation (no `wg` command needed)
+- No logind sleep locks, no logind listener, no RTC write: `CoreUptimeInhibitor` and `CoreUptimeRtcGuard` are no-ops (#747). The gate is the mode, not the absence of `systemd-inhibit` — a dev instance on a systemd box would otherwise lock that box's suspend. The test suite additionally refuses to start `systemd-inhibit` at all (autouse fixture `forbid_real_logind_inhibitors` in `backend/tests/conftest.py`); a test of the spawn path mocks `subprocess.Popen` and sets `settings.is_dev_mode = False`, otherwise the gate returns before the spawn
 
 ### Production Mode (`NAS_MODE=prod`)
 - Real mdadm RAID commands

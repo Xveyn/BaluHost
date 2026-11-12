@@ -3,7 +3,8 @@
 BaluHost Monitoring Worker — standalone process for system monitoring services.
 
 Runs telemetry, disk I/O, monitoring orchestrator, and power monitor in a
-dedicated process, communicating with web workers via /dev/shm/baluhost/.
+dedicated process, communicating with web workers via the SHM directory
+(`shm.SHM_DIR`: /dev/shm/baluhost/ in production, /dev/shm/baluhost-dev/ in dev mode).
 
 Usage:
     python scripts/monitoring_worker.py

@@ -24,6 +24,9 @@ Polkit:
   `deploy/install/templates/50-baluhost-inhibit-sleep.rules`.
 
 Dev mode / Windows / missing binaries → no-op (returns False, logs once).
+Dev mode is checked explicitly (#747): `start()` takes no lock and does not
+subscribe to logind, so a dev instance never reacts to a real suspend of the
+machine it runs on — and never writes that machine's RTC alarm.
 """
 from __future__ import annotations
 
@@ -34,6 +37,8 @@ import subprocess
 import time
 from datetime import datetime
 from typing import Callable, Optional
+
+from app.core.config import settings
 
 try:
     from dbus_next.aio import MessageBus
@@ -81,6 +86,7 @@ class CoreUptimeRtcGuard:
         # leave the lock held (#790).
         self._inhibitor_lock = asyncio.Lock()
         self._binary_missing_logged = False
+        self._dev_mode_logged = False
         self._dbus_bus: Optional["MessageBus"] = None
         self._dbus_iface = None
 
@@ -89,10 +95,15 @@ class CoreUptimeRtcGuard:
     def _acquire_delay_inhibitor(self) -> bool:
         """Acquire the delay-mode inhibitor. Idempotent.
 
-        Returns True on success (or already held), False on failure.
+        Returns True on success (or already held), False on failure or in
+        dev mode.
         """
         if self._delay_proc is not None and self._delay_proc.poll() is None:
             return True
+
+        if settings.is_dev_mode:
+            self._log_dev_mode_once()
+            return False
 
         # Drop a dead handle so we re-spawn cleanly.
         if self._delay_proc is not None and self._delay_proc.poll() is not None:
@@ -154,6 +165,13 @@ class CoreUptimeRtcGuard:
             self._delay_proc.pid,
         )
         return True
+
+    def _log_dev_mode_once(self) -> None:
+        if not self._dev_mode_logged:
+            logger.info(
+                "Dev mode — RTC wake guard disabled, no logind lock or listener",
+            )
+            self._dev_mode_logged = True
 
     def _release_delay_inhibitor(self) -> None:
         """Release the delay inhibitor. Idempotent."""
@@ -270,8 +288,14 @@ class CoreUptimeRtcGuard:
         """Acquire the delay inhibitor and subscribe to logind PrepareForSleep.
 
         Failures (no D-Bus, no systemd-inhibit, polkit denial) are logged but
-        do not raise — the guard simply degrades to no-op.
+        do not raise — the guard simply degrades to no-op. In dev mode it does
+        nothing at all: without the listener `on_prepare_for_sleep` never
+        fires, so no `rtcwake` runs either.
         """
+        if settings.is_dev_mode:
+            self._log_dev_mode_once()
+            return
+
         await self._acquire_delay_inhibitor_async()
 
         if not _DBUS_AVAILABLE:

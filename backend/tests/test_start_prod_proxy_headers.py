@@ -15,7 +15,12 @@ UNIT = REPO_ROOT / "deploy" / "install" / "templates" / "baluhost-backend.servic
 TRUST_FLAGS = ("--proxy-headers", "--forwarded-allow-ips=127.0.0.1")
 
 
-def _load_start_prod():
+def _load_start_prod(monkeypatch):
+    # `python start_prod.py` has the repo root on sys.path (it is the script's
+    # directory); loading it by path does not, and it imports its sibling
+    # dev_process_cleanup. Without this the tests only passed when an earlier
+    # test in the same worker had put the root there (#787).
+    monkeypatch.syspath_prepend(str(REPO_ROOT))
     spec = importlib.util.spec_from_file_location("start_prod", REPO_ROOT / "start_prod.py")
     mod = importlib.util.module_from_spec(spec)
     assert spec and spec.loader
@@ -23,18 +28,18 @@ def _load_start_prod():
     return mod
 
 
-def test_backend_command_trusts_only_the_local_proxy():
-    cmd = _load_start_prod().build_backend_cmd("python")
+def test_backend_command_trusts_only_the_local_proxy(monkeypatch):
+    cmd = _load_start_prod(monkeypatch).build_backend_cmd("python")
 
     for flag in TRUST_FLAGS:
         assert flag in cmd
     assert cmd[:4] == ["python", "-m", "uvicorn", "app.main:app"]
 
 
-def test_start_prod_and_unit_use_the_same_trust_flags():
+def test_start_prod_and_unit_use_the_same_trust_flags(monkeypatch):
     exec_start = re.search(r"^ExecStart=.*?(?<!\\)$", UNIT.read_text(encoding="utf-8"), re.M | re.S).group(0)
     unit_flags = {f for f in re.findall(r"--[\w-]+(?:=\S+)?", exec_start) if "proxy" in f or "forwarded" in f}
-    prod_flags = {f for f in _load_start_prod().build_backend_cmd("python") if "proxy" in f or "forwarded" in f}
+    prod_flags = {f for f in _load_start_prod(monkeypatch).build_backend_cmd("python") if "proxy" in f or "forwarded" in f}
 
     assert unit_flags == set(TRUST_FLAGS)
     assert prod_flags == unit_flags

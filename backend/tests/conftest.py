@@ -7,6 +7,8 @@ This module provides shared test fixtures including:
 - User authentication helpers
 """
 import os
+import shlex
+import subprocess
 from typing import Generator, AsyncGenerator, cast
 
 import pytest
@@ -59,6 +61,14 @@ _setenv("NAS_BACKUP_PATH", tempfile.mkdtemp(prefix=f"baluhost_test_backups_{_xdi
 # while SQLAlchemy holds it open (Windows: PermissionError).
 _tmp_db_dir = tempfile.mkdtemp(prefix=f"baluhost_test_db_{_xdist_worker_id}_")
 _setenv("DATABASE_URL", f"sqlite:///{_tmp_db_dir}/baluhost.db")
+# The SHM directory is per host, not per install: without an override the
+# suite would write into /dev/shm/baluhost-dev (shared with a running dev
+# instance and across xdist workers) — and before #779 into production's
+# /dev/shm/baluhost. Set unconditionally, NOT via _setenv: a value exported in
+# the calling shell (the documented way to run a second dev checkout) would be
+# the live directory of that instance. The name must start with "baluhost" and
+# sit in the temp dir (resolve_shm_dir).
+os.environ["BALUHOST_SHM_DIR"] = tempfile.mkdtemp(prefix=f"baluhost_test_shm_{_xdist_worker_id}_")
 # By default disable strict rate limits during tests to avoid flakiness.
 # Individual tests that need to assert rate-limit behavior should opt-in
 # by setting `ENABLE_RATE_LIMITS_IN_TESTS=1` in their own fixture or runtime.
@@ -137,6 +147,91 @@ Base.metadata.create_all(bind=_global_engine)
 from app.services import users as user_service
 from app.models.vpn import VPNClient
 from app.services.vpn import VPNService
+
+
+# ============================================================================
+# Host Protection
+# ============================================================================
+
+_SYSTEMD_INHIBIT = "systemd-inhibit"
+_inhibit_attempts: list[list[str]] = []
+_real_popen = subprocess.Popen
+
+
+def _argv_of(popen_args: object) -> list[str]:
+    """Normalise the first `Popen` argument to a list of strings."""
+    if isinstance(popen_args, (bytes, os.PathLike)):
+        return [os.fsdecode(popen_args)]
+    if isinstance(popen_args, str):
+        try:
+            return shlex.split(popen_args) or [popen_args]
+        except ValueError:
+            return [popen_args]
+    try:
+        return [os.fsdecode(part) for part in popen_args]  # type: ignore[union-attr]
+    except TypeError:
+        return []
+
+
+def _starts_systemd_inhibit(argv: list[str], executable: object) -> bool:
+    """True if this `Popen` call would run `systemd-inhibit`.
+
+    Looks at argv[0] and at `executable=`, which replaces argv[0] as the
+    program. Wrappers (`sudo systemd-inhibit`, `sh -c "..."`) are not parsed —
+    the application starts the binary directly, by its `shutil.which` path.
+    """
+    programs = argv[:1]
+    if isinstance(executable, (str, bytes, os.PathLike)):
+        programs.append(os.fsdecode(executable))
+    return any(os.path.basename(program) == _SYSTEMD_INHIBIT for program in programs)
+
+
+# A subclass, not a function: tests build `MagicMock(spec=subprocess.Popen)`
+# and asyncio's subprocess transport calls `subprocess.Popen(...)` too.
+class _GuardedPopen(_real_popen):  # type: ignore[type-arg,misc,valid-type]
+    def __init__(self, args, *rest, **kwargs):  # type: ignore[no-untyped-def]
+        argv = _argv_of(args)
+        if _starts_systemd_inhibit(argv, kwargs.get("executable")):
+            _inhibit_attempts.append(argv)
+            raise AssertionError(
+                f"test tried to start a real logind lock: {argv!r} — "
+                f"mock subprocess.Popen instead of spawning {_SYSTEMD_INHIBIT} (#747)"
+            )
+        super().__init__(args, *rest, **kwargs)
+
+
+# Installed once for the whole session, not per test through `monkeypatch`:
+# a test that calls `monkeypatch.undo()` would take a per-test guard down with
+# it, and session fixtures or import-time code run outside any test's scope.
+subprocess.Popen = _GuardedPopen  # type: ignore[misc]
+
+
+@pytest.fixture(autouse=True)
+def forbid_real_logind_inhibitors() -> Generator[list[list[str]], None, None]:
+    """Fail any test that tried to start `systemd-inhibit` (#747).
+
+    The lock holder is its own process: it survives the end of pytest, is
+    adopted by the user manager and keeps blocking suspend on the machine the
+    tests ran on — observed on the production box for three days. A test of
+    the spawn path mocks `subprocess.Popen` itself (and leaves dev mode, where
+    the application takes no lock at all); everything else must not reach the
+    binary.
+
+    Two layers, because the callers sit under broad `except Exception` blocks
+    that would swallow the refusal: `_GuardedPopen` raises on the spot AND
+    records the attempt, and a recorded attempt fails the test here at
+    teardown. Yields the record so the guard's own tests can clear their
+    deliberate attempts.
+    """
+    _inhibit_attempts.clear()
+    yield _inhibit_attempts
+    if _inhibit_attempts:
+        attempts = list(_inhibit_attempts)
+        _inhibit_attempts.clear()
+        pytest.fail(
+            f"test tried to start a real logind lock {len(attempts)}x: {attempts!r} — "
+            f"mock subprocess.Popen instead of spawning {_SYSTEMD_INHIBIT} (#747)"
+        )
 
 
 # ============================================================================

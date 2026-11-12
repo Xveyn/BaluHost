@@ -2,7 +2,8 @@
 
 Der Worker, der ``POST /pair`` annimmt, wird Besitzer: er haelt die
 Dateisperre, laesst den Agenten auf SEINER Bus-Verbindung laufen und
-schreibt den Stand nach ``/dev/shm/baluhost/bluetooth_pairing.json``. Die
+schreibt den Stand nach ``bluetooth_pairing.json`` im SHM-Verzeichnis
+(``shm.SHM_DIR``, in Produktion ``/dev/shm/baluhost/``). Die
 UI-Abfragen landen auf beliebigen Workern und lesen nur diese Datei. Der
 Rueckweg (Ja/Nein, Abbruch) laeuft ueber eine zweite Datei, die der Besitzer
 abfragt.
