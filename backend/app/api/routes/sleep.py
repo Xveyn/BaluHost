@@ -52,18 +52,46 @@ router = APIRouter()
 _UNAVAILABLE_DETAIL = "Sleep action could not be handed to the primary worker"
 
 
-def _raise_unless_done(result, action: str, refused_detail: str) -> None:
+def _audit_delegated(current_user: User, db: Session, resource: str, *, success: bool,
+                     details: dict) -> None:
+    """Audit a sleep action taken by a non-admin (delegated power permission)."""
+    if current_user.role == "admin":
+        return
+    get_audit_logger_db().log_security_event(
+        action="delegated_power_action",
+        user=current_user.username,
+        resource=resource,
+        details=details,
+        success=success,
+        db=db,
+    )
+
+
+def _raise_unless_done(
+    result, *, resource: str, refused_detail: str, current_user: User, db: Session,
+) -> None:
     """Map a `SleepActionResult`: refused -> 409, unavailable -> 503 (#823).
 
     The carried error text (timeout, stale, database) stays in the server log.
     A `ServiceError` rather than `HTTPException(503)`: the global 5xx scrubber
     would rewrite the latter's detail to "Internal server error".
+
+    "Unavailable" includes "outcome unknown" — the action was handed to the
+    primary and may still take effect (a suspend whose answer came too late).
+    A delegated user's attempt is therefore audited here, as not confirmed;
+    otherwise a system action by a non-admin could happen without a trace in
+    the audit log. A refusal means nothing happened and stays unaudited, as
+    it always was.
     """
     if result.ok:
         return
     if result.refused:
         raise HTTPException(status_code=409, detail=refused_detail)
-    logger.warning("Sleep action %s not executed: %s", action, result.detail)
+    logger.warning("Sleep action %s not executed: %s", resource, result.detail)
+    _audit_delegated(
+        current_user, db, resource, success=False,
+        details={"action": resource, "outcome": "unknown", "error": result.detail},
+    )
     raise ServiceUnavailableError(_UNAVAILABLE_DETAIL)
 
 
@@ -98,18 +126,14 @@ async def enter_soft_sleep(
     manager = _get_manager()
     reason = (body.reason if body else None) or f"manual by {current_user.username}"
     result = await manager.request_soft_sleep(reason)
-    _raise_unless_done(result, "soft", "Cannot enter soft sleep from current state")
+    _raise_unless_done(
+        result, resource="soft_sleep", refused_detail="Cannot enter soft sleep from current state",
+        current_user=current_user, db=db,
+    )
     logger.info("Soft sleep activated by %s", current_user.username)
-    if current_user.role != "admin":
-        audit_logger = get_audit_logger_db()
-        audit_logger.log_security_event(
-            action="delegated_power_action",
-            user=current_user.username,
-            resource="soft_sleep",
-            details={"action": "soft_sleep"},
-            success=True,
-            db=db,
-        )
+    _audit_delegated(
+        current_user, db, "soft_sleep", success=True, details={"action": "soft_sleep"},
+    )
     return {"success": True, "message": "Entered soft sleep mode"}
 
 
@@ -123,18 +147,14 @@ async def wake_from_sleep(
     """Exit soft sleep mode (admin or delegated users)."""
     manager = _get_manager()
     result = await manager.request_wake(f"manual wake by {current_user.username}")
-    _raise_unless_done(result, "wake", "Cannot wake from current state")
+    _raise_unless_done(
+        result, resource="wake", refused_detail="Cannot wake from current state",
+        current_user=current_user, db=db,
+    )
     logger.info("Manual wake triggered by %s", current_user.username)
-    if current_user.role != "admin":
-        audit_logger = get_audit_logger_db()
-        audit_logger.log_security_event(
-            action="delegated_power_action",
-            user=current_user.username,
-            resource="wake",
-            details={"action": "wake"},
-            success=True,
-            db=db,
-        )
+    _audit_delegated(
+        current_user, db, "wake", success=True, details={"action": "wake"},
+    )
     return {"success": True, "message": "Exited soft sleep mode"}
 
 
@@ -152,18 +172,14 @@ async def enter_suspend(
     result = await manager.request_suspend(
         reason, wake_at=body.wake_at if body else None,
     )
-    _raise_unless_done(result, "suspend", "Cannot suspend from current state")
+    _raise_unless_done(
+        result, resource="suspend", refused_detail="Cannot suspend from current state",
+        current_user=current_user, db=db,
+    )
     logger.info("System suspend triggered by %s", current_user.username)
-    if current_user.role != "admin":
-        audit_logger = get_audit_logger_db()
-        audit_logger.log_security_event(
-            action="delegated_power_action",
-            user=current_user.username,
-            resource="suspend",
-            details={"action": "suspend"},
-            success=True,
-            db=db,
-        )
+    _audit_delegated(
+        current_user, db, "suspend", success=True, details={"action": "suspend"},
+    )
     return {"success": True, "message": "System suspended"}
 
 
