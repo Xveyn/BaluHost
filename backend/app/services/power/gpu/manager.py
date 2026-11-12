@@ -396,7 +396,8 @@ class GpuPowerManagerService:
                 description=description,
             )
 
-        cmd_id = command_queue.enqueue_command(
+        # Best-effort: the result is not reported (the row may already exist).
+        await command_queue.submit_command(
             "register_demand",
             payload={
                 "source": source,
@@ -404,9 +405,6 @@ class GpuPowerManagerService:
                 "description": description,
             },
         )
-        if cmd_id is None:
-            return source  # best-effort: row may already exist
-        await command_queue.wait_for_completion(cmd_id)
         return source
 
     async def _primary_register_demand(
@@ -444,12 +442,9 @@ class GpuPowerManagerService:
         if self._primary:
             return await self._primary_unregister_demand(source)
 
-        cmd_id = command_queue.enqueue_command(
+        success, _ = await command_queue.submit_command(
             "unregister_demand", payload={"source": source}
         )
-        if cmd_id is None:
-            return False
-        success, _ = await command_queue.wait_for_completion(cmd_id)
         return success
 
     async def _primary_unregister_demand(self, source: str) -> bool:
@@ -531,13 +526,10 @@ class GpuPowerManagerService:
         if self._primary:
             return await self._primary_set_config(config)
 
-        cmd_id = command_queue.enqueue_command(
+        return await command_queue.submit_command(
             "set_config",
             payload=config.model_dump() if hasattr(config, "model_dump") else config.dict(),
         )
-        if cmd_id is None:
-            return False, "Failed to enqueue command"
-        return await command_queue.wait_for_completion(cmd_id)
 
     async def _primary_set_config(self, config: GpuPowerConfig) -> Tuple[bool, Optional[str]]:
         async with self._state_lock:

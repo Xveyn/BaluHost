@@ -39,6 +39,7 @@ __all__ = [
     "QUEUE",
     "enqueue_command",
     "run_poll_loop",
+    "submit_command",
     "wait_for_completion",
 ]
 
@@ -99,22 +100,49 @@ QUEUE = DbCommandQueue(GpuPowerCommand, label="gpu power", dispatch=_dispatch)
 # ---------------------------------------------------------------------------
 
 
+async def submit_command(
+    command: str,
+    payload: Optional[dict[str, Any]] = None,
+    requested_by: Optional[str] = None,
+    timeout_s: Optional[float] = None,
+) -> Tuple[bool, Optional[str]]:
+    """Enqueue a command and wait for the primary's result.
+
+    The way to hand a command over from async code: nothing here touches the
+    database on the event loop, and one timeout (default
+    ``DEFAULT_TIMEOUT_S``) governs both how long the row stays executable and
+    how long this call waits. Returns ``(success, error_message)``.
+    """
+    return await QUEUE.submit(
+        command, payload=payload, requested_by=requested_by, timeout_s=timeout_s
+    )
+
+
 def enqueue_command(
     command: str,
     payload: Optional[dict[str, Any]] = None,
     requested_by: Optional[str] = None,
+    timeout_s: Optional[float] = None,
 ) -> Optional[int]:
-    """Insert a pending command row. Returns the row id, or None on DB error."""
-    return QUEUE.enqueue(command, payload=payload, requested_by=requested_by)
+    """Insert a pending command row that stays executable for *timeout_s*
+    (default ``DEFAULT_TIMEOUT_S``).
+
+    Synchronous — from async code use :func:`submit_command`.
+    Returns the row id, or None on DB error.
+    """
+    return QUEUE.enqueue(
+        command, payload=payload, requested_by=requested_by, timeout_s=timeout_s
+    )
 
 
 async def wait_for_completion(
     command_id: int,
-    timeout_s: float = DEFAULT_TIMEOUT_S,
+    timeout_s: Optional[float] = None,
 ) -> Tuple[bool, Optional[str]]:
-    """Wait until the command leaves 'pending' or the timeout fires.
+    """Wait until the command is finished or the timeout fires.
 
-    Returns ``(success, error_message)``.
+    Returns ``(success, error_message)``. *timeout_s* must be the one the
+    command was enqueued with; :func:`submit_command` keeps the two together.
     """
     return await QUEUE.wait_for_completion(command_id, timeout_s=timeout_s)
 
