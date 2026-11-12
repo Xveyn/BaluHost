@@ -14,7 +14,10 @@ from app.schemas.sleep import SleepState, SleepTrigger
 def _build_service():
     """Build a fresh SleepManagerService with a DevSleepBackend."""
     SleepManagerService._instance = None  # reset singleton
-    return SleepManagerService(DevSleepBackend())
+    svc = SleepManagerService(DevSleepBackend())
+    # Geprueft wird der Abgleich im Primary: nur er haelt die logind-Sperre (#817).
+    svc._owns_sleep_inhibitor = True
+    return svc
 
 
 def _config(core_enabled: bool = True, auto_idle_enabled: bool = True, idle_timeout_minutes: int = 1,

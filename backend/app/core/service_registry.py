@@ -220,13 +220,22 @@ def register_all_services(
         config_enabled_fn=lambda: settings.fan_control_enabled,
     )
 
-    # Sleep Mode
+    # Sleep Mode — same wrapper as fan control above, for the same reason:
+    # a restart served by a secondary worker would otherwise start a second
+    # idle/schedule loop, a second RTC guard and its own logind lock (#817).
+    _is_primary_worker_for_sleep = is_primary_worker
+
+    async def _start_sleep_mode_for_worker():
+        await sleep_mode.start_sleep_manager(
+            monitoring=_is_primary_worker_for_sleep
+        )
+
     register_service(
         name="sleep_mode",
         display_name="Sleep Mode",
         get_status_fn=sleep_mode.get_service_status,
         stop_fn=sleep_mode.stop_sleep_manager,
-        start_fn=sleep_mode.start_sleep_manager,
+        start_fn=_start_sleep_mode_for_worker,
         config_enabled_fn=lambda: settings.sleep_mode_enabled,
     )
 

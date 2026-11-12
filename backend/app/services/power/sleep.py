@@ -158,6 +158,11 @@ class SleepManagerService:
         # idle, manual `systemctl suspend`) at the logind layer. Reconciled
         # every schedule-loop tick by `_reconcile_sleep_inhibitor`.
         self._core_uptime_inhibitor = CoreUptimeInhibitor()
+        # Only the worker that runs the schedule loop may hold that lock: the
+        # loop is the one place that ever releases it. Set by
+        # `start(monitoring=True)`, cleared by `stop()`. Fail-closed — an
+        # instance that was never told it is the primary takes no lock (#817).
+        self._owns_sleep_inhibitor: bool = False
         self._baluhost_suspend_in_progress: bool = False
         self._core_uptime_rtc_guard = CoreUptimeRtcGuard(
             next_core_start_provider=self._next_core_start_for_guard,
@@ -194,6 +199,7 @@ class SleepManagerService:
         config = self._load_config()
 
         if monitoring:
+            self._owns_sleep_inhibitor = True
             await self._core_uptime_rtc_guard.start()
 
             # Start idle detection loop
@@ -242,6 +248,9 @@ class SleepManagerService:
 
         # Always release the logind inhibitor on shutdown so suspend works
         # again after BaluHost goes down (e.g. system shutdown / reboot).
+        # Ownership goes first: a request still running in this worker must
+        # not re-acquire a lock that no loop is left to release.
+        self._owns_sleep_inhibitor = False
         self._core_uptime_inhibitor.release()
 
         self._idle_task = None
@@ -346,6 +355,13 @@ class SleepManagerService:
         logind layer. Soft sleep is unaffected — the block lock only
         prevents kernel suspend. Releasing/acquiring is idempotent.
 
+        Only the primary worker holds the lock. The manual sleep/suspend
+        routes call this from whichever worker serves the request; a
+        follower that acquired here kept the lock until the backend
+        restarted, because the schedule loop — the only place that releases
+        it — runs in the primary alone (#817). A follower therefore does
+        nothing, and the primary converges on its next tick (<= 60 s).
+
         Args:
             config: SleepConfig row (or None — treated as nothing active).
             in_core: Whether we are currently inside a core-uptime window.
@@ -356,6 +372,12 @@ class SleepManagerService:
                      so the `/proc` scan stays off the event loop; None
                      (sync callers) scans here.
         """
+        if not self._owns_sleep_inhibitor:
+            # A lock in a worker without the loop is orphaned by definition.
+            if self._core_uptime_inhibitor.is_held():
+                self._core_uptime_inhibitor.release()
+            return
+
         core_active = bool(in_core)
         aa_active = self._is_always_awake(config)
         presence_active = self._is_user_present(config)
@@ -938,6 +960,7 @@ class SleepManagerService:
         # Clear always-awake override if set: manual sleep ends the override.
         # Then reconcile the inhibitor synchronously so a manual sleep is not
         # blocked by our own logind lock during the gap before the next loop tick.
+        # Effective in the primary only — a follower holds no lock (#817).
         config_check = self._load_config()
         if config_check and self._is_always_awake(config_check):
             self._clear_always_awake("always_awake_cleared_by_sleep")
@@ -1224,6 +1247,7 @@ class SleepManagerService:
         # Clear always-awake override if set: manual suspend ends the override.
         # Then reconcile the inhibitor synchronously so a manual suspend reaches
         # the backend before the next loop tick (logind would otherwise refuse).
+        # Effective in the primary only — a follower holds no lock (#817).
         config_check = self._load_config()
         if config_check and self._is_always_awake(config_check):
             self._clear_always_awake("always_awake_cleared_by_sleep")
