@@ -13,7 +13,7 @@ Business logic layer. Routes delegate to services — services contain the actua
 | `telemetry.py` | System metrics collection (CPU, RAM, network) on interval |
 | `disk_monitor.py` | Real-time disk I/O sampling |
 | `mobile.py` | Mobile device registration, QR code pairing |
-| `service_status.py` | Background service health registry for admin dashboard |
+| `service_status.py` | Background service health registry for admin dashboard. `start_service`/`stop_service`/`restart_service` report `success` from what the service's own status function says afterwards, not from the control function returning without an exception (#764) — many services swallow their errors |
 | `network_discovery.py` | mDNS/Bonjour local network discovery. Skipped in dev mode unless `MDNS_FORCE_ENABLED=true` (#678) — a dev instance would otherwise announce the production hostname. `start()`/`stop()` are blocking and **must not run in the event-loop thread** (zeroconf raises `EventLoopBlocked` with an empty message); async callers use `async_start()`/`async_stop()` (#714) |
 | `jobs.py` | Health monitor background task (disk space, SMART) |
 | `websocket_manager.py` | WebSocket connections; publish methods build envelopes for `ws_bus`, `deliver_local()` is the only code that writes to sockets (#685). `is_admin` is a connect-time snapshot: after a role/`is_active` change or deletion the user routes call `close_user_connections()` (bus kind `close_user`), the client reconnects and gets a fresh one (#468) |
