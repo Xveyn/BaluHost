@@ -124,6 +124,7 @@
       "time": "Time",
       "retryHours": "Catch-up window (hours)",
       "leadMinutes": "Advance warning (minutes, 0 = off)",
+      "retryHoursInvalid": "The catch-up window must be a whole number between 1 and 24 hours.",
       "warningDeferred": "This time falls inside core operating hours \"{{window}}\". The reboot will be skipped and caught up at {{windowEnds}}.",
       "warningNever": "This time falls inside core operating hours \"{{window}}\". The window only ends at {{windowEnds}}, which is outside the {{retryHours}}-hour catch-up window. The reboot will never run."
     }
