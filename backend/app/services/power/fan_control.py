@@ -875,7 +875,8 @@ class FanControlService:
                     if (report.renamed or report.deactivated
                             or report.unresolved_sensors or report.readopted
                             or report.orphaned_inactive
-                            or report.unverified_sensors):
+                            or report.unverified_sensors
+                            or report.dropped_labels):
                         try:
                             # Eigene Session (db=None): AuditLoggerDB.log_event
                             # committet die uebergebene Session selbst. Mit
@@ -907,6 +908,12 @@ class FanControlService:
                                     # belegbar. Die Liste sagt dem Admin, was er
                                     # pruefen sollte.
                                     "unverified_sensors": report.unverified_sensors,
+                                    # #662: Labels, die unter ihrem alten
+                                    # Schluessel liegen geblieben sind und
+                                    # deshalb nirgends mehr angezeigt werden.
+                                    # Ohne diesen Eintrag verschwaende ein
+                                    # Label, ohne dass es jemand erfaehrt.
+                                    "dropped_labels": report.dropped_labels,
                                 },
                                 db=None,
                             )

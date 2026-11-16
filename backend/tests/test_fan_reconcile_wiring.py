@@ -343,3 +343,59 @@ def test_der_abgleich_laeuft_auch_wenn_kein_chip_stabil_ist(monkeypatch):
 
     assert service._should_reconcile(chip_count=0) is False
     assert service._should_reconcile(chip_count=1) is True
+
+
+# --- #662: verworfene Sensor-Labels im Audit-Eintrag ------------------------
+
+async def _run_load_with_report(monkeypatch, report):
+    """_load_fan_configs() mit einem vorgegebenen Abgleichs-Ergebnis fahren und
+    die Audit-Aufrufe zurueckgeben."""
+    service = _service(monkeypatch, primary=True, linux=True)
+
+    backend = AsyncMock()
+    backend.get_fans.return_value = []
+    backend.get_available_temp_sensors.return_value = []
+    backend._fan_cache = {
+        "nct6798-isa-0290:pwm1": {"identity_stable": True, "device_driver": "nct6798"},
+    }
+    backend._temp_paths = {}
+    service._backend = backend
+    service._rebuild_registry = AsyncMock()
+
+    mock_db = MagicMock()
+    mock_session_factory = MagicMock()
+    mock_session_factory.return_value.__enter__ = MagicMock(return_value=mock_db)
+    mock_session_factory.return_value.__exit__ = MagicMock(return_value=False)
+    service.db_session_factory = mock_session_factory
+
+    monkeypatch.setattr(fan_control_module, "reconcile_fan_identities",
+                        lambda *args, **kwargs: report)
+    audit = MagicMock()
+    monkeypatch.setattr("app.services.audit.get_audit_logger_db", lambda: audit)
+
+    await service._load_fan_configs()
+    return audit.log_system_event.call_args_list
+
+
+@pytest.mark.asyncio
+async def test_dropped_labels_alone_trigger_the_audit_entry(monkeypatch):
+    """Ein verworfenes Label ist der einzige Befund des Laufs -- genau dann
+    darf der Audit-Eintrag nicht ausbleiben, sonst erfaehrt niemand davon."""
+    from app.services.power.fan_reconcile import ReconcileReport
+
+    report = ReconcileReport(dropped_labels=[("hwmon:hwmon4_temp1", "Alt")])
+
+    calls = await _run_load_with_report(monkeypatch, report)
+
+    assert len(calls) == 1
+    assert calls[0].kwargs["action"] == "fan_identity_reconcile"
+    assert calls[0].kwargs["details"]["dropped_labels"] == [("hwmon:hwmon4_temp1", "Alt")]
+
+
+@pytest.mark.asyncio
+async def test_an_empty_report_writes_no_audit_entry(monkeypatch):
+    from app.services.power.fan_reconcile import ReconcileReport
+
+    calls = await _run_load_with_report(monkeypatch, ReconcileReport())
+
+    assert calls == []

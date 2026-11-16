@@ -72,6 +72,13 @@ class ReconcileReport:
     # die Nummerierung beim Speichern kennt niemand. Der Admin sieht im Audit,
     # was er pruefen sollte, falls sich die hwmon-Indizes verschoben haben.
     unverified_sensors: List[Tuple[str, str]] = field(default_factory=list)
+    # #662: Labels, die unter ihrem alten Schluessel liegen geblieben sind,
+    # weil die neue Kennung schon vergeben war -- (alte sensor_id,
+    # custom_label). Die Registry kennt nur noch stabile Kennungen, die Zeile
+    # wird also nirgends mehr angezeigt. Geloescht wird sie nicht; sie
+    # erscheint deshalb bei JEDEM Abgleich wieder hier, bis sie jemand
+    # entfernt.
+    dropped_labels: List[Tuple[str, str]] = field(default_factory=list)
 
 
 # Deren hwmon-Sensoren registriert die TempSourceRegistry nicht (die gpu:*-
@@ -520,8 +527,10 @@ def _reconcile_sensor_labels(db: Session, sensor_map: Dict[str, str],
 
     sensor_id ist Primaerschluessel und die Tabelle hat kein is_active. Bei
     einer Kollision gewinnt die juengste Zeile; die verworfene BLEIBT unter
-    ihrem alten Schluessel liegen und wird ignoriert. Kein Loeschen -- das
-    ist ein ausdrueckliches Nicht-Ziel der Spec.
+    ihrem alten Schluessel liegen und wird ignoriert. Dasselbe gilt, wenn die
+    neue Kennung schon ein Label traegt. Kein Loeschen -- das ist ein
+    ausdrueckliches Nicht-Ziel der Spec. Beide Faelle landen in
+    report.dropped_labels (#662).
 
     I-1: Real gespeichert wird sensor_id IMMER praefixiert ("hwmon:hwmon4_temp1")
     -- die Route persistiert dieselbe Kennung, die die Registry vergibt
@@ -551,14 +560,12 @@ def _reconcile_sensor_labels(db: Session, sensor_map: Dict[str, str],
             report.unresolved_sensors.append(row.sensor_id)
             continue
         if new_id in existing:
+            _drop_label(row, new_id, report)
             continue
         rival = claimed.get(new_id)
         if rival is not None:
             loser = min((rival, row), key=lambda r: r.updated_at or _EPOCH)
-            logger.warning(
-                "Sensor-Label %s verworfen: %s ist bereits vergeben",
-                loser.sensor_id, new_id,
-            )
+            _drop_label(loser, new_id, report)
             if loser is row:
                 continue
         claimed[new_id] = row
@@ -570,6 +577,20 @@ def _reconcile_sensor_labels(db: Session, sensor_map: Dict[str, str],
         # Anker fuer die Schreib-Nummerierung -- uebersetzt, aber gemeldet.
         report.unverified_sensors.append((row.legacy_sensor_id, new_id))
         logger.info("Sensor-Label: %s -> %s", row.legacy_sensor_id, new_id)
+
+
+def _drop_label(row: TempSensorLabel, new_id: str, report: ReconcileReport) -> None:
+    """Ein Label bleibt unter seinem alten Schluessel liegen: melden (#662).
+
+    Beide Wege hierher -- die neue Kennung traegt schon ein Label, oder eine
+    juengere Altzeile hat sie in diesem Lauf bekommen -- enden gleich: die
+    Zeile bleibt in der Datenbank, aber keine Oberflaeche zeigt sie mehr an.
+    """
+    logger.warning(
+        "Sensor-Label %s verworfen: %s ist bereits vergeben",
+        row.sensor_id, new_id,
+    )
+    report.dropped_labels.append((row.sensor_id, row.custom_label))
 
 
 def _reconcile_composites(db: Session, sensor_map: Dict[str, str],
