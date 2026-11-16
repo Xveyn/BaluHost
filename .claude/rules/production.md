@@ -25,8 +25,16 @@ See `docs/deployment/PRODUCTION_READINESS.en.md` (German: `PRODUCTION_READINESS.
 ## Deployment
 
 ### Systemd Services
+Five system units, templates in `deploy/install/templates/`:
 - `baluhost-backend.service` - FastAPI/Uvicorn (4 workers, port 8000)
-- `baluhost-frontend.service` - Optional (Nginx serves static files)
+- `baluhost-backend-local.service` + `.socket` - the same app on `/run/baluhost/local.sock` (2 workers, local channel for the Companion app). Socket-activated: the service shows `inactive` until the first connection, only the socket is `listening`
+- `baluhost-monitoring.service` - monitoring worker (telemetry, collectors, SHM)
+- `baluhost-scheduler.service` - scheduler worker (APScheduler jobs)
+- `baluhost-webdav.service` - WebDAV server (port 8080)
+
+Plus `baluhost-tray.service`, a systemd *user* unit for the desktop tray that needs manual setup.
+
+There is no frontend unit: nginx serves the built SPA from `/opt/baluhost/client/dist`. A `baluhost-frontend.service` existed on older installs and is a leftover if still present (`docs/deployment/PRODUCTION_DEPLOYMENT_NOTES.en.md`).
 
 ### Production Commands
 ```bash
@@ -34,6 +42,7 @@ See `docs/deployment/PRODUCTION_READINESS.en.md` (German: `PRODUCTION_READINESS.
 sudo systemctl start baluhost-backend
 sudo systemctl stop baluhost-backend
 sudo systemctl status baluhost-backend
+systemctl list-units 'baluhost*' --all   # all units at a glance
 
 # View Logs
 sudo journalctl -u baluhost-backend -f
