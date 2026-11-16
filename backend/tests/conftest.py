@@ -145,6 +145,7 @@ from app.schemas.user import UserCreate
 # worker gets a fresh DB and we must create the schema explicitly.
 Base.metadata.create_all(bind=_global_engine)
 from app.services import users as user_service
+from app.services.power import foreign_inhibitors as _foreign_inhibitors
 from app.models.vpn import VPNClient
 from app.services.vpn import VPNService
 
@@ -232,6 +233,44 @@ def forbid_real_logind_inhibitors() -> Generator[list[list[str]], None, None]:
             f"test tried to start a real logind lock {len(attempts)}x: {attempts!r} — "
             f"mock subprocess.Popen instead of spawning {_SYSTEMD_INHIBIT} (#747)"
         )
+
+
+_NO_INHIBITORS = '{"type":"a(ssssuu)","data":[[]]}'
+
+
+def _no_host_inhibitors() -> str:
+    """Stand-in for `foreign_inhibitors._run_busctl`: logind holds no locks."""
+    return _NO_INHIBITORS
+
+
+# Session-wide for the same reason as `_GuardedPopen` above: a per-test
+# `monkeypatch` would be undone by a test's own `monkeypatch.undo()`. A test
+# of the real reader patches `foreign_inhibitors._run_busctl` back itself;
+# the filter logic is tested through the `runner=` parameter and never gets
+# here.
+_foreign_inhibitors._run_busctl = _no_host_inhibitors
+
+
+@pytest.fixture(autouse=True)
+def isolate_foreign_inhibitors() -> Generator[None, None, None]:
+    """Keep the host's logind inhibitor list out of every test (#771).
+
+    `SleepManagerService` consults `foreign_inhibitors.first_blocking()`
+    before each suspend (#602), and the default reader runs `busctl` against
+    the real machine. On a box where another program holds a sleep block —
+    the production box during an mdraid check — every test expecting a
+    suspend to go through failed, eleven across five modules, while CI stayed
+    green. The reader is replaced for the whole session (above); this fixture
+    drops the module's four-second cache around each test, so a reading one
+    test produced through `runner=` cannot answer the next test's question.
+
+    A test that wants a foreign block patches `first_blocking` or passes its
+    own `runner=`, as `test_sleep_foreign_inhibitor_integration.py` and
+    `test_foreign_inhibitors.py` do.
+    """
+    _foreign_inhibitors.reset_cache()
+    yield
+    _foreign_inhibitors.reset_cache()
 
 
 @pytest.fixture(autouse=True)
