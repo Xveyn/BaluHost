@@ -85,6 +85,7 @@ from app.models.cloud import CloudOAuthConfig, CloudConnection, CloudImportJob
 from app.models.cloud_export import CloudExportJob
 from app.models.sleep import (
     SleepConfig, SleepStateLog, CoreUptimeWindow, PresenceSession, SleepRuntimeState,
+    SleepCommand,
 )
 from app.models.system_lifecycle import SystemLifecycleEvent
 from app.models.api_key import ApiKey
@@ -199,6 +200,7 @@ __all__ = [
     "CoreUptimeWindow",
     "PresenceSession",
     "SleepRuntimeState",
+    "SleepCommand",
     "SystemLifecycleEvent",
     "ApiKey",
     "DesktopPairingCode",

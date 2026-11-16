@@ -323,3 +323,95 @@ class TestAudioControlPermission:
         )
         assert resp.status_code == 200
         assert resp.json()["can_control_audio"] is True
+
+
+class TestDelegatedSleepActionAudit:
+    """Eine delegierte Sleep-Aktion hinterlaesst eine Audit-Spur, auch wenn ihr
+    Ausgang offen ist (#823).
+
+    Seit Follower die Aktion an den Primary weiterreichen, gibt es ein drittes
+    Ergebnis neben "ausgefuehrt" und "abgelehnt": "unbekannt" (Timeout,
+    Status nicht lesbar). Die Aktion kann dann trotzdem gewirkt haben -- ein
+    Suspend etwa, dessen Rueckmeldung zu spaet kam. Ohne Eintrag waere das eine
+    Systemaktion eines Nicht-Admins ohne Audit-Spur.
+    """
+
+    ROUTES = [
+        ("/api/system/sleep/soft", "request_soft_sleep", "can_soft_sleep", "soft_sleep"),
+        ("/api/system/sleep/wake", "request_wake", "can_wake", "wake"),
+        ("/api/system/sleep/suspend", "request_suspend", "can_suspend", "suspend"),
+    ]
+
+    @staticmethod
+    def _call(client, admin_token, user_token, regular_user, path, method, permission, result):
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from app.services.power.sleep import SleepManagerService
+
+        client.put(
+            f"/api/users/{regular_user.id}/power-permissions",
+            json={permission: True},
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+        manager = MagicMock(spec=SleepManagerService)
+        setattr(manager, method, AsyncMock(return_value=result))
+        audit = MagicMock()
+        with patch("app.api.routes.sleep.get_sleep_manager", return_value=manager), \
+             patch("app.api.routes.sleep.get_audit_logger_db", return_value=audit):
+            response = client.post(path, headers={"Authorization": f"Bearer {user_token}"})
+        return response, audit
+
+    @pytest.mark.parametrize("path, method, permission, resource", ROUTES)
+    def test_unknown_outcome_is_audited_as_not_confirmed(
+        self, client, admin_token, user_token, regular_user, path, method, permission, resource,
+    ):
+        from app.services.power.sleep import SleepActionResult, SleepActionStatus
+
+        result = SleepActionResult(
+            SleepActionStatus.UNAVAILABLE, "Command still running after 65.0s; outcome unknown"
+        )
+        response, audit = self._call(
+            client, admin_token, user_token, regular_user, path, method, permission, result
+        )
+
+        assert response.status_code == 503
+        audit.log_security_event.assert_called_once()
+        entry = audit.log_security_event.call_args.kwargs
+        assert entry["action"] == "delegated_power_action"
+        assert entry["user"] == "poweruser"
+        assert entry["resource"] == resource
+        assert entry["success"] is False
+        assert entry["details"]["outcome"] == "unknown"
+        assert "outcome unknown" in entry["details"]["error"]
+
+    @pytest.mark.parametrize("path, method, permission, resource", ROUTES)
+    def test_done_is_audited_as_before(
+        self, client, admin_token, user_token, regular_user, path, method, permission, resource,
+    ):
+        from app.services.power.sleep import SleepActionResult, SleepActionStatus
+
+        response, audit = self._call(
+            client, admin_token, user_token, regular_user, path, method, permission,
+            SleepActionResult(SleepActionStatus.DONE),
+        )
+
+        assert response.status_code == 200
+        audit.log_security_event.assert_called_once()
+        entry = audit.log_security_event.call_args.kwargs
+        assert entry["resource"] == resource
+        assert entry["success"] is True
+
+    @pytest.mark.parametrize("path, method, permission, resource", ROUTES)
+    def test_refusal_is_not_audited(
+        self, client, admin_token, user_token, regular_user, path, method, permission, resource,
+    ):
+        """Abgelehnt heisst: nichts ist passiert. Wie bisher kein Eintrag."""
+        from app.services.power.sleep import SleepActionResult, SleepActionStatus
+
+        response, audit = self._call(
+            client, admin_token, user_token, regular_user, path, method, permission,
+            SleepActionResult(SleepActionStatus.REFUSED),
+        )
+
+        assert response.status_code == 409
+        audit.log_security_event.assert_not_called()

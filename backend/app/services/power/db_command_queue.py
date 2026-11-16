@@ -55,8 +55,9 @@ Guarantees (#829):
 This module knows nothing about *what* is being commanded. A concrete queue
 is one instance: a table (any ORM model with the columns listed at
 :class:`DbCommandQueue`), a label for log lines, and a dispatch function.
-``power/command_queue.py`` and ``power/gpu/command_queue.py`` are the two
-instances; they used to be line-for-line copies of this code (#313).
+``power/command_queue.py``, ``power/gpu/command_queue.py`` and
+``power/sleep_command_queue.py`` are the instances; the first two used to be
+line-for-line copies of this code (#313).
 
 DB sessions are deliberately short-lived (one session per operation) so a
 route's request session is never held across the ``await asyncio.sleep``
