@@ -599,6 +599,24 @@ def _start_concurrency_probe() -> "asyncio.Task | None":
     return task
 
 
+def _record_version_if_primary() -> None:
+    """Count this service start in `version_history` — primary worker only.
+
+    Every process runs the lifespan, so recording unconditionally counted
+    workers: six per deploy (four TCP workers, two on the local channel)
+    instead of one (#715). Must be called after `_try_become_primary()`;
+    before it, IS_PRIMARY_WORKER is still the module default and no worker
+    would record anything.
+    """
+    if not IS_PRIMARY_WORKER:
+        return
+    from app.core.database import SessionLocal
+    from app.services import version_tracker
+
+    with SessionLocal() as version_db:
+        version_tracker.record_version_on_startup(version_db)
+
+
 async def _startup(app: FastAPI) -> None:
     """Run all startup initialization steps."""
     global _discovery_service, _websocket_manager, _plugin_manager, IS_PRIMARY_WORKER
@@ -641,11 +659,6 @@ async def _startup(app: FastAPI) -> None:
         if settings.is_dev_mode:
             seed.seed_dev_files_only()
 
-    # Record current version in database
-    from app.services.version_tracker import record_version_on_startup
-    with SessionLocal() as version_db:
-        record_version_on_startup(version_db)
-
     # Recover stale benchmarks and kill orphan fio processes from previous runs
     from app.services.benchmark.lifecycle import recover_stale_benchmarks, kill_orphan_fio_processes
     with SessionLocal() as bench_db:
@@ -663,6 +676,9 @@ async def _startup(app: FastAPI) -> None:
     # Acquire primary-worker lock *after* fork (lifespan runs per-worker).
     IS_PRIMARY_WORKER = _try_become_primary()
     logger.info("Primary worker: %s (PID %d)", IS_PRIMARY_WORKER, os.getpid())
+
+    # Record current version in database
+    _record_version_if_primary()
 
     # Lifecycle notification: emit startup with downtime context
     await _emit_lifecycle_startup()

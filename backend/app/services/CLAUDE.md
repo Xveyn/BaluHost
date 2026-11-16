@@ -41,7 +41,7 @@ Business logic layer. Routes delegate to services — services contain the actua
 | `server_profile_service.py` | Server connection profiles for login screen |
 | `ssh_service.py` | SSH key management |
 | `snapshot_export.py` | Shutdown snapshot for BaluPi handoff |
-| `version_tracker.py` | App version history tracking |
+| `version_tracker.py` | App version history tracking — one count per service start (primary worker only, called from `lifespan._record_version_if_primary()`); the write itself is safe under concurrent starts (#715) |
 | `user_metadata_cache.py` | Cached user metadata for file operations |
 | `balupi_handshake.py` | BaluPi companion device startup/shutdown notifications |
 | `dashboard_panel_bridge.py` | Plugin dashboard panel SHM-to-WebSocket bridge |
