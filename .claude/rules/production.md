@@ -10,13 +10,13 @@
 - Structured JSON logging
 - Systemd deployment with 4 Uvicorn workers
 - Nginx reverse proxy with rate limiting
+- HTTPS — nginx terminates TLS on 443, port 80 answers with a 301 redirect, HSTS is set (`deploy/nginx/baluhost-https.conf`). The backend port 8000 itself still speaks plain HTTP, see Known Gap 6 in `security-agent.md`
 - Test suite (size: see the Testing row in `README.md` — machine-maintained by `scripts/generate_readme_stats.py`, so it is not restated here)
 - CI/CD pipeline (GitHub Actions)
 - Built-in monitoring (monitoring worker, dashboards, push notifications; no Prometheus endpoint since #494)
 - Localization (i18n) — i18next with `de` + `en`, 22 namespaces each (`client/src/i18n/locales/`), switcher in Settings and the setup wizard. Remaining hardcoded English strings are tracked in #406
 
 **Optional/Future:**
-- SSL/HTTPS (currently HTTP on port 80)
 - Email notifications
 - PWA support
 
