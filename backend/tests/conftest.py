@@ -9,7 +9,7 @@ This module provides shared test fixtures including:
 import os
 import shlex
 import subprocess
-from typing import Generator, AsyncGenerator, cast
+from typing import Callable, Generator, AsyncGenerator, cast
 
 import pytest
 import pytest_asyncio
@@ -244,11 +244,21 @@ def _no_host_inhibitors() -> str:
 
 
 # Session-wide for the same reason as `_GuardedPopen` above: a per-test
-# `monkeypatch` would be undone by a test's own `monkeypatch.undo()`. A test
-# of the real reader patches `foreign_inhibitors._run_busctl` back itself;
-# the filter logic is tested through the `runner=` parameter and never gets
-# here.
+# `monkeypatch` would be undone by a test's own `monkeypatch.undo()`. The
+# filter logic is tested through the `runner=` parameter and never gets here;
+# a test of the reader itself asks for `real_busctl_reader`.
+_real_run_busctl = _foreign_inhibitors._run_busctl
 _foreign_inhibitors._run_busctl = _no_host_inhibitors
+
+
+@pytest.fixture
+def real_busctl_reader() -> Callable[[], str]:
+    """The unreplaced `foreign_inhibitors._run_busctl`, for tests of the reader.
+
+    It runs the machine's `busctl` unless the test mocks `subprocess.run` (and
+    `shutil.which`) in `foreign_inhibitors` first.
+    """
+    return _real_run_busctl
 
 
 @pytest.fixture(autouse=True)

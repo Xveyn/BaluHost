@@ -77,6 +77,13 @@ def test_the_guard_survives_a_monkeypatch_undo(host_with_a_foreign_block, monkey
     assert calls == []
 
 
+def test_the_real_reader_stays_reachable(host_with_a_foreign_block, real_busctl_reader):
+    """A test of `_run_busctl` itself needs the original, not the stand-in."""
+    assert real_busctl_reader() == HOST_BLOCK
+    assert len(host_with_a_foreign_block) == 1
+    assert host_with_a_foreign_block[0][0] == "/usr/bin/busctl"
+
+
 def test_an_explicit_runner_is_still_honoured():
     """The guard replaces the default reader only — tests of the filter logic
     pass their own `runner=` and must keep seeing what it returns."""
