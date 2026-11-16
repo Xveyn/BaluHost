@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { listBackups, createBackup, deleteBackup } from '../../api/backup';
+import { listBackups, createBackup, deleteBackup, restoreBackup } from '../../api/backup';
 
 vi.mock('../../lib/api', () => ({
   apiClient: {
@@ -35,6 +35,19 @@ describe('backup API', () => {
     await createBackup({ includes_database: true });
 
     expect(apiClient.post).toHaveBeenCalledWith('/api/backups/', { includes_database: true });
+  });
+
+  it('restoreBackup leaves the auth header to the apiClient interceptor', async () => {
+    vi.mocked(apiClient.post).mockResolvedValue({ data: { success: true } });
+    const request = { backup_id: 3, confirm: true };
+
+    await restoreBackup(request);
+
+    // Kein drittes Argument: ein eigener Authorization-Header würde den
+    // Interceptor in lib/api.ts doppeln (und bei fehlendem Token
+    // "Bearer null" senden).
+    expect(apiClient.post).toHaveBeenCalledWith('/api/backups/3/restore', request);
+    expect(vi.mocked(apiClient.post).mock.calls[0]).toHaveLength(2);
   });
 
   it('deleteBackup calls DELETE with the id', async () => {

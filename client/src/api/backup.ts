@@ -77,16 +77,9 @@ export async function deleteBackup(backupId: number): Promise<void> {
  * Restore system from backup
  */
 export async function restoreBackup(request: RestoreBackupRequest): Promise<RestoreBackupResponse> {
-  const token = localStorage.getItem('token');
   const response = await apiClient.post<RestoreBackupResponse>(
     `/api/backups/${request.backup_id}/restore`,
-    request,
-    {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    }
+    request
   );
   return response.data;
 }
