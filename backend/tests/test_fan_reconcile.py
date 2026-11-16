@@ -413,8 +413,8 @@ def test_sensor_label_collision_keeps_older_row_under_its_own_key(db):
     sensor_map = dict(SENSOR_MAP)
     sensor_map["hwmon6_temp1"] = "hwmon:k10temp-pci-00c3:temp1"
 
-    reconcile_fan_identities(db, chips=CHIPS, sensor_map=sensor_map,
-                             cpu_sensor_id=CPU_DEFAULT)
+    report = reconcile_fan_identities(db, chips=CHIPS, sensor_map=sensor_map,
+                                      cpu_sensor_id=CPU_DEFAULT)
     db.commit()   # darf keinen Primaerschluessel-Konflikt werfen
 
     labels = {row.sensor_id: row for row in db.query(TempSensorLabel).all()}
@@ -423,6 +423,96 @@ def test_sensor_label_collision_keeps_older_row_under_its_own_key(db):
     assert "hwmon:hwmon4_temp1" in labels           # aeltere bleibt liegen
     assert labels["hwmon:hwmon4_temp1"].custom_label == "Alt"
     assert len(labels) == 2
+    # #662: die liegengebliebene Zeile zeigt keine Oberflaeche mehr an --
+    # der Report nennt sie, damit sie im Audit landet.
+    assert report.dropped_labels == [("hwmon:hwmon4_temp1", "Alt")]
+
+
+def test_three_way_label_collision_reports_both_losers(db):
+    """#662: gewinnt die juengste von drei Zeilen, sind zwei verworfen -- auch
+    die, die zwischenzeitlich selbst einen aelteren Rivalen verdraengt hatte."""
+    for sensor_id, label, stamp in (
+        ("hwmon:hwmon4_temp1", "Aeltestes", "2026-01-01T00:00:00"),
+        ("hwmon:hwmon6_temp1", "Mittleres", "2026-04-01T00:00:00"),
+        ("hwmon:hwmon7_temp1", "Juengstes", "2026-08-01T00:00:00"),
+    ):
+        db.add(TempSensorLabel(sensor_id=sensor_id, custom_label=label,
+                               updated_at=_dt(stamp)))
+    db.commit()
+
+    sensor_map = dict(SENSOR_MAP)
+    sensor_map["hwmon6_temp1"] = "hwmon:k10temp-pci-00c3:temp1"
+    sensor_map["hwmon7_temp1"] = "hwmon:k10temp-pci-00c3:temp1"
+
+    report = reconcile_fan_identities(db, chips=CHIPS, sensor_map=sensor_map,
+                                      cpu_sensor_id=CPU_DEFAULT)
+    db.commit()
+
+    labels = {row.sensor_id: row.custom_label for row in db.query(TempSensorLabel).all()}
+    assert labels["hwmon:k10temp-pci-00c3:temp1"] == "Juengstes"
+    assert sorted(report.dropped_labels) == [
+        ("hwmon:hwmon4_temp1", "Aeltestes"),
+        ("hwmon:hwmon6_temp1", "Mittleres"),
+    ]
+
+
+def test_label_whose_target_already_exists_is_reported_as_dropped(db):
+    """#662: unter der neuen Kennung liegt bereits ein Label. Die Altzeile
+    wird uebersprungen und bleibt unter ihrem alten Schluessel liegen -- bisher
+    ganz ohne Meldung, nicht einmal im Log."""
+    db.add(TempSensorLabel(sensor_id="hwmon:k10temp-pci-00c3:temp1",
+                           custom_label="Schon da"))
+    db.add(TempSensorLabel(sensor_id="hwmon:hwmon4_temp1", custom_label="Altlast"))
+    db.commit()
+
+    report = reconcile_fan_identities(db, chips=CHIPS, sensor_map=SENSOR_MAP,
+                                      cpu_sensor_id=CPU_DEFAULT)
+    db.commit()
+
+    labels = {row.sensor_id: row.custom_label for row in db.query(TempSensorLabel).all()}
+    assert labels == {
+        "hwmon:k10temp-pci-00c3:temp1": "Schon da",
+        "hwmon:hwmon4_temp1": "Altlast",
+    }
+    assert report.dropped_labels == [("hwmon:hwmon4_temp1", "Altlast")]
+    # Nichts uebersetzt, also auch nichts zu pruefen.
+    assert report.unverified_sensors == []
+
+
+def test_dropped_label_is_reported_again_on_the_next_run(db):
+    """#662: nichts wird geloescht und nichts markiert -- die Zeile liegt beim
+    naechsten Start unveraendert da, und ihre neue Kennung traegt jetzt die
+    Gewinnerin. Der Abgleich meldet sie also bei jedem Lauf, bis sie jemand
+    entfernt. Das ist gewollt laut (ein stiller zweiter Lauf hiesse: der
+    Befund steht genau einmal im Audit und danach nie wieder)."""
+    db.add(TempSensorLabel(sensor_id="hwmon:hwmon4_temp1", custom_label="Alt",
+                           updated_at=_dt("2026-01-01T00:00:00")))
+    db.add(TempSensorLabel(sensor_id="hwmon:hwmon6_temp1", custom_label="Neu",
+                           updated_at=_dt("2026-08-01T00:00:00")))
+    db.commit()
+    sensor_map = dict(SENSOR_MAP)
+    sensor_map["hwmon6_temp1"] = "hwmon:k10temp-pci-00c3:temp1"
+
+    reconcile_fan_identities(db, chips=CHIPS, sensor_map=sensor_map,
+                             cpu_sensor_id=CPU_DEFAULT)
+    db.commit()
+    second = reconcile_fan_identities(db, chips=CHIPS, sensor_map=sensor_map,
+                                      cpu_sensor_id=CPU_DEFAULT)
+    db.commit()
+
+    assert second.dropped_labels == [("hwmon:hwmon4_temp1", "Alt")]
+    assert second.unverified_sensors == []
+
+
+def test_translated_label_is_not_reported_as_dropped(db):
+    db.add(TempSensorLabel(sensor_id="hwmon:hwmon4_temp1", custom_label="RAID-Platten"))
+    db.commit()
+
+    report = reconcile_fan_identities(db, chips=CHIPS, sensor_map=SENSOR_MAP,
+                                      cpu_sensor_id=CPU_DEFAULT)
+    db.commit()
+
+    assert report.dropped_labels == []
 
 
 def test_composite_sources_are_rewritten(db):
