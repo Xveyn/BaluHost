@@ -10,13 +10,13 @@
 - Structured JSON logging
 - Systemd deployment with 4 Uvicorn workers
 - Nginx reverse proxy with rate limiting
+- HTTPS — nginx terminates TLS on 443, port 80 answers with a 301 redirect, HSTS is set (`deploy/nginx/baluhost-https.conf`). The backend port 8000 itself still speaks plain HTTP, see Known Gap 6 in `security-agent.md`
 - Test suite (size: see the Testing row in `README.md` — machine-maintained by `scripts/generate_readme_stats.py`, so it is not restated here)
 - CI/CD pipeline (GitHub Actions)
 - Built-in monitoring (monitoring worker, dashboards, push notifications; no Prometheus endpoint since #494)
 - Localization (i18n) — i18next with `de` + `en`, 22 namespaces each (`client/src/i18n/locales/`), switcher in Settings and the setup wizard. Remaining hardcoded English strings are tracked in #406
 
 **Optional/Future:**
-- SSL/HTTPS (currently HTTP on port 80)
 - Email notifications
 - PWA support
 
@@ -25,8 +25,16 @@ See `docs/deployment/PRODUCTION_READINESS.en.md` (German: `PRODUCTION_READINESS.
 ## Deployment
 
 ### Systemd Services
+Five system units, templates in `deploy/install/templates/`:
 - `baluhost-backend.service` - FastAPI/Uvicorn (4 workers, port 8000)
-- `baluhost-frontend.service` - Optional (Nginx serves static files)
+- `baluhost-backend-local.service` + `.socket` - the same app on `/run/baluhost/local.sock` (2 workers, local channel for the Companion app). Socket-activated: the service shows `inactive` until the first connection, only the socket is `listening`
+- `baluhost-monitoring.service` - monitoring worker (telemetry, collectors, SHM)
+- `baluhost-scheduler.service` - scheduler worker (APScheduler jobs)
+- `baluhost-webdav.service` - WebDAV server (port 8080)
+
+Plus `baluhost-tray.service`, a systemd *user* unit for the desktop tray that needs manual setup.
+
+There is no frontend unit: nginx serves the built SPA from `/opt/baluhost/client/dist`. A `baluhost-frontend.service` existed on older installs and is a leftover if still present (`docs/deployment/PRODUCTION_DEPLOYMENT_NOTES.en.md`).
 
 ### Production Commands
 ```bash
@@ -34,6 +42,7 @@ See `docs/deployment/PRODUCTION_READINESS.en.md` (German: `PRODUCTION_READINESS.
 sudo systemctl start baluhost-backend
 sudo systemctl stop baluhost-backend
 sudo systemctl status baluhost-backend
+systemctl list-units 'baluhost*' --all   # all units at a glance
 
 # View Logs
 sudo journalctl -u baluhost-backend -f

@@ -1,0 +1,1286 @@
+<!doctype html>
+<html lang="de">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BaluHost Architektur</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600&display=swap">
+<style>
+/* Layout: eine Lesespalte, Figuren in voller Breite. Jede Sektion trägt den Repo-Pfad, den sie beschreibt.
+   Blau = BaluHost-Prozess, Ocker = geteilter Zustand, neutral = Fremdsoftware und Betriebssystem. */
+:root {
+  --bg: #f3f5f8;
+  --surface: #ffffff;
+  --surface-2: #e8ecf2;
+  --ink: #141b26;
+  --ink-2: #465265;
+  --ink-3: #657186;
+  --line: #d3dae4;
+  --line-strong: #a3aebf;
+  --accent: #2459d6;
+  --accent-soft: #e4ecfd;
+  --on-accent: #ffffff;
+  --state: #a8540a;
+  --state-soft: #fcefd9;
+  --font-display: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e131b; --surface: #161d28; --surface-2: #1c2532; --ink: #e6ebf2; --ink-2: #a9b4c3; --ink-3: #8592a4;
+    --line: #2a3443; --line-strong: #4b596d; --accent: #76a4ff; --accent-soft: #172848; --on-accent: #0b1220;
+    --state: #efb35c; --state-soft: #32250f; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e131b; --surface: #161d28; --surface-2: #1c2532; --ink: #e6ebf2; --ink-2: #a9b4c3; --ink-3: #8592a4;
+  --line: #2a3443; --line-strong: #4b596d; --accent: #76a4ff; --accent-soft: #172848; --on-accent: #0b1220;
+  --state: #efb35c; --state-soft: #32250f; color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.6;
+}
+.wrap {
+  max-width: 1180px;
+  margin-inline: auto;
+  padding-block: 48px 72px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex;
+  flex-direction: column;
+  gap: 64px;
+}
+code, .mono { font-family: var(--font-mono); font-size: 0.875em; }
+p { margin: 0; }
+a { color: var(--accent); text-underline-offset: 3px; }
+a:focus-visible, .node:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+/* Kopf */
+.top { display: flex; flex-direction: column; gap: 16px; }
+.eyebrow {
+  font-family: var(--font-mono); font-size: 13px; color: var(--ink-3);
+  display: flex; flex-wrap: wrap; gap: 4px 16px;
+}
+h1 {
+  font-family: var(--font-display); font-weight: 600; font-size: clamp(34px, 6vw, 54px);
+  line-height: 1.05; margin: 0; letter-spacing: -0.01em; text-wrap: balance;
+}
+.lede { max-width: 66ch; font-size: 18px; color: var(--ink-2); }
+.toc { display: flex; flex-wrap: wrap; gap: 6px 20px; font-size: 14px; padding-top: 16px; border-top: 1px solid var(--line); }
+
+/* Sektionen */
+section { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.path-tag { font-family: var(--font-mono); font-size: 13px; color: var(--accent); }
+h2 {
+  font-family: var(--font-display); font-weight: 600; font-size: clamp(24px, 3.6vw, 32px);
+  line-height: 1.15; margin: 4px 0 0; text-wrap: balance;
+}
+h3 { font-size: 16px; font-weight: 600; margin: 0; }
+.prose { max-width: 68ch; color: var(--ink-2); display: flex; flex-direction: column; gap: 12px; }
+.prose strong { color: var(--ink); font-weight: 600; }
+
+/* Figuren */
+figure { margin: 0; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.dia { display: block; width: 100%; height: auto; }
+.dia-wide { min-width: 1040px; }
+.dia-mid { min-width: 820px; }
+figcaption { font-size: 14px; color: var(--ink-3); max-width: 80ch; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 13px; color: var(--ink-2); list-style: none; margin: 0; padding: 0; }
+.legend li { display: flex; align-items: center; gap: 8px; }
+.sw { width: 18px; height: 12px; border-radius: 3px; border: 1.4px solid; flex: none; }
+.sw-proc { background: var(--accent-soft); border-color: var(--accent); }
+.sw-state { background: var(--state-soft); border-color: var(--state); }
+.sw-ext { background: var(--surface); border-color: var(--line-strong); }
+.sw-iso { background: var(--surface); border-color: var(--ink-2); border-style: dashed; }
+
+/* SVG-Bausteine */
+.dia text { font-family: var(--font-body); fill: var(--ink); }
+.dia .t-name { font-size: 13px; font-weight: 600; }
+.dia .t-unit { font-family: var(--font-mono); font-size: 12.5px; font-weight: 600; }
+.dia .t-mono { font-family: var(--font-mono); font-size: 11px; font-weight: 500; }
+.dia .t-sub { font-size: 11.5px; fill: var(--ink-2); }
+.dia .t-lbl { font-size: 11px; fill: var(--ink-2); }
+.dia .t-note { font-size: 11px; fill: var(--ink-3); }
+.dia .t-cap { font-size: 10.5px; font-weight: 600; letter-spacing: 0.09em; fill: var(--ink-3); }
+.dia .edge { stroke: var(--ink-2); stroke-width: 1.3; fill: none; }
+.dia .ah { fill: var(--ink-2); }
+.dia .host { fill: var(--surface-2); stroke: var(--line-strong); stroke-width: 1; }
+.dia .n-ext { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1.2; }
+.dia .n-proc { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.4; }
+.dia .n-chip { fill: var(--surface); stroke: var(--accent); stroke-width: 1; }
+.dia .n-primary { fill: var(--accent); stroke: var(--accent); stroke-width: 1; }
+.dia .on-accent { fill: var(--on-accent); }
+.dia .n-state { fill: var(--state-soft); stroke: var(--state); stroke-width: 1.4; }
+.dia .n-iso { fill: var(--surface); stroke: var(--ink-2); stroke-width: 1.3; stroke-dasharray: 5 4; }
+.node { cursor: pointer; }
+.node:hover > .shape { stroke-width: 2.2; }
+.node[aria-pressed="true"] > .shape { stroke: var(--ink); stroke-width: 2.6; }
+
+/* Auslöser der Detailansicht außerhalb der Diagramme */
+.open {
+  font: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0; cursor: pointer;
+  text-align: left; display: inline-flex; align-items: baseline; gap: 6px; align-self: flex-start; flex-wrap: wrap;
+}
+.open::after { content: "›"; color: var(--accent); font-family: var(--font-body); font-weight: 600; }
+.open:hover, .open:hover code { color: var(--accent); }
+.open:focus-visible, .jump:focus-visible, .sheet-close:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px; }
+.hint { font-size: 14px; color: var(--ink-3); }
+
+/* Detailansicht: Blatt am rechten Rand, auf dem Handy bildschirmfüllend */
+html:has(dialog.sheet[open]) { overflow: hidden; }
+.sheet {
+  position: fixed; inset: 0 0 0 auto; margin: 0; padding: 0;
+  width: min(580px, 100vw); max-width: 100vw; height: 100%; max-height: 100%;
+  border: 0; border-left: 1px solid var(--line-strong);
+  background: var(--surface); color: var(--ink);
+}
+.sheet::backdrop { background: rgba(8, 12, 18, 0.5); }
+.sheet-inner { display: flex; flex-direction: column; height: 100%; }
+.sheet-head {
+  display: flex; gap: 16px; align-items: flex-start; justify-content: space-between;
+  padding-block: calc(20px + env(safe-area-inset-top, 0px)) 16px;
+  padding-left: 20px; padding-right: max(20px, env(safe-area-inset-right, 0px));
+  border-bottom: 1px solid var(--line);
+}
+.sheet-head > div { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.sheet-kind { font-family: var(--font-mono); font-size: 12px; color: var(--ink-3); }
+.sheet h2 { font-family: var(--font-mono); font-size: 20px; line-height: 1.25; margin: 0; overflow-wrap: anywhere; }
+.sheet h2:focus { outline: none; }
+.sheet-close {
+  font: inherit; font-size: 13px; padding: 6px 12px; flex: none; cursor: pointer;
+  border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface); color: var(--ink);
+}
+.sheet-close:hover { background: var(--surface-2); }
+.sheet-body {
+  overflow-y: auto; display: flex; flex-direction: column; gap: 24px;
+  padding-block: 20px calc(28px + env(safe-area-inset-bottom, 0px));
+  padding-left: 20px; padding-right: max(20px, env(safe-area-inset-right, 0px));
+}
+.sheet .lead { font-size: 15px; color: var(--ink-2); max-width: none; }
+.blk { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.sheet h3 { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); }
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 16px; margin: 0; font-size: 14px; }
+.facts dt { color: var(--ink-3); }
+.facts dd { margin: 0; color: var(--ink); overflow-wrap: anywhere; }
+.rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.rows li {
+  display: grid; grid-template-columns: minmax(0, 11.5rem) minmax(0, 1fr); gap: 2px 16px;
+  padding-block: 8px; border-top: 1px solid var(--line); font-size: 14px;
+}
+.rows li > :first-child { font-family: var(--font-mono); font-size: 13px; color: var(--ink); overflow-wrap: anywhere; }
+.rows li > :last-child { color: var(--ink-2); }
+.jump {
+  font: inherit; background: none; border: 0; padding: 0; cursor: pointer; text-align: left;
+  color: var(--accent) !important; text-decoration: underline; text-underline-offset: 3px;
+}
+.plain { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+.plain code { color: var(--ink); overflow-wrap: anywhere; }
+.notes { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 8px; font-size: 14px; color: var(--ink-2); }
+@media (max-width: 480px) { .rows li { grid-template-columns: minmax(0, 1fr); } }
+@media (prefers-reduced-motion: no-preference) {
+  .sheet[open] { animation: sheet-in 0.16s ease-out; }
+  @keyframes sheet-in { from { transform: translateX(20px); } }
+}
+
+/* Weg einer Anfrage */
+.lanes { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 16px; align-items: stretch; }
+.lane { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); padding: 20px; display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.lane-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+.lane-head code { color: var(--ink-3); }
+.steps { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; }
+.steps li { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 12px; padding-block: 12px; border-top: 1px solid var(--line); }
+.steps .num { font-family: var(--font-mono); font-size: 13px; color: var(--accent); padding-top: 2px; font-variant-numeric: tabular-nums; }
+.steps .what { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.steps .what code { font-weight: 600; font-size: 14px; color: var(--ink); overflow-wrap: anywhere; }
+.steps .what span { font-size: 14px; color: var(--ink-2); }
+.wire {
+  display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 6px;
+  font-family: var(--font-mono); font-size: 12px; color: var(--ink-2); text-align: center; min-width: 120px;
+}
+.wire::before, .wire::after { content: ""; flex: 1; width: 1.5px; background: var(--line-strong); min-height: 16px; }
+.cross { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 48px; }
+.cross > div { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.cross ul { margin: 0; padding-left: 18px; font-size: 14px; color: var(--ink-2); display: flex; flex-direction: column; gap: 6px; }
+.cross code { color: var(--ink); }
+@media (max-width: 820px) {
+  .lanes { grid-template-columns: minmax(0, 1fr); }
+  .wire { flex-direction: row; min-width: 0; }
+  .wire::before, .wire::after { width: auto; height: 1.5px; min-height: 0; min-width: 16px; }
+  .cross { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Tabellen */
+.tbl { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { text-align: left; vertical-align: top; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+tr:last-child td { border-bottom: 0; }
+th { font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); white-space: nowrap; }
+td { color: var(--ink-2); }
+td:first-child { color: var(--ink); font-weight: 500; }
+td code { color: var(--ink); }
+.tbl-ipc table { min-width: 860px; }
+.tbl-two table { min-width: 620px; }
+
+/* Service-Domänen */
+.domains { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 28px 32px; }
+.domain { border-top: 2px solid var(--ink); padding-top: 12px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.domain p { font-size: 14px; color: var(--ink-2); }
+.domain ul { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 6px; }
+.domain li { font-family: var(--font-mono); font-size: 12.5px; background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 2px 7px; color: var(--ink); }
+
+/* Auslieferung */
+.chain { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; counter-reset: s; }
+.chain li { counter-increment: s; border-top: 2px solid var(--accent); padding-top: 10px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.chain li::before { content: counter(s, decimal-leading-zero); font-family: var(--font-mono); font-size: 12px; color: var(--accent); }
+.chain strong { font-size: 15px; font-weight: 600; }
+.chain span { font-size: 14px; color: var(--ink-2); }
+.chain code { overflow-wrap: anywhere; }
+
+footer { font-size: 13px; color: var(--ink-3); border-top: 1px solid var(--line); padding-top: 16px; max-width: 80ch; }
+@media (prefers-reduced-motion: no-preference) { .node > .shape { transition: stroke-width 0.12s; } }
+</style>
+
+<div class="wrap">
+
+<header class="top">
+  <div class="eyebrow"><span>Xveyn/BaluHost</span><span>v1.38.0</span><span>Stand 16.11.2026</span></div>
+  <h1>BaluHost Architektur</h1>
+  <p class="lede">BaluHost ist ein selbst gehosteter Heimserver mit NAS-Kern. Diese Seite zeigt, aus welchen Prozessen er zur Laufzeit besteht, wie eine Anfrage durch die Schichten läuft und über welche Kanäle die Prozesse miteinander reden.</p>
+  <nav class="toc" aria-label="Inhalt">
+    <a href="#laufzeit">Laufzeit</a>
+    <a href="#anfrage">Weg einer Anfrage</a>
+    <a href="#kanaele">Kanäle zwischen Prozessen</a>
+    <a href="#domaenen">Service-Domänen</a>
+    <a href="#plugins">Plugins</a>
+    <a href="#modi">Dev und Prod</a>
+    <a href="#auslieferung">Auslieferung</a>
+  </nav>
+</header>
+
+<!-- ===================================================== Laufzeit -->
+<section id="laufzeit">
+  <div>
+    <div class="path-tag">deploy/install/templates/*.service</div>
+    <h2>Fünf Units, eine Datenbank</h2>
+  </div>
+  <div class="prose">
+    <p>In Produktion besteht BaluHost aus fünf systemd-Units. Gemeinsamen Arbeitsspeicher haben sie nicht: Was mehr als ein Prozess wissen muss, steht in PostgreSQL oder als JSON-Datei unter <code>/dev/shm</code>. Ein Klick auf einen Baustein öffnet seine Detailansicht mit Eckdaten, innerem Aufbau, Verbindungen und Code-Pfaden.</p>
+  </div>
+
+  <figure>
+    <div class="scroll">
+      <svg class="dia dia-wide" viewBox="0 0 1240 766" role="img" aria-label="Laufzeitbild: Clients erreichen über nginx, einen Unix-Socket oder Port 8080 fünf systemd-Units, die sich PostgreSQL und ein SHM-Verzeichnis teilen.">
+        <defs>
+          <marker id="ah1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0 0L10 5L0 10z"/></marker>
+        </defs>
+
+        <!-- Host-Rahmen -->
+        <rect class="host" x="12" y="100" width="1216" height="580" rx="10"/>
+        <text class="t-cap" x="500" y="124">HOST · DEBIAN 13 · SYSTEMD</text>
+        <text class="t-note" x="500" y="141">Zugriff von unterwegs: WireGuard-Tunnel (wg0)</text>
+        <text class="t-note" x="664" y="226" text-anchor="middle">Worker ohne Netzwerk-Eingang</text>
+
+        <!-- Kanten: Clients zu Eingängen -->
+        <path class="edge" d="M78 70V150" marker-end="url(#ah1)"/>
+        <path class="edge" d="M191 70V150" marker-end="url(#ah1)"/>
+        <path class="edge" d="M304 70V150" marker-end="url(#ah1)"/>
+        <path class="edge" d="M417 70V250" marker-end="url(#ah1)"/>
+        <path class="edge" d="M948 70V150" marker-end="url(#ah1)"/>
+        <path class="edge" d="M1134 70V150" marker-end="url(#ah1)"/>
+        <text class="t-lbl" x="84" y="91">HTTPS · WebSocket</text>
+        <text class="t-lbl" x="425" y="91">HTTP</text>
+        <text class="t-lbl" x="425" y="176">ohne nginx</text>
+        <text class="t-lbl" x="956" y="91">HTTP über lokalen Proxy</text>
+        <text class="t-lbl" x="1142" y="91">WebDAV/TLS</text>
+
+        <!-- Kanten: Eingänge zu Prozessen -->
+        <path class="edge" d="M191 194V250" marker-end="url(#ah1)"/>
+        <path class="edge" d="M948 194V250" marker-end="url(#ah1)"/>
+        <path class="edge" d="M1134 194V250" marker-end="url(#ah1)"/>
+        <text class="t-lbl" x="199" y="226">Proxy an 127.0.0.1:8000</text>
+        <text class="t-lbl" x="956" y="226">Socket-Übergabe (fd 3)</text>
+
+        <!-- Kanten: Prozesse zu Zustand -->
+        <path class="edge" d="M110 370V414" marker-start="url(#ah1)" marker-end="url(#ah1)"/>
+        <text class="t-lbl" x="118" y="396">UDS-RPC</text>
+        <path class="edge" d="M400 414V370" marker-end="url(#ah1)"/>
+        <text class="t-lbl" x="392" y="396" text-anchor="end">liest</text>
+        <path class="edge" d="M524 370V414" marker-end="url(#ah1)"/>
+        <text class="t-lbl" x="532" y="396">schreibt</text>
+        <path class="edge" d="M290 370V510" marker-end="url(#ah1)"/>
+        <text class="t-lbl" x="298" y="492">ORM · LISTEN/NOTIFY</text>
+        <path class="edge" d="M610 370V510" marker-end="url(#ah1)"/>
+        <text class="t-lbl" x="618" y="492">Samples · NOTIFY</text>
+        <path class="edge" d="M757 370V510" marker-end="url(#ah1)"/>
+        <text class="t-lbl" x="765" y="492">Aufträge · Verlauf</text>
+        <path class="edge" d="M948 370V510" marker-end="url(#ah1)"/>
+        <text class="t-lbl" x="956" y="492">ORM · LISTEN</text>
+        <path class="edge" d="M1134 370V510" marker-end="url(#ah1)"/>
+        <text class="t-lbl" x="1126" y="492" text-anchor="end">Auth · Heartbeat</text>
+        <path class="edge" d="M620 680V708" marker-end="url(#ah1)"/>
+        <text class="t-lbl" x="628" y="699">ausgehende Verbindungen</text>
+
+        <!-- Clients -->
+        <g class="node" data-open="web" tabindex="0" role="button" aria-haspopup="dialog" aria-label="Web-UI">
+          <rect class="shape n-ext" x="28" y="20" width="100" height="50" rx="6"/>
+          <text class="t-name" x="78" y="41" text-anchor="middle">Web-UI</text>
+          <text class="t-sub" x="78" y="58" text-anchor="middle">React-SPA</text>
+        </g>
+        <g class="node" data-open="app" tabindex="0" role="button" aria-haspopup="dialog" aria-label="BaluApp">
+          <rect class="shape n-ext" x="141" y="20" width="100" height="50" rx="6"/>
+          <text class="t-name" x="191" y="41" text-anchor="middle">BaluApp</text>
+          <text class="t-sub" x="191" y="58" text-anchor="middle">Android</text>
+        </g>
+        <g class="node" data-open="desk" tabindex="0" role="button" aria-haspopup="dialog" aria-label="BaluDesk">
+          <rect class="shape n-ext" x="254" y="20" width="100" height="50" rx="6"/>
+          <text class="t-name" x="304" y="41" text-anchor="middle">BaluDesk</text>
+          <text class="t-sub" x="304" y="58" text-anchor="middle">Sync-Client</text>
+        </g>
+        <g class="node" data-open="tray" tabindex="0" role="button" aria-haspopup="dialog" aria-label="Tray und TUI">
+          <rect class="shape n-ext" x="367" y="20" width="100" height="50" rx="6"/>
+          <text class="t-name" x="417" y="41" text-anchor="middle">Tray · TUI</text>
+          <text class="t-sub" x="417" y="58" text-anchor="middle">KDE · Terminal</text>
+        </g>
+        <g class="node" data-open="comp" tabindex="0" role="button" aria-haspopup="dialog" aria-label="Companion">
+          <rect class="shape n-ext" x="860" y="20" width="176" height="50" rx="6"/>
+          <text class="t-name" x="948" y="41" text-anchor="middle">Companion</text>
+          <text class="t-sub" x="948" y="58" text-anchor="middle">Tauri · Webview + Proxy</text>
+        </g>
+        <g class="node" data-open="dav" tabindex="0" role="button" aria-haspopup="dialog" aria-label="WebDAV-Client">
+          <rect class="shape n-ext" x="1056" y="20" width="156" height="50" rx="6"/>
+          <text class="t-name" x="1134" y="41" text-anchor="middle">WebDAV-Client</text>
+          <text class="t-sub" x="1134" y="58" text-anchor="middle">Explorer · Finder</text>
+        </g>
+
+        <!-- Eingänge -->
+        <g class="node" data-open="nginx" tabindex="0" role="button" aria-haspopup="dialog" aria-label="nginx">
+          <rect class="shape n-ext" x="28" y="150" width="326" height="44" rx="6"/>
+          <text class="t-unit" x="40" y="168">nginx :443</text>
+          <text class="t-sub" x="40" y="185">TLS · statische SPA · Rate-Limits · /api-Proxy</text>
+        </g>
+        <g class="node" data-open="local" tabindex="0" role="button" aria-haspopup="dialog" aria-label="Unix-Socket des lokalen Kanals">
+          <rect class="shape n-ext" x="860" y="150" width="176" height="44" rx="6"/>
+          <text class="t-mono" x="868" y="168">/run/baluhost/local.sock</text>
+          <text class="t-sub" x="868" y="185">Socket-Unit von systemd</text>
+        </g>
+        <g class="node" data-open="webdav" tabindex="0" role="button" aria-haspopup="dialog" aria-label="WebDAV-Port">
+          <rect class="shape n-ext" x="1056" y="150" width="156" height="44" rx="6"/>
+          <text class="t-unit" x="1068" y="168">Port 8080</text>
+          <text class="t-sub" x="1068" y="185">TLS · HTTP-Basic</text>
+        </g>
+
+        <!-- Prozesse -->
+        <g class="node" data-open="backend" tabindex="0" role="button" aria-haspopup="dialog" aria-label="baluhost-backend">
+          <rect class="shape n-proc" x="28" y="250" width="440" height="120" rx="8"/>
+          <text class="t-unit" x="44" y="274">baluhost-backend</text>
+          <text class="t-sub" x="44" y="291">FastAPI · uvicorn · 4 Worker · Port 8000</text>
+          <rect class="n-chip" x="146" y="306" width="97" height="48" rx="5"/>
+          <text class="t-name" x="194.5" y="326" text-anchor="middle">Follower</text>
+          <text class="t-sub" x="194.5" y="342" text-anchor="middle">Requests · WS</text>
+          <rect class="n-chip" x="252" y="306" width="97" height="48" rx="5"/>
+          <text class="t-name" x="300.5" y="326" text-anchor="middle">Follower</text>
+          <text class="t-sub" x="300.5" y="342" text-anchor="middle">Requests · WS</text>
+          <rect class="n-chip" x="358" y="306" width="97" height="48" rx="5"/>
+          <text class="t-name" x="406.5" y="326" text-anchor="middle">Follower</text>
+          <text class="t-sub" x="406.5" y="342" text-anchor="middle">Requests · WS</text>
+        </g>
+        <g class="node" data-open="primary" tabindex="0" role="button" aria-haspopup="dialog" aria-label="Primary-Worker">
+          <rect class="shape n-primary" x="40" y="306" width="97" height="48" rx="5"/>
+          <text class="t-name on-accent" x="88.5" y="326" text-anchor="middle">Primary</text>
+          <text class="t-sub on-accent" x="88.5" y="342" text-anchor="middle">Hardware-Loops</text>
+        </g>
+        <g class="node" data-open="monitoring" tabindex="0" role="button" aria-haspopup="dialog" aria-label="baluhost-monitoring">
+          <rect class="shape n-proc" x="488" y="250" width="166" height="120" rx="8"/>
+          <text class="t-unit" x="498" y="274">baluhost-monitoring</text>
+          <text class="t-sub" x="498" y="298">Telemetrie · Disk-I/O</text>
+          <text class="t-sub" x="498" y="315">Collector · Retention</text>
+          <text class="t-sub" x="498" y="332">Smart-Device-Poller</text>
+        </g>
+        <g class="node" data-open="scheduler" tabindex="0" role="button" aria-haspopup="dialog" aria-label="baluhost-scheduler">
+          <rect class="shape n-proc" x="674" y="250" width="166" height="120" rx="8"/>
+          <text class="t-unit" x="684" y="274">baluhost-scheduler</text>
+          <text class="t-sub" x="684" y="298">APScheduler-Jobs:</text>
+          <text class="t-sub" x="684" y="315">Backup · RAID-Scrub</text>
+          <text class="t-sub" x="684" y="332">SMART-Scan · Sync-Check</text>
+        </g>
+        <g class="node" data-open="local" tabindex="0" role="button" aria-haspopup="dialog" aria-label="baluhost-backend-local">
+          <rect class="shape n-proc" x="860" y="250" width="176" height="120" rx="8"/>
+          <text class="t-unit" x="869" y="274" style="font-size:11.5px">baluhost-backend-local</text>
+          <text class="t-sub" x="869" y="298">uvicorn · 2 Worker</text>
+          <text class="t-sub" x="869" y="315">Kanal „local“</text>
+          <text class="t-sub" x="869" y="332">wird nie Primary</text>
+        </g>
+        <g class="node" data-open="webdav" tabindex="0" role="button" aria-haspopup="dialog" aria-label="baluhost-webdav">
+          <rect class="shape n-proc" x="1056" y="250" width="156" height="120" rx="8"/>
+          <text class="t-unit" x="1066" y="274">baluhost-webdav</text>
+          <text class="t-sub" x="1066" y="298">WsgiDAV auf cheroot</text>
+          <text class="t-sub" x="1066" y="315">Login per Passwort</text>
+          <text class="t-sub" x="1066" y="332">Root je Nutzer</text>
+        </g>
+
+        <!-- Sandbox und SHM -->
+        <g class="node" data-open="sandbox" tabindex="0" role="button" aria-haspopup="dialog" aria-label="Plugin-Sandbox">
+          <rect class="shape n-iso" x="28" y="414" width="222" height="48" rx="6"/>
+          <text class="t-name" x="40" y="434">Plugin-Sandbox</text>
+          <text class="t-sub" x="40" y="451">baluhost-plugin · eigener netns</text>
+        </g>
+        <g class="node" data-open="shm" tabindex="0" role="button" aria-haspopup="dialog" aria-label="SHM-Verzeichnis">
+          <rect class="shape n-state" x="330" y="414" width="230" height="48" rx="6"/>
+          <text class="t-unit" x="342" y="434">/dev/shm/baluhost/</text>
+          <text class="t-sub" x="342" y="451">JSON-Dateien je Metrik</text>
+        </g>
+
+        <!-- Datenbank -->
+        <g class="node" data-open="pg" tabindex="0" role="button" aria-haspopup="dialog" aria-label="PostgreSQL">
+          <rect class="shape n-state" x="28" y="510" width="1184" height="56" rx="8"/>
+          <text class="t-unit" x="44" y="533">PostgreSQL 17</text>
+          <text class="t-sub" x="44" y="552">Tabellen via SQLAlchemy und Alembic · LISTEN/NOTIFY als ws_bus · Command-Queues (power_commands) · Scheduler-Aufträge · Heartbeats</text>
+        </g>
+
+        <!-- Betriebssystem -->
+        <text class="t-note" x="28" y="590">Betriebssystem-Ebene: Zugriff per subprocess und sysfs. Regelkreise für Lüfter, CPU-Takt und Sleep laufen nur im Primary.</text>
+        <g class="node" data-open="os" tabindex="0" role="button" aria-haspopup="dialog" aria-label="Linux-Host">
+          <rect class="shape n-ext" x="28" y="602" width="1184" height="62" rx="8"/>
+          <path class="edge" d="M264.8 602V664M501.6 602V664M738.4 602V664M975.2 602V664" style="stroke-width:1"/>
+          <text class="t-name" x="44" y="627">Storage</text>
+          <text class="t-sub" x="44" y="645">mdadm-RAID · Nutzerdaten</text>
+          <text class="t-name" x="280" y="627">Hardware</text>
+          <text class="t-sub" x="280" y="645">smartctl · hwmon/sysfs · GPU</text>
+          <text class="t-name" x="517" y="627">systemd · logind</text>
+          <text class="t-sub" x="517" y="645">Suspend-Locks · Unit-Neustart</text>
+          <text class="t-name" x="754" y="627">Netz</text>
+          <text class="t-sub" x="754" y="645">WireGuard wg0 · avahi/mDNS</text>
+          <text class="t-name" x="991" y="627">Freigaben</text>
+          <text class="t-sub" x="991" y="645">smbd · nfsd, Konfig aus BaluHost</text>
+        </g>
+
+        <!-- Extern -->
+        <g class="node" data-open="ext" tabindex="0" role="button" aria-haspopup="dialog" aria-label="Externe Dienste">
+          <rect class="shape n-ext" x="28" y="708" width="1184" height="48" rx="8"/>
+          <path class="edge" d="M264.8 708V756M501.6 708V756M738.4 708V756M975.2 708V756" style="stroke-width:1"/>
+          <text class="t-name" x="44" y="728">Firebase</text>
+          <text class="t-sub" x="44" y="745">Push an BaluApp</text>
+          <text class="t-name" x="280" y="728">Plugin-Marktplatz</text>
+          <text class="t-sub" x="280" y="745">signierter Index</text>
+          <text class="t-name" x="517" y="728">Cloud-Speicher</text>
+          <text class="t-sub" x="517" y="745">Import und Export per rclone</text>
+          <text class="t-name" x="754" y="728">Heimnetz-Geräte</text>
+          <text class="t-sub" x="754" y="745">FritzBox · Pi-hole · Tapo</text>
+          <text class="t-name" x="991" y="728">BaluPi</text>
+          <text class="t-sub" x="991" y="745">Handshake bei Start und Stopp</text>
+        </g>
+      </svg>
+    </div>
+    <ul class="legend" aria-label="Legende">
+      <li><span class="sw sw-proc"></span>BaluHost-Prozess (systemd-Unit)</li>
+      <li><span class="sw sw-state"></span>geteilter Zustand</li>
+      <li><span class="sw sw-ext"></span>Client, Fremdsoftware, Betriebssystem</li>
+      <li><span class="sw sw-iso"></span>Isolationsgrenze</li>
+    </ul>
+    <figcaption>Clients oben, Eingänge darunter, dann die fünf Units. Monitoring und Scheduler nehmen keine Verbindungen an; sie arbeiten nur über Datenbank und SHM-Verzeichnis.</figcaption>
+  </figure>
+
+</section>
+
+<!-- ===================================================== Weg einer Anfrage -->
+<section id="anfrage">
+  <div>
+    <div class="path-tag">client/src/ → backend/app/</div>
+    <h2>Weg einer Anfrage durch die Schichten</h2>
+  </div>
+  <div class="prose">
+    <p>Beide Hälften sind gleich geschnitten: je Fachgebiet eine Datei pro Schicht. Zu <code>api/routes/raid</code> im Backend gehört <code>api/raid.ts</code> im Frontend, zum Pydantic-Schema das TypeScript-Interface. Eine Anfrage läuft in dieser Reihenfolge durch. Jede Schicht lässt sich für Details öffnen.</p>
+  </div>
+
+  <div class="lanes">
+    <div class="lane">
+      <div class="lane-head"><h3>Browser</h3><code>client/src/</code></div>
+      <ol class="steps">
+        <li><span class="num">1</span><span class="what"><button type="button" class="open" data-open="l-pages"><code>pages/</code></button><span>Seite hinter einer Route, lazy geladen. Setzt Komponenten aus <code>components/</code> zusammen und enthält kaum eigene Logik.</span></span></li>
+        <li><span class="num">2</span><span class="what"><button type="button" class="open" data-open="l-hooks"><code>hooks/</code></button><span>Datenhaltung mit TanStack Query: <code>useQuery</code> mit Polling, <code>useMutation</code> mit Invalidierung. Schlüssel kommen aus <code>lib/queryKeys.ts</code>.</span></span></li>
+        <li><span class="num">3</span><span class="what"><button type="button" class="open" data-open="l-api"><code>api/</code></button><span>Eine typisierte Funktion je Endpunkt, ein Modul je Fachgebiet. Kein Cache, keine Fehlerbehandlung.</span></span></li>
+        <li><span class="num">4</span><span class="what"><button type="button" class="open" data-open="l-libapi"><code>lib/api.ts</code></button><span>Die eine axios-Instanz. Hängt das Token an und meldet ein 401 als <code>auth:expired</code> an den AuthContext.</span></span></li>
+      </ol>
+    </div>
+
+    <div class="wire" aria-label="Übertragung"><span>HTTPS</span><span>/api/…</span><span>Bearer-JWT</span></div>
+
+    <div class="lane">
+      <div class="lane-head"><h3>Server</h3><code>backend/app/</code></div>
+      <ol class="steps" start="5">
+        <li><span class="num">5</span><span class="what"><button type="button" class="open" data-open="nginx"><code>nginx</code></button><span>Beendet TLS, begrenzt die Rate (<code>api_limit</code>, <code>auth_limit</code>) und reicht an einen der vier Worker weiter.</span></span></li>
+        <li><span class="num">6</span><span class="what"><button type="button" class="open" data-open="l-mw"><code>middleware/</code></button><span>Neun Schichten um jede Anfrage: Security-Header, Kanal-Markierung, Plugin-Gate, Auto-Wake aus dem Sleep, Geräte-Tracking, Fehlerzähler.</span></span></li>
+        <li><span class="num">7</span><span class="what"><button type="button" class="open" data-open="l-routes"><code>api/routes/</code> + <code>api/deps.py</code></button><span>Nur HTTP-Belange: Auth-Dependency, Rate-Limit-Dekorator, Validierung über ein Schema aus <code>schemas/</code>.</span></span></li>
+        <li><span class="num">8</span><span class="what"><button type="button" class="open" data-open="l-services"><code>services/</code></button><span>Die Fachlogik. Hardware-Services wählen hier ihr Backend: Simulation im Dev-Modus, echte Befehle in Produktion.</span></span></li>
+        <li><span class="num">9</span><span class="what"><button type="button" class="open" data-open="l-models"><code>models/</code></button><span>SQLAlchemy-2-Modelle auf PostgreSQL. Schemaänderungen laufen über Alembic-Migrationen.</span></span></li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="cross">
+    <div>
+      <h3>Quer durch das Frontend</h3>
+      <ul>
+        <li><code>contexts/</code>: Provider in fester Reihenfolge Auth, Version, Plugin, Notification, Upload; dazu das Theme mit sechs Farbschemata.</li>
+        <li><code>i18n/</code>: i18next mit Deutsch und Englisch in je 22 Namespaces.</li>
+        <li><code>lib/features.ts</code>: Build-Schalter <code>__DEVICE_MODE__</code>. Der Pi-Build enthält nur Login, Dashboard und Systemmonitor.</li>
+        <li><code>plugin-runtime/</code>: eigenes Bundle, das im iframe eines Plugins startet.</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Quer durch das Backend</h3>
+      <ul>
+        <li><code>core/</code>: Konfiguration aus Umgebungsvariablen, Datenbank-Engine, JWT mit Typ-Claim, Rate-Limiter, Fehlerklassen mit client-sicherer Meldung.</li>
+        <li><code>core/lifespan.py</code>: Start und Stopp aller Hintergrunddienste samt Wahl des Primary.</li>
+        <li><code>plugins/</code>: Plugin-Framework, siehe unten.</li>
+        <li><code>compat/</code>: Brücke zur WSGI-Bibliothek WsgiDAV für den WebDAV-Prozess.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ===================================================== Kanäle -->
+<section id="kanaele">
+  <div>
+    <div class="path-tag">services/ws_bus.py · monitoring/shm.py · power/db_command_queue.py</div>
+    <h2>Kanäle zwischen den Prozessen</h2>
+  </div>
+  <div class="prose">
+    <p>Sechs API-Prozesse und drei Worker müssen sich abstimmen, ohne einander direkt aufzurufen. Jeder Kanal hat genau eine Aufgabe.</p>
+  </div>
+  <div class="tbl tbl-ipc">
+    <table>
+      <thead><tr><th>Kanal</th><th>Schreibt</th><th>Liest</th><th>Wofür</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Postgres LISTEN/NOTIFY<br><code>ws_bus</code></td>
+          <td>jeder Prozess, auch Scheduler und Monitoring</td>
+          <td>ein Listener je API-Prozess</td>
+          <td>WebSocket-Nachrichten. Zustellen kann nur der Prozess, der den Socket hält, also geht jede Nachricht über den Bus an alle. Bewusst nicht dauerhaft gespeichert.</td>
+        </tr>
+        <tr>
+          <td>JSON-Dateien<br><code>/dev/shm/baluhost/</code></td>
+          <td>Monitoring-Worker</td>
+          <td>API-Worker</td>
+          <td>Live-Metriken wie CPU, RAM, Disk-I/O und SMART-Zusammenfassung, ohne Datenbankabfrage je Request.</td>
+        </tr>
+        <tr>
+          <td>Command-Queue<br><code>power_commands</code></td>
+          <td>Follower-Worker</td>
+          <td>Primary</td>
+          <td>Hardware-Befehle. Eine Zeile wandert von <code>pending</code> über <code>running</code> zu <code>applied</code> oder <code>failed</code>, trägt eine Frist und wird höchstens einmal ausgeführt.</td>
+        </tr>
+        <tr>
+          <td>Scheduler-Aufträge<br><code>scheduler_executions</code></td>
+          <td>API legt Zeile mit Status <code>requested</code> an</td>
+          <td>Scheduler-Worker fragt ab</td>
+          <td>„Jetzt ausführen“ aus der Oberfläche sowie der Verlauf aller Läufe.</td>
+        </tr>
+        <tr>
+          <td>Zustandszeilen<br><code>sleep_runtime_state</code>, <code>webdav_state</code>, <code>scheduler_state</code></td>
+          <td>der Prozess, dem der Zustand gehört</td>
+          <td>alle anderen</td>
+          <td>Heartbeats und Zustände, die jeder Worker beantworten können muss, etwa „schläft das System gerade“.</td>
+        </tr>
+        <tr>
+          <td>Plugin-Aktivierung<br><code>plugin_enablement</code></td>
+          <td>der Worker, der den Schalter bedient</td>
+          <td>alle Worker, mit 5-Sekunden-Cache</td>
+          <td>Ein Plugin-Schalter wirkt nach wenigen Sekunden in allen Workern, ohne Neustart.</td>
+        </tr>
+        <tr>
+          <td>Datei-Lock<br><code>/tmp/baluhost-primary.lock</code></td>
+          <td colspan="2">die vier Backend-Worker konkurrieren beim Start</td>
+          <td>Wahl des Primary. Der lokale Kanal bewirbt sich nie.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ===================================================== Domänen -->
+<section id="domaenen">
+  <div>
+    <div class="path-tag">backend/app/services/</div>
+    <h2>Service-Domänen</h2>
+  </div>
+  <div class="prose">
+    <p>Die Fachlogik liegt in rund 250 Modulen. Einfache Dienste sind eine Datei, größere Gebiete ein Unterverzeichnis. Fast jede Domäne hat ihr Gegenstück in <code>api/routes/</code>, <code>schemas/</code> und <code>models/</code>. Ein Klick auf eine Domäne zeigt ihre Module.</p>
+  </div>
+  <div class="domains">
+    <div class="domain">
+      <h3><button type="button" class="open" data-open="d-files">Dateien und Speicher</button></h3>
+      <p>Der NAS-Kern: Datei-Operationen, Besitz, Quota, Freigabelinks, Versionierung.</p>
+      <ul><li>files/</li><li>versioning/</li><li>cache/</li><li>storage_breakdown</li><li>game_libraries/</li></ul>
+    </div>
+    <div class="domain">
+      <h3><button type="button" class="open" data-open="d-drives">Laufwerke</button></h3>
+      <p>RAID über mdadm, Plattengesundheit über smartctl, Benchmarks mit fio.</p>
+      <ul><li>hardware/raid/</li><li>hardware/smart/</li><li>benchmark/</li><li>disk_monitor</li></ul>
+    </div>
+    <div class="domain">
+      <h3><button type="button" class="open" data-open="d-power">Energie und Kühlung</button></h3>
+      <p>CPU-Profile nach Bedarf, Lüfterkurven, Sleep-Automat, geplanter Neustart.</p>
+      <ul><li>power/manager</li><li>power/fan_control</li><li>power/sleep</li><li>power/energy</li><li>power/scheduled_reboot</li></ul>
+    </div>
+    <div class="domain">
+      <h3><button type="button" class="open" data-open="d-net">Netz und Freigaben</button></h3>
+      <p>WireGuard-VPN, SMB, NFS, WebDAV, mDNS und die Pi-hole-Anbindung.</p>
+      <ul><li>vpn/</li><li>samba_service</li><li>nfs_service</li><li>webdav_service</li><li>network_discovery</li><li>pihole/</li></ul>
+    </div>
+    <div class="domain">
+      <h3><button type="button" class="open" data-open="d-id">Identität und Sicherheit</button></h3>
+      <p>Anmeldung, Token, zweiter Faktor, API-Keys, Rechte und das Audit-Log.</p>
+      <ul><li>auth</li><li>token_service</li><li>totp_service</li><li>api_key_service</li><li>permissions</li><li>step_up</li><li>audit/</li></ul>
+    </div>
+    <div class="domain">
+      <h3><button type="button" class="open" data-open="d-sync">Geräte, Sync und Backup</button></h3>
+      <p>Kopplung von Handy und Desktop, Sync-Koordination, Sicherungen, Cloud-Import.</p>
+      <ul><li>mobile</li><li>desktop_pairing</li><li>sync/</li><li>backup/</li><li>cloud/</li><li>balupi_handshake</li></ul>
+    </div>
+    <div class="domain">
+      <h3><button type="button" class="open" data-open="d-ops">Beobachtung und Betrieb</button></h3>
+      <p>Metriken, geplante Jobs, Dienststatus, Benachrichtigungen, Updates, Ersteinrichtung.</p>
+      <ul><li>monitoring/</li><li>scheduler/</li><li>service_status</li><li>notifications/</li><li>status_bar/</li><li>update/</li><li>setup/</li></ul>
+    </div>
+    <div class="domain">
+      <h3><button type="button" class="open" data-open="d-ext">Erweiterung</button></h3>
+      <p>Installieren, Schalten und Versorgen von Plugins samt Marktplatz.</p>
+      <ul><li>plugin_service</li><li>plugin_marketplace</li><li>plugin_enablement</li><li>plugin_storage_service</li><li>dashboard_panel_bridge</li></ul>
+    </div>
+  </div>
+</section>
+
+<!-- ===================================================== Plugins -->
+<section id="plugins">
+  <div>
+    <div class="path-tag">backend/app/plugins/ · client/src/plugin-runtime/</div>
+    <h2>Plugins: zwei Vertrauensstufen</h2>
+  </div>
+  <div class="prose">
+    <p>Plugins bringen Routen, Hintergrundaufgaben, Dashboard-Panels, Status-Pills und eigene Oberflächen mit. Mitgelieferte Plugins laufen im Host-Prozess. Fremder Code aus dem Marktplatz läuft auf beiden Seiten hinter einem schmalen Kanal: auf dem Server im Subprozess, im Browser im iframe. Die Bausteine im Bild sind anklickbar.</p>
+  </div>
+  <figure>
+    <div class="scroll">
+      <svg class="dia dia-mid" viewBox="0 0 1000 292" role="img" aria-label="Plugin-Isolation: Auf dem Server spricht der Host-Prozess mit dem Sandbox-Subprozess über UDS-RPC, im Browser spricht die Web-UI mit dem iframe über postMessage.">
+        <defs>
+          <marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0 0L10 5L0 10z"/></marker>
+        </defs>
+        <text class="t-cap" x="20" y="18">SERVER</text>
+        <rect class="n-proc" x="20" y="28" width="420" height="104" rx="8"/>
+        <text class="t-unit" x="36" y="50">baluhost-backend</text>
+        <g class="node" data-open="p-host" tabindex="0" role="button" aria-haspopup="dialog" aria-label="PluginManager">
+          <rect class="shape n-chip" x="36" y="64" width="154" height="52" rx="5"/>
+          <text class="t-name" x="48" y="86">PluginManager</text>
+          <text class="t-sub" x="48" y="103">Lifecycle · Routen · Gate</text>
+        </g>
+        <g class="node" data-open="p-bundled" tabindex="0" role="button" aria-haspopup="dialog" aria-label="Mitgelieferte Plugins">
+          <rect class="shape n-chip" x="206" y="64" width="218" height="52" rx="5"/>
+          <text class="t-name" x="218" y="86">Mitgelieferte Plugins</text>
+          <text class="t-sub" x="218" y="103">im Prozess · volles Vertrauen</text>
+        </g>
+        <path class="edge" d="M440 80H640" marker-start="url(#ah2)" marker-end="url(#ah2)"/>
+        <text class="t-name" x="540" y="70" text-anchor="middle">UDS-RPC</text>
+        <text class="t-lbl" x="540" y="98" text-anchor="middle">Capability-Scopes, sonst nichts</text>
+        <g class="node" data-open="sandbox" tabindex="0" role="button" aria-haspopup="dialog" aria-label="Sandbox-Subprozess">
+          <rect class="shape n-iso" x="640" y="28" width="340" height="104" rx="8"/>
+          <text class="t-name" x="656" y="50">Sandbox-Subprozess</text>
+          <text class="t-sub" x="656" y="74">externes Plugin aus dem Marktplatz</text>
+          <text class="t-sub" x="656" y="92">Benutzer baluhost-plugin, kein sudo</text>
+          <text class="t-sub" x="656" y="110">eigener Netzwerk-Namespace, nur Loopback</text>
+        </g>
+
+        <text class="t-cap" x="20" y="174">BROWSER</text>
+        <rect class="n-ext" x="20" y="184" width="420" height="92" rx="8"/>
+        <text class="t-name" x="36" y="206">Web-UI</text>
+        <g class="node" data-open="p-frame" tabindex="0" role="button" aria-haspopup="dialog" aria-label="PluginSandboxHost">
+          <rect class="shape n-chip" x="36" y="218" width="388" height="44" rx="5"/>
+          <text class="t-name" x="48" y="237">PluginSandboxHost</text>
+          <text class="t-sub" x="48" y="253">lib/plugin-sandbox: Nachrichtenbus und Scope-Katalog</text>
+        </g>
+        <path class="edge" d="M440 230H640" marker-start="url(#ah2)" marker-end="url(#ah2)"/>
+        <text class="t-name" x="540" y="220" text-anchor="middle">postMessage-RPC</text>
+        <text class="t-lbl" x="540" y="248" text-anchor="middle">api · toast · storage · navigate</text>
+        <g class="node" data-open="p-frame" tabindex="0" role="button" aria-haspopup="dialog" aria-label="Sandbox-iframe">
+          <rect class="shape n-iso" x="640" y="184" width="340" height="92" rx="8"/>
+          <text class="t-name" x="656" y="206">Sandbox-iframe</text>
+          <text class="t-sub" x="656" y="230">plugin-runtime startet die Plugin-Oberfläche</text>
+          <text class="t-sub" x="656" y="248">Theme kommt als Token-Satz vom Host</text>
+        </g>
+</svg>
+    </div>
+    <figcaption>Dieselbe Form auf beiden Seiten: Der Host behält alle Fähigkeiten, das Plugin bekommt nur, was über den Kanal freigegeben ist.</figcaption>
+  </figure>
+  <div class="tbl tbl-two">
+    <table>
+      <thead><tr><th></th><th>Mitgeliefert</th><th>Extern</th></tr></thead>
+      <tbody>
+        <tr><td>Herkunft</td><td><code>plugins/installed/</code>, im Repo gepflegt</td><td>Marktplatz, installiert nach <code>/var/lib/baluhost/plugins</code></td></tr>
+        <tr><td>Läuft</td><td>als Python im Host-Prozess</td><td>als Subprozess unter eigenem Benutzer</td></tr>
+        <tr><td>Rechte</td><td>Berechtigungen, die der Admin beim Aktivieren bestätigt</td><td>Capability-Scopes, standardmäßig alles verboten</td></tr>
+        <tr><td>Zugriff</td><td>volle Host-API</td><td>kein Import, keine Datenbank, kein Dateisystem, keine Shell</td></tr>
+        <tr><td>Beispiele</td><td><code>audio_control</code>, <code>bluetooth</code>, <code>display_output</code>, <code>optical_drive</code>, <code>steam_gaming</code>, <code>tapo_smart_plug</code></td><td>derzeit keine ausgerollt</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="prose">
+    <p>Der Marktplatz-Index ist die Stelle, an der fremder Code ins System kommt. Deshalb prüft <code>MarketplaceService.get_index()</code> eine abgesetzte ed25519-Signatur über genau die Bytes, die danach geparst werden. Fehlt der Schlüssel, die Signatur oder stimmt sie nicht, wird der Index abgelehnt. Einen unsignierten Ausweichweg gibt es nicht.</p>
+  </div>
+</section>
+
+<!-- ===================================================== Dev / Prod -->
+<section id="modi">
+  <div>
+    <div class="path-tag">NAS_MODE=dev | prod</div>
+    <h2>Derselbe Code in zwei Modi</h2>
+  </div>
+  <div class="prose">
+    <p>Hardware-Services sind gegen ein Protokoll geschrieben und haben zwei Implementierungen. <code>settings.is_dev_mode</code> entscheidet beim Start, welche geladen wird. So läuft die ganze Anwendung auch auf einem Windows-Laptop ohne RAID, Lüfter oder systemd.</p>
+  </div>
+  <div class="tbl tbl-two">
+    <table>
+      <thead><tr><th></th><th>Entwicklung</th><th>Produktion</th></tr></thead>
+      <tbody>
+        <tr><td>Start</td><td><code>python start_dev.py</code>: Backend auf 8000, Vite auf 5173</td><td>fünf systemd-Units hinter nginx</td></tr>
+        <tr><td>Datenbank</td><td>SQLite, Tabellen beim Start angelegt</td><td>PostgreSQL 17, Alembic-Migrationen</td></tr>
+        <tr><td>RAID</td><td><code>DevRaidBackend</code> mit sieben simulierten Platten</td><td><code>MdadmRaidBackend</code> mit echten mdadm-Befehlen</td></tr>
+        <tr><td>Lüfter, CPU, Sleep</td><td>simulierte Backends, keine logind-Locks</td><td>hwmon, cpufreq, logind</td></tr>
+        <tr><td>Speicher</td><td><code>backend/dev-storage/</code>, bei jedem Start neu</td><td>RAID-Mount</td></tr>
+        <tr><td>SHM-Verzeichnis</td><td><code>/dev/shm/baluhost-dev/</code></td><td><code>/dev/shm/baluhost/</code></td></tr>
+        <tr><td>Daten</td><td>Seed-Nutzer und Demo-Dateien</td><td>Setup-Assistent beim ersten Start</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ===================================================== Auslieferung -->
+<section id="auslieferung">
+  <div>
+    <div class="path-tag">.github/workflows/ · deploy/scripts/ci-deploy.sh</div>
+    <h2>Vom Pull Request auf die Maschine</h2>
+  </div>
+  <div class="prose">
+    <p>Fremder Code aus einem Pull Request und der Produktions-Deploy laufen auf getrennten Runnern mit getrennten Rechten. Beide Schritte warten auf eine Freigabe von Hand.</p>
+  </div>
+  <ol class="chain">
+    <li><strong>Pull Request</strong><span><code>ci-check.yml</code> baut das Frontend und fährt die Backend-Tests, auf dem Sandbox-Runner in rootless Podman.</span></li>
+    <li><strong>Merge nach main</strong><span>Von Hand durch den Maintainer, sobald die Checks grün sind.</span></li>
+    <li><strong>Freigabe</strong><span><code>deploy-production.yml</code> hält im Environment <code>production</code> an, bis der Lauf bestätigt ist.</span></li>
+    <li><strong>Deploy</strong><span><code>ci-deploy.sh</code> auf dem Prod-Runner: Code aktualisieren, Unit-Dateien rendern, Dienste neu starten, Health-Check, sonst Rollback.</span></li>
+    <li><strong>Pre-Release-Tag</strong><span><code>v1.38.0-pre.n</code> entsteht erst nach gelungenem Deploy und löst <code>create-release.yml</code> aus.</span></li>
+  </ol>
+</section>
+
+<footer>
+  Erstellt aus dem Stand des Repos am 16.11.2026: Unit-Vorlagen unter <code>deploy/install/templates/</code>, die <code>CLAUDE.md</code>-Dateien der Verzeichnisse und <code>.claude/rules/</code>. Ports, Pfade und Worker-Zahlen sind die Vorgaben der Vorlagen; eine einzelne Installation kann davon abweichen.
+</footer>
+
+</div>
+
+<dialog class="sheet" id="sheet" aria-labelledby="s-title">
+  <div class="sheet-inner">
+    <header class="sheet-head">
+      <div>
+        <span class="sheet-kind" id="s-kind"></span>
+        <h2 id="s-title" tabindex="-1"></h2>
+      </div>
+      <button type="button" class="sheet-close" id="s-close">Schließen</button>
+    </header>
+    <div class="sheet-body" id="s-body"></div>
+  </div>
+</dialog>
+
+<script>
+(function () {
+  /* Je Baustein: kind, title, text, facts [[Label, Wert]], parts [[Name, Rolle, Ziel-ID?]], partsTitle,
+     inn/out [[Ziel-ID oder freier Name, was]], code [Pfade], notes [Sätze]. */
+  var D = {
+    /* ---------- Laufzeit: Clients ---------- */
+    web: {
+      kind: "Client", title: "Web-UI",
+      text: "Die Oberfläche im Browser. nginx liefert den fertigen Build als statische Dateien aus; Daten holt die App über /api, Benachrichtigungen kommen per WebSocket.",
+      facts: [["Technik", "React 18, TypeScript, Vite, Tailwind"], ["Ausgeliefert aus", "/opt/baluhost/client/dist"], ["Sprachen", "Deutsch und Englisch, je 22 Namespaces"], ["Varianten", "Desktop-Build und Pi-Build (__DEVICE_MODE__)"]],
+      parts: [["pages/", "Seiten hinter Routen", "l-pages"], ["hooks/", "Datenhaltung mit TanStack Query", "l-hooks"], ["api/", "eine Funktion je Endpunkt", "l-api"], ["lib/api.ts", "die eine axios-Instanz", "l-libapi"], ["contexts/", "Auth, Version, Plugin, Notification, Upload, Theme"], ["plugin-runtime/", "Bundle für den Plugin-iframe", "p-frame"]],
+      out: [["nginx", "HTTPS mit Bearer-JWT"], ["nginx", "WebSocket unter /api/notifications/ws"], ["nginx", "Upload-Fortschritt als Server-Sent Events"]],
+      code: ["client/src/App.tsx", "client/src/pages/", "client/src/lib/api.ts", "client/vite.config.ts"],
+      notes: ["Das Token liegt im localStorage. Ein 401 löst das Ereignis auth:expired aus und meldet ab.", "Bei jedem Identitätswechsel wird der Query-Cache geleert, damit keine Daten eines anderen Nutzers stehen bleiben."]
+    },
+    app: {
+      kind: "Client, eigenes Repo", title: "BaluApp",
+      text: "Native Android-App. Die Kopplung läuft über einen QR-Code, der die WireGuard-Konfiguration gleich mitbringt.",
+      facts: [["Technik", "Kotlin, natives Android"], ["Repo", "github.com/Xveyn/BaluApp"], ["Kopplung", "QR-Code mit eingebetteter VPN-Konfiguration"], ["Sitzung", "Refresh-Token über 30 Tage"]],
+      inn: [["ext", "Push-Nachrichten über Firebase"]],
+      out: [["nginx", "HTTPS mit Token und X-Device-ID, von unterwegs durch den VPN-Tunnel"]],
+      code: ["backend/app/services/mobile.py", "backend/app/api/routes/mobile.py", "backend/app/middleware/device_tracking.py"],
+      notes: ["verify_mobile_device_token prüft Token, Geräte-ID und das Ablaufdatum des Geräts.", "last_seen wird höchstens einmal pro Minute und Gerät geschrieben."]
+    },
+    desk: {
+      kind: "Client, eigenes Repo", title: "BaluDesk",
+      text: "Desktop-Sync-Client. Meldet sich über einen Geräte-Code an und gleicht Ordner über die Sync-API ab.",
+      facts: [["Technik", "C++-Kern, Electron-Oberfläche"], ["Repo", "github.com/Xveyn/BaluDesk"], ["Kopplung", "Geräte-Code"]],
+      out: [["nginx", "HTTPS, Endpunkte unter /api/sync"]],
+      code: ["backend/app/services/sync/", "backend/app/services/desktop_pairing.py", "docs/sleep-aware-sync-client-guide.md"],
+      notes: ["Schläft das System, antwortet die Sync-API mit 503 und einem strukturierten Detail; der Client wartet dann, statt Fehler zu melden."]
+    },
+    tray: {
+      kind: "Clients auf der Maschine selbst", title: "Tray · TUI",
+      text: "Das Tray sitzt im KDE-Panel, zeigt den Zustand der Box und bringt kritische Meldungen auf den Desktop. Die TUI ist eine Terminal-Oberfläche. Beide sprechen die API ohne Umweg über nginx an.",
+      facts: [["Tray-Unit", "baluhost-tray.service, systemd-User-Unit"], ["Startet nur mit", "~/.baluhost/tray-tokens.json"], ["TUI", "baluhost-tui, gebaut mit Textual"], ["TUI-Standardserver", "http://127.0.0.1:8000"]],
+      out: [["backend", "HTTP an Port 8000"], ["os", "Notweg des Trays: systemctl restart mit polkit-Dialog"]],
+      code: ["backend/baluhost_tray/", "backend/baluhost_tui/", "deploy/install/templates/baluhost-tray.service"],
+      notes: ["Das Tray fragt alle 30 Sekunden ab, ob eine Spielsitzung läuft, und hält dann Popups zurück.", "Der Notweg muss ein kurzlebiger Subprozess bleiben. Ein D-Bus-Aufruf aus dem Tray-Prozess würde die polkit-Freigabe fünf Minuten an diesem Prozess halten."]
+    },
+    comp: {
+      kind: "Client auf der Maschine selbst", title: "Companion",
+      text: "Tauri-App mit eingebetteter Webview. Ein kleiner Proxy reicht jede Anfrage unverändert an den Unix-Socket weiter. Wer über diesen Kanal kommt, sitzt nachweislich an der Maschine; das schaltet zerstörende Admin-Aktionen frei.",
+      facts: [["Technik", "Tauri 2, Rust"], ["Proxy lauscht auf", "127.0.0.1, Port vom Kernel gewählt"], ["Ziel", "/run/baluhost/local.sock"]],
+      out: [["local", "HTTP über den Unix-Socket"]],
+      code: ["client/src-tauri/src/proxy.rs", "client/src-tauri/src/lib.rs", "deploy/scripts/install-companion.sh"],
+      notes: ["Der Proxy puffert Anfrage und Antwort vollständig. Streaming über SSE geht auf diesem Weg nicht."]
+    },
+    dav: {
+      kind: "Client", title: "WebDAV-Client",
+      text: "Windows Explorer, Finder oder jedes andere WebDAV-Programm bindet den Speicher als Laufwerk ein.",
+      facts: [["Anmeldung", "Benutzername und Passwort (HTTP Basic)"], ["Port", "8080"]],
+      out: [["webdav", "WebDAV über TLS, vorbei an nginx"]],
+      code: ["backend/app/compat/webdav_asgi.py", "backend/app/compat/webdav_provider.py"],
+      notes: ["Dieser Weg kennt kein JWT. Geprüft wird das Passwort gegen die users-Tabelle."]
+    },
+
+    /* ---------- Laufzeit: Eingang und Prozesse ---------- */
+    nginx: {
+      kind: "Fremdsoftware", title: "nginx",
+      text: "Der einzige Eingang für die Web-Oberfläche. Beendet TLS, liefert die gebaute SPA aus und reicht die API an das Backend weiter.",
+      facts: [["Ports", "443 mit TLS und HTTP/2; 80 leitet um"], ["Upstream", "127.0.0.1:8000, keepalive 32"], ["Limits", "api_limit 100 pro Sekunde, auth_limit 5 pro Minute"], ["Statische Dateien", "/opt/baluhost/client/dist"]],
+      partsTitle: "Routen",
+      parts: [["/", "statische SPA"], ["/api/", "Proxy mit api_limit"], ["/api/auth/", "Proxy mit auth_limit"], ["/api/notifications/ws", "WebSocket-Proxy"], ["/docs · /openapi.json", "Swagger-Oberfläche des Backends"], ["/health", "Health-Check"]],
+      inn: [["web", "HTTPS, WebSocket"], ["app", "HTTPS"], ["desk", "HTTPS"]],
+      out: [["backend", "Proxy an einen der vier Worker"]],
+      code: ["deploy/nginx/baluhost-https.conf", "deploy/nginx/security-headers.conf", "deploy/nginx/ssl-params.conf", "deploy/scripts/install-nginx.sh"],
+      notes: ["uvicorn vertraut X-Forwarded-For nur von 127.0.0.1. Davon hängt jede Prüfung auf „Anfrage aus dem lokalen Netz“ ab.", "Die App hat kein globales Rate-Limit. Für eine Route ohne eigenen Dekorator ist nginx die einzige Grenze."]
+    },
+    backend: {
+      kind: "systemd-Unit", title: "baluhost-backend",
+      text: "Die FastAPI-Anwendung mit vier Worker-Prozessen. Jeder Worker lädt die ganze App und hält einen eigenen Listener am WebSocket-Bus. Welcher Worker eine Anfrage bekommt, ist Zufall.",
+      facts: [["Unit", "baluhost-backend.service"], ["Start", "uvicorn app.main:app --port 8000 --workers 4 --proxy-headers"], ["Neustart", "Restart=always nach 10 s"], ["Konfiguration", ".env.production"], ["Reihenfolge", "nach postgresql.service"]],
+      parts: [["middleware/", "neun Schichten um jede Anfrage", "l-mw"], ["api/routes/", "HTTP-Belange, Auth, Rate-Limit", "l-routes"], ["services/", "Fachlogik in acht Domänen", "l-services"], ["models/", "ORM-Modelle", "l-models"], ["plugins/", "PluginManager und mitgelieferte Plugins", "p-host"], ["core/lifespan.py", "Start und Stopp der Hintergrunddienste, Wahl des Primary", "primary"]],
+      inn: [["nginx", "/api, /docs und WebSocket"], ["tray", "HTTP direkt an Port 8000"]],
+      out: [["pg", "ORM, LISTEN/NOTIFY, Befehls-Queues"], ["shm", "liest Live-Metriken, schreibt eigene Zähler"], ["sandbox", "UDS-RPC zu externen Plugins"], ["os", "subprocess und sysfs"], ["ext", "Push, Marktplatz, Cloud"]],
+      code: ["backend/app/main.py", "backend/app/api/routes/", "backend/app/services/", "backend/app/core/lifespan.py", "deploy/install/templates/baluhost-backend.service"],
+      notes: ["Kein Zustand darf nur im Prozess leben: Die nächste Anfrage landet womöglich bei einem anderen Worker.", "Plugin-Router werden einmal beim Start eingehängt. Ein neu aktiviertes Plugin mit eigenem Router braucht einen Neustart.", "Der Rate-Limiter zählt pro Worker im Arbeitsspeicher und beginnt nach einem Neustart von vorn."]
+    },
+    primary: {
+      kind: "Rolle eines Workers", title: "Primary",
+      text: "Genau einer der vier Backend-Worker gewinnt beim Start ein Datei-Lock und wird Primary. Nur er fasst Hardware an. Die anderen Worker geben Hardware-Befehle über eine Datenbank-Queue an ihn ab.",
+      facts: [["Wahl", "Datei-Lock /tmp/baluhost-primary.lock"], ["Kandidaten", "die vier Worker von baluhost-backend"], ["Merker im Code", "IS_PRIMARY_WORKER"]],
+      partsTitle: "Läuft nur hier",
+      parts: [["power/fan_control.py", "Lüfterregelung nach Temperaturkurven"], ["power/manager.py", "CPU-Profile nach Bedarf"], ["power/sleep.py", "Sleep-Automat mit Idle- und Zeitplan-Schleife"], ["power/scheduled_reboot.py", "geplanter Neustart samt seiner vier Sperren"], ["network_discovery.py", "Anmeldung des Hosts per mDNS"], ["Plugin-Aufgaben", "Hintergrundaufgaben der Plugins, Abgleich alle 15 s"]],
+      inn: [["backend", "Befehle der Follower über power_commands"]],
+      out: [["os", "sysfs, systemctl, logind"], ["pg", "holt Befehle ab, veröffentlicht den Sleep-Zustand"]],
+      code: ["backend/app/core/lifespan.py", "backend/app/services/power/db_command_queue.py", "backend/app/services/power/command_queue.py", "backend/app/services/power/sleep_runtime_store.py"],
+      notes: ["Der lokale Kanal bewirbt sich nie. Vor #685 sah jede Unit durch PrivateTmp ihr eigenes Lock, und es gab zwei Primaries mit doppelten Hardware-Schleifen.", "Die Unit löscht das Lock vor dem Start, damit ein Überbleibsel die Wahl nicht blockiert.", "Ein Befehl in der Queue trägt eine Frist und wird höchstens einmal ausgeführt, auch nach einem Absturz des Primary."]
+    },
+    monitoring: {
+      kind: "systemd-Unit", title: "baluhost-monitoring",
+      text: "Eigener Prozess für alles, was im Sekundentakt misst. Schreibt Live-Werte ins SHM-Verzeichnis und Messreihen in die Datenbank. Schwellwert-Alarme gehen von hier direkt als Push hinaus.",
+      facts: [["Unit", "baluhost-monitoring.service"], ["Start", "python scripts/monitoring_worker.py"], ["Neustart", "Restart=always nach 5 s"], ["Härtung", "NoNewPrivileges, PrivateTmp"], ["Beim Stopp", "löscht /dev/shm/baluhost"], ["Takt", "3 s in Produktion, 2 s im Dev-Modus; Disk-I/O jede Sekunde"]],
+      partsTitle: "Collector und Aufgaben",
+      parts: [["CpuMetricCollector", "Auslastung, Takt, Temperatur, je Thread"], ["MemoryMetricCollector", "RAM"], ["NetworkMetricCollector", "Durchsatz"], ["DiskIoMetricCollector", "IOPS und Durchsatz je Platte"], ["GpuMetricCollector", "GPU-Werte"], ["UptimeCollector", "Laufzeit"], ["process_tracker", "die BaluHost-Prozesse selbst"], ["retention_manager", "löscht alte Messwerte"], ["SmartDevicePoller", "fragt Smart-Geräte ab"]],
+      out: [["shm", "schreibt eine JSON-Datei je Metrik"], ["pg", "Sample-Tabellen, NOTIFY auf dem ws_bus"], ["os", "psutil, sysfs, smartctl"], ["ext", "Push bei überschrittenen Schwellwerten"]],
+      code: ["backend/scripts/monitoring_worker.py", "backend/app/services/monitoring/orchestrator.py", "backend/app/services/monitoring/worker_service.py", "backend/app/services/monitoring/shm.py", "backend/app/plugins/smart_device/poller.py"],
+      notes: ["cleanup_shm() läuft bei Start und Stopp und löscht jede Datei im Verzeichnis, auch die der Web-Worker.", "Der Prozess veröffentlicht auf dem ws_bus, hält aber selbst keine WebSockets."]
+    },
+    scheduler: {
+      kind: "systemd-Unit", title: "baluhost-scheduler",
+      text: "Besitzt alle geplanten Jobs, damit schwere Ein- und Ausgabe keinen Web-Worker blockiert. Die API stößt einen Lauf an, indem sie eine Zeile anlegt; der Worker holt sie ab.",
+      facts: [["Unit", "baluhost-scheduler.service"], ["Start", "python scripts/scheduler_worker.py"], ["Neustart", "Restart=always nach 10 s"], ["Härtung", "NoNewPrivileges, PrivateTmp"], ["Technik", "APScheduler"]],
+      partsTitle: "Jobs im Register",
+      parts: [["raid_scrub", "RAID-Prüfung, wöchentlich"], ["smart_scan", "Plattengesundheit, stündlich"], ["backup", "automatische Sicherung, täglich"], ["sync_check", "fällige Sync-Zeitpläne, alle 5 Minuten"], ["notification_check", "ablaufende Geräte, stündlich"], ["upload_cleanup", "abgelaufene Chunk-Uploads, täglich"], ["auto_update", "Update-Prüfung, täglich"], ["cloud_sync", "Cloud-Anbieter, stündlich"], ["file_activity_cleanup", "alte Aktivitätseinträge, täglich"], ["plugin_update_check", "Marktplatz, alle 6 Stunden"], ["system_reboot", "steht im Register, läuft aber im Primary", "primary"]],
+      inn: [["backend", "legt Aufträge mit Status requested an"]],
+      out: [["pg", "Aufträge, Verlauf, Heartbeat in scheduler_state"], ["os", "mdadm, smartctl, Dateisystem"], ["ext", "Push bei Fehlschlag, Cloud-Abgleich"]],
+      code: ["backend/scripts/scheduler_worker.py", "backend/app/services/scheduler/worker.py", "backend/app/services/scheduler/service.py", "backend/app/schemas/scheduler.py"],
+      notes: ["Die API führt nie selbst einen Job aus.", "Intervall und Ein/Aus stehen je Job in scheduler_configs und lassen sich in der Oberfläche ändern."]
+    },
+    local: {
+      kind: "systemd-Unit mit Socket-Unit", title: "baluhost-backend-local",
+      text: "Dieselbe FastAPI-Anwendung ein zweites Mal, an einem Unix-Socket statt an einem Port. Eine Middleware markiert jede Anfrage hier mit dem Kanal local. Endpunkte, die physische Anwesenheit verlangen, prüfen genau diese Markierung.",
+      facts: [["Units", "baluhost-backend-local.service und .socket"], ["Socket", "/run/baluhost/local.sock, 0660, baluhost:baluhost"], ["Start", "uvicorn app.main:app --fd 3 --workers 2"], ["Umgebung", "BALUHOST_CHANNEL=local"], ["Neustart", "Restart=on-failure nach 5 s"]],
+      inn: [["comp", "HTTP über den Unix-Socket"]],
+      out: [["pg", "gleiche Datenbank, eigener ws_bus-Listener"]],
+      code: ["deploy/install/templates/baluhost-backend-local.service", "deploy/install/templates/baluhost-backend-local.socket", "backend/app/middleware/channel_marker.py", "backend/app/api/deps.py"],
+      notes: ["request.state.channel ist für diesen Zweck reserviert; andere Middleware darf es nicht überschreiben.", "Nimmt nicht an der Wahl des Primary teil.", "Der Sammelneustart erfasst auch diese Unit. Die sudoers-Zeile dafür muss auf einer bestehenden Installation einmal von Hand nachgezogen werden."]
+    },
+    webdav: {
+      kind: "systemd-Unit", title: "baluhost-webdav",
+      text: "Eigenständiger WebDAV-Server neben der API. Meldet Nutzer per Passwort an und sperrt jeden in sein Heimatverzeichnis.",
+      facts: [["Unit", "baluhost-webdav.service"], ["Start", "python scripts/webdav_worker.py"], ["Port", "8080, TLS standardmäßig an"], ["Technik", "WsgiDAV auf dem WSGI-Server cheroot"], ["Härtung", "NoNewPrivileges, PrivateTmp"]],
+      parts: [["BaluHostDomainController", "prüft Benutzername und Passwort per bcrypt"], ["BaluHostDAVProvider", "eigener Root je Nutzer, Pfadprüfung, Quota"], ["WebdavWorker", "Lebenszyklus und Heartbeat"]],
+      inn: [["dav", "WebDAV über TLS"]],
+      out: [["pg", "liest users, schreibt webdav_state"], ["os", "Dateien direkt auf dem Storage"]],
+      code: ["backend/scripts/webdav_worker.py", "backend/app/services/webdav_service.py", "backend/app/compat/webdav_asgi.py", "backend/app/compat/webdav_provider.py"],
+      notes: ["Admins sehen den ganzen Speicher, alle anderen nur ihr Heimatverzeichnis.", "Die Quota kommt vom Storage-Root und nicht vom Ordner, damit Windows die Kapazität des RAID anzeigt."]
+    },
+    sandbox: {
+      kind: "Subprozess je externem Plugin", title: "Plugin-Sandbox",
+      text: "Plugins aus dem Marktplatz laufen nie im Backend. Ein root-eigenes Startskript prüft alle Argumente, wechselt auf einen rechtelosen Benutzer und sperrt den Prozess in einen eigenen Netzwerk-Namespace. Zum Host führt nur ein Unix-Socket.",
+      facts: [["Startskript", "/usr/local/sbin/baluhost-spawn-plugin-worker.sh"], ["Skript gehört", "root, liegt außerhalb von /opt/baluhost"], ["Benutzer", "baluhost-plugin"], ["Netz", "eigener Namespace, nur Loopback"], ["Plugin-Verzeichnis", "/var/lib/baluhost/plugins"]],
+      parts: [["spawn.py · supervisor.py", "starten und überwachen den Subprozess"], ["worker.py · loader.py", "laufen im Subprozess und laden das Plugin"], ["protocol.py · channel.py · transport.py", "RPC über den Unix-Socket"], ["capabilities.py · host_capabilities.py", "die freigebbaren Fähigkeiten und ihre Umsetzung im Host"], ["proxy.py", "reicht Anfragen an /api/plugins/{name}/ an das Plugin weiter"]],
+      inn: [["backend", "UDS-RPC, HTTP-Anfragen über den Proxy"]],
+      out: [["backend", "Aufrufe freigegebener Capability-Scopes"]],
+      code: ["backend/app/plugins/sandbox/", "backend/app/plugins/scope_catalog.py", "deploy/install/templates/baluhost-plugin-sudoers"],
+      notes: ["Ohne eingerichtetes Startskript startet kein externes Plugin.", "Welche Scopes ein Plugin bekommt, wählt der Admin beim Aktivieren aus dem, was das Plugin anfragt.", "Derzeit ist kein externes Plugin ausgerollt."]
+    },
+    shm: {
+      kind: "geteilter Zustand", title: "/dev/shm/baluhost/",
+      text: "Ein Verzeichnis im Arbeitsspeicher mit einer JSON-Datei je Thema. Der Monitoring-Worker schreibt, die API-Worker lesen und sparen sich so die Datenbank für Live-Werte.",
+      facts: [["Produktion", "/dev/shm/baluhost/"], ["Dev-Modus", "/dev/shm/baluhost-dev/"], ["Windows", "%TEMP%/baluhost-shm/"], ["Übersteuern", "BALUHOST_SHM_DIR, nur als echte Umgebungsvariable"]],
+      partsTitle: "Was darin liegt",
+      parts: [["Metrik-Dateien", "CPU, RAM, Netz, Disk-I/O vom Monitoring-Worker"], ["SMART-Zusammenfassung", "auch Quelle der Plattentemperaturen für die Lüfterregelung"], ["Smart-Device-Zustand", "vom Poller im Monitoring-Worker"], ["power_status.json · gpu_status.json", "von den Web-Workern"], ["http_activity_<pid>.json", "Request-Zähler je API-Prozess für die Idle-Erkennung"]],
+      inn: [["monitoring", "schreibt"], ["backend", "liest, schreibt eigene Zähler"]],
+      code: ["backend/app/services/monitoring/shm.py", "backend/app/services/power/http_activity.py"],
+      notes: ["/dev/shm gilt pro Host, nicht pro Instanz. Deshalb hat der Dev-Modus ein eigenes Verzeichnis; vorher überschrieb eine Dev-Instanz die Dateien der Produktion (#779).", "Liegt nicht unter /tmp, PrivateTmp trennt es also nicht."]
+    },
+    pg: {
+      kind: "geteilter Zustand", title: "PostgreSQL 17",
+      text: "Der einzige dauerhafte Speicher und zugleich der Treffpunkt der Prozesse: Neben den Fachtabellen laufen hier der Broadcast-Bus, die Befehls-Queues an den Primary und die Scheduler-Aufträge.",
+      facts: [["Erreichbar", "localhost:5432"], ["Zugriff", "SQLAlchemy 2.0 über get_db() oder SessionLocal()"], ["Schema", "nur über Alembic-Migrationen"], ["Dev-Modus", "SQLite im WAL-Modus"]],
+      partsTitle: "Tabellen und Kanäle",
+      parts: [["Auth und Nutzer", "users, Refresh-Token, API-Keys, Auth-Policy"], ["Dateien", "Metadaten, Freigaben, Aktivität, Versionen"], ["Messreihen", "cpu_samples, memory_samples, network_samples, disk_io_samples"], ["Energie und Hardware", "Profile, Lüfter, Sleep, Smart-Geräte"], ["Netz", "VPN, Mobilgeräte, Server-Profile, NFS"], ["Systemdienste", "Scheduler, Backup, Audit-Log, Benachrichtigungen"], ["ws_bus", "LISTEN/NOTIFY für WebSocket-Nachrichten"], ["power_commands", "Befehle der Follower an den Primary", "primary"], ["scheduler_executions", "Aufträge und Verlauf", "scheduler"]],
+      inn: [["backend", "vier Worker, je eine zusätzliche Listener-Verbindung"], ["local", "zwei Worker"], ["monitoring", "Messreihen"], ["scheduler", "Aufträge und Verlauf"], ["webdav", "Anmeldung und Heartbeat"]],
+      code: ["backend/app/models/", "backend/alembic/versions/", "backend/app/core/database.py", "backend/app/services/ws_bus.py"],
+      notes: ["Der ws_bus speichert nichts: Eine Nachricht an einen Prozess, der gerade nicht lauscht, ist weg.", "Sessions nie über eine await-Grenze hinweg halten.", "Spalten mit password, secret, token, private_key oder api_key im Namen schwärzt die Admin-Ansicht automatisch. Neue sensible Spalten müssen so heißen."]
+    },
+    os: {
+      kind: "Betriebssystem", title: "Linux-Host",
+      text: "Was BaluHost verwaltet, aber nicht selbst ist. Zugriff läuft über subprocess mit Argumentlisten und über sysfs. Wo root nötig ist, erlaubt eine sudoers-Zeile genau einen festen Befehl.",
+      facts: [["System", "Debian 13"], ["Rechte", "sudoers-Vorlagen unter deploy/install/templates/"]],
+      partsTitle: "Angesprochene Werkzeuge",
+      parts: [["mdadm", "RAID anlegen, prüfen, reparieren"], ["smartctl", "Plattengesundheit"], ["hwmon · sysfs", "Lüfter-PWM, Temperaturen, CPU-Takt"], ["systemd · logind", "Suspend, Sleep-Locks, Unit-Neustart, Reboot"], ["WireGuard", "VPN-Schnittstelle wg0"], ["smbd · nfsd", "Freigaben; BaluHost schreibt ihre Konfiguration"], ["avahi", "mDNS im Heimnetz"], ["rclone", "Cloud-Import und -Export"]],
+      inn: [["primary", "Regelkreise für Lüfter, CPU-Takt, Sleep"], ["backend", "RAID, SMART, VPN, Freigaben auf Anfrage"], ["scheduler", "Backup, Scrub, SMART-Scan"], ["monitoring", "Messwerte"], ["webdav", "Dateizugriff"]],
+      code: ["backend/app/services/hardware/", "backend/app/services/power/", "backend/app/services/vpn/", "deploy/install/templates/"],
+      notes: ["subprocess immer mit Argumentliste, nie mit shell=True.", "Im Dev-Modus ersetzt je ein simuliertes Backend diese Zugriffe."]
+    },
+    ext: {
+      kind: "außerhalb der Maschine", title: "Externe Dienste",
+      text: "BaluHost baut diese Verbindungen selbst auf; keiner dieser Dienste ruft von sich aus herein.",
+      partsTitle: "Gegenstellen",
+      parts: [["Firebase", "Push-Nachrichten an die BaluApp"], ["Plugin-Marktplatz", "index.json mit abgesetzter ed25519-Signatur"], ["Cloud-Speicher", "Import und Export über rclone"], ["FritzBox", "Wake-on-LAN über TR-064"], ["Pi-hole", "DNS-Statistik und Steuerung"], ["Tapo-Steckdosen", "Schalten und Verbrauch messen"], ["BaluPi", "Begleitgerät, wird bei Start und Stopp benachrichtigt"]],
+      inn: [["backend", "Marktplatz, Cloud, Heimnetz-Geräte"], ["monitoring", "Push, Abfrage der Smart-Geräte"], ["scheduler", "Push, Cloud-Abgleich, Plugin-Update-Prüfung"]],
+      code: ["backend/app/services/notifications/", "backend/app/services/plugin_marketplace.py", "backend/app/services/cloud/", "backend/app/services/pihole/", "backend/app/services/power/fritzbox_wol.py"],
+      notes: ["Der Marktplatz-Index wird vor dem Parsen geprüft. Ohne gültige Signatur wird er abgelehnt.", "Zugangsdaten der Smart-Geräte liegen verschlüsselt in der Datenbank."]
+    },
+
+    /* ---------- Schichten ---------- */
+    "l-pages": {
+      kind: "Frontend-Schicht", title: "pages/",
+      text: "Eine Datei je Seite. Seiten setzen Komponenten aus components/ zusammen und enthalten kaum eigene Logik. Die Wahrheit über das Routing steht in App.tsx.",
+      partsTitle: "Beispiele",
+      parts: [["Dashboard", "/ · Widgets und Plugin-Panels"], ["FileManager", "/files · Dateibrowser mit Upload und Freigabe"], ["SystemMonitor", "/system · Diagramme, Dienste, Logs"], ["SystemControlPage", "/admin/system-control · RAID, Energie, Lüfter, Sleep, Backup, VPN als Tabs"], ["SettingsPage", "/settings · Profil, Sicherheit, Sprache"], ["PluginsPage", "/plugins · installieren, schalten, konfigurieren"], ["SetupWizard", "ohne Route, erscheint vor der Anmeldung"]],
+      out: [["l-hooks", "holt Daten über Hooks"]],
+      code: ["client/src/App.tsx", "client/src/pages/CLAUDE.md", "client/src/components/layout/"],
+      notes: ["Alle Seiten werden lazy geladen. Die Suspense-Grenze sitzt im Layout, damit Seitenleiste und Kopf beim Nachladen stehen bleiben.", "Das Frontend blendet Admin-Seiten nur aus. Durchgesetzt wird die Rolle im Backend.", "Einige Dateien in pages/ werden nirgends mehr gerendert; pages/CLAUDE.md führt sie auf."]
+    },
+    "l-hooks": {
+      kind: "Frontend-Schicht", title: "hooks/",
+      text: "Datenhaltung mit TanStack Query. Ein Hook kapselt ein Fachgebiet: Lesen mit useQuery und Polling, Schreiben mit useMutation, danach Invalidierung der Domäne.",
+      partsTitle: "Beispiele",
+      parts: [["useMonitoring", "CPU, RAM, Netz, Disk mit einstellbarem Intervall"], ["useRaidStatus", "60 s Polling, auf der RAID-Seite 8 s"], ["useSchedulers", "Vorlage für das Mutationsmuster"], ["useFanControl", "pausiert das Polling, solange eine Kurve bearbeitet wird"]],
+      inn: [["l-pages", "Seiten und Komponenten"]],
+      out: [["l-api", "ruft typisierte API-Funktionen"]],
+      code: ["client/src/hooks/", "client/src/lib/queryKeys.ts", "client/src/lib/queryClient.ts", "client/src/lib/queryPersister.ts"],
+      notes: ["Schlüssel kommen ausschließlich aus lib/queryKeys.ts.", "Der Cache wird in den sessionStorage gespiegelt; nach einem Reload ist die Seite sofort gefüllt.", "useMobile erkennt die Bildschirmbreite und hat mit Daten nichts zu tun."]
+    },
+    "l-api": {
+      kind: "Frontend-Schicht", title: "api/",
+      text: "Typisierte Hüllen um die Backend-Endpunkte: ein Modul je Fachgebiet, eine Funktion je Endpunkt, daneben die Interfaces für Anfrage und Antwort.",
+      partsTitle: "Regeln",
+      parts: [["Funktionen", "keine Klassen; geben res.data zurück"], ["Typen", "spiegeln die Pydantic-Schemas des Backends"], ["Kein Cache", "Caching und Dedup gehören in die Hooks"], ["Keine Fehlerbehandlung", "das macht der Aufrufer mit handleApiError()"]],
+      inn: [["l-hooks", "useQuery und useMutation"]],
+      out: [["l-libapi", "alle Aufrufe über apiClient"]],
+      code: ["client/src/api/", "client/src/lib/errorHandling.ts"]
+    },
+    "l-libapi": {
+      kind: "Frontend-Schicht", title: "lib/api.ts",
+      text: "Die eine axios-Instanz der Anwendung. Jeder API-Aufruf geht hier durch.",
+      parts: [["apiClient", "axios-Instanz mit Auth-Interceptor"], ["buildApiUrl()", "löst Pfade für Dev (Vite-Proxy) und Produktion auf"], ["401-Behandlung", "feuert auth:expired, der AuthContext meldet ab"], ["Versionsprüfung", "vergleicht mit dem Header X-API-Min-Version"]],
+      inn: [["l-api", "alle API-Module"]],
+      out: [["nginx", "HTTPS an /api"]],
+      code: ["client/src/lib/api.ts", "client/src/contexts/AuthContext.tsx"]
+    },
+    "l-mw": {
+      kind: "Backend-Schicht", title: "middleware/",
+      text: "Läuft um jede Anfrage. Registriert wird in main.py, und die Reihenfolge zählt: Die zuletzt registrierte Middleware ist die äußerste.",
+      partsTitle: "Die Schichten",
+      parts: [["security_headers", "CSP, HSTS, X-Frame-Options"], ["channel_marker", "setzt request.state.channel auf local oder remote", "local"], ["plugin_gate", "prüft bei /api/plugins/{name}/, ob das Plugin aktiv ist"], ["sleep_auto_wake", "zählt Anfragen für die Idle-Erkennung, weckt aus dem Soft-Sleep"], ["device_tracking", "aktualisiert last_seen eines Mobilgeräts"], ["local_only", "sperrt ausgewählte Pfade für Anfragen von außerhalb des lokalen Netzes"], ["error_counter", "zählt 4xx und 5xx für die Admin-Ansicht"], ["api_version", "setzt X-API-Version und X-API-Min-Version"], ["inflight", "misst laufende Anfragen; nur mit eingeschalteter Concurrency-Probe"]],
+      out: [["l-routes", "reicht die Anfrage an die Route"]],
+      code: ["backend/app/middleware/", "backend/app/main.py", "backend/app/middleware/CLAUDE.md"],
+      notes: ["Acht der neun sind BaseHTTPMiddleware. inflight ist reines ASGI, weil es Overhead messen und selbst keinen erzeugen soll.", "Ob eine Anfrage lokal ist, entscheidet allein core/network_utils.is_private_or_local_ip()."]
+    },
+    "l-routes": {
+      kind: "Backend-Schicht", title: "api/routes/ + api/deps.py",
+      text: "Eine Datei je Fachgebiet, alle unter /api eingehängt. Routen kümmern sich nur um HTTP: wer darf, wie oft, mit welchem Körper. Die Arbeit macht ein Service.",
+      partsTitle: "Auth-Dependencies",
+      parts: [["get_current_user", "jeder angemeldete Nutzer"], ["get_current_admin", "nur Admins"], ["get_current_user_optional", "Anmeldung möglich, nicht nötig (öffentliche Freigaben)"], ["verify_mobile_device_token", "Token plus Geräte-ID und Ablaufdatum"], ["require_power_<aktion>", "Admin oder das passende Einzelrecht"]],
+      inn: [["l-mw", "nach der Middleware-Kette"]],
+      out: [["l-services", "delegiert an einen Service"]],
+      code: ["backend/app/api/routes/__init__.py", "backend/app/api/deps.py", "backend/app/schemas/", "backend/app/core/rate_limiter.py"],
+      notes: ["Es gibt kein globales Rate-Limit. Jede neue Route braucht ihren eigenen Dekorator.", "Anfragekörper sind immer Pydantic-Schemas, nie rohe Dictionaries.", "Dateipfade von Nutzern laufen durch _jail_path().", "Neben JWT werden API-Keys mit dem Präfix balu_ akzeptiert."]
+    },
+    "l-services": {
+      kind: "Backend-Schicht", title: "services/",
+      text: "Die Fachlogik. Einfache Dienste sind eine Datei, größere Gebiete ein Unterverzeichnis.",
+      partsTitle: "Domänen",
+      parts: [["Dateien und Speicher", "der NAS-Kern", "d-files"], ["Laufwerke", "RAID, SMART, Benchmark", "d-drives"], ["Energie und Kühlung", "CPU, Lüfter, Sleep", "d-power"], ["Netz und Freigaben", "VPN, SMB, NFS, WebDAV", "d-net"], ["Identität und Sicherheit", "Anmeldung, Rechte, Audit", "d-id"], ["Geräte, Sync und Backup", "Kopplung, Abgleich, Sicherung", "d-sync"], ["Beobachtung und Betrieb", "Metriken, Jobs, Updates", "d-ops"], ["Erweiterung", "Plugins und Marktplatz", "d-ext"]],
+      inn: [["l-routes", "Routen delegieren hierher"]],
+      out: [["l-models", "liest und schreibt über das ORM"], ["os", "Hardware-Backends"]],
+      code: ["backend/app/services/", "backend/app/services/CLAUDE.md"],
+      notes: ["Hardware-Services sind gegen ein Protokoll geschrieben und haben je ein Dev- und ein Linux-Backend; settings.is_dev_mode wählt aus.", "Langlebige Dienste sind Singletons mit get_instance().", "Hintergrundaufgaben startet der Lifespan mit asyncio.create_task() und beendet sie durch Abbruch."]
+    },
+    "l-models": {
+      kind: "Backend-Schicht", title: "models/",
+      text: "SQLAlchemy-2-Modelle im typisierten Stil. Jedes Modell ist in __init__.py eingetragen, damit Alembic es findet.",
+      partsTitle: "Gruppen",
+      parts: [["Auth und Nutzer", "user, refresh_token, api_key, auth_policy"], ["Dateien und Speicher", "file_metadata, file_share, file_activity"], ["Messreihen", "monitoring, service_heartbeat"], ["Energie und Hardware", "power, fans, sleep, smart_device, gpu_power"], ["Netz", "vpn, mobile, server_profile, webdav_state, nfs_export"], ["Systemdienste", "scheduler_history, backup, audit_log, notification"], ["Versionierung", "vcl"], ["Plugins und Integrationen", "plugin, plugin_storage, pihole, cloud"], ["Desktop-Sync", "desktop_sync_folder, sync_state"]],
+      inn: [["l-services", "Services"]],
+      out: [["pg", "PostgreSQL, im Dev-Modus SQLite"]],
+      code: ["backend/app/models/", "backend/app/models/CLAUDE.md", "backend/alembic/versions/"],
+      notes: ["Tabellennamen im Plural und in snake_case, Zeitstempel mit Zeitzone.", "Neues Modell: Datei anlegen, in __init__.py eintragen, Migration erzeugen, Schema ergänzen."]
+    },
+
+    /* ---------- Service-Domänen ---------- */
+    "d-files": {
+      kind: "Service-Domäne", title: "Dateien und Speicher",
+      text: "Der NAS-Kern. Alle Pfade sind relativ zum Storage-Root; Besitz wird in der Datenbank geführt, und vor jedem Upload wird die Quota geprüft.",
+      facts: [["Routen", "files, chunked_upload, shares, vcl, ssd_file_cache"], ["Oberfläche", "FileManager, SharesPage"]],
+      partsTitle: "Module",
+      parts: [["files/operations", "Upload, Download, Löschen, Umbenennen, Verschieben"], ["files/shares", "öffentliche Links und Freigaben an Nutzer"], ["files/chunked_upload", "fortsetzbare Uploads in Teilen"], ["files/storage", "Speicherinfo, Mountpoints, Quota"], ["files/ownership · metadata", "Besitz und Metadaten"], ["versioning/", "Dateiversionen (VCL), Blob-Speicher, Abgleich"], ["cache/", "SSD-Cache mit LRU-Verdrängung"], ["storage_breakdown", "Belegung je Nutzer"], ["game_libraries/", "Platzbedarf der Steam-Bibliotheken"]],
+      code: ["backend/app/services/files/", "backend/app/services/versioning/", "backend/app/api/routes/files.py"],
+      notes: ["Ein Nutzer ohne Admin-Rechte kommt nur in sein Heimatverzeichnis, nach Shared/ und in mit ihm geteilte Pfade.", ".system, lost+found und Papierkörbe sind für Nutzer unsichtbar."]
+    },
+    "d-drives": {
+      kind: "Service-Domäne", title: "Laufwerke",
+      text: "Alles, was physische Platten betrifft. Im Dev-Modus simuliert ein Backend sieben Platten, in Produktion laufen echte mdadm-Befehle.",
+      facts: [["Routen", "system_raid, system, benchmark"], ["Oberfläche", "RAID-Tab der Systemsteuerung, SystemMonitor"]],
+      partsTitle: "Module",
+      parts: [["hardware/raid/protocol", "die Schnittstelle beider Backends"], ["hardware/raid/dev_backend", "Simulation mit sieben Platten"], ["hardware/raid/mdadm_backend", "echte mdadm-Befehle"], ["hardware/raid/parsing", "liest /proc/mdstat"], ["hardware/raid/confirmation", "Bestätigungs-Token vor zerstörenden Aktionen"], ["hardware/raid/scrub", "Planung der RAID-Prüfung"], ["hardware/smart/", "Plattengesundheit über smartctl"], ["benchmark/", "Messung mit fio, im Dev-Modus simuliert"], ["disk_monitor", "Disk-I/O im Sekundentakt"]],
+      out: [["os", "mdadm, smartctl, fio"]],
+      code: ["backend/app/services/hardware/raid/", "backend/app/services/hardware/smart/", "backend/app/services/benchmark/"],
+      notes: ["Echtes mdadm wird nur auf GitHub-eigenen Runnern gegen Loop-Devices getestet, nie auf eigener Hardware."]
+    },
+    "d-power": {
+      kind: "Service-Domäne", title: "Energie und Kühlung",
+      text: "Regelt, wie viel die Maschine leistet, wie laut sie ist und wann sie schläft. Die Regelkreise laufen nur im Primary.",
+      facts: [["Routen", "power, power_presets, fans, sleep, energy, gpu_power"], ["Oberfläche", "Energie-, Lüfter- und Sleep-Tab der Systemsteuerung"]],
+      partsTitle: "Module",
+      parts: [["power/manager", "wählt das CPU-Profil nach angemeldetem Bedarf"], ["power/fan_control", "Lüfter nach Temperaturkurven und Zeitplan"], ["power/sleep", "Soft- und Hard-Sleep mit Idle-Erkennung"], ["power/scheduled_reboot", "wöchentlicher Neustart mit vier Sperren"], ["power/db_command_queue", "Befehle der Follower an den Primary", "primary"], ["power/presence", "Anwesenheit blockiert automatisches Suspend"], ["power/energy", "Verbrauch und Kosten"], ["power/presets", "gespeicherte Konfigurationen"], ["power/fritzbox_wol", "Wecken über die FritzBox"]],
+      out: [["primary", "führt die Regelkreise aus"], ["os", "sysfs, hwmon, logind"]],
+      code: ["backend/app/services/power/", "backend/app/core/power_rating.py"],
+      notes: ["Routen mit hoher Last melden ihren Bedarf über @requires_power an; der PowerManager hebt dann das CPU-Profil.", "Lüfter-Identitäten überleben eine Umnummerierung der hwmon-Geräte."]
+    },
+    "d-net": {
+      kind: "Service-Domäne", title: "Netz und Freigaben",
+      text: "Wie man die Box erreicht und über welche Protokolle sie Dateien anbietet.",
+      facts: [["Routen", "vpn, vpn_profiles, samba, nfs, webdav, pihole, fritzbox"], ["Oberfläche", "Netzwerk-Tabs der Systemsteuerung, PiholePage"]],
+      partsTitle: "Module",
+      parts: [["vpn/", "WireGuard: Schlüssel, Client-Konfiguration, Verschlüsselung"], ["samba_service", "SMB-Freigaben"], ["nfs_service", "NFS-Exporte"], ["webdav_service", "Steuerung des WebDAV-Prozesses", "webdav"], ["network_discovery", "mDNS im Heimnetz"], ["pihole/", "DNS-Statistik, Werbefilter-Analyse, Ausfallschutz"], ["ssh_service", "SSH-Schlüssel"]],
+      out: [["os", "wg, smbd, nfsd, avahi"], ["ext", "Pi-hole, FritzBox"]],
+      code: ["backend/app/services/vpn/", "backend/app/services/samba_service.py", "backend/app/services/nfs_service.py", "backend/app/services/pihole/"],
+      notes: ["Private VPN- und SSH-Schlüssel liegen verschlüsselt in der Datenbank und erscheinen nie in Antworten oder Logs.", "Im Dev-Modus meldet sich die Instanz nicht per mDNS an, damit sie nicht den Namen der Produktion ankündigt."]
+    },
+    "d-id": {
+      kind: "Service-Domäne", title: "Identität und Sicherheit",
+      text: "Wer jemand ist, was er darf und was davon protokolliert wird.",
+      facts: [["Routen", "auth, users, api_keys, auth_policy, logging, admin_db"], ["Oberfläche", "Login, UserManagement, Sicherheits-Tab der Einstellungen"]],
+      partsTitle: "Module",
+      parts: [["auth", "Anmeldung, Registrierung, Token-Prüfung"], ["token_service", "Refresh-Token und ihre Rotation"], ["totp_service", "zweiter Faktor"], ["recovery_code_service", "Einmal-Codes zum Zurücksetzen des Passworts"], ["api_key_service", "API-Keys für Automatisierung"], ["permissions", "is_privileged() und ensure_owner_or_privileged()"], ["power_permissions", "Einzelrechte wie Spiele starten oder Bluetooth verwalten"], ["step_up", "erneuter Nachweis vor einem Sammelneustart"], ["auth_policy", "einstellbare Regeln, etwa die Token-Lebensdauer"], ["audit/", "Audit-Log und Datenbank-Einsicht mit Schwärzung"]],
+      code: ["backend/app/services/auth.py", "backend/app/core/security.py", "backend/app/api/deps.py", "backend/app/services/audit/"],
+      notes: ["Jedes Token trägt einen Typ und wird nur dort akzeptiert, wo dieser Typ erwartet wird.", "Die verbindlichen Regeln und die bewusst akzeptierten Lücken stehen in .claude/rules/security-agent.md."]
+    },
+    "d-sync": {
+      kind: "Service-Domäne", title: "Geräte, Sync und Backup",
+      text: "Verbindet Handy und Desktop mit der Box und hält Daten an mehr als einem Ort.",
+      facts: [["Routen", "mobile, devices, desktop_pairing, sync, sync_advanced, backup, cloud, cloud_export, balupi"], ["Oberfläche", "DevicesPage, CloudImportPage, Backup-Tab der Systemsteuerung"]],
+      partsTitle: "Module",
+      parts: [["mobile", "Geräte-Registrierung mit QR-Code", "app"], ["desktop_pairing", "Kopplung per Geräte-Code", "desk"], ["sync/", "Sync-Zeitpläne, Bandbreitengrenzen, Koordination"], ["backup/", "Sichern und Wiederherstellen nach Zeitplan"], ["cloud/", "Import und Export über rclone, OAuth"], ["balupi_handshake", "Meldung an das Begleitgerät bei Start und Stopp"], ["snapshot_export", "Zustandsabbild beim Herunterfahren für BaluPi"]],
+      out: [["scheduler", "Backup und Sync-Prüfung laufen als Jobs"], ["ext", "Cloud-Anbieter, BaluPi"]],
+      code: ["backend/app/services/sync/", "backend/app/services/backup/", "backend/app/services/cloud/", "backend/app/services/mobile.py"]
+    },
+    "d-ops": {
+      kind: "Service-Domäne", title: "Beobachtung und Betrieb",
+      text: "Was die Box über sich selbst weiß und wie sie sich selbst am Laufen hält.",
+      facts: [["Routen", "monitoring, schedulers, service_status, notifications, status_bar, updates, setup, backend_logs"], ["Oberfläche", "SystemMonitor, SchedulerDashboard, UpdatePage, SetupWizard"]],
+      partsTitle: "Module",
+      parts: [["monitoring/", "Collector, SHM, Monitoring-Worker", "monitoring"], ["scheduler/", "Konfiguration, Verlauf, Worker", "scheduler"], ["service_status", "Gesundheitsregister aller Hintergrunddienste"], ["notifications/", "Push über Firebase und Meldungen in der App"], ["status_bar/", "Statusleiste im Kopf, aus einem Katalog gespeist"], ["update/", "Selbst-Update mit Rollback"], ["setup/", "Assistent für den ersten Start"], ["system_restart", "startet die fünf Units neu, das Backend zuletzt"], ["unit_drift", "vergleicht installierte Units mit den Vorlagen"]],
+      out: [["pg", "Messreihen, Verlauf, Zustände"], ["shm", "Live-Werte"]],
+      code: ["backend/app/services/monitoring/", "backend/app/services/scheduler/", "backend/app/services/notifications/", "backend/app/core/service_registry.py"],
+      notes: ["Ein Dienst gilt als gestartet, wenn seine eigene Statusfunktion das hinterher sagt, nicht schon, weil der Aufruf ohne Ausnahme zurückkam."]
+    },
+    "d-ext": {
+      kind: "Service-Domäne", title: "Erweiterung",
+      text: "Die Dienste rund um das Plugin-Framework: installieren, schalten, mit Speicher versorgen, aktuell halten.",
+      facts: [["Routen", "plugins, plugins_marketplace, smart_devices, dashboard"], ["Oberfläche", "PluginsPage, SmartDevicesPage, Plugin-Panels im Dashboard"]],
+      partsTitle: "Module",
+      parts: [["plugin_service", "installieren, entfernen, schalten"], ["plugin_marketplace", "holt den Index, prüft die Signatur, treibt die Installation"], ["plugin_enablement", "eine Quelle für „welche Plugins sind aktiv“ über alle Worker"], ["plugin_storage_service", "Schlüssel-Wert-Speicher je Plugin mit Quota"], ["plugin_update_check", "vergleicht installierte Versionen mit dem Marktplatz"], ["dashboard_panel_bridge", "bringt Panel-Daten aus dem SHM auf den WebSocket"]],
+      out: [["p-host", "PluginManager"], ["sandbox", "externe Plugins"], ["ext", "Marktplatz"]],
+      code: ["backend/app/services/plugin_marketplace.py", "backend/app/services/plugin_enablement.py", "backend/app/plugins/"],
+      notes: ["plugins_marketplace muss vor plugins registriert sein, sonst gilt „marketplace“ als Plugin-Name."]
+    },
+
+    /* ---------- Plugins ---------- */
+    "p-host": {
+      kind: "Plugin-Framework", title: "PluginManager",
+      text: "Findet Plugins, prüft ihre Berechtigungen, hängt ihre Routen ein und startet ihre Hintergrundaufgaben. Ein Plugin erweitert das System über wenige feste Stellen.",
+      partsTitle: "Lebenszyklus",
+      parts: [["1 · Discovery", "sucht in installed/ nach einer PluginBase-Unterklasse"], ["2 · Registrierung", "Instanz anlegen, Metadaten prüfen"], ["3 · Berechtigungen", "Verlangtes gegen das in der Datenbank Gewährte"], ["4 · Aktivierung", "on_startup(), Routen unter /api/plugins/{name}/, Aufgaben starten"], ["5 · Betrieb", "PluginGateMiddleware prüft jede Anfrage"], ["6 · Deaktivierung", "on_shutdown(), Aufgaben abbrechen"]],
+      facts: [["Erweiterungspunkte", "Router, Hintergrundaufgaben, Dashboard-Panel, Status-Pills, Menü-Aktionen, Oberfläche"], ["Ereignisse", "Pluggy-Hooks (synchron) und Async-Events (Queue)"], ["Berechtigungen", "15, davon 5 als gefährlich markiert"]],
+      out: [["p-bundled", "lädt mitgelieferte Plugins in den Prozess"], ["sandbox", "startet externe Plugins als Subprozess"]],
+      code: ["backend/app/plugins/manager.py", "backend/app/plugins/base.py", "backend/app/plugins/hooks.py", "backend/app/plugins/events.py", "backend/app/middleware/plugin_gate.py"],
+      notes: ["Einige Unterpfade unter /api/plugins/{name}/ gehören dem Core, etwa toggle, config und _storage. Eine Plugin-Route mit gleichem Pfad wird nie erreicht.", "Ein Plugin-Name wird zu einem Verzeichnis und zu einem Argument des Startskripts. Er muss ^[a-z0-9_]{1,64}$ erfüllen, bevor ein Pfad daraus gebaut wird."]
+    },
+    "p-bundled": {
+      kind: "Vertrauensstufe 1", title: "Mitgelieferte Plugins",
+      text: "Liegen im Repo, laufen als Python im Backend-Prozess und haben vollen Zugriff auf die Host-API. Der Admin bestätigt beim Aktivieren die verlangten Berechtigungen.",
+      partsTitle: "Die sieben",
+      parts: [["audio_control", "Lautstärke, Ausgabegerät und App-Mixer der Desktop-Sitzung"], ["bluetooth", "Geräte, Scan und Kopplung über BlueZ"], ["display_output", "Ausgangswahl, Video-Modus, Helligkeit"], ["optical_drive", "CDs und DVDs brennen, lesen, ISOs durchsuchen"], ["steam_gaming", "Status-Pill, Sitzungsbuch, Spielstart"], ["tapo_smart_plug", "Tapo-Steckdosen über das SmartDevice-Framework"], ["storage_analytics", "nur Demo, alle Zahlen sind fest einprogrammiert"]],
+      inn: [["p-host", "geladen und verwaltet vom PluginManager"]],
+      out: [["os", "pactl, kscreen-doctor, D-Bus, Steam"]],
+      code: ["backend/app/plugins/installed/", "backend/app/plugins/smart_device/"],
+      notes: ["Jedes Plugin hat eine eigene CLAUDE.md mit Aufbau und Fallstricken.", "Koppeln per Bluetooth, Spiele starten und das Entsperren des Desktops gehen nur aus dem lokalen Netz, unabhängig von der Rolle."]
+    },
+    "p-frame": {
+      kind: "Isolation im Browser", title: "Plugin-iframe",
+      text: "Die Oberfläche eines Plugins läuft in einem abgeschotteten iframe. Darin startet ein eigenes Bundle, baut window.BaluHost auf und hängt die Plugin-Komponente ein. Alles, was über den iframe hinausgeht, läuft als Nachricht an den Host.",
+      facts: [["Route", "/plugins/:pluginName/*"], ["ABI", "RUNTIME_ABI 1, beschrieben in docs/plugins/RUNTIME_ABI.md"], ["Kanal", "postMessage in beide Richtungen"]],
+      partsTitle: "Was das Plugin bekommt",
+      parts: [["React · ui · icons · utils", "direkt im iframe vorhanden"], ["api", "über den Host geleitet"], ["toast", "über den Host geleitet"], ["storage", "über den Host geleitet"], ["navigate", "über den Host geleitet"], ["Theme", "Token-Satz beim Start und bei jedem Wechsel"]],
+      inn: [["web", "PluginSandboxHost rendert den iframe"]],
+      code: ["client/src/plugin-runtime/index.ts", "client/src/plugin-runtime/sdk.ts", "client/src/lib/plugin-sandbox/hostBridge.ts", "client/src/lib/plugin-sandbox/protocol.ts", "client/src/components/PluginPage.tsx"],
+      notes: ["Der iframe nimmt nur Nachrichten seines Eltern-Fensters an."]
+    }
+  };
+
+  var sheet = document.getElementById("sheet");
+  var elKind = document.getElementById("s-kind");
+  var elTitle = document.getElementById("s-title");
+  var elBody = document.getElementById("s-body");
+  var current = null;
+
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  }
+  function jump(id, label) {
+    var b = el("button", "jump", label || D[id].title);
+    b.type = "button";
+    b.setAttribute("data-open", id);
+    return b;
+  }
+  function block(title) {
+    var d = el("div", "blk");
+    d.appendChild(el("h3", null, title));
+    elBody.appendChild(d);
+    return d;
+  }
+  function rows(parent, items, linkCol) {
+    var ul = el("ul", "rows");
+    items.forEach(function (it) {
+      var li = el("li");
+      var target = linkCol === "first" ? it[0] : it[2];
+      if (target && D[target]) li.appendChild(jump(target, linkCol === "first" ? null : it[0]));
+      else li.appendChild(el("span", null, it[0]));
+      li.appendChild(el("span", null, it[1]));
+      ul.appendChild(li);
+    });
+    parent.appendChild(ul);
+  }
+
+  function render(id) {
+    var n = D[id];
+    elKind.textContent = n.kind;
+    elTitle.textContent = n.title;
+    elBody.textContent = "";
+    elBody.appendChild(el("p", "lead", n.text));
+    if (n.facts) {
+      var dl = el("dl", "facts");
+      n.facts.forEach(function (f) { dl.appendChild(el("dt", null, f[0])); dl.appendChild(el("dd", null, f[1])); });
+      block("Eckdaten").appendChild(dl);
+    }
+    if (n.parts) rows(block(n.partsTitle || "Aufbau"), n.parts, "third");
+    if (n.inn) rows(block("Eingehend"), n.inn, "first");
+    if (n.out) rows(block("Ausgehend"), n.out, "first");
+    if (n.code) {
+      var ul = el("ul", "plain");
+      n.code.forEach(function (c) { var li = el("li"); li.appendChild(el("code", null, c)); ul.appendChild(li); });
+      block("Code").appendChild(ul);
+    }
+    if (n.notes) {
+      var ol = el("ul", "notes");
+      n.notes.forEach(function (t) { ol.appendChild(el("li", null, t)); });
+      block("Zu beachten").appendChild(ol);
+    }
+    elBody.scrollTop = 0;
+  }
+
+  function mark(id) {
+    document.querySelectorAll(".node").forEach(function (g) {
+      g.setAttribute("aria-pressed", id && g.getAttribute("data-open") === id ? "true" : "false");
+    });
+  }
+  function hashId() {
+    var h = (location.hash || "").slice(1);
+    return h.indexOf("k-") === 0 && D[h.slice(2)] ? h.slice(2) : null;
+  }
+  function show(id, fromHash) {
+    if (!D[id]) return;
+    current = id;
+    render(id);
+    mark(id);
+    if (!sheet.open) {
+      if (sheet.showModal) sheet.showModal(); else sheet.setAttribute("open", "");
+    }
+    elTitle.focus();
+    if (!fromHash) {
+      try { if (location.hash !== "#k-" + id) location.hash = "k-" + id; } catch (e) {}
+    }
+  }
+  function clearHash() {
+    var y = window.scrollY;
+    try { history.replaceState(null, "", location.pathname + location.search); }
+    catch (e) { try { location.hash = ""; window.scrollTo(0, y); } catch (e2) {} }
+  }
+
+  document.addEventListener("click", function (e) {
+    var t = e.target.closest ? e.target.closest("[data-open]") : null;
+    if (t) { show(t.getAttribute("data-open"), false); return; }
+    if (e.target === sheet) sheet.close();
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    var t = e.target;
+    if (t && t.classList && t.classList.contains("node")) { e.preventDefault(); show(t.getAttribute("data-open"), false); }
+  });
+  document.getElementById("s-close").addEventListener("click", function () { sheet.close(); });
+  sheet.addEventListener("close", function () {
+    current = null;
+    mark(null);
+    if (hashId()) clearHash();
+  });
+  window.addEventListener("hashchange", function () {
+    var id = hashId();
+    if (id) { if (id !== current) show(id, true); }
+    else if (sheet.open) sheet.close();
+  });
+  if (hashId()) show(hashId(), true);
+})();
+</script>

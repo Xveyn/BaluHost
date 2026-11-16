@@ -114,7 +114,7 @@ These are documented trade-offs — do not attempt to fix without discussion:
 3. **CORS `allow_methods=["*"]`/`allow_headers=["*"]`** — Scoped to configured `cors_origins` list
 4. **In-memory rate limiter** — Resets on restart; acceptable for single-instance deployment
 5. **No CSRF protection** — Mitigated by JWT Bearer auth (not cookie-based)
-6. **HTTPS not enforced** — External access via WireGuard VPN (encrypted tunnel); HTTP on trusted LAN
+6. **Plain HTTP remains on the backend port (8000)** — The web UI is HTTPS-only (nginx: TLS on 443, port 80 redirects, HSTS). The Uvicorn port still binds `0.0.0.0:8000` without TLS, so the API is reachable unencrypted on the trusted LAN by going around nginx; remote access goes through the WireGuard tunnel
 7. **JTI without server-side revocation store** — Token rotation is the primary defense
 
 ## Security Checklist for Production
