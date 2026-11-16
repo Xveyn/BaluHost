@@ -21,6 +21,18 @@ function formatTime(iso: string | null): string {
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
+// Same bounds as RebootScheduleConfig.retry_window_hours in the backend.
+const RETRY_HOURS_MIN = 1;
+const RETRY_HOURS_MAX = 24;
+
+/** The retry window the field holds, or null while it holds none the backend accepts. */
+function parseRetryHours(raw: string): number | null {
+  const trimmed = raw.trim();
+  if (!/^\d+$/.test(trimmed)) return null;
+  const hours = Number(trimmed);
+  return hours >= RETRY_HOURS_MIN && hours <= RETRY_HOURS_MAX ? hours : null;
+}
+
 export function SchedulerConfigModal({
   scheduler,
   isOpen,
@@ -38,9 +50,16 @@ export function SchedulerConfigModal({
   const isReboot = scheduler?.name === 'system_reboot';
   const [weekday, setWeekday] = useState(6);
   const [time, setTime] = useState('04:00');
-  const [retryHours, setRetryHours] = useState(6);
+  // The field keeps what was typed, as a string: an emptied field is '' and
+  // not Number('') === 0, which is finite, out of range and used to cost the
+  // warning below a 422 (#624).
+  const [retryHoursInput, setRetryHoursInput] = useState('6');
+  const retryHours = parseRetryHours(retryHoursInput);
   const [leadMinutes, setLeadMinutes] = useState(10);
-  const [preview, setPreview] = useState<RebootPreview | null>(null);
+  // The answer together with the retry window it was computed for - the
+  // warning names that number, and the field may hold a different one (or
+  // none) by the time it is read.
+  const [preview, setPreview] = useState<{ value: RebootPreview; retryHours: number } | null>(null);
 
   // Initialize form when scheduler changes
   useEffect(() => {
@@ -76,7 +95,7 @@ export function SchedulerConfigModal({
         const extra = scheduler.extra_config ?? {};
         setWeekday(Number(extra.weekday ?? 6));
         setTime(String(extra.time ?? '04:00'));
-        setRetryHours(Number(extra.retry_window_hours ?? 6));
+        setRetryHoursInput(String(extra.retry_window_hours ?? 6));
         setLeadMinutes(Number(extra.warning_lead_minutes ?? 10));
       }
     }
@@ -94,12 +113,13 @@ export function SchedulerConfigModal({
       setPreview(null);
       return;
     }
-    // A half-typed time or an emptied number field would only earn a 422 -
-    // keep the previous answer until the form is complete again.
-    if (!/^\d{2}:\d{2}$/.test(time) || !Number.isFinite(retryHours)) return;
+    // A half-typed time or a retry window the backend would reject (emptied,
+    // out of range) would only earn a 422 - keep the previous answer until
+    // the form is complete again.
+    if (!/^\d{2}:\d{2}$/.test(time) || retryHours === null) return;
     let cancelled = false;
     getRebootPreview({ weekday, time, retry_window_hours: retryHours })
-      .then((value) => { if (!cancelled) setPreview(value); })
+      .then((value) => { if (!cancelled) setPreview({ value, retryHours }); })
       .catch(() => { if (!cancelled) setPreview(null); });
     return () => { cancelled = true; };
   }, [isOpen, isReboot, weekday, time, retryHours]);
@@ -128,6 +148,12 @@ export function SchedulerConfigModal({
       // Validate minimum interval (60 seconds) - system_reboot has no interval
       if (!isReboot && intervalSeconds < 60) {
         setError(t('scheduler:configModal.minIntervalError'));
+        setIsSaving(false);
+        return;
+      }
+
+      if (isReboot && retryHours === null) {
+        setError(t('scheduler:configModal.reboot.retryHoursInvalid'));
         setIsSaving(false);
         return;
       }
@@ -269,10 +295,10 @@ export function SchedulerConfigModal({
                 <input
                   data-testid="reboot-retry"
                   type="number"
-                  min={1}
-                  max={24}
-                  value={retryHours}
-                  onChange={(e) => setRetryHours(Number(e.target.value))}
+                  min={RETRY_HOURS_MIN}
+                  max={RETRY_HOURS_MAX}
+                  value={retryHoursInput}
+                  onChange={(e) => setRetryHoursInput(e.target.value)}
                   className="w-full rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-white focus:border-sky-500 focus:ring-1 focus:ring-sky-500 outline-none"
                 />
               </div>
@@ -293,20 +319,20 @@ export function SchedulerConfigModal({
               </div>
 
               {/* Core-uptime collision warning - not blocking, the window can be changed later */}
-              {preview?.in_core_uptime && (
+              {preview?.value.in_core_uptime && (
                 <div
                   data-testid="reboot-core-uptime-warning"
                   className="rounded-md bg-amber-900/30 border border-amber-800 px-3 py-2 text-sm text-amber-300"
                 >
-                  {preview.reachable
+                  {preview.value.reachable
                     ? t('scheduler:configModal.reboot.warningDeferred', {
-                        window: preview.window_label ?? '',
-                        windowEnds: formatTime(preview.window_ends_at),
+                        window: preview.value.window_label ?? '',
+                        windowEnds: formatTime(preview.value.window_ends_at),
                       })
                     : t('scheduler:configModal.reboot.warningNever', {
-                        window: preview.window_label ?? '',
-                        windowEnds: formatTime(preview.window_ends_at),
-                        retryHours,
+                        window: preview.value.window_label ?? '',
+                        windowEnds: formatTime(preview.value.window_ends_at),
+                        retryHours: preview.retryHours,
                       })}
                 </div>
               )}

@@ -124,6 +124,7 @@
       "time": "Uhrzeit",
       "retryHours": "Nachholfrist (Stunden)",
       "leadMinutes": "Vorwarnung (Minuten, 0 = aus)",
+      "retryHoursInvalid": "Die Nachholfrist muss eine ganze Zahl zwischen 1 und 24 Stunden sein.",
       "warningDeferred": "Dieser Termin liegt in der Kernbetriebszeit „{{window}}“. Der Neustart wird übersprungen und um {{windowEnds}} nachgeholt.",
       "warningNever": "Dieser Termin liegt in der Kernbetriebszeit „{{window}}“. Das Fenster endet erst um {{windowEnds}} und damit außerhalb der Nachholfrist von {{retryHours}} Stunden. Der Neustart läuft so nie."
     }
