@@ -1,0 +1,908 @@
+<!doctype html>
+<html lang="de">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BaluHost Architektur</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600&display=swap">
+<style>
+/* Layout: eine Lesespalte, Figuren in voller Breite. Jede Sektion trägt den Repo-Pfad, den sie beschreibt.
+   Blau = BaluHost-Prozess, Ocker = geteilter Zustand, neutral = Fremdsoftware und Betriebssystem. */
+:root {
+  --bg: #f3f5f8;
+  --surface: #ffffff;
+  --surface-2: #e8ecf2;
+  --ink: #141b26;
+  --ink-2: #465265;
+  --ink-3: #657186;
+  --line: #d3dae4;
+  --line-strong: #a3aebf;
+  --accent: #2459d6;
+  --accent-soft: #e4ecfd;
+  --on-accent: #ffffff;
+  --state: #a8540a;
+  --state-soft: #fcefd9;
+  --font-display: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e131b; --surface: #161d28; --surface-2: #1c2532; --ink: #e6ebf2; --ink-2: #a9b4c3; --ink-3: #8592a4;
+    --line: #2a3443; --line-strong: #4b596d; --accent: #76a4ff; --accent-soft: #172848; --on-accent: #0b1220;
+    --state: #efb35c; --state-soft: #32250f; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e131b; --surface: #161d28; --surface-2: #1c2532; --ink: #e6ebf2; --ink-2: #a9b4c3; --ink-3: #8592a4;
+  --line: #2a3443; --line-strong: #4b596d; --accent: #76a4ff; --accent-soft: #172848; --on-accent: #0b1220;
+  --state: #efb35c; --state-soft: #32250f; color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.6;
+}
+.wrap {
+  max-width: 1180px;
+  margin-inline: auto;
+  padding-block: 48px 72px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex;
+  flex-direction: column;
+  gap: 64px;
+}
+code, .mono { font-family: var(--font-mono); font-size: 0.875em; }
+p { margin: 0; }
+a { color: var(--accent); text-underline-offset: 3px; }
+a:focus-visible, .node:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+/* Kopf */
+.top { display: flex; flex-direction: column; gap: 16px; }
+.eyebrow {
+  font-family: var(--font-mono); font-size: 13px; color: var(--ink-3);
+  display: flex; flex-wrap: wrap; gap: 4px 16px;
+}
+h1 {
+  font-family: var(--font-display); font-weight: 600; font-size: clamp(34px, 6vw, 54px);
+  line-height: 1.05; margin: 0; letter-spacing: -0.01em; text-wrap: balance;
+}
+.lede { max-width: 66ch; font-size: 18px; color: var(--ink-2); }
+.toc { display: flex; flex-wrap: wrap; gap: 6px 20px; font-size: 14px; padding-top: 16px; border-top: 1px solid var(--line); }
+
+/* Sektionen */
+section { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.path-tag { font-family: var(--font-mono); font-size: 13px; color: var(--accent); }
+h2 {
+  font-family: var(--font-display); font-weight: 600; font-size: clamp(24px, 3.6vw, 32px);
+  line-height: 1.15; margin: 4px 0 0; text-wrap: balance;
+}
+h3 { font-size: 16px; font-weight: 600; margin: 0; }
+.prose { max-width: 68ch; color: var(--ink-2); display: flex; flex-direction: column; gap: 12px; }
+.prose strong { color: var(--ink); font-weight: 600; }
+
+/* Figuren */
+figure { margin: 0; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.dia { display: block; width: 100%; height: auto; }
+.dia-wide { min-width: 1040px; }
+.dia-mid { min-width: 820px; }
+figcaption { font-size: 14px; color: var(--ink-3); max-width: 80ch; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 13px; color: var(--ink-2); list-style: none; margin: 0; padding: 0; }
+.legend li { display: flex; align-items: center; gap: 8px; }
+.sw { width: 18px; height: 12px; border-radius: 3px; border: 1.4px solid; flex: none; }
+.sw-proc { background: var(--accent-soft); border-color: var(--accent); }
+.sw-state { background: var(--state-soft); border-color: var(--state); }
+.sw-ext { background: var(--surface); border-color: var(--line-strong); }
+.sw-iso { background: var(--surface); border-color: var(--ink-2); border-style: dashed; }
+
+/* SVG-Bausteine */
+.dia text { font-family: var(--font-body); fill: var(--ink); }
+.dia .t-name { font-size: 13px; font-weight: 600; }
+.dia .t-unit { font-family: var(--font-mono); font-size: 12.5px; font-weight: 600; }
+.dia .t-mono { font-family: var(--font-mono); font-size: 11px; font-weight: 500; }
+.dia .t-sub { font-size: 11.5px; fill: var(--ink-2); }
+.dia .t-lbl { font-size: 11px; fill: var(--ink-2); }
+.dia .t-note { font-size: 11px; fill: var(--ink-3); }
+.dia .t-cap { font-size: 10.5px; font-weight: 600; letter-spacing: 0.09em; fill: var(--ink-3); }
+.dia .edge { stroke: var(--ink-2); stroke-width: 1.3; fill: none; }
+.dia .ah { fill: var(--ink-2); }
+.dia .host { fill: var(--surface-2); stroke: var(--line-strong); stroke-width: 1; }
+.dia .n-ext { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1.2; }
+.dia .n-proc { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.4; }
+.dia .n-chip { fill: var(--surface); stroke: var(--accent); stroke-width: 1; }
+.dia .n-primary { fill: var(--accent); stroke: var(--accent); stroke-width: 1; }
+.dia .on-accent { fill: var(--on-accent); }
+.dia .n-state { fill: var(--state-soft); stroke: var(--state); stroke-width: 1.4; }
+.dia .n-iso { fill: var(--surface); stroke: var(--ink-2); stroke-width: 1.3; stroke-dasharray: 5 4; }
+.node { cursor: pointer; }
+.node:hover > .shape { stroke-width: 2.2; }
+.node[aria-pressed="true"] > .shape { stroke: var(--ink); stroke-width: 2.6; }
+
+/* Detailfeld unter dem Laufzeitbild */
+.detail {
+  border: 1px solid var(--line); border-radius: 10px; background: var(--surface);
+  padding: 20px; display: grid; gap: 16px 32px; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1fr);
+}
+.detail > div { min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.detail-kind { font-family: var(--font-mono); font-size: 12px; color: var(--ink-3); }
+.detail h3 { font-family: var(--font-mono); font-size: 17px; overflow-wrap: anywhere; }
+.detail p { font-size: 15px; color: var(--ink-2); }
+.detail h4 { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); }
+.detail ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; font-size: 14px; color: var(--ink-2); }
+.detail ul code { color: var(--ink); overflow-wrap: anywhere; }
+@media (max-width: 820px) { .detail { grid-template-columns: minmax(0, 1fr); } }
+
+/* Weg einer Anfrage */
+.lanes { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 16px; align-items: stretch; }
+.lane { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); padding: 20px; display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.lane-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+.lane-head code { color: var(--ink-3); }
+.steps { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; }
+.steps li { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 12px; padding-block: 12px; border-top: 1px solid var(--line); }
+.steps .num { font-family: var(--font-mono); font-size: 13px; color: var(--accent); padding-top: 2px; font-variant-numeric: tabular-nums; }
+.steps .what { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.steps .what code { font-weight: 600; font-size: 14px; color: var(--ink); overflow-wrap: anywhere; }
+.steps .what span { font-size: 14px; color: var(--ink-2); }
+.wire {
+  display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 6px;
+  font-family: var(--font-mono); font-size: 12px; color: var(--ink-2); text-align: center; min-width: 120px;
+}
+.wire::before, .wire::after { content: ""; flex: 1; width: 1.5px; background: var(--line-strong); min-height: 16px; }
+.cross { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 48px; }
+.cross > div { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.cross ul { margin: 0; padding-left: 18px; font-size: 14px; color: var(--ink-2); display: flex; flex-direction: column; gap: 6px; }
+.cross code { color: var(--ink); }
+@media (max-width: 820px) {
+  .lanes { grid-template-columns: minmax(0, 1fr); }
+  .wire { flex-direction: row; min-width: 0; }
+  .wire::before, .wire::after { width: auto; height: 1.5px; min-height: 0; min-width: 16px; }
+  .cross { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Tabellen */
+.tbl { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { text-align: left; vertical-align: top; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+tr:last-child td { border-bottom: 0; }
+th { font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); white-space: nowrap; }
+td { color: var(--ink-2); }
+td:first-child { color: var(--ink); font-weight: 500; }
+td code { color: var(--ink); }
+.tbl-ipc table { min-width: 860px; }
+.tbl-two table { min-width: 620px; }
+
+/* Service-Domänen */
+.domains { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 28px 32px; }
+.domain { border-top: 2px solid var(--ink); padding-top: 12px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.domain p { font-size: 14px; color: var(--ink-2); }
+.domain ul { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 6px; }
+.domain li { font-family: var(--font-mono); font-size: 12.5px; background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 2px 7px; color: var(--ink); }
+
+/* Auslieferung */
+.chain { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; counter-reset: s; }
+.chain li { counter-increment: s; border-top: 2px solid var(--accent); padding-top: 10px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.chain li::before { content: counter(s, decimal-leading-zero); font-family: var(--font-mono); font-size: 12px; color: var(--accent); }
+.chain strong { font-size: 15px; font-weight: 600; }
+.chain span { font-size: 14px; color: var(--ink-2); }
+.chain code { overflow-wrap: anywhere; }
+
+footer { font-size: 13px; color: var(--ink-3); border-top: 1px solid var(--line); padding-top: 16px; max-width: 80ch; }
+@media (prefers-reduced-motion: no-preference) { .node > .shape { transition: stroke-width 0.12s; } }
+</style>
+
+<div class="wrap">
+
+<header class="top">
+  <div class="eyebrow"><span>Xveyn/BaluHost</span><span>v1.38.0</span><span>Stand 16.11.2026</span></div>
+  <h1>BaluHost Architektur</h1>
+  <p class="lede">BaluHost ist ein selbst gehosteter Heimserver mit NAS-Kern. Diese Seite zeigt, aus welchen Prozessen er zur Laufzeit besteht, wie eine Anfrage durch die Schichten läuft und über welche Kanäle die Prozesse miteinander reden.</p>
+  <nav class="toc" aria-label="Inhalt">
+    <a href="#laufzeit">Laufzeit</a>
+    <a href="#anfrage">Weg einer Anfrage</a>
+    <a href="#kanaele">Kanäle zwischen Prozessen</a>
+    <a href="#domaenen">Service-Domänen</a>
+    <a href="#plugins">Plugins</a>
+    <a href="#modi">Dev und Prod</a>
+    <a href="#auslieferung">Auslieferung</a>
+  </nav>
+</header>
+
+<!-- ===================================================== Laufzeit -->
+<section id="laufzeit">
+  <div>
+    <div class="path-tag">deploy/install/templates/*.service</div>
+    <h2>Fünf Units, eine Datenbank</h2>
+  </div>
+  <div class="prose">
+    <p>In Produktion besteht BaluHost aus fünf systemd-Units. Gemeinsamen Arbeitsspeicher haben sie nicht: Was mehr als ein Prozess wissen muss, steht in PostgreSQL oder als JSON-Datei unter <code>/dev/shm</code>. Ein Klick auf einen Baustein zeigt, was er tut und wo sein Code liegt.</p>
+  </div>
+
+  <figure>
+    <div class="scroll">
+      <svg class="dia dia-wide" viewBox="0 0 1240 766" role="img" aria-label="Laufzeitbild: Clients erreichen über nginx, einen Unix-Socket oder Port 8080 fünf systemd-Units, die sich PostgreSQL und ein SHM-Verzeichnis teilen.">
+        <defs>
+          <marker id="ah1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0 0L10 5L0 10z"/></marker>
+        </defs>
+
+        <!-- Host-Rahmen -->
+        <rect class="host" x="12" y="100" width="1216" height="580" rx="10"/>
+        <text class="t-cap" x="500" y="124">HOST · DEBIAN 13 · SYSTEMD</text>
+        <text class="t-note" x="500" y="141">Zugriff von unterwegs: WireGuard-Tunnel (wg0)</text>
+        <text class="t-note" x="664" y="226" text-anchor="middle">Worker ohne Netzwerk-Eingang</text>
+
+        <!-- Kanten: Clients zu Eingängen -->
+        <path class="edge" d="M78 70V150" marker-end="url(#ah1)"/>
+        <path class="edge" d="M191 70V150" marker-end="url(#ah1)"/>
+        <path class="edge" d="M304 70V150" marker-end="url(#ah1)"/>
+        <path class="edge" d="M417 70V250" marker-end="url(#ah1)"/>
+        <path class="edge" d="M948 70V150" marker-end="url(#ah1)"/>
+        <path class="edge" d="M1134 70V150" marker-end="url(#ah1)"/>
+        <text class="t-lbl" x="84" y="91">HTTPS · WebSocket</text>
+        <text class="t-lbl" x="425" y="91">HTTP</text>
+        <text class="t-lbl" x="425" y="176">ohne nginx</text>
+        <text class="t-lbl" x="956" y="91">HTTP über lokalen Proxy</text>
+        <text class="t-lbl" x="1142" y="91">WebDAV/TLS</text>
+
+        <!-- Kanten: Eingänge zu Prozessen -->
+        <path class="edge" d="M191 194V250" marker-end="url(#ah1)"/>
+        <path class="edge" d="M948 194V250" marker-end="url(#ah1)"/>
+        <path class="edge" d="M1134 194V250" marker-end="url(#ah1)"/>
+        <text class="t-lbl" x="199" y="226">Proxy an 127.0.0.1:8000</text>
+        <text class="t-lbl" x="956" y="226">Socket-Übergabe (fd 3)</text>
+
+        <!-- Kanten: Prozesse zu Zustand -->
+        <path class="edge" d="M110 370V414" marker-start="url(#ah1)" marker-end="url(#ah1)"/>
+        <text class="t-lbl" x="118" y="396">UDS-RPC</text>
+        <path class="edge" d="M400 414V370" marker-end="url(#ah1)"/>
+        <text class="t-lbl" x="392" y="396" text-anchor="end">liest</text>
+        <path class="edge" d="M524 370V414" marker-end="url(#ah1)"/>
+        <text class="t-lbl" x="532" y="396">schreibt</text>
+        <path class="edge" d="M290 370V510" marker-end="url(#ah1)"/>
+        <text class="t-lbl" x="298" y="492">ORM · LISTEN/NOTIFY</text>
+        <path class="edge" d="M610 370V510" marker-end="url(#ah1)"/>
+        <text class="t-lbl" x="618" y="492">Samples · NOTIFY</text>
+        <path class="edge" d="M757 370V510" marker-end="url(#ah1)"/>
+        <text class="t-lbl" x="765" y="492">Aufträge · Verlauf</text>
+        <path class="edge" d="M948 370V510" marker-end="url(#ah1)"/>
+        <text class="t-lbl" x="956" y="492">ORM · LISTEN</text>
+        <path class="edge" d="M1134 370V510" marker-end="url(#ah1)"/>
+        <text class="t-lbl" x="1126" y="492" text-anchor="end">Auth · Heartbeat</text>
+        <path class="edge" d="M620 680V708" marker-end="url(#ah1)"/>
+        <text class="t-lbl" x="628" y="699">ausgehende Verbindungen</text>
+
+        <!-- Clients -->
+        <g class="node" data-id="web" tabindex="0" role="button" aria-label="Web-UI">
+          <rect class="shape n-ext" x="28" y="20" width="100" height="50" rx="6"/>
+          <text class="t-name" x="78" y="41" text-anchor="middle">Web-UI</text>
+          <text class="t-sub" x="78" y="58" text-anchor="middle">React-SPA</text>
+        </g>
+        <g class="node" data-id="app" tabindex="0" role="button" aria-label="BaluApp">
+          <rect class="shape n-ext" x="141" y="20" width="100" height="50" rx="6"/>
+          <text class="t-name" x="191" y="41" text-anchor="middle">BaluApp</text>
+          <text class="t-sub" x="191" y="58" text-anchor="middle">Android</text>
+        </g>
+        <g class="node" data-id="desk" tabindex="0" role="button" aria-label="BaluDesk">
+          <rect class="shape n-ext" x="254" y="20" width="100" height="50" rx="6"/>
+          <text class="t-name" x="304" y="41" text-anchor="middle">BaluDesk</text>
+          <text class="t-sub" x="304" y="58" text-anchor="middle">Sync-Client</text>
+        </g>
+        <g class="node" data-id="tray" tabindex="0" role="button" aria-label="Tray und TUI">
+          <rect class="shape n-ext" x="367" y="20" width="100" height="50" rx="6"/>
+          <text class="t-name" x="417" y="41" text-anchor="middle">Tray · TUI</text>
+          <text class="t-sub" x="417" y="58" text-anchor="middle">KDE · Terminal</text>
+        </g>
+        <g class="node" data-id="comp" tabindex="0" role="button" aria-label="Companion">
+          <rect class="shape n-ext" x="860" y="20" width="176" height="50" rx="6"/>
+          <text class="t-name" x="948" y="41" text-anchor="middle">Companion</text>
+          <text class="t-sub" x="948" y="58" text-anchor="middle">Tauri · Webview + Proxy</text>
+        </g>
+        <g class="node" data-id="dav" tabindex="0" role="button" aria-label="WebDAV-Client">
+          <rect class="shape n-ext" x="1056" y="20" width="156" height="50" rx="6"/>
+          <text class="t-name" x="1134" y="41" text-anchor="middle">WebDAV-Client</text>
+          <text class="t-sub" x="1134" y="58" text-anchor="middle">Explorer · Finder</text>
+        </g>
+
+        <!-- Eingänge -->
+        <g class="node" data-id="nginx" tabindex="0" role="button" aria-label="nginx">
+          <rect class="shape n-ext" x="28" y="150" width="326" height="44" rx="6"/>
+          <text class="t-unit" x="40" y="168">nginx :443</text>
+          <text class="t-sub" x="40" y="185">TLS · statische SPA · Rate-Limits · /api-Proxy</text>
+        </g>
+        <g class="node" data-id="local" tabindex="0" role="button" aria-label="Unix-Socket des lokalen Kanals">
+          <rect class="shape n-ext" x="860" y="150" width="176" height="44" rx="6"/>
+          <text class="t-mono" x="868" y="168">/run/baluhost/local.sock</text>
+          <text class="t-sub" x="868" y="185">Socket-Unit von systemd</text>
+        </g>
+        <g class="node" data-id="webdav" tabindex="0" role="button" aria-label="WebDAV-Port">
+          <rect class="shape n-ext" x="1056" y="150" width="156" height="44" rx="6"/>
+          <text class="t-unit" x="1068" y="168">Port 8080</text>
+          <text class="t-sub" x="1068" y="185">TLS · HTTP-Basic</text>
+        </g>
+
+        <!-- Prozesse -->
+        <g class="node" data-id="backend" tabindex="0" role="button" aria-label="baluhost-backend" aria-pressed="true">
+          <rect class="shape n-proc" x="28" y="250" width="440" height="120" rx="8"/>
+          <text class="t-unit" x="44" y="274">baluhost-backend</text>
+          <text class="t-sub" x="44" y="291">FastAPI · uvicorn · 4 Worker · Port 8000</text>
+          <rect class="n-chip" x="146" y="306" width="97" height="48" rx="5"/>
+          <text class="t-name" x="194.5" y="326" text-anchor="middle">Follower</text>
+          <text class="t-sub" x="194.5" y="342" text-anchor="middle">Requests · WS</text>
+          <rect class="n-chip" x="252" y="306" width="97" height="48" rx="5"/>
+          <text class="t-name" x="300.5" y="326" text-anchor="middle">Follower</text>
+          <text class="t-sub" x="300.5" y="342" text-anchor="middle">Requests · WS</text>
+          <rect class="n-chip" x="358" y="306" width="97" height="48" rx="5"/>
+          <text class="t-name" x="406.5" y="326" text-anchor="middle">Follower</text>
+          <text class="t-sub" x="406.5" y="342" text-anchor="middle">Requests · WS</text>
+        </g>
+        <g class="node" data-id="primary" tabindex="0" role="button" aria-label="Primary-Worker">
+          <rect class="shape n-primary" x="40" y="306" width="97" height="48" rx="5"/>
+          <text class="t-name on-accent" x="88.5" y="326" text-anchor="middle">Primary</text>
+          <text class="t-sub on-accent" x="88.5" y="342" text-anchor="middle">Hardware-Loops</text>
+        </g>
+        <g class="node" data-id="monitoring" tabindex="0" role="button" aria-label="baluhost-monitoring">
+          <rect class="shape n-proc" x="488" y="250" width="166" height="120" rx="8"/>
+          <text class="t-unit" x="498" y="274">baluhost-monitoring</text>
+          <text class="t-sub" x="498" y="298">Telemetrie · Disk-I/O</text>
+          <text class="t-sub" x="498" y="315">Collector · Retention</text>
+          <text class="t-sub" x="498" y="332">Smart-Device-Poller</text>
+        </g>
+        <g class="node" data-id="scheduler" tabindex="0" role="button" aria-label="baluhost-scheduler">
+          <rect class="shape n-proc" x="674" y="250" width="166" height="120" rx="8"/>
+          <text class="t-unit" x="684" y="274">baluhost-scheduler</text>
+          <text class="t-sub" x="684" y="298">APScheduler-Jobs:</text>
+          <text class="t-sub" x="684" y="315">Backup · RAID-Scrub</text>
+          <text class="t-sub" x="684" y="332">SMART-Scan · Sync-Check</text>
+        </g>
+        <g class="node" data-id="local" tabindex="0" role="button" aria-label="baluhost-backend-local">
+          <rect class="shape n-proc" x="860" y="250" width="176" height="120" rx="8"/>
+          <text class="t-unit" x="869" y="274" style="font-size:11.5px">baluhost-backend-local</text>
+          <text class="t-sub" x="869" y="298">uvicorn · 2 Worker</text>
+          <text class="t-sub" x="869" y="315">Kanal „local“</text>
+          <text class="t-sub" x="869" y="332">wird nie Primary</text>
+        </g>
+        <g class="node" data-id="webdav" tabindex="0" role="button" aria-label="baluhost-webdav">
+          <rect class="shape n-proc" x="1056" y="250" width="156" height="120" rx="8"/>
+          <text class="t-unit" x="1066" y="274">baluhost-webdav</text>
+          <text class="t-sub" x="1066" y="298">WsgiDAV auf cheroot</text>
+          <text class="t-sub" x="1066" y="315">Login per Passwort</text>
+          <text class="t-sub" x="1066" y="332">Root je Nutzer</text>
+        </g>
+
+        <!-- Sandbox und SHM -->
+        <g class="node" data-id="sandbox" tabindex="0" role="button" aria-label="Plugin-Sandbox">
+          <rect class="shape n-iso" x="28" y="414" width="222" height="48" rx="6"/>
+          <text class="t-name" x="40" y="434">Plugin-Sandbox</text>
+          <text class="t-sub" x="40" y="451">baluhost-plugin · eigener netns</text>
+        </g>
+        <g class="node" data-id="shm" tabindex="0" role="button" aria-label="SHM-Verzeichnis">
+          <rect class="shape n-state" x="330" y="414" width="230" height="48" rx="6"/>
+          <text class="t-unit" x="342" y="434">/dev/shm/baluhost/</text>
+          <text class="t-sub" x="342" y="451">JSON-Dateien je Metrik</text>
+        </g>
+
+        <!-- Datenbank -->
+        <g class="node" data-id="pg" tabindex="0" role="button" aria-label="PostgreSQL">
+          <rect class="shape n-state" x="28" y="510" width="1184" height="56" rx="8"/>
+          <text class="t-unit" x="44" y="533">PostgreSQL 17</text>
+          <text class="t-sub" x="44" y="552">Tabellen via SQLAlchemy und Alembic · LISTEN/NOTIFY als ws_bus · Command-Queues (power_commands) · Scheduler-Aufträge · Heartbeats</text>
+        </g>
+
+        <!-- Betriebssystem -->
+        <text class="t-note" x="28" y="590">Betriebssystem-Ebene: Zugriff per subprocess und sysfs. Regelkreise für Lüfter, CPU-Takt und Sleep laufen nur im Primary.</text>
+        <g class="node" data-id="os" tabindex="0" role="button" aria-label="Linux-Host">
+          <rect class="shape n-ext" x="28" y="602" width="1184" height="62" rx="8"/>
+          <path class="edge" d="M264.8 602V664M501.6 602V664M738.4 602V664M975.2 602V664" style="stroke-width:1"/>
+          <text class="t-name" x="44" y="627">Storage</text>
+          <text class="t-sub" x="44" y="645">mdadm-RAID · Nutzerdaten</text>
+          <text class="t-name" x="280" y="627">Hardware</text>
+          <text class="t-sub" x="280" y="645">smartctl · hwmon/sysfs · GPU</text>
+          <text class="t-name" x="517" y="627">systemd · logind</text>
+          <text class="t-sub" x="517" y="645">Suspend-Locks · Unit-Neustart</text>
+          <text class="t-name" x="754" y="627">Netz</text>
+          <text class="t-sub" x="754" y="645">WireGuard wg0 · avahi/mDNS</text>
+          <text class="t-name" x="991" y="627">Freigaben</text>
+          <text class="t-sub" x="991" y="645">smbd · nfsd, Konfig aus BaluHost</text>
+        </g>
+
+        <!-- Extern -->
+        <g class="node" data-id="ext" tabindex="0" role="button" aria-label="Externe Dienste">
+          <rect class="shape n-ext" x="28" y="708" width="1184" height="48" rx="8"/>
+          <path class="edge" d="M264.8 708V756M501.6 708V756M738.4 708V756M975.2 708V756" style="stroke-width:1"/>
+          <text class="t-name" x="44" y="728">Firebase</text>
+          <text class="t-sub" x="44" y="745">Push an BaluApp</text>
+          <text class="t-name" x="280" y="728">Plugin-Marktplatz</text>
+          <text class="t-sub" x="280" y="745">signierter Index</text>
+          <text class="t-name" x="517" y="728">Cloud-Speicher</text>
+          <text class="t-sub" x="517" y="745">Import und Export per rclone</text>
+          <text class="t-name" x="754" y="728">Heimnetz-Geräte</text>
+          <text class="t-sub" x="754" y="745">FritzBox · Pi-hole · Tapo</text>
+          <text class="t-name" x="991" y="728">BaluPi</text>
+          <text class="t-sub" x="991" y="745">Handshake bei Start und Stopp</text>
+        </g>
+      </svg>
+    </div>
+    <ul class="legend" aria-label="Legende">
+      <li><span class="sw sw-proc"></span>BaluHost-Prozess (systemd-Unit)</li>
+      <li><span class="sw sw-state"></span>geteilter Zustand</li>
+      <li><span class="sw sw-ext"></span>Client, Fremdsoftware, Betriebssystem</li>
+      <li><span class="sw sw-iso"></span>Isolationsgrenze</li>
+    </ul>
+    <figcaption>Clients oben, Eingänge darunter, dann die fünf Units. Monitoring und Scheduler nehmen keine Verbindungen an; sie arbeiten nur über Datenbank und SHM-Verzeichnis.</figcaption>
+  </figure>
+
+  <div class="detail" id="detail" aria-live="polite">
+    <div>
+      <span class="detail-kind" id="d-kind">systemd-Unit</span>
+      <h3 id="d-title">baluhost-backend</h3>
+      <p id="d-text">Die FastAPI-Anwendung unter uvicorn mit vier Worker-Prozessen auf Port 8000. Jeder Worker lädt die ganze App: Middleware, Routen, Services und einen eigenen Listener am WebSocket-Bus. Welcher Worker eine Anfrage bekommt, ist Zufall, deshalb darf kein Zustand nur im Prozess leben.</p>
+    </div>
+    <div>
+      <h4>Code</h4>
+      <ul id="d-code">
+        <li><code>backend/app/main.py</code></li>
+        <li><code>backend/app/api/routes/</code></li>
+        <li><code>backend/app/services/</code></li>
+        <li><code>backend/app/core/lifespan.py</code></li>
+      </ul>
+    </div>
+    <div>
+      <h4>Verbindungen</h4>
+      <ul id="d-links">
+        <li>nginx reicht <code>/api</code> an 127.0.0.1:8000 weiter</li>
+        <li>PostgreSQL für alle Daten und den Broadcast-Bus</li>
+        <li>liest Live-Metriken aus dem SHM-Verzeichnis</li>
+        <li>spricht externe Plugins über UDS-RPC an</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ===================================================== Weg einer Anfrage -->
+<section id="anfrage">
+  <div>
+    <div class="path-tag">client/src/ → backend/app/</div>
+    <h2>Weg einer Anfrage durch die Schichten</h2>
+  </div>
+  <div class="prose">
+    <p>Beide Hälften sind gleich geschnitten: je Fachgebiet eine Datei pro Schicht. Zu <code>api/routes/raid</code> im Backend gehört <code>api/raid.ts</code> im Frontend, zum Pydantic-Schema das TypeScript-Interface. Eine Anfrage läuft in dieser Reihenfolge durch.</p>
+  </div>
+
+  <div class="lanes">
+    <div class="lane">
+      <div class="lane-head"><h3>Browser</h3><code>client/src/</code></div>
+      <ol class="steps">
+        <li><span class="num">1</span><span class="what"><code>pages/</code><span>Seite hinter einer Route, lazy geladen. Setzt Komponenten aus <code>components/</code> zusammen und enthält kaum eigene Logik.</span></span></li>
+        <li><span class="num">2</span><span class="what"><code>hooks/</code><span>Datenhaltung mit TanStack Query: <code>useQuery</code> mit Polling, <code>useMutation</code> mit Invalidierung. Schlüssel kommen aus <code>lib/queryKeys.ts</code>.</span></span></li>
+        <li><span class="num">3</span><span class="what"><code>api/</code><span>Eine typisierte Funktion je Endpunkt, ein Modul je Fachgebiet. Kein Cache, keine Fehlerbehandlung.</span></span></li>
+        <li><span class="num">4</span><span class="what"><code>lib/api.ts</code><span>Die eine axios-Instanz. Hängt das Token an und meldet ein 401 als <code>auth:expired</code> an den AuthContext.</span></span></li>
+      </ol>
+    </div>
+
+    <div class="wire" aria-label="Übertragung"><span>HTTPS</span><span>/api/…</span><span>Bearer-JWT</span></div>
+
+    <div class="lane">
+      <div class="lane-head"><h3>Server</h3><code>backend/app/</code></div>
+      <ol class="steps" start="5">
+        <li><span class="num">5</span><span class="what"><code>nginx</code><span>Beendet TLS, begrenzt die Rate (<code>api_limit</code>, <code>auth_limit</code>) und reicht an einen der vier Worker weiter.</span></span></li>
+        <li><span class="num">6</span><span class="what"><code>middleware/</code><span>Neun Schichten um jede Anfrage: Security-Header, Kanal-Markierung, Plugin-Gate, Auto-Wake aus dem Sleep, Geräte-Tracking, Fehlerzähler.</span></span></li>
+        <li><span class="num">7</span><span class="what"><code>api/routes/</code> + <code>api/deps.py</code><span>Nur HTTP-Belange: Auth-Dependency, Rate-Limit-Dekorator, Validierung über ein Schema aus <code>schemas/</code>.</span></span></li>
+        <li><span class="num">8</span><span class="what"><code>services/</code><span>Die Fachlogik. Hardware-Services wählen hier ihr Backend: Simulation im Dev-Modus, echte Befehle in Produktion.</span></span></li>
+        <li><span class="num">9</span><span class="what"><code>models/</code><span>SQLAlchemy-2-Modelle auf PostgreSQL. Schemaänderungen laufen über Alembic-Migrationen.</span></span></li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="cross">
+    <div>
+      <h3>Quer durch das Frontend</h3>
+      <ul>
+        <li><code>contexts/</code>: Provider in fester Reihenfolge Auth, Version, Plugin, Notification, Upload; dazu das Theme mit sechs Farbschemata.</li>
+        <li><code>i18n/</code>: i18next mit Deutsch und Englisch in je 22 Namespaces.</li>
+        <li><code>lib/features.ts</code>: Build-Schalter <code>__DEVICE_MODE__</code>. Der Pi-Build enthält nur Login, Dashboard und Systemmonitor.</li>
+        <li><code>plugin-runtime/</code>: eigenes Bundle, das im iframe eines Plugins startet.</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Quer durch das Backend</h3>
+      <ul>
+        <li><code>core/</code>: Konfiguration aus Umgebungsvariablen, Datenbank-Engine, JWT mit Typ-Claim, Rate-Limiter, Fehlerklassen mit client-sicherer Meldung.</li>
+        <li><code>core/lifespan.py</code>: Start und Stopp aller Hintergrunddienste samt Wahl des Primary.</li>
+        <li><code>plugins/</code>: Plugin-Framework, siehe unten.</li>
+        <li><code>compat/</code>: Brücke zur WSGI-Bibliothek WsgiDAV für den WebDAV-Prozess.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ===================================================== Kanäle -->
+<section id="kanaele">
+  <div>
+    <div class="path-tag">services/ws_bus.py · monitoring/shm.py · power/db_command_queue.py</div>
+    <h2>Kanäle zwischen den Prozessen</h2>
+  </div>
+  <div class="prose">
+    <p>Sechs API-Prozesse und drei Worker müssen sich abstimmen, ohne einander direkt aufzurufen. Jeder Kanal hat genau eine Aufgabe.</p>
+  </div>
+  <div class="tbl tbl-ipc">
+    <table>
+      <thead><tr><th>Kanal</th><th>Schreibt</th><th>Liest</th><th>Wofür</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Postgres LISTEN/NOTIFY<br><code>ws_bus</code></td>
+          <td>jeder Prozess, auch Scheduler und Monitoring</td>
+          <td>ein Listener je API-Prozess</td>
+          <td>WebSocket-Nachrichten. Zustellen kann nur der Prozess, der den Socket hält, also geht jede Nachricht über den Bus an alle. Bewusst nicht dauerhaft gespeichert.</td>
+        </tr>
+        <tr>
+          <td>JSON-Dateien<br><code>/dev/shm/baluhost/</code></td>
+          <td>Monitoring-Worker</td>
+          <td>API-Worker</td>
+          <td>Live-Metriken wie CPU, RAM, Disk-I/O und SMART-Zusammenfassung, ohne Datenbankabfrage je Request.</td>
+        </tr>
+        <tr>
+          <td>Command-Queue<br><code>power_commands</code></td>
+          <td>Follower-Worker</td>
+          <td>Primary</td>
+          <td>Hardware-Befehle. Eine Zeile wandert von <code>pending</code> über <code>running</code> zu <code>applied</code> oder <code>failed</code>, trägt eine Frist und wird höchstens einmal ausgeführt.</td>
+        </tr>
+        <tr>
+          <td>Scheduler-Aufträge<br><code>scheduler_executions</code></td>
+          <td>API legt Zeile mit Status <code>requested</code> an</td>
+          <td>Scheduler-Worker fragt ab</td>
+          <td>„Jetzt ausführen“ aus der Oberfläche sowie der Verlauf aller Läufe.</td>
+        </tr>
+        <tr>
+          <td>Zustandszeilen<br><code>sleep_runtime_state</code>, <code>webdav_state</code>, <code>scheduler_state</code></td>
+          <td>der Prozess, dem der Zustand gehört</td>
+          <td>alle anderen</td>
+          <td>Heartbeats und Zustände, die jeder Worker beantworten können muss, etwa „schläft das System gerade“.</td>
+        </tr>
+        <tr>
+          <td>Plugin-Aktivierung<br><code>plugin_enablement</code></td>
+          <td>der Worker, der den Schalter bedient</td>
+          <td>alle Worker, mit 5-Sekunden-Cache</td>
+          <td>Ein Plugin-Schalter wirkt nach wenigen Sekunden in allen Workern, ohne Neustart.</td>
+        </tr>
+        <tr>
+          <td>Datei-Lock<br><code>/tmp/baluhost-primary.lock</code></td>
+          <td colspan="2">die vier Backend-Worker konkurrieren beim Start</td>
+          <td>Wahl des Primary. Der lokale Kanal bewirbt sich nie.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ===================================================== Domänen -->
+<section id="domaenen">
+  <div>
+    <div class="path-tag">backend/app/services/</div>
+    <h2>Service-Domänen</h2>
+  </div>
+  <div class="prose">
+    <p>Die Fachlogik liegt in rund 250 Modulen. Einfache Dienste sind eine Datei, größere Gebiete ein Unterverzeichnis. Fast jede Domäne hat ihr Gegenstück in <code>api/routes/</code>, <code>schemas/</code> und <code>models/</code>.</p>
+  </div>
+  <div class="domains">
+    <div class="domain">
+      <h3>Dateien und Speicher</h3>
+      <p>Der NAS-Kern: Datei-Operationen, Besitz, Quota, Freigabelinks, Versionierung.</p>
+      <ul><li>files/</li><li>versioning/</li><li>cache/</li><li>storage_breakdown</li><li>game_libraries/</li></ul>
+    </div>
+    <div class="domain">
+      <h3>Laufwerke</h3>
+      <p>RAID über mdadm, Plattengesundheit über smartctl, Benchmarks mit fio.</p>
+      <ul><li>hardware/raid/</li><li>hardware/smart/</li><li>benchmark/</li><li>disk_monitor</li></ul>
+    </div>
+    <div class="domain">
+      <h3>Energie und Kühlung</h3>
+      <p>CPU-Profile nach Bedarf, Lüfterkurven, Sleep-Automat, geplanter Neustart.</p>
+      <ul><li>power/manager</li><li>power/fan_control</li><li>power/sleep</li><li>power/energy</li><li>power/scheduled_reboot</li></ul>
+    </div>
+    <div class="domain">
+      <h3>Netz und Freigaben</h3>
+      <p>WireGuard-VPN, SMB, NFS, WebDAV, mDNS und die Pi-hole-Anbindung.</p>
+      <ul><li>vpn/</li><li>samba_service</li><li>nfs_service</li><li>webdav_service</li><li>network_discovery</li><li>pihole/</li></ul>
+    </div>
+    <div class="domain">
+      <h3>Identität und Sicherheit</h3>
+      <p>Anmeldung, Token, zweiter Faktor, API-Keys, Rechte und das Audit-Log.</p>
+      <ul><li>auth</li><li>token_service</li><li>totp_service</li><li>api_key_service</li><li>permissions</li><li>step_up</li><li>audit/</li></ul>
+    </div>
+    <div class="domain">
+      <h3>Geräte, Sync und Backup</h3>
+      <p>Kopplung von Handy und Desktop, Sync-Koordination, Sicherungen, Cloud-Import.</p>
+      <ul><li>mobile</li><li>desktop_pairing</li><li>sync/</li><li>backup/</li><li>cloud/</li><li>balupi_handshake</li></ul>
+    </div>
+    <div class="domain">
+      <h3>Beobachtung und Betrieb</h3>
+      <p>Metriken, geplante Jobs, Dienststatus, Benachrichtigungen, Updates, Ersteinrichtung.</p>
+      <ul><li>monitoring/</li><li>scheduler/</li><li>service_status</li><li>notifications/</li><li>status_bar/</li><li>update/</li><li>setup/</li></ul>
+    </div>
+    <div class="domain">
+      <h3>Erweiterung</h3>
+      <p>Installieren, Schalten und Versorgen von Plugins samt Marktplatz.</p>
+      <ul><li>plugin_service</li><li>plugin_marketplace</li><li>plugin_enablement</li><li>plugin_storage_service</li><li>dashboard_panel_bridge</li></ul>
+    </div>
+  </div>
+</section>
+
+<!-- ===================================================== Plugins -->
+<section id="plugins">
+  <div>
+    <div class="path-tag">backend/app/plugins/ · client/src/plugin-runtime/</div>
+    <h2>Plugins: zwei Vertrauensstufen</h2>
+  </div>
+  <div class="prose">
+    <p>Plugins bringen Routen, Hintergrundaufgaben, Dashboard-Panels, Status-Pills und eigene Oberflächen mit. Mitgelieferte Plugins laufen im Host-Prozess. Fremder Code aus dem Marktplatz läuft auf beiden Seiten hinter einem schmalen Kanal: auf dem Server im Subprozess, im Browser im iframe.</p>
+  </div>
+  <figure>
+    <div class="scroll">
+      <svg class="dia dia-mid" viewBox="0 0 1000 292" role="img" aria-label="Plugin-Isolation: Auf dem Server spricht der Host-Prozess mit dem Sandbox-Subprozess über UDS-RPC, im Browser spricht die Web-UI mit dem iframe über postMessage.">
+        <defs>
+          <marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0 0L10 5L0 10z"/></marker>
+        </defs>
+        <text class="t-cap" x="20" y="18">SERVER</text>
+        <rect class="n-proc" x="20" y="28" width="420" height="104" rx="8"/>
+        <text class="t-unit" x="36" y="50">baluhost-backend</text>
+        <rect class="n-chip" x="36" y="64" width="154" height="52" rx="5"/>
+        <text class="t-name" x="48" y="86">PluginManager</text>
+        <text class="t-sub" x="48" y="103">Lifecycle · Routen · Gate</text>
+        <rect class="n-chip" x="206" y="64" width="218" height="52" rx="5"/>
+        <text class="t-name" x="218" y="86">Mitgelieferte Plugins</text>
+        <text class="t-sub" x="218" y="103">im Prozess · volles Vertrauen</text>
+        <path class="edge" d="M440 80H640" marker-start="url(#ah2)" marker-end="url(#ah2)"/>
+        <text class="t-name" x="540" y="70" text-anchor="middle">UDS-RPC</text>
+        <text class="t-lbl" x="540" y="98" text-anchor="middle">Capability-Scopes, sonst nichts</text>
+        <rect class="n-iso" x="640" y="28" width="340" height="104" rx="8"/>
+        <text class="t-name" x="656" y="50">Sandbox-Subprozess</text>
+        <text class="t-sub" x="656" y="74">externes Plugin aus dem Marktplatz</text>
+        <text class="t-sub" x="656" y="92">Benutzer baluhost-plugin, kein sudo</text>
+        <text class="t-sub" x="656" y="110">eigener Netzwerk-Namespace, nur Loopback</text>
+
+        <text class="t-cap" x="20" y="174">BROWSER</text>
+        <rect class="n-ext" x="20" y="184" width="420" height="92" rx="8"/>
+        <text class="t-name" x="36" y="206">Web-UI</text>
+        <rect class="n-chip" x="36" y="218" width="388" height="44" rx="5"/>
+        <text class="t-name" x="48" y="237">PluginSandboxHost</text>
+        <text class="t-sub" x="48" y="253">lib/plugin-sandbox: Nachrichtenbus und Scope-Katalog</text>
+        <path class="edge" d="M440 230H640" marker-start="url(#ah2)" marker-end="url(#ah2)"/>
+        <text class="t-name" x="540" y="220" text-anchor="middle">postMessage-RPC</text>
+        <text class="t-lbl" x="540" y="248" text-anchor="middle">api · toast · storage · navigate</text>
+        <rect class="n-iso" x="640" y="184" width="340" height="92" rx="8"/>
+        <text class="t-name" x="656" y="206">Sandbox-iframe</text>
+        <text class="t-sub" x="656" y="230">plugin-runtime startet die Plugin-Oberfläche</text>
+        <text class="t-sub" x="656" y="248">Theme kommt als Token-Satz vom Host</text>
+      </svg>
+    </div>
+    <figcaption>Dieselbe Form auf beiden Seiten: Der Host behält alle Fähigkeiten, das Plugin bekommt nur, was über den Kanal freigegeben ist.</figcaption>
+  </figure>
+  <div class="tbl tbl-two">
+    <table>
+      <thead><tr><th></th><th>Mitgeliefert</th><th>Extern</th></tr></thead>
+      <tbody>
+        <tr><td>Herkunft</td><td><code>plugins/installed/</code>, im Repo gepflegt</td><td>Marktplatz, installiert nach <code>/var/lib/baluhost/plugins</code></td></tr>
+        <tr><td>Läuft</td><td>als Python im Host-Prozess</td><td>als Subprozess unter eigenem Benutzer</td></tr>
+        <tr><td>Rechte</td><td>Berechtigungen, die der Admin beim Aktivieren bestätigt</td><td>Capability-Scopes, standardmäßig alles verboten</td></tr>
+        <tr><td>Zugriff</td><td>volle Host-API</td><td>kein Import, keine Datenbank, kein Dateisystem, keine Shell</td></tr>
+        <tr><td>Beispiele</td><td><code>audio_control</code>, <code>bluetooth</code>, <code>display_output</code>, <code>optical_drive</code>, <code>steam_gaming</code>, <code>tapo_smart_plug</code></td><td>derzeit keine ausgerollt</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="prose">
+    <p>Der Marktplatz-Index ist die Stelle, an der fremder Code ins System kommt. Deshalb prüft <code>MarketplaceService.get_index()</code> eine abgesetzte ed25519-Signatur über genau die Bytes, die danach geparst werden. Fehlt der Schlüssel, die Signatur oder stimmt sie nicht, wird der Index abgelehnt. Einen unsignierten Ausweichweg gibt es nicht.</p>
+  </div>
+</section>
+
+<!-- ===================================================== Dev / Prod -->
+<section id="modi">
+  <div>
+    <div class="path-tag">NAS_MODE=dev | prod</div>
+    <h2>Derselbe Code in zwei Modi</h2>
+  </div>
+  <div class="prose">
+    <p>Hardware-Services sind gegen ein Protokoll geschrieben und haben zwei Implementierungen. <code>settings.is_dev_mode</code> entscheidet beim Start, welche geladen wird. So läuft die ganze Anwendung auch auf einem Windows-Laptop ohne RAID, Lüfter oder systemd.</p>
+  </div>
+  <div class="tbl tbl-two">
+    <table>
+      <thead><tr><th></th><th>Entwicklung</th><th>Produktion</th></tr></thead>
+      <tbody>
+        <tr><td>Start</td><td><code>python start_dev.py</code>: Backend auf 8000, Vite auf 5173</td><td>fünf systemd-Units hinter nginx</td></tr>
+        <tr><td>Datenbank</td><td>SQLite, Tabellen beim Start angelegt</td><td>PostgreSQL 17, Alembic-Migrationen</td></tr>
+        <tr><td>RAID</td><td><code>DevRaidBackend</code> mit sieben simulierten Platten</td><td><code>MdadmRaidBackend</code> mit echten mdadm-Befehlen</td></tr>
+        <tr><td>Lüfter, CPU, Sleep</td><td>simulierte Backends, keine logind-Locks</td><td>hwmon, cpufreq, logind</td></tr>
+        <tr><td>Speicher</td><td><code>backend/dev-storage/</code>, bei jedem Start neu</td><td>RAID-Mount</td></tr>
+        <tr><td>SHM-Verzeichnis</td><td><code>/dev/shm/baluhost-dev/</code></td><td><code>/dev/shm/baluhost/</code></td></tr>
+        <tr><td>Daten</td><td>Seed-Nutzer und Demo-Dateien</td><td>Setup-Assistent beim ersten Start</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ===================================================== Auslieferung -->
+<section id="auslieferung">
+  <div>
+    <div class="path-tag">.github/workflows/ · deploy/scripts/ci-deploy.sh</div>
+    <h2>Vom Pull Request auf die Maschine</h2>
+  </div>
+  <div class="prose">
+    <p>Fremder Code aus einem Pull Request und der Produktions-Deploy laufen auf getrennten Runnern mit getrennten Rechten. Beide Schritte warten auf eine Freigabe von Hand.</p>
+  </div>
+  <ol class="chain">
+    <li><strong>Pull Request</strong><span><code>ci-check.yml</code> baut das Frontend und fährt die Backend-Tests, auf dem Sandbox-Runner in rootless Podman.</span></li>
+    <li><strong>Merge nach main</strong><span>Von Hand durch den Maintainer, sobald die Checks grün sind.</span></li>
+    <li><strong>Freigabe</strong><span><code>deploy-production.yml</code> hält im Environment <code>production</code> an, bis der Lauf bestätigt ist.</span></li>
+    <li><strong>Deploy</strong><span><code>ci-deploy.sh</code> auf dem Prod-Runner: Code aktualisieren, Unit-Dateien rendern, Dienste neu starten, Health-Check, sonst Rollback.</span></li>
+    <li><strong>Pre-Release-Tag</strong><span><code>v1.38.0-pre.n</code> entsteht erst nach gelungenem Deploy und löst <code>create-release.yml</code> aus.</span></li>
+  </ol>
+</section>
+
+<footer>
+  Erstellt aus dem Stand des Repos am 16.11.2026: Unit-Vorlagen unter <code>deploy/install/templates/</code>, die <code>CLAUDE.md</code>-Dateien der Verzeichnisse und <code>.claude/rules/</code>. Ports, Pfade und Worker-Zahlen sind die Vorgaben der Vorlagen; eine einzelne Installation kann davon abweichen.
+</footer>
+
+</div>
+
+<script>
+(function () {
+  var NODES = {
+    web: {
+      kind: "Client", title: "Web-UI",
+      text: "Die Oberfläche: React 18 mit TypeScript, gebaut mit Vite, gestaltet mit Tailwind. nginx liefert den fertigen Build als statische Dateien aus. Daten holt sie über /api, Benachrichtigungen kommen per WebSocket.",
+      code: ["client/src/App.tsx", "client/src/pages/", "client/src/lib/api.ts"],
+      links: ["HTTPS an nginx, Token als Bearer-Header", "WebSocket unter /api/notifications/ws", "Upload-Fortschritt als Server-Sent Events"]
+    },
+    app: {
+      kind: "Client, eigenes Repo", title: "BaluApp",
+      text: "Native Android-App in Kotlin. Die Kopplung läuft über einen QR-Code, der die WireGuard-Konfiguration gleich mitbringt. Das Backend prüft bei jeder Anfrage Token und Geräte-ID.",
+      code: ["github.com/Xveyn/BaluApp", "backend/app/services/mobile.py", "backend/app/api/routes/mobile.py"],
+      links: ["HTTPS an nginx, von unterwegs durch den VPN-Tunnel", "Push-Nachrichten über Firebase"]
+    },
+    desk: {
+      kind: "Client, eigenes Repo", title: "BaluDesk",
+      text: "Desktop-Sync-Client mit C++-Kern und Electron-Oberfläche. Meldet sich über einen Geräte-Code an und gleicht Ordner über die Sync-API ab. Das Backend kann ihm mitteilen, dass das System schläft.",
+      code: ["github.com/Xveyn/BaluDesk", "backend/app/services/sync/", "backend/app/services/desktop_pairing.py"],
+      links: ["HTTPS an nginx", "Sync-Endpunkte unter /api/sync", "Kopplung über einen Geräte-Code"]
+    },
+    tray: {
+      kind: "Clients auf der Maschine selbst", title: "Tray · TUI",
+      text: "Das Tray sitzt im KDE-Panel, zeigt den Zustand der Box und bringt kritische Meldungen auf den Desktop; es läuft als systemd-User-Unit. Die TUI ist eine Terminal-Oberfläche auf Basis von Textual. Beide sprechen die API ohne Umweg über nginx an.",
+      code: ["backend/baluhost_tray/", "backend/baluhost_tui/", "deploy/install/templates/baluhost-tray.service"],
+      links: ["HTTP an localhost:8000", "Notweg des Trays: systemctl restart mit polkit-Dialog, wenn die API nicht antwortet"]
+    },
+    comp: {
+      kind: "Client auf der Maschine selbst", title: "Companion",
+      text: "Tauri-App mit eingebetteter Webview. Ein kleiner Rust-Proxy lauscht auf 127.0.0.1 und reicht jede Anfrage unverändert an den Unix-Socket weiter. Wer über diesen Kanal kommt, sitzt nachweislich an der Maschine; das schaltet zerstörende Admin-Aktionen frei.",
+      code: ["client/src-tauri/src/proxy.rs", "client/src-tauri/src/lib.rs"],
+      links: ["HTTP an den eigenen Proxy, von dort an /run/baluhost/local.sock", "landet bei baluhost-backend-local"]
+    },
+    dav: {
+      kind: "Client", title: "WebDAV-Client",
+      text: "Windows Explorer, Finder oder jedes andere WebDAV-Programm bindet den Speicher als Laufwerk ein. Angemeldet wird mit Benutzername und Passwort, nicht mit einem Token.",
+      code: ["backend/app/compat/webdav_asgi.py", "backend/app/compat/webdav_provider.py"],
+      links: ["direkt an Port 8080, vorbei an nginx"]
+    },
+    nginx: {
+      kind: "Fremdsoftware", title: "nginx",
+      text: "Der einzige Eingang für die Web-Oberfläche. Beendet TLS auf 443 und leitet 80 dorthin um, liefert die gebaute SPA aus und reicht /api, /docs und die WebSocket-Verbindung an das Backend weiter. Zwei Rate-Limit-Zonen fangen ab, was die App-Schicht nicht selbst begrenzt.",
+      code: ["deploy/nginx/baluhost-https.conf", "deploy/nginx/security-headers.conf"],
+      links: ["Upstream 127.0.0.1:8000", "api_limit 100 Anfragen pro Sekunde, auth_limit 5 pro Minute"]
+    },
+    backend: {
+      kind: "systemd-Unit", title: "baluhost-backend",
+      text: "Die FastAPI-Anwendung unter uvicorn mit vier Worker-Prozessen auf Port 8000. Jeder Worker lädt die ganze App: Middleware, Routen, Services und einen eigenen Listener am WebSocket-Bus. Welcher Worker eine Anfrage bekommt, ist Zufall, deshalb darf kein Zustand nur im Prozess leben.",
+      code: ["backend/app/main.py", "backend/app/api/routes/", "backend/app/services/", "backend/app/core/lifespan.py"],
+      links: ["nginx reicht /api an 127.0.0.1:8000 weiter", "PostgreSQL für alle Daten und den Broadcast-Bus", "liest Live-Metriken aus dem SHM-Verzeichnis", "spricht externe Plugins über UDS-RPC an"]
+    },
+    primary: {
+      kind: "Rolle eines Workers", title: "Primary",
+      text: "Genau einer der vier Worker gewinnt beim Start ein Datei-Lock und wird Primary. Nur er regelt Lüfter und CPU-Takt, führt den Sleep-Automaten, meldet den Host per mDNS an und startet Hintergrundaufgaben von Plugins. Die anderen Worker geben Hardware-Befehle über eine Datenbank-Queue an ihn ab.",
+      code: ["backend/app/core/lifespan.py", "backend/app/services/power/db_command_queue.py", "backend/app/services/power/fan_control.py", "backend/app/services/power/sleep.py"],
+      links: ["Lock unter /tmp/baluhost-primary.lock", "holt Befehle aus power_commands und gpu_power_commands", "veröffentlicht den Sleep-Zustand in sleep_runtime_state"]
+    },
+    monitoring: {
+      kind: "systemd-Unit", title: "baluhost-monitoring",
+      text: "Eigener Prozess für alles, was im Sekundentakt misst: Telemetrie, Disk-I/O, die Collector für CPU, RAM, Netz und Prozesse, Aufräumen alter Messwerte und das Abfragen der Smart-Geräte. Schwellwert-Alarme gehen von hier direkt als Push hinaus.",
+      code: ["backend/scripts/monitoring_worker.py", "backend/app/services/monitoring/orchestrator.py", "backend/app/services/monitoring/shm.py"],
+      links: ["schreibt JSON-Dateien ins SHM-Verzeichnis", "schreibt Messreihen in die Sample-Tabellen", "veröffentlicht auf dem ws_bus, hält aber selbst keine Sockets"]
+    },
+    scheduler: {
+      kind: "systemd-Unit", title: "baluhost-scheduler",
+      text: "Besitzt alle geplanten Jobs: Backup, RAID-Scrub, SMART-Scan, Sync-Prüfung, Benachrichtigungs-Prüfung, Aufräumen abgebrochener Uploads. Schwere Ein- und Ausgabe blockiert so keinen Web-Worker. Die API stößt einen Lauf an, indem sie eine Zeile anlegt; der Worker holt sie ab.",
+      code: ["backend/scripts/scheduler_worker.py", "backend/app/services/scheduler/worker.py", "backend/app/services/scheduler/service.py"],
+      links: ["liest Aufträge aus scheduler_executions", "Heartbeat in scheduler_state", "der geplante Neustart läuft bewusst nicht hier, sondern im Primary"]
+    },
+    local: {
+      kind: "systemd-Unit mit Socket-Unit", title: "baluhost-backend-local",
+      text: "Dieselbe FastAPI-Anwendung ein zweites Mal, mit zwei Workern an einem Unix-Socket statt an einem Port. Eine Middleware markiert jede Anfrage hier mit dem Kanal local. Endpunkte, die physische Anwesenheit verlangen, prüfen genau diese Markierung.",
+      code: ["deploy/install/templates/baluhost-backend-local.socket", "backend/app/middleware/channel_marker.py", "backend/app/api/deps.py"],
+      links: ["Socket /run/baluhost/local.sock, Rechte 0660 für baluhost", "gleiche Datenbank, eigener ws_bus-Listener", "nimmt nicht an der Primary-Wahl teil"]
+    },
+    webdav: {
+      kind: "systemd-Unit", title: "baluhost-webdav",
+      text: "Eigenständiger WSGI-Server: WsgiDAV auf cheroot, Port 8080. Meldet Nutzer per Passwort gegen die users-Tabelle an und sperrt jeden in sein Heimatverzeichnis; Admins sehen den ganzen Speicher. Die Quota meldet er vom RAID, damit Windows die echte Kapazität anzeigt.",
+      code: ["backend/scripts/webdav_worker.py", "backend/app/services/webdav_service.py", "backend/app/compat/"],
+      links: ["liest Nutzer aus PostgreSQL", "schreibt Port, PID und Heartbeat in webdav_state", "arbeitet direkt auf dem Storage"]
+    },
+    sandbox: {
+      kind: "Subprozess je externem Plugin", title: "Plugin-Sandbox",
+      text: "Plugins aus dem Marktplatz laufen nie im Backend. Ein root-eigenes Startskript prüft alle Argumente, wechselt auf den rechtelosen Benutzer baluhost-plugin und sperrt den Prozess in einen eigenen Netzwerk-Namespace. Zum Host führt nur ein Unix-Socket, über den das Plugin einzeln freigegebene Fähigkeiten aufruft.",
+      code: ["backend/app/plugins/sandbox/", "backend/app/plugins/scope_catalog.py", "deploy/install/templates/baluhost-plugin-sudoers"],
+      links: ["UDS-RPC zum Backend", "Scopes vergibt der Admin beim Aktivieren", "ohne eingerichteten Wrapper startet nichts"]
+    },
+    shm: {
+      kind: "geteilter Zustand", title: "/dev/shm/baluhost/",
+      text: "Ein Verzeichnis im Arbeitsspeicher mit einer JSON-Datei je Metrik. Der Monitoring-Worker schreibt, die API-Worker lesen und sparen sich so die Datenbank für Live-Werte. Im Dev-Modus heißt das Verzeichnis baluhost-dev, damit eine Entwicklungsinstanz die Produktion auf derselben Maschine nicht überschreibt.",
+      code: ["backend/app/services/monitoring/shm.py", "backend/app/services/power/http_activity.py"],
+      links: ["Monitoring-Worker leert das Verzeichnis bei Start und Stopp", "API-Worker legen hier zusätzlich ihre Request-Zähler ab"]
+    },
+    pg: {
+      kind: "geteilter Zustand", title: "PostgreSQL 17",
+      text: "Der einzige dauerhafte Speicher und zugleich der Treffpunkt der Prozesse. Neben den Fachtabellen laufen hier der Broadcast-Bus über LISTEN/NOTIFY, die Befehls-Queues an den Primary, die Scheduler-Aufträge und die Heartbeats der Worker.",
+      code: ["backend/app/models/", "backend/alembic/versions/", "backend/app/core/database.py", "backend/app/services/ws_bus.py"],
+      links: ["alle fünf Units verbinden sich", "je API-Prozess eine zusätzliche Listener-Verbindung außerhalb des Pools", "im Dev-Modus ersetzt durch SQLite"]
+    },
+    os: {
+      kind: "Betriebssystem", title: "Linux-Host",
+      text: "Was BaluHost verwaltet, aber nicht selbst ist: das RAID, die Platten, die Lüfter, der Energiezustand, der VPN-Tunnel, die Dateifreigaben. Zugriff läuft über subprocess mit Argumentlisten und über sysfs. Wo root nötig ist, erlaubt eine sudoers-Zeile genau einen Befehl.",
+      code: ["backend/app/services/hardware/", "backend/app/services/power/", "backend/app/services/vpn/", "deploy/install/templates/"],
+      links: ["mdadm, smartctl, systemctl, wg, rclone", "Samba und NFS laufen als eigene Dienste; BaluHost schreibt ihre Konfiguration"]
+    },
+    ext: {
+      kind: "außerhalb der Maschine", title: "Externe Dienste",
+      text: "BaluHost baut nur ausgehende Verbindungen auf. Firebase bringt Push-Nachrichten aufs Handy. Der Plugin-Marktplatz liefert einen signierten Index. rclone holt und schreibt Cloud-Daten. Im Heimnetz spricht das Backend mit der FritzBox für Wake-on-LAN, mit Pi-hole und mit Tapo-Steckdosen. BaluPi ist ein Begleitgerät, das beim Hoch- und Herunterfahren benachrichtigt wird.",
+      code: ["backend/app/services/notifications/", "backend/app/services/plugin_marketplace.py", "backend/app/services/cloud/", "backend/app/services/pihole/"],
+      links: ["Index-Signatur wird vor dem Parsen geprüft", "Zugangsdaten der Smart-Geräte liegen verschlüsselt in der Datenbank"]
+    }
+  };
+
+  var elKind = document.getElementById("d-kind");
+  var elTitle = document.getElementById("d-title");
+  var elText = document.getElementById("d-text");
+  var elCode = document.getElementById("d-code");
+  var elLinks = document.getElementById("d-links");
+  var nodes = document.querySelectorAll(".node");
+
+  function fill(list, items, asCode) {
+    while (list.firstChild) list.removeChild(list.firstChild);
+    items.forEach(function (item) {
+      var li = document.createElement("li");
+      if (asCode) {
+        var c = document.createElement("code");
+        c.textContent = item;
+        li.appendChild(c);
+      } else {
+        li.textContent = item;
+      }
+      list.appendChild(li);
+    });
+  }
+
+  function show(id) {
+    var n = NODES[id];
+    if (!n) return;
+    elKind.textContent = n.kind;
+    elTitle.textContent = n.title;
+    elText.textContent = n.text;
+    fill(elCode, n.code, true);
+    fill(elLinks, n.links, false);
+    nodes.forEach(function (g) {
+      g.setAttribute("aria-pressed", g.getAttribute("data-id") === id ? "true" : "false");
+    });
+  }
+
+  nodes.forEach(function (g) {
+    var id = g.getAttribute("data-id");
+    g.addEventListener("click", function () { show(id); });
+    g.addEventListener("keydown", function (e) {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); show(id); }
+    });
+  });
+})();
+</script>
