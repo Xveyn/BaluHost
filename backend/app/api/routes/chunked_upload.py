@@ -20,8 +20,7 @@ and file name again before it moves anything.
 
 import asyncio
 import logging
-import shutil
-from pathlib import Path, PurePosixPath
+from pathlib import PurePosixPath
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel
@@ -32,7 +31,12 @@ from app.core.database import get_db
 from app.core.exceptions import InsufficientStorageError
 from app.schemas.user import UserPublic
 from app.services import upload_activity
-from app.services.files.chunked_upload import ChunkedUploadSession, get_chunked_upload_manager
+from app.services.files.chunked_upload import (
+    ChunkedUploadSession,
+    CompletedUpload,
+    get_chunked_upload_manager,
+    move_completed_upload,
+)
 from app.services.files.operations import (
     ROOT_DIR,
     FileAccessError,
@@ -42,10 +46,7 @@ from app.services.files.operations import (
     get_owner,
     is_in_shared_dir,
 )
-from app.services.files.storage_permissions import (
-    ensure_dir_with_permissions,
-    set_storage_file_permissions,
-)
+from app.services.files.storage_permissions import ensure_dir_with_permissions
 from app.services.permissions import PermissionDeniedError, ensure_owner_or_privileged
 from app.services.upload_progress import get_upload_progress_manager
 from app.core.rate_limiter import user_limiter, get_limit
@@ -275,16 +276,17 @@ async def _finalise(
     """
     mgr = get_chunked_upload_manager()
     try:
-        temp_path, file_checksum = await mgr.complete_session(upload_id)
+        completed = await mgr.complete_session_checked(upload_id)
     except (ValueError, FileNotFoundError) as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
     try:
-        return await _move_into_place(upload_id, user, target_path, filename, temp_path, file_checksum)
+        return await _move_into_place(upload_id, user, target_path, filename, completed)
     finally:
         # Moved on success. After a failure nothing refers to the data any
         # more — the session is closed — so it goes now, not with the janitor.
-        await asyncio.to_thread(lambda: temp_path.unlink(missing_ok=True))
+        # unlink removes what is at the path itself, never a link's target.
+        await asyncio.to_thread(lambda: completed.temp_path.unlink(missing_ok=True))
 
 
 async def _move_into_place(
@@ -292,17 +294,18 @@ async def _move_into_place(
     user: UserPublic,
     target_path: str,
     filename: str,
-    temp_path: Path,
-    file_checksum: str,
+    completed: CompletedUpload,
 ) -> ChunkedCompleteResponse:
     """Move the received file to its destination; metadata, audit, VCL."""
+    temp_path = completed.temp_path
+    file_checksum = completed.sha256_hex
     # --- Move temp file to final destination ---
     target_dir = _resolve_path(target_path)
     ensure_dir_with_permissions(target_dir)
     destination = target_dir / filename
     ensure_dir_with_permissions(destination.parent)
 
-    file_size = await asyncio.to_thread(lambda: temp_path.stat().st_size)
+    file_size = completed.size
 
     # Final space check (another upload could have consumed space in between)
     available = await calculate_available_bytes_async()
@@ -316,8 +319,12 @@ async def _move_into_place(
             f"Not enough space. Need {needed} bytes, available {available}."
         )
 
-    await asyncio.to_thread(shutil.move, str(temp_path), str(destination))
-    await asyncio.to_thread(set_storage_file_permissions, destination)
+    # Moves the file `complete` checked, or nothing: the upload directory is
+    # writable by others, and the path could name something else by now.
+    try:
+        await asyncio.to_thread(move_completed_upload, completed, destination)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
     relative_destination = str(destination.relative_to(ROOT_DIR).as_posix())
 

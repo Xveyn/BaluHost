@@ -29,6 +29,10 @@ share it), so a session file is input, not a credential:
   lower-case UUID is ever turned into a path;
 - every field is type-checked on load, a malformed file is an unknown session;
 - neither the session file nor the data file is ever opened through a symlink;
+- `complete` pins the data file it checked and hashed (device + inode);
+  `move_completed_upload()` moves that file or nothing — whatever was put in
+  its place in between does not reach the destination, and the permissions
+  are set on the open file, not on a path;
 - the route re-derives authorization from the authenticated user at every
   step, and validates target and file name again before it moves the file
   (`routes/chunked_upload.py`).
@@ -37,11 +41,13 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import errno
 import hashlib
 import json
 import logging
 import os
 import re
+import shutil
 import stat
 import tempfile
 import threading
@@ -113,6 +119,84 @@ def _append_to_data_file(path: Path, parts: Sequence[bytes]) -> int:
     if not existed:
         _chmod(path, STORAGE_FILE_MODE)  # os.open applied the umask
     return written
+
+
+@dataclass(frozen=True)
+class CompletedUpload:
+    """The data file of a closed session, pinned to the file that was checked.
+
+    `device` and `inode` identify the regular file `complete` verified and
+    hashed. The path alone would not: it sits in a directory others can write
+    to, and could name something else by the time the file is moved.
+    """
+    temp_path: Path
+    sha256_hex: str
+    size: int
+    device: int
+    inode: int
+
+
+def _set_file_mode(fd: int, path: Path) -> None:
+    """Storage file mode on the open file — never on a path, which could be a
+    link by now. Skipped quietly where it is not ours to change."""
+    try:
+        if hasattr(os, "fchmod"):
+            os.fchmod(fd, STORAGE_FILE_MODE)
+    except OSError as exc:
+        logger.debug("fchmod on %s failed: %s", path, exc)
+
+
+def _copy_into_place(src_fd: int, destination: Path) -> None:
+    """Copy the open file to *destination* (another filesystem), atomically."""
+    fd, tmp_path = tempfile.mkstemp(dir=str(destination.parent), prefix=".upload-", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "wb") as dst, os.fdopen(os.dup(src_fd), "rb") as src:
+            src.seek(0)
+            shutil.copyfileobj(src, dst, _HASH_READ_SIZE)
+            dst.flush()
+            _set_file_mode(dst.fileno(), destination)
+        os.replace(tmp_path, destination)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.unlink(tmp_path)
+        raise
+
+
+def move_completed_upload(completed: CompletedUpload, destination: Path) -> None:
+    """Move the file `complete` checked to *destination*, or nothing (blocking).
+
+    Raises ``ValueError`` if the data file is no longer the one that was
+    checked — replaced by a link or by another file. On the same filesystem
+    this is a rename; what the rename actually moved is compared with the open
+    file afterwards, so a swap in the last instant is undone, not delivered.
+    """
+    changed = ValueError("Upload data changed after it was checked; not moved")
+    try:
+        fd = os.open(completed.temp_path, os.O_RDONLY | _O_NOFOLLOW)
+    except OSError as exc:
+        raise changed from exc
+    try:
+        st = os.fstat(fd)
+        if not stat.S_ISREG(st.st_mode) \
+                or (st.st_dev, st.st_ino) != (completed.device, completed.inode):
+            raise changed
+        try:
+            os.replace(completed.temp_path, destination)
+        except OSError as exc:
+            if exc.errno != errno.EXDEV:
+                raise
+            _copy_into_place(fd, destination)
+            with contextlib.suppress(OSError):
+                os.unlink(completed.temp_path)
+            return
+        moved = os.lstat(destination)
+        if (moved.st_dev, moved.st_ino) != (st.st_dev, st.st_ino):
+            with contextlib.suppress(OSError):
+                os.unlink(destination)  # the thing itself; never its target
+            raise changed
+        _set_file_mode(fd, destination)
+    finally:
+        os.close(fd)
 
 
 @dataclass
@@ -324,13 +408,14 @@ class ChunkedUploadManager:
             seen += len(part)
         self._running_hashes[upload_id] = (hasher, seen)
 
-    def _checksum(self, session: ChunkedUploadSession) -> str:
+    def _checksum(self, session: ChunkedUploadSession, fd: int) -> str:
+        """SHA-256 of the session's data; *fd* is the open, verified data file."""
         entry = self._running_hashes.get(session.upload_id)
         if entry is not None and entry[1] == session.received_bytes:
             return entry[0].hexdigest()
         hasher = hashlib.sha256()
-        fd = os.open(session.temp_file_path, os.O_RDONLY | _O_NOFOLLOW)
-        with os.fdopen(fd, "rb") as f:
+        with os.fdopen(os.dup(fd), "rb") as f:
+            f.seek(0)
             while block := f.read(_HASH_READ_SIZE):
                 hasher.update(block)
         return hasher.hexdigest()
@@ -463,43 +548,69 @@ class ChunkedUploadManager:
         async with self._get_user_semaphore(session.user_id):
             return await asyncio.to_thread(self._write_locked, upload_id, chunk_index, parts)
 
-    def _complete_locked(self, upload_id: str) -> tuple[Path, str, ChunkedUploadSession]:
+    def _complete_locked(self, upload_id: str) -> tuple[CompletedUpload, ChunkedUploadSession]:
         with self._locked(upload_id) as held:
             session = self._load(upload_id) if held else None
             if session is None:
                 raise ValueError(f"Unknown upload session: {upload_id}")
+            # One open, never through a link; everything below — the check,
+            # the hash, the identity handed to the mover — is about THIS file.
             try:
-                mode = os.lstat(session.temp_file_path).st_mode
-            except OSError:
+                fd = os.open(session.temp_file_path, os.O_RDONLY | _O_NOFOLLOW)
+            except FileNotFoundError:
                 self._remove_files(upload_id)
                 raise FileNotFoundError(f"Temp file missing for session {upload_id}") from None
-            if not stat.S_ISREG(mode):
-                # Moving a link into the user's folder would hand out read
-                # access to whatever it points at.
+            except OSError:
+                # A link where the data file belongs (ELOOP). Moving it into
+                # the user's folder would hand out read access to its target.
                 self._remove_files(upload_id)
-                raise ValueError(f"Temp file of session {upload_id} is not a regular file")
-            sha256_hex = self._checksum(session)
+                raise ValueError(
+                    f"Temp file of session {upload_id} is not a regular file"
+                ) from None
+            try:
+                st = os.fstat(fd)
+                if not stat.S_ISREG(st.st_mode):
+                    self._remove_files(upload_id)
+                    raise ValueError(f"Temp file of session {upload_id} is not a regular file")
+                completed = CompletedUpload(
+                    temp_path=session.temp_file_path,
+                    sha256_hex=self._checksum(session, fd),
+                    size=st.st_size,
+                    device=st.st_dev,
+                    inode=st.st_ino,
+                )
+            finally:
+                os.close(fd)
             self._remove_files(upload_id, keep_data=True)
-            return session.temp_file_path, sha256_hex, session
+            return completed, session
 
-    async def complete_session(self, upload_id: str) -> tuple[Path, str]:
-        """Finalise the upload: return the temp file path and SHA-256 hex digest.
+    async def complete_session_checked(self, upload_id: str) -> CompletedUpload:
+        """Finalise the upload and pin its data file.
 
-        The caller (route layer) is responsible for moving the file to its
-        final destination, creating metadata, and audit logging.
-        After calling this the session is removed; the data file stays.
+        The caller (route layer) moves the file with `move_completed_upload()`
+        and is responsible for metadata and audit logging. After calling this
+        the session is removed; the data file stays.
 
         The digest comes from the running hash if this process received every
         chunk, otherwise from one read of the file.
         """
         if not _is_upload_id(upload_id):
             raise ValueError(f"Unknown upload session: {upload_id}")
-        temp_path, sha256_hex, session = await asyncio.to_thread(self._complete_locked, upload_id)
+        completed, session = await asyncio.to_thread(self._complete_locked, upload_id)
         logger.info(
             "Chunked upload completed: id=%s file=%s bytes=%d",
             upload_id, session.filename, session.received_bytes,
         )
-        return temp_path, sha256_hex
+        return completed
+
+    async def complete_session(self, upload_id: str) -> tuple[Path, str]:
+        """`complete_session_checked()` as (temp file path, SHA-256 hex digest).
+
+        For callers that only look at the result. To move the file, use the
+        checked variant: a bare path does not say which file was checked.
+        """
+        completed = await self.complete_session_checked(upload_id)
+        return completed.temp_path, completed.sha256_hex
 
     def _abort_locked(self, upload_id: str) -> bool:
         with self._locked(upload_id) as held:
