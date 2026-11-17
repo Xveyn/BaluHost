@@ -284,6 +284,21 @@ def isolate_foreign_inhibitors() -> Generator[None, None, None]:
 
 
 @pytest.fixture(autouse=True)
+def _forget_reported_uploads() -> Generator[None, None, None]:
+    """Drop this process's upload reports after each test (#834).
+
+    Every upload session a test creates is reported to the process-wide
+    `upload_activity` tracker and counts as running for ten minutes unless
+    the test finishes it. Left there, a later test asking "is the system
+    idle" or reading the status bar would see an upload nobody is making.
+    """
+    yield
+    from app.services import upload_activity
+
+    upload_activity._tracker.reset()
+
+
+@pytest.fixture(autouse=True)
 def _forget_published_sleep_state() -> Generator[None, None, None]:
     """Drop the primary's published sleep state after each test (#823).
 

@@ -78,3 +78,77 @@ def test_failed_publish_returns_false():
     session = sessionmaker(bind=engine)()
 
     assert store.publish_state(session, SleepState.AWAKE, None) is False
+
+
+# ─── Statusdetails (#834) ────────────────────────────────────────────
+
+
+def test_snapshot_of_nothing_published_is_unknown(db):
+    assert store.read_snapshot(db) is None
+
+
+def test_details_round_trip(db):
+    details = store.SleepRuntimeDetails(
+        idle_seconds=450.0,
+        paused_services=["monitoring_orchestrator", "disk_io_monitor"],
+        spun_down_disks=["/dev/sda"],
+    )
+
+    assert store.publish_state(db, SleepState.SOFT_SLEEP, None, details) is True
+
+    snap = store.read_snapshot(db)
+    assert snap.state is SleepState.SOFT_SLEEP
+    assert snap.idle_seconds == 450.0
+    assert snap.paused_services == ["monitoring_orchestrator", "disk_io_monitor"]
+    assert snap.spun_down_disks == ["/dev/sda"]
+
+
+def test_publish_without_details_reads_as_empty_details(db):
+    store.publish_state(db, SleepState.AWAKE, None)
+
+    snap = store.read_snapshot(db)
+    assert (snap.idle_seconds, snap.paused_services, snap.spun_down_disks) == (0.0, [], [])
+
+
+def test_publish_without_details_clears_older_details(db):
+    """Jede Veroeffentlichung ist der ganze Stand -- nichts bleibt von der
+    vorigen stehen."""
+    store.publish_state(
+        db, SleepState.SOFT_SLEEP, None,
+        store.SleepRuntimeDetails(spun_down_disks=["/dev/sda"]),
+    )
+    store.publish_state(db, SleepState.AWAKE, None)
+
+    assert store.read_snapshot(db).spun_down_disks == []
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "{not json",
+        "[]",
+        '"text"',
+        '{"idle_seconds": "viel", "paused_services": "x", "spun_down_disks": 3}',
+        '{"paused_services": [1, null, "ok"]}',
+    ],
+)
+def test_unreadable_details_cost_the_details_not_the_state(db, raw):
+    store.publish_state(db, SleepState.SOFT_SLEEP, None)
+    db.get(SleepRuntimeState, 1).details_json = raw
+    db.commit()
+
+    snap = store.read_snapshot(db)
+
+    assert snap.state is SleepState.SOFT_SLEEP
+    assert snap.idle_seconds == 0.0
+    assert all(isinstance(s, str) for s in snap.paused_services)
+    assert snap.spun_down_disks == []
+
+
+def test_read_state_still_returns_state_and_since(db):
+    since = datetime(2026, 11, 17, 12, 0, tzinfo=timezone.utc)
+    store.publish_state(
+        db, SleepState.SOFT_SLEEP, since, store.SleepRuntimeDetails(idle_seconds=5.0),
+    )
+
+    assert store.read_state(db) == (SleepState.SOFT_SLEEP, since)

@@ -153,3 +153,74 @@ async def test_cleanup_after_completion():
     await asyncio.sleep(0.2)
 
     progress = manager.get_progress(upload_id)
+
+
+# ─── Sessions always end (#834) ──────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_fail_unfinished_fails_only_sessions_still_uploading():
+    manager = get_upload_progress_manager()
+    running = manager.create_upload_session("running.bin", 10)
+    done = manager.create_upload_session("done.bin", 10)
+    failed = manager.create_upload_session("failed.bin", 10)
+    await manager.complete_upload(done)
+    await manager.fail_upload(failed, "first error")
+    # Keep the finished ones for the assertions below (dev mode cleans up at once).
+    kept = {uid: manager.get_progress(uid) for uid in (done, failed)}
+
+    await manager.fail_unfinished([running, done, failed, "unknown-id"], "Upload failed")
+
+    assert manager.get_progress(running).status == "failed"
+    assert manager.get_progress(running).error == "Upload failed"
+    assert kept[done].status == "completed"
+    assert kept[failed].error == "first error"
+
+
+@pytest.mark.asyncio
+async def test_stalled_session_is_dropped_when_the_next_one_starts():
+    manager = get_upload_progress_manager()
+    now = [1000.0]
+    manager._monotonic = lambda: now[0]
+    stalled = manager.create_upload_session("abandoned.bin", 10)
+    listener = await manager.subscribe(stalled)
+    await listener.get()  # the current state, sent on subscribe
+
+    now[0] += manager.STALLED_AFTER_SECONDS + 1
+    fresh = manager.create_upload_session("new.bin", 10)
+
+    assert manager.get_progress(stalled) is None
+    assert manager.get_progress(fresh) is not None
+    assert await listener.get() is None  # the stream is told it is over
+    assert stalled not in manager._touched
+
+
+@pytest.mark.asyncio
+async def test_session_with_recent_progress_is_not_stalled():
+    manager = get_upload_progress_manager()
+    now = [1000.0]
+    manager._monotonic = lambda: now[0]
+    slow = manager.create_upload_session("slow.bin", 100)
+
+    now[0] += manager.STALLED_AFTER_SECONDS - 10
+    await manager.update_progress(slow, 50)
+    now[0] += manager.STALLED_AFTER_SECONDS - 10  # long since the start, not since the update
+    manager.create_upload_session("new.bin", 10)
+
+    assert manager.get_progress(slow).status == "uploading"
+
+
+@pytest.mark.asyncio
+async def test_finished_session_is_not_treated_as_stalled():
+    """A finished session waits for its own cleanup; the stall rule is for
+    "uploading" only."""
+    manager = get_upload_progress_manager()
+    now = [1000.0]
+    manager._monotonic = lambda: now[0]
+    done = manager.create_upload_session("done.bin", 10)
+    manager._progress[done].status = "completed"
+
+    now[0] += manager.STALLED_AFTER_SECONDS + 1
+    manager.create_upload_session("new.bin", 10)
+
+    assert manager.get_progress(done) is not None

@@ -487,9 +487,7 @@ async def test_power_pill_dynamic_mode_no_config():
 @pytest.mark.asyncio
 async def test_collect_uploads_counts_active():
     from app.services.status_bar import collectors
-    p1 = MagicMock(status="uploading"); p2 = MagicMock(status="done")
-    mgr = MagicMock(); mgr._progress = {"a": p1, "b": p2}
-    with patch("app.services.upload_progress.get_upload_progress_manager", return_value=mgr):
+    with patch("app.services.upload_activity.active_uploads", return_value=1):
         result = await collectors.collect_uploads(MagicMock(), "admin")
     assert result["label_key"] == "pills.uploads.live"
     assert result["value"] == "1"

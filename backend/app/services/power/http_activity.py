@@ -13,18 +13,18 @@ traffic less than two seconds after its last write never reach the file;
 that undercount is bounded and accepted in exchange for not writing on every
 request.
 
-Nothing here may ever fail a request: every SHM error is swallowed.
+Nothing here may ever fail a request: every SHM error is swallowed. The file
+mechanics are shared with the upload counter (`services/shm_process_files.py`).
 """
 from __future__ import annotations
 
-import json
 import logging
 import os
-import re
-import tempfile
 import time
 from pathlib import Path
 from typing import Callable, Optional
+
+from app.services.shm_process_files import read_other_process_files, write_process_file
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +35,6 @@ WRITE_INTERVAL_SECONDS = 2.0
 STALE_FILE_SECONDS = 600.0
 
 _FILE_PREFIX = "http_activity_"
-_FILE_NAME_RE = re.compile(r"http_activity_\d+\.json")
 
 
 def _default_shm_dir() -> Path:
@@ -103,27 +102,12 @@ class HttpActivityCounter:
             logger.debug("HTTP activity record failed: %s", exc)
 
     def _write(self, now: float) -> None:
-        directory = self._dir()
         payload = {
             "pid": self._current_pid(),
             "written_at": now,
             "buckets": {str(b): n for b, n in self._buckets.items()},
         }
-        try:
-            directory.mkdir(parents=True, exist_ok=True)
-            fd, tmp_path = tempfile.mkstemp(dir=str(directory), suffix=".tmp")
-            try:
-                with os.fdopen(fd, "w") as f:
-                    json.dump(payload, f)
-                os.replace(tmp_path, str(directory / f"{_FILE_PREFIX}{self._current_pid()}.json"))
-            except BaseException:
-                try:
-                    os.unlink(tmp_path)
-                except OSError:
-                    pass
-                raise
-        except Exception as exc:
-            logger.debug("HTTP activity write failed: %s", exc)
+        write_process_file(self._dir(), _FILE_PREFIX, self._current_pid(), payload)
 
     # --- read side ---
 
@@ -138,31 +122,14 @@ class HttpActivityCounter:
         return float(total)
 
     def _count_other_processes(self, now: float) -> int:
-        directory = self._dir()
-        own_name = f"{_FILE_PREFIX}{self._current_pid()}.json"
         total = 0
-        try:
-            entries = list(directory.iterdir())
-        except OSError:
-            return 0
-        for path in entries:
-            name = path.name
-            if not _FILE_NAME_RE.fullmatch(name) or name == own_name:
-                continue
+        for data in read_other_process_files(
+            self._dir(), _FILE_PREFIX, self._current_pid(), now, STALE_FILE_SECONDS,
+        ):
             try:
-                if path.is_symlink():
-                    # We only ever write regular files; never follow a link
-                    # out of the directory, neither to read nor to judge age.
-                    continue
-                if now - path.stat().st_mtime > STALE_FILE_SECONDS:
-                    # Left behind by a process that is gone. Best effort.
-                    path.unlink(missing_ok=True)
-                    continue
-                with open(path, "r") as f:
-                    data = json.load(f)
                 buckets = {int(b): int(n) for b, n in data["buckets"].items()}
             except Exception as exc:
-                logger.debug("Ignoring unreadable %s: %s", name, exc)
+                logger.debug("Ignoring malformed HTTP activity file: %s", exc)
                 continue
             total += self._count_recent(buckets, now)
         return total

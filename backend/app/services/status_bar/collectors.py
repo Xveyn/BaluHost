@@ -73,16 +73,18 @@ async def collect_pihole(db: Session, role: str) -> Optional[dict]:
 # ── uploads ──────────────────────────────────────────────────────────
 @_safe()
 async def collect_uploads(db: Session, role: str) -> Optional[dict]:
-    from app.services.upload_progress import get_upload_progress_manager
-    mgr = get_upload_progress_manager()
-    active = [p for p in mgr._progress.values() if getattr(p, "status", None) == "uploading"]
+    # Across all API processes, and bounded in time: the pill used to show
+    # only the uploads of the worker that answered, and an upload nobody
+    # finished stayed there until that worker restarted (#834).
+    from app.services import upload_activity
+    active = upload_activity.active_uploads()
     if not active:
         return None
     return {
         "kind": "activity",
         "tone": "info",
         "label_key": "pills.uploads.live",
-        "value": str(len(active)),
+        "value": str(active),
         "icon": "Upload",
     }
 
