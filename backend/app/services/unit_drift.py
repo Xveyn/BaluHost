@@ -20,8 +20,10 @@ This check reads the box's actual state instead:
      that also catches a drop-in overriding a correct unit file,
   3. any drop-ins at all, and ``NeedDaemonReload=yes``.
 
-Only the units module 10 manages are checked. ``baluhost-backend-local`` is
-left out until its template is fixed and an installer path exists (#717).
+Checked are the four core units module 10 always installs, and the local
+channel's pair (``baluhost-backend-local.service`` + ``.socket``, #717) where
+it is installed. The pair is optional: a box without it passes; a box with
+only one of the two is told so.
 """
 from __future__ import annotations
 
@@ -39,6 +41,13 @@ MANAGED_UNITS = (
     "baluhost-scheduler",
     "baluhost-webdav",
     "baluhost-monitoring",
+)
+
+#: The local channel: socket-activated service plus its socket. Optional —
+#: must match ``OPTIONAL_UNIT_FILES`` in module 10 and install-systemd-units.sh.
+OPTIONAL_UNIT_FILES = (
+    "baluhost-backend-local.service",
+    "baluhost-backend-local.socket",
 )
 
 _SHOW_PROPERTIES = ("LoadState", "FragmentPath", "DropInPaths", "NeedDaemonReload",
@@ -70,6 +79,12 @@ def parse_show_argv(value: str) -> list[list[str]]:
     return [shlex.split(m) for m in _ARGV_RE.findall(value)]
 
 
+def unit_file_name(unit: str) -> str:
+    """File name of *unit*: core units are named without suffix, the optional
+    files with theirs."""
+    return unit if unit.endswith((".service", ".socket")) else f"{unit}.service"
+
+
 def _normalize(text: str) -> list[str]:
     lines = [line.rstrip() for line in text.splitlines()]
     while lines and not lines[-1]:
@@ -78,8 +93,12 @@ def _normalize(text: str) -> list[str]:
 
 
 def _check_unit(unit: str, expected: str, show: dict[str, str],
-                read_file: Callable[[str], str]) -> tuple[list[str], bool]:
-    """Return ``(warn lines, needs_rerender)`` for one unit."""
+                read_file: Callable[[str], str],
+                has_exec_start: bool = True) -> tuple[list[str], bool]:
+    """Return ``(warn lines, needs_rerender)`` for one unit.
+
+    *has_exec_start* is False for a socket unit: it runs no command.
+    """
     if show.get("LoadState") != "loaded" or not show.get("FragmentPath"):
         return [f"WARN: {unit}: not installed (LoadState={show.get('LoadState', '?')})"], True
 
@@ -98,13 +117,14 @@ def _check_unit(unit: str, expected: str, show: dict[str, str],
         if len(diff) > _MAX_DIFF_LINES:
             warns.append(f"    … {len(diff) - _MAX_DIFF_LINES} more diff lines")
 
-    want = parse_exec_start(expected)
-    running = parse_show_argv(show.get("ExecStart", ""))
-    if running != [want]:
-        warns.append(f"WARN: {unit}: effective ExecStart differs from template")
-        warns.append(f"    template: {shlex.join(want)}")
-        for argv in running or [[]]:
-            warns.append(f"    systemd:  {shlex.join(argv) or '(none)'}")
+    if has_exec_start:
+        want = parse_exec_start(expected)
+        running = parse_show_argv(show.get("ExecStart", ""))
+        if running != [want]:
+            warns.append(f"WARN: {unit}: effective ExecStart differs from template")
+            warns.append(f"    template: {shlex.join(want)}")
+            for argv in running or [[]]:
+                warns.append(f"    systemd:  {shlex.join(argv) or '(none)'}")
 
     dropins = show.get("DropInPaths", "").split()
     if dropins:
@@ -153,9 +173,33 @@ def check_units(
             warns, needs = [f"WARN: {unit}: check failed: {exc}"], False
         lines.extend(warns)
         rerender = rerender or needs
+    checked = len(MANAGED_UNITS)
+
+    # The local channel is optional. Installed means: systemd has at least one
+    # of its two files — then both are held against their templates, and a
+    # missing half is reported like any missing unit.
+    try:
+        optional_shows = {name: systemctl_show(name) for name in OPTIONAL_UNIT_FILES}
+    except Exception as exc:  # noqa: BLE001 - smoke-check must not crash
+        lines.append(f"WARN: local channel units: check failed: {exc}")
+        optional_shows = {}
+    if any(show.get("LoadState") == "loaded" and show.get("FragmentPath")
+           for show in optional_shows.values()):
+        for name in OPTIONAL_UNIT_FILES:
+            try:
+                expected = render_template(read_template(name), values)
+                warns, needs = _check_unit(
+                    name, expected, optional_shows[name], read_file,
+                    has_exec_start=name.endswith(".service"),
+                )
+            except Exception as exc:  # noqa: BLE001 - one unit must not hide the others
+                warns, needs = [f"WARN: {name}: check failed: {exc}"], False
+            lines.extend(warns)
+            rerender = rerender or needs
+        checked += len(OPTIONAL_UNIT_FILES)
 
     if not lines:
-        return [f"PASS: {len(MANAGED_UNITS)} systemd units match their templates"]
+        return [f"PASS: {checked} systemd units match their templates"]
     if rerender:
         lines.append("WARN: fix: sudo bash "
                      f"{install_dir}/deploy/scripts/install-systemd-units.sh"
@@ -164,7 +208,7 @@ def check_units(
 
 
 def _systemctl_show(unit: str) -> dict[str, str]:
-    args = ["systemctl", "show", f"{unit}.service"]
+    args = ["systemctl", "show", unit_file_name(unit)]
     for prop in _SHOW_PROPERTIES:
         args += ["-p", prop]
     result = subprocess.run(args, capture_output=True, text=True, timeout=10, check=True)
@@ -185,7 +229,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
         for line in check_units(
             install_dir=args.install_dir,
-            read_template=lambda unit: (template_dir / f"{unit}.service").read_text(encoding="utf-8"),
+            read_template=lambda unit: (template_dir / unit_file_name(unit)).read_text(encoding="utf-8"),
             read_file=lambda path: Path(path).read_text(encoding="utf-8"),
             systemctl_show=_systemctl_show,
         ):

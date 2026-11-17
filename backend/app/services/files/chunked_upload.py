@@ -22,8 +22,11 @@ overtaking it and leaving a temp file behind.
 
 What the session file may decide
 --------------------------------
-Nothing that needs trust. The directory is group-writable (two service users
-share it), so a session file is input, not a credential:
+Nothing that needs trust. The upload directory is not private to this code:
+it is group-writable (mode 2775, group `settings.storage_group`), and the
+Samba share of the admins covers the whole storage root — a NAS admin can put
+files there over SMB, as the service user. So a session file is input, not a
+credential:
 
 - the upload id comes from the URL and becomes a file name — only a canonical
   lower-case UUID is ever turned into a path;
