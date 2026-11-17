@@ -617,6 +617,22 @@ def _record_version_if_primary() -> None:
         version_tracker.record_version_on_startup(version_db)
 
 
+def _start_chunked_upload_cleanup_if_primary() -> None:
+    """Start the janitor for abandoned chunked uploads — primary worker only.
+
+    Chunked upload sessions are files in a directory every API process shares
+    (`services/files/chunked_upload.py`); one process cleaning it is enough.
+    The loop used to be started nowhere, so an upload whose client went away
+    kept its temp file until the service restarted. Must be called after
+    `_try_become_primary()`.
+    """
+    if not IS_PRIMARY_WORKER:
+        return
+    from app.services.files.chunked_upload import get_chunked_upload_manager
+
+    get_chunked_upload_manager().start_cleanup_loop()
+
+
 async def _startup(app: FastAPI) -> None:
     """Run all startup initialization steps."""
     global _discovery_service, _websocket_manager, _plugin_manager, IS_PRIMARY_WORKER
@@ -679,6 +695,9 @@ async def _startup(app: FastAPI) -> None:
 
     # Record current version in database
     _record_version_if_primary()
+
+    # Janitor for abandoned chunked uploads (shared directory, one cleaner)
+    _start_chunked_upload_cleanup_if_primary()
 
     # Lifecycle notification: emit startup with downtime context
     await _emit_lifecycle_startup()

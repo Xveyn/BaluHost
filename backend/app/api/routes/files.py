@@ -762,6 +762,12 @@ async def upload_files(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     except file_service.FileAccessError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
+    finally:
+        # Every way out of save_uploads — the errors above, any other, a
+        # cancelled request: no progress session of this request may stay
+        # "uploading". It did, until the worker restarted, whenever
+        # save_uploads raised before its own first fail_upload (#834).
+        await progress_manager.fail_unfinished(upload_ids, "Upload failed")
 
     # Emit plugin hooks for uploaded files
     for saved_file in saved:

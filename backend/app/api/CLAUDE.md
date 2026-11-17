@@ -9,6 +9,7 @@ REST API endpoints for BaluHost. All routes are registered in `routes/__init__.p
 - `routes/` — One file per feature domain (~65 route modules)
   - `auth.py` — Auth endpoints. Recovery-code routes: `POST /recovery-codes` (step-up: TOTP if 2FA on, else current-password), `GET /recovery-codes/status`, `POST /recovery-reset` (LAN-only, no session issued; consumes a single-use code to reset password).
   - `setup.py` — Setup wizard endpoints (status, admin creation, user creation, file access, completion)
+  - `chunked_upload.py` — Chunked upload routes (`/files/upload/chunked/...`). **Must be registered before `files.router`** in `routes/__init__.py`: `files.py` ends in `DELETE /{resource_path:path}`, which matches every path under `/files` — registered after it, the abort route `DELETE /upload/chunked/{upload_id}` was never reached. Any worker serves any step (sessions are on disk); `complete` re-validates target and file name against the authenticated user, because the session file is not trusted.
   - `plugins_marketplace.py` — Marketplace listing + install routes. **Must be registered before `plugins.router`** in `routes/__init__.py`; otherwise `GET /plugins/marketplace` is swallowed as a plugin-name lookup.
 - `versioned/` — API versioning support (reserved)
 
