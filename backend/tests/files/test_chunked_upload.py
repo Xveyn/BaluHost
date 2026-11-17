@@ -793,3 +793,315 @@ class TestDataFileIsNeverFollowed:
         assert secret.read_bytes() == b"secret"
         assert manager.get_session(session.upload_id) is None
         assert not session.temp_file_path.is_symlink()
+
+
+class TestDataFileMustBeARegularFile:
+    @pytest.mark.asyncio
+    async def test_complete_refuses_a_directory_where_the_data_file_belongs(self, manager):
+        session = await _create(manager, total_size=100)
+        session.temp_file_path.mkdir()
+
+        with pytest.raises(ValueError, match="not a regular file"):
+            await manager.complete_session(session.upload_id)
+
+        assert manager.get_session(session.upload_id) is None
+
+
+# ============================================================================
+# Moving the completed file: that file, or nothing
+# ============================================================================
+
+class TestMoveCompletedUpload:
+    """`complete` checks the data file; the move happens afterwards, from a
+    directory others can write to. What reaches the destination must be the
+    file that was checked."""
+
+    @staticmethod
+    async def _completed(manager, data=b"Hello, World!"):
+        session = await _create(manager, total_size=len(data))
+        await manager.write_chunk(session.upload_id, 0, data)
+        return await manager.complete_session_checked(session.upload_id)
+
+    @pytest.mark.asyncio
+    async def test_checked_variant_describes_the_file(self, manager):
+        completed = await self._completed(manager)
+
+        st = os.stat(completed.temp_path)
+        assert completed.sha256_hex == hashlib.sha256(b"Hello, World!").hexdigest()
+        assert completed.size == 13
+        assert (completed.device, completed.inode) == (st.st_dev, st.st_ino)
+
+    @pytest.mark.asyncio
+    async def test_moves_the_file_and_sets_the_storage_mode(self, manager, tmp_path):
+        completed = await self._completed(manager)
+        os.chmod(completed.temp_path, 0o600)
+        destination = tmp_path / "target" / "big.bin"
+        destination.parent.mkdir()
+
+        cu.move_completed_upload(completed, destination)
+
+        assert destination.read_bytes() == b"Hello, World!"
+        assert not completed.temp_path.exists()
+        assert destination.stat().st_mode & 0o777 == cu.STORAGE_FILE_MODE
+
+    @pytest.mark.asyncio
+    async def test_replaces_an_existing_destination(self, manager, tmp_path):
+        completed = await self._completed(manager)
+        destination = tmp_path / "big.bin"
+        destination.write_bytes(b"old version")
+
+        cu.move_completed_upload(completed, destination)
+
+        assert destination.read_bytes() == b"Hello, World!"
+
+    @pytest.mark.asyncio
+    async def test_link_swapped_in_after_the_check_is_not_moved(self, manager, tmp_path):
+        """The race the check alone leaves open: regular file at `complete`,
+        a link to something else by the time of the move."""
+        completed = await self._completed(manager)
+        secret = tmp_path / "secret.txt"
+        secret.write_bytes(b"secret")
+        os.chmod(secret, 0o600)
+        completed.temp_path.unlink()
+        completed.temp_path.symlink_to(secret)
+        destination = tmp_path / "big.bin"
+
+        with pytest.raises(ValueError, match="changed after it was checked"):
+            cu.move_completed_upload(completed, destination)
+
+        assert not destination.exists() and not destination.is_symlink()
+        assert secret.read_bytes() == b"secret"
+        assert secret.stat().st_mode & 0o777 == 0o600  # nobody chmod-ed the target
+
+    @pytest.mark.asyncio
+    async def test_other_file_swapped_in_after_the_check_is_not_moved(self, manager, tmp_path):
+        """Not a link, just not the file that was hashed."""
+        completed = await self._completed(manager)
+        completed.temp_path.unlink()
+        completed.temp_path.write_bytes(b"something else entirely")
+        destination = tmp_path / "big.bin"
+
+        with pytest.raises(ValueError, match="changed after it was checked"):
+            cu.move_completed_upload(completed, destination)
+
+        assert not destination.exists()
+
+    @pytest.mark.asyncio
+    async def test_missing_data_file_is_not_moved(self, manager, tmp_path):
+        completed = await self._completed(manager)
+        completed.temp_path.unlink()
+
+        with pytest.raises(ValueError, match="changed after it was checked"):
+            cu.move_completed_upload(completed, tmp_path / "big.bin")
+
+    @pytest.mark.asyncio
+    async def test_link_swapped_in_at_the_last_instant_is_taken_back(
+        self, manager, tmp_path, monkeypatch,
+    ):
+        """The swap lands between the mover's own check and its rename: the
+        rename then moves the link. It must not stay at the destination, and
+        the mode must not be set on what it points at."""
+        completed = await self._completed(manager)
+        secret = tmp_path / "secret.txt"
+        secret.write_bytes(b"secret")
+        os.chmod(secret, 0o600)
+        destination = tmp_path / "big.bin"
+        real_replace = os.replace
+
+        def _swap_then_replace(src, dst):
+            if os.fspath(src) == os.fspath(completed.temp_path):
+                os.unlink(src)
+                os.symlink(secret, src)
+            return real_replace(src, dst)
+
+        monkeypatch.setattr(cu.os, "replace", _swap_then_replace)
+
+        with pytest.raises(ValueError, match="changed after it was checked"):
+            cu.move_completed_upload(completed, destination)
+
+        assert not destination.exists() and not destination.is_symlink()
+        assert secret.read_bytes() == b"secret"
+        assert secret.stat().st_mode & 0o777 == 0o600
+
+    @pytest.mark.asyncio
+    async def test_destination_on_another_filesystem_is_copied(
+        self, manager, tmp_path, monkeypatch,
+    ):
+        import errno
+
+        completed = await self._completed(manager)
+        os.chmod(completed.temp_path, 0o600)
+        destination = tmp_path / "big.bin"
+        destination.write_bytes(b"old version")
+        real_replace = os.replace
+
+        def _cross_device(src, dst):
+            if os.fspath(src) == os.fspath(completed.temp_path):
+                raise OSError(errno.EXDEV, "Invalid cross-device link")
+            return real_replace(src, dst)
+
+        monkeypatch.setattr(cu.os, "replace", _cross_device)
+
+        cu.move_completed_upload(completed, destination)
+
+        assert destination.read_bytes() == b"Hello, World!"
+        assert destination.stat().st_mode & 0o777 == cu.STORAGE_FILE_MODE
+        assert not completed.temp_path.exists()
+        assert [p.name for p in tmp_path.iterdir() if p.name.startswith(".upload-")] == []
+
+    @pytest.mark.asyncio
+    async def test_other_move_errors_are_not_mistaken_for_another_filesystem(
+        self, manager, tmp_path,
+    ):
+        completed = await self._completed(manager)
+
+        with pytest.raises(OSError):
+            cu.move_completed_upload(completed, tmp_path / "no-such-dir" / "big.bin")
+
+        assert completed.temp_path.read_bytes() == b"Hello, World!"
+
+    @pytest.mark.asyncio
+    async def test_refused_move_is_not_retried_as_a_copy(self, manager, tmp_path, monkeypatch):
+        """Only "other filesystem" falls back to copying. A move that is
+        refused stays refused."""
+        import errno
+
+        completed = await self._completed(manager)
+        destination = tmp_path / "big.bin"
+
+        real_replace = os.replace
+
+        def _refused(src, dst):
+            # Only the move itself: a copy that followed would get through.
+            if os.fspath(src) == os.fspath(completed.temp_path):
+                raise PermissionError(errno.EACCES, "Permission denied")
+            return real_replace(src, dst)
+
+        monkeypatch.setattr(cu.os, "replace", _refused)
+
+        with pytest.raises(PermissionError):
+            cu.move_completed_upload(completed, destination)
+
+        assert not destination.exists()
+        assert completed.temp_path.read_bytes() == b"Hello, World!"
+
+    @pytest.mark.asyncio
+    async def test_mode_is_set_on_the_moved_file_not_on_the_destination_path(
+        self, manager, tmp_path, monkeypatch,
+    ):
+        """After the move the destination path is checked, then the mode is
+        set. A link put at that path in between must not get the mode change
+        passed on to its target."""
+        completed = await self._completed(manager)
+        os.chmod(completed.temp_path, 0o600)
+        secret = tmp_path / "secret.txt"
+        secret.write_bytes(b"secret")
+        os.chmod(secret, 0o600)
+        destination = tmp_path / "big.bin"
+        moved_aside = tmp_path / "moved-aside.bin"
+        real_lstat = os.lstat
+
+        def _lstat_then_swap(path, *args, **kwargs):
+            result = real_lstat(path, *args, **kwargs)
+            if os.fspath(path) == os.fspath(destination):
+                os.rename(destination, moved_aside)
+                os.symlink(secret, destination)
+            return result
+
+        monkeypatch.setattr(cu.os, "lstat", _lstat_then_swap)
+
+        cu.move_completed_upload(completed, destination)
+
+        assert secret.stat().st_mode & 0o777 == 0o600
+        assert moved_aside.stat().st_mode & 0o777 == cu.STORAGE_FILE_MODE
+
+
+# ============================================================================
+# A named pipe where a file belongs must not hang the worker
+# ============================================================================
+
+def _finishes(fn, timeout=5.0):
+    """Run *fn* in a daemon thread; fail if it is still running after *timeout*.
+
+    Opening a FIFO for reading blocks until someone opens it for writing. A
+    regression here would hang, so the call must not run in the test's own
+    thread (nor in an executor thread, which would keep the interpreter alive).
+    """
+    outcome = {}
+
+    def _run():
+        try:
+            outcome["result"] = fn()
+        except BaseException as exc:  # noqa: BLE001 - handed to the caller
+            outcome["error"] = exc
+
+    thread = threading.Thread(target=_run, daemon=True)
+    thread.start()
+    thread.join(timeout)
+    assert not thread.is_alive(), "blocked on a named pipe"
+    if "error" in outcome:
+        raise outcome["error"]
+    return outcome.get("result")
+
+
+@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="needs named pipes")
+class TestNamedPipeDoesNotBlock:
+    """Whoever can write to the upload directory can put a FIFO where one of
+    a session's files belongs. Every open of those files used to wait on it
+    forever — one stuck thread per request."""
+
+    def test_pipe_as_session_file_is_an_unknown_session(self, manager, upload_dir):
+        upload_dir.mkdir(parents=True)
+        os.mkfifo(upload_dir / f"{_VALID_ID}.json")
+
+        assert _finishes(lambda: manager.get_session(_VALID_ID)) is None
+
+    def test_pipe_as_lock_file_is_an_unknown_session(self, manager, upload_dir):
+        _plant_session(upload_dir)
+        lock = upload_dir / f"{_VALID_ID}.lock"
+        lock.unlink()
+        os.mkfifo(lock)
+
+        with pytest.raises(ValueError, match="Unknown upload session"):
+            _finishes(lambda: manager._write_locked(_VALID_ID, 0, [b"x"]))
+
+    def test_pipe_as_data_file_refuses_the_chunk(self, manager, upload_dir):
+        _plant_session(upload_dir)
+        os.mkfifo(upload_dir / _VALID_ID)
+
+        with pytest.raises(ValueError):
+            _finishes(lambda: manager._write_locked(_VALID_ID, 0, [b"x"]))
+
+    def test_pipe_as_data_file_refuses_complete(self, manager, upload_dir):
+        _plant_session(upload_dir, received_bytes=1, next_chunk_index=1)
+        os.mkfifo(upload_dir / _VALID_ID)
+
+        with pytest.raises(ValueError, match="not a regular file"):
+            _finishes(lambda: manager._complete_locked(_VALID_ID))
+
+        assert manager.get_session(_VALID_ID) is None
+
+    @pytest.mark.asyncio
+    async def test_pipe_swapped_in_before_the_move_is_not_moved(self, manager, tmp_path):
+        session = await _create(manager, total_size=5)
+        await manager.write_chunk(session.upload_id, 0, b"Hello")
+        completed = await manager.complete_session_checked(session.upload_id)
+        completed.temp_path.unlink()
+        os.mkfifo(completed.temp_path)
+        destination = tmp_path / "big.bin"
+
+        with pytest.raises(ValueError, match="changed after it was checked"):
+            _finishes(lambda: cu.move_completed_upload(completed, destination))
+
+        assert not destination.exists()
+
+    def test_cleanup_is_not_stopped_by_a_pipe(self, manager, upload_dir, clock):
+        upload_dir.mkdir(parents=True)
+        old = clock.now - SESSION_MAX_AGE.total_seconds() - 3600
+        pipe = upload_dir / f"{_VALID_ID}.json"
+        os.mkfifo(pipe)
+        os.utime(pipe, (old, old))
+
+        _finishes(manager._cleanup_stale_sync)
+
+        assert not pipe.exists()

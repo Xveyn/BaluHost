@@ -387,10 +387,10 @@ def test_failed_complete_leaves_nothing_running_and_no_temp_file(
     upload_id = _init(client, admin_headers, target)
     _chunk(client, admin_headers, upload_id, 0, b"Hello, World!")
 
-    def _broken_move(src, dst):
+    def _broken_move(completed, destination):
         raise OSError("disk says no")
 
-    monkeypatch.setattr(chunked_routes.shutil, "move", _broken_move)
+    monkeypatch.setattr(chunked_routes, "move_completed_upload", _broken_move)
     try:
         r = client.post(_url(upload_id, "complete"), headers=admin_headers)
         assert r.status_code == 500
@@ -401,6 +401,37 @@ def test_failed_complete_leaves_nothing_running_and_no_temp_file(
     assert _not_uploading(upload_id)
     assert _leftovers(upload_dir) == []
     assert not (ROOT_DIR / target / "big.bin").exists()
+
+
+def test_data_file_swapped_for_a_link_before_the_move_is_not_delivered(
+    client: TestClient, admin_headers, target, upload_dir, tmp_path, monkeypatch,
+):
+    """`complete` checks the data file, then asks for free space, then moves.
+    Someone with write access to the upload directory swaps the file for a
+    link in between: the user must not end up with that link in their folder."""
+    upload_id = _init(client, admin_headers, target)
+    _chunk(client, admin_headers, upload_id, 0, b"Hello, World!")
+    secret = tmp_path / "secret.txt"
+    secret.write_bytes(b"secret")
+    real_available = chunked_routes.calculate_available_bytes_async
+
+    async def _swap_in_the_window():
+        data_file = upload_dir / upload_id
+        data_file.unlink()
+        data_file.symlink_to(secret)
+        return await real_available()
+
+    monkeypatch.setattr(chunked_routes, "calculate_available_bytes_async", _swap_in_the_window)
+
+    r = client.post(_url(upload_id, "complete"), headers=admin_headers)
+
+    destination = ROOT_DIR / target / "big.bin"
+    assert r.status_code == 400
+    assert "changed after it was checked" in r.json()["detail"]
+    assert not destination.exists() and not destination.is_symlink()
+    assert secret.read_bytes() == b"secret"
+    assert _leftovers(upload_dir) == []
+    assert upload_activity.active_uploads() == 0
 
 
 def test_abort_of_an_unknown_id_does_not_touch_someone_elses_progress(
