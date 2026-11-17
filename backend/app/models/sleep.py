@@ -166,6 +166,10 @@ class SleepRuntimeState(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
     updated_by_pid: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # What only the primary knows besides the state itself (#834): JSON object
+    # with `idle_seconds`, `paused_services`, `spun_down_disks`. Written with
+    # every publish; NULL reads as "no details".
+    details_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     def __repr__(self) -> str:
         return f"<SleepRuntimeState({self.current_state}, pid={self.updated_by_pid})>"

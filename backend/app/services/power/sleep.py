@@ -172,8 +172,11 @@ class SleepManagerService:
         self._state_publish_dirty: bool = False
         self._publish_since: Optional[datetime] = None
         self._published_cache: Optional[
-            tuple[float, Optional[tuple[SleepState, Optional[datetime]]]]
+            tuple[float, Optional[sleep_runtime_store.SleepRuntimeSnapshot]]
         ] = None
+        # The details as last written successfully; see
+        # `_publish_details_if_changed()` (#834).
+        self._published_details: Optional[sleep_runtime_store.SleepRuntimeDetails] = None
         self._clock = time.monotonic
         self._current_state = SleepState.AWAKE
         self._state_since: Optional[datetime] = None
@@ -230,33 +233,57 @@ class SleepManagerService:
         if self._is_primary:
             self._publish_state(state, datetime.now(timezone.utc))
 
+    def _local_details(self) -> sleep_runtime_store.SleepRuntimeDetails:
+        """What this process knows besides the state (#834)."""
+        return sleep_runtime_store.SleepRuntimeDetails(
+            idle_seconds=self._idle_seconds,
+            paused_services=list(self._paused_services),
+            spun_down_disks=list(self._spun_down_disks),
+        )
+
     def _publish_state(self, state: SleepState, since: Optional[datetime]) -> bool:
-        """Write *state* to the shared store. Never raises.
+        """Write *state* and the current details to the shared store. Never raises.
 
         A failure marks the state dirty; the schedule loop retries on its
         next tick (`_retry_state_publish`). The state machine must never
         notice a database problem here.
         """
         self._publish_since = since
+        details = self._local_details()
         try:
             db = SessionLocal()
             try:
-                ok = sleep_runtime_store.publish_state(db, state, since)
+                ok = sleep_runtime_store.publish_state(db, state, since, details)
             finally:
                 db.close()
         except Exception as exc:
             logger.warning("Publishing sleep state %s failed: %s", state, exc)
             ok = False
         self._state_publish_dirty = not ok
+        if ok:
+            self._published_details = details
         return ok
+
+    def _publish_details_if_changed(self) -> None:
+        """Republish when the details moved without a state change (primary only).
+
+        Only the idle counter does that; the idle loop calls this once per
+        tick. `paused_services` and `spun_down_disks` change inside a
+        transition and travel with the state. Writes nothing while the
+        published details are current, so an idle box costs no writes.
+        """
+        if not self._is_primary:
+            return
+        if self._local_details() != self._published_details:
+            self._publish_state(self._local_state, self._publish_since)
 
     def _retry_state_publish(self) -> None:
         """Republish the local state if the last attempt failed (primary only)."""
         if self._is_primary and self._state_publish_dirty:
             self._publish_state(self._local_state, self._publish_since)
 
-    def _read_published_state(self) -> Optional[tuple[SleepState, Optional[datetime]]]:
-        """The primary's published state, cached for a short TTL. Never raises."""
+    def _read_published_snapshot(self) -> Optional[sleep_runtime_store.SleepRuntimeSnapshot]:
+        """What the primary published, cached for a short TTL. Never raises."""
         now = self._clock()
         cached = self._published_cache
         if cached is not None and now - cached[0] < self._PUBLISHED_STATE_TTL_SECONDS:
@@ -264,7 +291,7 @@ class SleepManagerService:
         try:
             db = SessionLocal()
             try:
-                value = sleep_runtime_store.read_state(db)
+                value = sleep_runtime_store.read_snapshot(db)
             finally:
                 db.close()
         except Exception as exc:
@@ -289,10 +316,28 @@ class SleepManagerService:
         local = self._local_state
         if self._is_primary or local != SleepState.AWAKE:
             return local, self._state_since
-        published = self._read_published_state()
+        published = self._read_published_snapshot()
         if published is None:
             return local, self._state_since
-        return published
+        return published.state, published.since
+
+    def _effective_details(self) -> sleep_runtime_store.SleepRuntimeDetails:
+        """Idle counter, paused services and spun-down disks to report (#834).
+
+        Same rule as `effective_state()`: the primary reports its own, any
+        other instance what the primary published — falling back to its own
+        (empty) values when nothing is readable.
+        """
+        if self._is_primary or self._local_state != SleepState.AWAKE:
+            return self._local_details()
+        published = self._read_published_snapshot()
+        if published is None:
+            return self._local_details()
+        return sleep_runtime_store.SleepRuntimeDetails(
+            idle_seconds=published.idle_seconds,
+            paused_services=published.paused_services,
+            spun_down_disks=published.spun_down_disks,
+        )
 
     @classmethod
     async def get_instance(cls, backend: Optional[SleepBackend] = None) -> "SleepManagerService":
@@ -666,9 +711,10 @@ class SleepManagerService:
             pass
 
         try:
-            from app.services.upload_progress import get_upload_progress_manager
-            mgr = get_upload_progress_manager()
-            active_uploads = len(mgr._progress)
+            # Summed over all API processes: an upload runs in whichever
+            # worker serves it, idle detection in the primary alone (#834).
+            from app.services import upload_activity
+            active_uploads = upload_activity.active_uploads()
         except Exception:
             pass
 
@@ -842,6 +888,10 @@ class SleepManagerService:
                 self._last_error = str(e)
                 self._last_error_at = datetime.now(timezone.utc)
                 logger.warning("Error in idle detection loop: %s", e)
+            finally:
+                # Every way out of a tick (the many `continue`s included):
+                # followers report the idle counter from the store (#834).
+                self._publish_details_if_changed()
 
     async def _schedule_check_loop(self) -> None:
         """Check sleep schedule and core-uptime auto-wake every 60 seconds."""
@@ -1487,12 +1537,13 @@ class SleepManagerService:
             except Exception as e:
                 logger.warning("Could not remove CPU IDLE lock: %s", e)
 
-            # Finalize state
+            # Finalize state. The idle counter is reset first: assigning the
+            # state publishes it together with the details (#834).
+            self._consecutive_idle_checks = 0
+            self._idle_seconds = 0.0
             self._current_state = SleepState.AWAKE
             self._state_since = datetime.now(timezone.utc)
             self._soft_sleep_entered_at = None
-            self._consecutive_idle_checks = 0
-            self._idle_seconds = 0.0
 
             self._log_state_change(
                 prev_state, SleepState.AWAKE, reason, SleepTrigger.AUTO_WAKE,
@@ -1960,15 +2011,16 @@ class SleepManagerService:
             )
 
         current_state, state_since = self.effective_state()
+        details = self._effective_details()
 
         return SleepStatusResponse(
             current_state=current_state,
             state_since=state_since,
-            idle_seconds=self._idle_seconds,
+            idle_seconds=details.idle_seconds,
             idle_threshold_seconds=idle_threshold,
             activity_metrics=metrics,
-            paused_services=self._paused_services,
-            spun_down_disks=self._spun_down_disks,
+            paused_services=details.paused_services,
+            spun_down_disks=details.spun_down_disks,
             auto_idle_enabled=config.auto_idle_enabled if config else False,
             schedule_enabled=config.schedule_enabled if config else False,
             escalation_enabled=config.auto_escalation_enabled if config else False,

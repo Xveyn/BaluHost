@@ -10,12 +10,18 @@ Protocol
 2. ``POST /{id}/chunk``   — send one chunk (sequential, 0-indexed)
 3. ``POST /{id}/complete`` — finalise (move temp → target, metadata, audit)
 4. ``DELETE /{id}``       — abort and clean up
+
+Any API process can serve any step: the session lives on disk
+(`services/files/chunked_upload.py`), not in the memory of the worker that
+handled ``init``. That session file is input, not a credential — every step
+checks the authenticated user against it, and ``complete`` validates target
+and file name again before it moves anything.
 """
 
 import asyncio
 import logging
 import shutil
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel
@@ -25,7 +31,8 @@ from app.api import deps
 from app.core.database import get_db
 from app.core.exceptions import InsufficientStorageError
 from app.schemas.user import UserPublic
-from app.services.files.chunked_upload import get_chunked_upload_manager
+from app.services import upload_activity
+from app.services.files.chunked_upload import ChunkedUploadSession, get_chunked_upload_manager
 from app.services.files.operations import (
     ROOT_DIR,
     FileAccessError,
@@ -95,6 +102,24 @@ def _validate_target(target_path: str, user: UserPublic, db: Session) -> str:
     return jailed
 
 
+def _safe_filename(raw: str) -> str | None:
+    """The bare file name in *raw*, or None if there is none to use."""
+    name = PurePosixPath(raw).name
+    if not name or name in ('.', '..') or "\x00" in name:
+        return None
+    return name
+
+
+async def _own_session(upload_id: str, user: UserPublic) -> ChunkedUploadSession:
+    """The caller's session, or 404 / 403. Reads the session file off the loop."""
+    session = await asyncio.to_thread(get_chunked_upload_manager().get_session, upload_id)
+    if session is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Upload session not found")
+    if session.user_id != user.id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Not your upload session")
+    return session
+
+
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
@@ -117,8 +142,8 @@ async def chunked_init(
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
 
     # Sanitize filename: strip all directory components to prevent path traversal
-    safe_filename = PurePosixPath(payload.filename).name
-    if not safe_filename or safe_filename in ('.', '..'):
+    safe_filename = _safe_filename(payload.filename)
+    if safe_filename is None:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
             detail="Invalid filename",
@@ -170,20 +195,24 @@ async def chunked_chunk(
     This avoids buffering the entire chunk in server RAM.
     """
     mgr = get_chunked_upload_manager()
-    session = mgr.get_session(upload_id)
-    if session is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Upload session not found")
+    await _own_session(upload_id, user)
 
-    # Verify the session belongs to this user
-    if session.user_id != user.id:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Not your upload session")
-
+    # Reported from whichever worker gets the chunk, before and after it:
+    # idle detection must see the upload while the chunk is still coming in.
+    upload_activity.touch(upload_id)
     try:
         received = await mgr.write_chunk_stream(upload_id, chunk_index, request.stream())
     except ValueError as exc:
+        if await asyncio.to_thread(mgr.get_session, upload_id) is None:
+            # The manager closed the session (a chunk beyond the declared
+            # size) or an abort got there first: the upload is over.
+            await get_upload_progress_manager().fail_unfinished([upload_id], str(exc))
+            upload_activity.finish(upload_id)
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    upload_activity.touch(upload_id)
 
-    # Update SSE progress
+    # Update SSE progress — only if this worker holds the progress session
+    # (it lives in the memory of the worker that handled `init`).
     progress_mgr = get_upload_progress_manager()
     progress = progress_mgr.get_progress(upload_id)
     if progress is not None:
@@ -203,21 +232,74 @@ async def chunked_complete(
 ) -> ChunkedCompleteResponse:
     """Finalise a chunked upload: move temp file to target, create metadata."""
     mgr = get_chunked_upload_manager()
-    session = mgr.get_session(upload_id)
-    if session is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Upload session not found")
-    if session.user_id != user.id:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Not your upload session")
+    session = await _own_session(upload_id, user)
+    progress_mgr = get_upload_progress_manager()
 
+    try:
+        # The session file is not trusted (see module docstring): validate
+        # what it says about the destination exactly as `init` did, against
+        # the user making THIS request and the permissions of right now.
+        filename = _safe_filename(session.filename)
+        if filename is None or filename != session.filename:
+            await mgr.abort_session(upload_id)
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Invalid filename")
+        try:
+            target_path = _validate_target(session.target_path, user, db)
+        except (PermissionDeniedError, FileAccessError) as exc:
+            await mgr.abort_session(upload_id)
+            raise HTTPException(status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+        except HTTPException:
+            await mgr.abort_session(upload_id)
+            raise
+
+        return await _finalise(upload_id, user, target_path, filename)
+    except BaseException:
+        # However this ends, the progress session must not stay "uploading".
+        await progress_mgr.fail_unfinished([upload_id], "Upload failed")
+        raise
+    finally:
+        # ... and the upload is over for idle detection and the status bar,
+        # on whichever worker `init` and the chunks were served.
+        upload_activity.finish(upload_id)
+
+
+async def _finalise(
+    upload_id: str,
+    user: UserPublic,
+    target_path: str,
+    filename: str,
+) -> ChunkedCompleteResponse:
+    """Close the session and move its data to *target_path* / *filename*.
+
+    Both are validated by the caller.
+    """
+    mgr = get_chunked_upload_manager()
     try:
         temp_path, file_checksum = await mgr.complete_session(upload_id)
     except (ValueError, FileNotFoundError) as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
+    try:
+        return await _move_into_place(upload_id, user, target_path, filename, temp_path, file_checksum)
+    finally:
+        # Moved on success. After a failure nothing refers to the data any
+        # more — the session is closed — so it goes now, not with the janitor.
+        await asyncio.to_thread(lambda: temp_path.unlink(missing_ok=True))
+
+
+async def _move_into_place(
+    upload_id: str,
+    user: UserPublic,
+    target_path: str,
+    filename: str,
+    temp_path: Path,
+    file_checksum: str,
+) -> ChunkedCompleteResponse:
+    """Move the received file to its destination; metadata, audit, VCL."""
     # --- Move temp file to final destination ---
-    target_dir = _resolve_path(session.target_path)
+    target_dir = _resolve_path(target_path)
     ensure_dir_with_permissions(target_dir)
-    destination = target_dir / session.filename
+    destination = target_dir / filename
     ensure_dir_with_permissions(destination.parent)
 
     file_size = await asyncio.to_thread(lambda: temp_path.stat().st_size)
@@ -329,14 +411,20 @@ async def chunked_abort(
 ) -> dict:
     """Abort an in-progress chunked upload and clean up temp files."""
     mgr = get_chunked_upload_manager()
-    session = mgr.get_session(upload_id)
-    if session is not None and session.user_id != user.id:
+    session = await asyncio.to_thread(mgr.get_session, upload_id)
+    if session is None:
+        # Nothing to abort — and nothing to report: without a session there
+        # is no telling whose upload this id would be.
+        return {"message": "Upload aborted"}
+    if session.user_id != user.id:
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Not your upload session")
 
     await mgr.abort_session(upload_id)
 
-    # Also mark SSE progress as failed
+    # Also mark SSE progress as failed (if this worker holds it), and the
+    # upload as over for every worker.
     progress_mgr = get_upload_progress_manager()
-    await progress_mgr.fail_upload(upload_id, "Upload aborted by user")
+    await progress_mgr.fail_unfinished([upload_id], "Upload aborted by user")
+    upload_activity.finish(upload_id)
 
     return {"message": "Upload aborted"}

@@ -27,9 +27,14 @@ from app.api.routes import (
 api_router = APIRouter()
 api_router.include_router(health.router, tags=["health"])  # Health check endpoint (no prefix)
 api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
+# Before files.router: its `DELETE /{resource_path:path}` matches every path
+# under /files. Registered after it, `DELETE /upload/chunked/{upload_id}` was
+# never reached — the abort of a chunked upload ran the file-delete route on
+# the path "upload/chunked/<id>" instead (200 "Deleted" for an admin, 403 for
+# everyone else) and the session stayed.
+api_router.include_router(chunked_upload.router, prefix="/files", tags=["files"])
 api_router.include_router(files.router, prefix="/files", tags=["files"])
 api_router.include_router(upload_progress.router, prefix="/files", tags=["files"])
-api_router.include_router(chunked_upload.router, prefix="/files", tags=["files"])
 api_router.include_router(logging.router, prefix="/logging", tags=["logging"])
 api_router.include_router(system.router, prefix="/system", tags=["system"])
 api_router.include_router(users.router, prefix="/users", tags=["users"])

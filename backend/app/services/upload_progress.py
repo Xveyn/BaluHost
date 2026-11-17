@@ -12,12 +12,18 @@ No client uses this stream today: the web client library was removed on
 needs it again, either make it cross-process (publish progress over the bus,
 derive the initial state from the chunked-upload session in the database) or
 poll instead (#306).
+
+One fact does leave the process: which uploads are running. Every session
+event is reported to `upload_activity` (`touch` while uploading, `finish` on
+completion or failure), which the primary's idle detection and the status bar
+read across all processes (#834).
 """
 from __future__ import annotations
 
 import asyncio
+import time
 import uuid
-from typing import Dict, Optional
+from typing import Dict, Iterable, Optional
 from datetime import datetime, timezone
 from dataclasses import dataclass, asdict, replace
 import logging
@@ -54,14 +60,73 @@ class UploadProgress:
 class UploadProgressManager:
     """Manages upload progress tracking and SSE connections."""
 
+    #: An "uploading" session nobody created, updated or finished for this
+    #: long is dropped. Every route ends its sessions on every way out, so
+    #: this only catches what cannot be caught there: a chunked upload whose
+    #: later requests went to another worker, or whose client went away.
+    STALLED_AFTER_SECONDS = 3600.0
+
     def __init__(self):
         self._progress: Dict[str, UploadProgress] = {}
         self._listeners: Dict[str, list[asyncio.Queue]] = {}
         self._lock = asyncio.Lock()
         self._cleanup_tasks: set[asyncio.Task] = set()
+        # upload_id -> monotonic time of the last create / progress update.
+        self._touched: Dict[str, float] = {}
+        self._monotonic = time.monotonic
+
+    def _drop_stalled(self) -> None:
+        """Forget sessions stuck in "uploading" (see STALLED_AFTER_SECONDS).
+
+        Synchronous and without the lock on purpose: it runs between two
+        awaits of the event loop, like `create_upload_session()` itself.
+        """
+        now = self._monotonic()
+        stalled = [
+            upload_id for upload_id, progress in self._progress.items()
+            if progress.status == 'uploading'
+            and now - self._touched.get(upload_id, now) > self.STALLED_AFTER_SECONDS
+        ]
+        for upload_id in stalled:
+            del self._progress[upload_id]
+            self._touched.pop(upload_id, None)
+            for queue in self._listeners.pop(upload_id, []):
+                try:
+                    queue.put_nowait(None)  # Signal end
+                except asyncio.QueueFull:
+                    pass
+            self._report_activity(upload_id, running=False)
+            logger.warning("Dropped stalled upload session %s", upload_id)
+
+    async def fail_unfinished(self, upload_ids: Iterable[str], error: str) -> None:
+        """Fail those of *upload_ids* that are still "uploading" here.
+
+        For the `finally` of a route: sessions that completed or failed on
+        the way stay as they are, ids this worker does not hold are skipped.
+        """
+        for upload_id in upload_ids:
+            progress = self._progress.get(upload_id)
+            if progress is not None and progress.status == 'uploading':
+                await self.fail_upload(upload_id, error)
+
+    @staticmethod
+    def _report_activity(upload_id: str, *, running: bool) -> None:
+        """Tell the cross-process upload tracker about a session event (#834).
+
+        Never raises: a counter must not fail an upload.
+        """
+        try:
+            from app.services import upload_activity
+            if running:
+                upload_activity.touch(upload_id)
+            else:
+                upload_activity.finish(upload_id)
+        except Exception as exc:
+            logger.debug("Upload activity report failed: %s", exc)
 
     def create_upload_session(self, filename: str, total_bytes: int, upload_id: str | None = None) -> str:
         """Create a new upload session and return upload_id."""
+        self._drop_stalled()
         upload_id = upload_id or str(uuid.uuid4())
         progress = UploadProgress(
             upload_id=upload_id,
@@ -73,6 +138,8 @@ class UploadProgressManager:
         )
         self._progress[upload_id] = progress
         self._listeners[upload_id] = []
+        self._touched[upload_id] = self._monotonic()
+        self._report_activity(upload_id, running=True)
         logger.info(f"Created upload session {upload_id} for {filename} ({total_bytes} bytes)")
         return str(upload_id)
 
@@ -85,6 +152,8 @@ class UploadProgressManager:
 
             progress = self._progress[upload_id]
             progress.uploaded_bytes = uploaded_bytes
+            self._touched[upload_id] = self._monotonic()
+            self._report_activity(upload_id, running=True)
 
             # Notify all listeners
             await self._notify_listeners(upload_id, progress)
@@ -98,6 +167,7 @@ class UploadProgressManager:
             progress = self._progress[upload_id]
             progress.status = 'completed'
             progress.completed_at = datetime.now(timezone.utc).isoformat()
+            self._report_activity(upload_id, running=False)
             
             logger.info(f"Upload {upload_id} completed: {progress.filename}")
             
@@ -125,6 +195,7 @@ class UploadProgressManager:
             progress.status = 'failed'
             progress.error = error
             progress.completed_at = datetime.now(timezone.utc).isoformat()
+            self._report_activity(upload_id, running=False)
             
             logger.error(f"Upload {upload_id} failed: {error}")
             
@@ -208,6 +279,7 @@ class UploadProgressManager:
             # If cancelled, proceed to cleanup immediately
             pass
         async with self._lock:
+            self._touched.pop(upload_id, None)
             if upload_id in self._progress:
                 del self._progress[upload_id]
                 logger.debug(f"Cleaned up upload session {upload_id}")
