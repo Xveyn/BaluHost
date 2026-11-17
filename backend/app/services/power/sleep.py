@@ -193,6 +193,9 @@ class SleepManagerService:
         # Primary only: executes sleep actions forwarded by followers (#823).
         self._command_poll_task: Optional[asyncio.Task] = None
         self._soft_sleep_entered_at: Optional[datetime] = None
+        # Name of the sleep action currently running in this process, or None.
+        # See `_begin_action()` (#833).
+        self._action_in_progress: Optional[str] = None
         self._started_at: Optional[datetime] = None
         self._error_count: int = 0
         self._last_error: Optional[str] = None
@@ -1154,6 +1157,38 @@ class SleepManagerService:
             return SleepActionResult(SleepActionStatus.REFUSED)
         return SleepActionResult(SleepActionStatus.UNAVAILABLE, error)
 
+    # --- One action at a time (#833) ---
+    #
+    # Entering soft sleep, waking and suspending are long coroutines: disks
+    # spin down and up, a suspend only returns after resume. Everything that
+    # starts one — a request on the primary, a forwarded command, the idle,
+    # schedule and escalation loops — goes through the three public methods
+    # below, and those run one at a time. An action arriving while another
+    # runs is REFUSED, never queued: a suspend that waited for its turn would
+    # run after the box woke up again.
+    #
+    # The state alone cannot say "busy": after resume it is SOFT_SLEEP again
+    # while the suspend is still finishing, and that is exactly the window in
+    # which a second suspend would put the box straight back to sleep.
+
+    def _begin_action(self, action: str, reason: str) -> bool:
+        """Claim the state machine for *action*; False if another one runs.
+
+        Check and claim happen without an await in between, so two coroutines
+        cannot both get through. Pair with `_end_action()` in a `finally`.
+        """
+        if self._action_in_progress is not None:
+            logger.warning(
+                "Sleep action '%s' refused (reason=%s): '%s' is still in progress",
+                action, reason, self._action_in_progress,
+            )
+            return False
+        self._action_in_progress = action
+        return True
+
+    def _end_action(self) -> None:
+        self._action_in_progress = None
+
     # --- Public API ---
 
     async def enter_soft_sleep(
@@ -1170,7 +1205,23 @@ class SleepManagerService:
         3. Set fans to silent
         4. Spin down data disks
         5. Log state change
+
+        Returns False without touching anything if another sleep action is
+        still running (#833).
         """
+        if not self._begin_action("soft_sleep", reason):
+            return False
+        try:
+            return await self._enter_soft_sleep(reason, trigger)
+        finally:
+            self._end_action()
+
+    async def _enter_soft_sleep(
+        self,
+        reason: str,
+        trigger: SleepTrigger = SleepTrigger.MANUAL,
+    ) -> bool:
+        """The soft-sleep sequence itself; the caller holds the action."""
         # Clear always-awake override if set: manual sleep ends the override.
         # Then reconcile the inhibitor synchronously so a manual sleep is not
         # blocked by our own logind lock during the gap before the next loop tick.
@@ -1318,15 +1369,29 @@ class SleepManagerService:
             return False
 
     async def exit_soft_sleep(self, reason: str) -> bool:
-        """Exit soft sleep and return to awake state (public wrapper)."""
-        return await self._exit_soft_sleep(reason)
+        """Exit soft sleep and return to awake state.
+
+        Returns False without touching anything if another sleep action is
+        still running (#833) — including a soft sleep that is still being
+        entered: waking alongside it would leave the box half asleep.
+        """
+        if not self._begin_action("wake", reason):
+            return False
+        try:
+            return await self._exit_soft_sleep(reason)
+        finally:
+            self._end_action()
 
     async def _exit_soft_sleep(self, reason: str) -> bool:
         """
-        Exit soft sleep mode.
+        Exit soft sleep mode; the caller holds the action (or is `stop()`).
 
         Reverse sequence: spin up disks, resume services, restore telemetry,
         restore fans, remove IDLE lock.
+
+        ENTERING_SOFT_SLEEP is accepted on purpose: with one action at a time
+        it can only be seen here when an entering was cancelled half way, and
+        waking is what gets the box out of that.
         """
         if self._current_state not in (SleepState.SOFT_SLEEP, SleepState.ENTERING_SOFT_SLEEP):
             logger.warning("Cannot exit soft sleep from state %s", self._current_state)
@@ -1457,7 +1522,34 @@ class SleepManagerService:
         If currently in soft sleep, stays there.
         If awake, enters soft sleep first.
         Then suspends the system.
+
+        Returns False without touching anything if another sleep action is
+        still running (#833). The action is held until the box has resumed
+        AND woken up again, not just until the kernel suspend returns.
         """
+        if not self._begin_action("suspend", reason):
+            return False
+        try:
+            return await self._enter_true_suspend(reason, trigger, wake_at)
+        finally:
+            self._end_action()
+
+    async def _enter_true_suspend(
+        self,
+        reason: str,
+        trigger: SleepTrigger,
+        wake_at: Optional[datetime],
+    ) -> bool:
+        """The suspend sequence itself; the caller holds the action."""
+        # A suspend starts from a resting state only. Anything else means a
+        # transition is under way or was cut off half way (a cancelled
+        # action); suspending on top of that is never what was asked for.
+        # Before the always-awake handling below: a refused suspend must not
+        # end the override.
+        if self._current_state not in (SleepState.AWAKE, SleepState.SOFT_SLEEP):
+            logger.warning("Cannot suspend from state %s", self._current_state)
+            return False
+
         # Clear always-awake override if set: manual suspend ends the override.
         # Then reconcile the inhibitor synchronously so a manual suspend reaches
         # the backend before the next loop tick (logind would otherwise refuse).
@@ -1572,7 +1664,9 @@ class SleepManagerService:
 
         # Enter soft sleep first if awake
         if self._current_state == SleepState.AWAKE:
-            ok = await self.enter_soft_sleep(reason, trigger)
+            # The step, not the public method: this coroutine already holds
+            # the action.
+            ok = await self._enter_soft_sleep(reason, trigger)
             if not ok:
                 return False
 

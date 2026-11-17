@@ -164,7 +164,7 @@ async def test_an_armed_occurrence_survives_a_suspend_that_never_happens(db_sess
     (6d) knüpft das Verfallen an den TATSÄCHLICHEN Suspend.
     """
     svc = SleepManagerService(DevSleepBackend())
-    svc._current_state = SleepState.AWAKE  # erzwingt den enter_soft_sleep-Schritt
+    svc._current_state = SleepState.AWAKE  # erzwingt den _enter_soft_sleep-Schritt
     _enable(db_session)
     _arm(db_session)
 
@@ -179,7 +179,7 @@ async def test_an_armed_occurrence_survives_a_suspend_that_never_happens(db_sess
 
     with patch.object(svc, "_load_config", return_value=None), \
          patch.object(svc, "_load_core_uptime", return_value=(False, [])), \
-         patch.object(svc, "enter_soft_sleep", new=AsyncMock(return_value=False)), \
+         patch.object(svc, "_enter_soft_sleep", new=AsyncMock(return_value=False)), \
          patch.object(svc._backend, "suspend_system", side_effect=_suspend), \
          patch("app.services.power.sleep.scheduled_reboot.should_defer_suspend",
                return_value=False), \
