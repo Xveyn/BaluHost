@@ -22,6 +22,7 @@ SCRIPT = REPO / "deploy" / "scripts" / "install-systemd-units.sh"
 COMMON = REPO / "deploy" / "install" / "lib" / "common.sh"
 TEMPLATES = REPO / "deploy" / "install" / "templates"
 UNITS = ("baluhost-backend", "baluhost-scheduler", "baluhost-webdav", "baluhost-monitoring")
+OPTIONAL_UNIT_FILES = ("baluhost-backend-local.service", "baluhost-backend-local.socket")
 BASH = shutil.which("bash")
 
 _STUB_SYSTEMCTL = """#!/bin/bash
@@ -72,6 +73,8 @@ class Box:
         _copy_lf(COMMON, self.root / "deploy" / "install" / "lib" / "common.sh")
         for unit in UNITS:
             _copy_lf(TEMPLATES / f"{unit}.service", self.templates / f"{unit}.service")
+        for name in OPTIONAL_UNIT_FILES:
+            _copy_lf(TEMPLATES / name, self.templates / name)
         self.systemd.mkdir()
         self.stubs.mkdir()
         for name, body in (("systemctl", _STUB_SYSTEMCTL),
@@ -340,6 +343,130 @@ def test_alle_vier_unit_listen_sind_gleich():
     assert _bash_array(MODULE_10, "SERVICES") == expected
     assert _bash_array(CI_DEPLOY, "SERVICES") == expected
     assert set(MANAGED_UNITS) == expected
+
+
+def _bash_file_array(path: Path, name: str) -> set[str]:
+    text = path.read_text(encoding="utf-8")
+    match = re.search(rf"^{name}=\((.*?)\)", text, re.MULTILINE | re.DOTALL)
+    assert match, f"{name}=( … ) nicht gefunden in {path.name}"
+    return set(re.findall(r"baluhost-[a-z-]+\.(?:service|socket)", match.group(1)))
+
+
+def test_die_optionalen_unit_dateien_sind_ueberall_dieselben():
+    from app.services.unit_drift import OPTIONAL_UNIT_FILES as DRIFT_FILES
+
+    expected = set(OPTIONAL_UNIT_FILES)
+    assert _bash_file_array(SCRIPT, "OPTIONAL_UNIT_FILES") == expected
+    assert _bash_file_array(MODULE_10, "OPTIONAL_UNIT_FILES") == expected
+    assert set(DRIFT_FILES) == expected
+    for name in expected:
+        assert (TEMPLATES / name).is_file(), name
+
+
+# ─── Der Local-Channel: optional, Service plus Socket (#717) ─────────
+
+LOCAL_SERVICE, LOCAL_SOCKET = OPTIONAL_UNIT_FILES
+
+
+def _local_files(box: Box) -> list[str]:
+    return sorted(p.name for p in box.systemd.iterdir() if "backend-local" in p.name)
+
+
+def test_ein_deploy_fuehrt_den_local_channel_nicht_ein(box):
+    """Auf einer Box ohne Local-Channel legt der Abgleich ihn nicht an."""
+    result = box.run()
+
+    assert result.returncode == 0, result.stderr
+    assert _local_files(box) == []
+    assert not any("backend-local" in c for c in box.calls())
+
+
+def test_installierter_local_channel_wird_mit_abgeglichen(box):
+    _in_sync(box)
+    (box.systemd / LOCAL_SERVICE).write_text("[Service]\nUser=baluhost\n", encoding="utf-8")
+    (box.systemd / LOCAL_SOCKET).write_text("[Socket]\nSocketUser=baluhost\n", encoding="utf-8")
+
+    result = box.run()
+
+    assert result.returncode == 0, result.stderr
+    assert "CHANGED: baluhost-backend-local\n" in result.stdout
+    assert "CHANGED: baluhost-backend-local.socket" in result.stdout
+    assert "OK: 2 unit(s) replaced" in result.stdout
+    assert box.reloads() == 1
+    service = (box.systemd / LOCAL_SERVICE).read_text(encoding="utf-8")
+    socket = (box.systemd / LOCAL_SOCKET).read_text(encoding="utf-8")
+    assert "@@" not in service + socket
+    assert "User=sven\n" in service and "Group=sven\n" in service
+    assert f"ExecStart={box.root.as_posix()}/backend/.venv/bin/uvicorn app.main:app" in service
+    assert f"EnvironmentFile={box.root.as_posix()}/.env.production" in service
+    assert "SocketUser=sven\n" in socket and "SocketGroup=sven\n" in socket
+    # Die alte Fassung beider Dateien ist gesichert.
+    saved = sorted(p.name.rsplit(".", 1)[0] for p in box.backups.iterdir())
+    assert saved == [LOCAL_SERVICE, LOCAL_SOCKET]
+
+
+def test_nur_der_socket_installiert_zieht_den_service_nach(box):
+    """Das Paar gehoert zusammen: eine Haelfte allein waere nach dem Abgleich
+    eine Vorlage ohne ihr Gegenstueck."""
+    _in_sync(box)
+    (box.systemd / LOCAL_SOCKET).write_text("[Socket]\n", encoding="utf-8")
+
+    result = box.run()
+
+    assert result.returncode == 0, result.stderr
+    assert _local_files(box) == [LOCAL_SERVICE, LOCAL_SOCKET]
+
+
+def test_local_channel_im_takt_ist_ein_noop_ueber_sechs_units(box):
+    _in_sync(box)
+    (box.systemd / LOCAL_SOCKET).write_text("[Socket]\n", encoding="utf-8")
+    assert box.run().returncode == 0
+    box.log.write_text("", encoding="utf-8")
+
+    result = box.run()
+
+    assert result.returncode == 0, result.stderr
+    assert "OK: all 6 units up to date" in result.stdout
+    assert box.reloads() == 0
+
+
+def test_verify_bekommt_auch_das_local_channel_paar(box):
+    _in_sync(box)
+    (box.systemd / LOCAL_SOCKET).write_text("[Socket]\n", encoding="utf-8")
+
+    box.run()
+
+    verify = [c for c in box.calls() if c.startswith("systemd-analyze verify")]
+    assert len(verify) == 1
+    assert LOCAL_SERVICE in verify[0] and LOCAL_SOCKET in verify[0]
+
+
+def test_verify_fehler_am_local_channel_schreibt_gar_nichts(box):
+    _in_sync(box)
+    before = (box.systemd / "baluhost-backend.service").read_text(encoding="utf-8")
+    (box.systemd / "baluhost-backend.service").write_text(before + "# drift\n", encoding="utf-8")
+    (box.systemd / LOCAL_SOCKET).write_text("[Socket]\nalt\n", encoding="utf-8")
+
+    result = box.run(FAKE_VERIFY_FAIL="baluhost-backend-local.service")
+
+    assert result.returncode != 0
+    assert (box.systemd / LOCAL_SOCKET).read_text(encoding="utf-8") == "[Socket]\nalt\n"
+    assert (box.systemd / "baluhost-backend.service").read_text(encoding="utf-8").endswith("# drift\n")
+    assert not (box.systemd / LOCAL_SERVICE).exists()
+
+
+def test_veralteter_systemd_stand_des_sockets_laedt_neu(box):
+    """NeedDaemonReload wird je Datei gefragt, auch fuer den Socket."""
+    _in_sync(box)
+    (box.systemd / LOCAL_SOCKET).write_text("[Socket]\n", encoding="utf-8")
+    assert box.run().returncode == 0
+    box.log.write_text("", encoding="utf-8")
+
+    box.run()
+
+    asked = [c for c in box.calls() if "NeedDaemonReload" in c]
+    assert any(c.endswith(LOCAL_SOCKET) for c in asked)
+    assert any(c.endswith(LOCAL_SERVICE) for c in asked)
 
 
 def test_die_vorlage_erlaubt_genau_dieses_skript():

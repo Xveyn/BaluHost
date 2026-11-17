@@ -17,6 +17,13 @@ SERVICES=(
     "baluhost-monitoring"
 )
 
+# The local channel (Unix socket for the Tauri Companion, #717): a
+# socket-activated pair, installed as an optional extra below. Must match
+# OPTIONAL_UNIT_FILES in deploy/scripts/install-systemd-units.sh and in
+# backend/app/services/unit_drift.py.
+OPTIONAL_UNIT_FILES=(baluhost-backend-local.service baluhost-backend-local.socket)
+LOCAL_CHANNEL_SOCKET="baluhost-backend-local.socket"
+
 # ─── Main ───────────────────────────────────────────────────────────
 
 log_step "Systemd Services"
@@ -114,6 +121,32 @@ install_plugin_wrapper() {
 
     install_sudoers_file "$TEMPLATE_DIR/baluhost-plugin-sudoers" /etc/sudoers.d/baluhost-plugin \
         "BALUHOST_USER=$BALUHOST_USER"
+}
+
+install_local_channel_units() {
+    # Rendered with the same three values as the core units, so the deploy's
+    # unit sync (install-systemd-units.sh) finds them byte-identical.
+    local file tpl out
+    for file in "${OPTIONAL_UNIT_FILES[@]}"; do
+        tpl="$TEMPLATE_DIR/$file"
+        out="$SYSTEMD_DIR/$file"
+        if [[ ! -f "$tpl" ]]; then
+            log_error "Template not found: $tpl"
+            return 1
+        fi
+        process_template "$tpl" "$out" \
+            "BALUHOST_USER=$BALUHOST_USER" \
+            "INSTALL_DIR=$INSTALL_DIR" \
+            "VENV_BIN=$VENV_BIN" || return 1
+        chmod 644 "$out" || return 1
+        log_info "Created $out"
+    done
+    systemctl daemon-reload || return 1
+    # The SOCKET is what gets enabled. The service starts on the first
+    # connection (systemd hands it the socket as fd 3) and must stay disabled:
+    # enabled, it would start at boot without a socket to listen on.
+    systemctl enable "$LOCAL_CHANNEL_SOCKET" || return 1
+    log_info "$LOCAL_CHANNEL_SOCKET enabled (service is socket-activated, not enabled itself)."
 }
 
 install_polkit_rule() {
@@ -293,6 +326,7 @@ run_optional "Deploy sudoers" install_sudoers_file \
 run_optional "Hardware sudoers" install_sudoers_file \
     "$TEMPLATE_DIR/baluhost-hardware-sudoers" /etc/sudoers.d/baluhost-hardware \
     "BALUHOST_USER=$BALUHOST_USER"
+run_optional "Local channel units" install_local_channel_units
 run_optional "Plugin sandbox spawn wrapper" install_plugin_wrapper
 run_optional "Polkit rule" install_polkit_rule
 run_optional "Udev rule" install_udev_rule

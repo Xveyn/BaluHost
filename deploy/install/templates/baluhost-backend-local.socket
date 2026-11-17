@@ -4,8 +4,8 @@ Description=BaluHost local-channel socket (Tauri Companion)
 [Socket]
 ListenStream=/run/baluhost/local.sock
 SocketMode=0660
-SocketUser=baluhost
-SocketGroup=baluhost
+SocketUser=@@BALUHOST_USER@@
+SocketGroup=@@BALUHOST_USER@@
 RemoveOnStop=yes
 
 [Install]

@@ -56,7 +56,7 @@ Business logic layer. Routes delegate to services — services contain the actua
 | `pin_service.py` | Device PIN management (set, verify, clear) |
 | `step_up.py` | Second-factor re-verification (fresh TOTP code or backup code, else current password) before a service-interrupting action a valid token alone shouldn't cover — used by `restart-all`'s step-up |
 | `system_restart.py` | Restarts the five BaluHost systemd units via `sudo systemctl restart`, backend last (its own restart ends the calling process) |
-| `unit_drift.py` | Deploy smoke-check (`python -m app.services.unit_drift`, run by `ci-deploy.sh` after the health check, always exit 0): installed units + effective `ExecStart` from `systemctl show` vs. the rendered templates, plus drop-ins and `NeedDaemonReload`. Since #689 the deploy renders the units itself (step 6b, `deploy/scripts/install-systemd-units.sh`); this stays as the independent second measurement — it also catches drop-ins and boxes where 6b could only warn. `baluhost-backend-local` is excluded until #717 |
+| `unit_drift.py` | Deploy smoke-check (`python -m app.services.unit_drift`, run by `ci-deploy.sh` after the health check, always exit 0): installed units + effective `ExecStart` from `systemctl show` vs. the rendered templates, plus drop-ins and `NeedDaemonReload`. Since #689 the deploy renders the units itself (step 6b, `deploy/scripts/install-systemd-units.sh`); this stays as the independent second measurement — it also catches drop-ins and boxes where 6b could only warn. The local channel's pair (`baluhost-backend-local.service` + `.socket`, `OPTIONAL_UNIT_FILES`) is checked where it is installed and skipped where it is not; a socket has no `ExecStart` to compare (#717) |
 
 ### Service Subdirectories
 

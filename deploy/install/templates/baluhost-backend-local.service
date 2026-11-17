@@ -5,12 +5,19 @@ After=baluhost-backend-local.socket network.target postgresql.service
 
 [Service]
 Type=simple
-User=baluhost
-Group=baluhost
-WorkingDirectory=/opt/baluhost/backend
-EnvironmentFile=/opt/baluhost/.env.production
+User=@@BALUHOST_USER@@
+Group=@@BALUHOST_USER@@
+WorkingDirectory=@@INSTALL_DIR@@/backend
+EnvironmentFile=@@INSTALL_DIR@@/.env.production
 Environment="BALUHOST_CHANNEL=local"
-ExecStart=/opt/baluhost/venv/bin/uvicorn app.main:app \
+# The local channel never owns the hardware loops (#710). The app already
+# refuses the primary role when BALUHOST_CHANNEL=local (core/lifespan.py,
+# _try_become_primary); this line says so where an operator looks first, and
+# replaces the drop-in primary-worker.conf that used to exist on the box only.
+Environment="BALUHOST_PRIMARY_WORKER=0"
+# Socket-activated: systemd passes the listening socket as fd 3
+# (baluhost-backend-local.socket). Enable the SOCKET, not this service.
+ExecStart=@@VENV_BIN@@/uvicorn app.main:app \
     --fd 3 \
     --workers 2 \
     --log-level info
