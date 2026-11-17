@@ -28,7 +28,9 @@ share it), so a session file is input, not a credential:
 - the upload id comes from the URL and becomes a file name — only a canonical
   lower-case UUID is ever turned into a path;
 - every field is type-checked on load, a malformed file is an unknown session;
-- neither the session file nor the data file is ever opened through a symlink;
+- no file of a session is ever opened through a symlink, and only a regular
+  file is ever read or written — a named pipe put in its place is refused at
+  once instead of blocking the open (`_open_regular()`);
 - `complete` pins the data file it checked and hashed (device + inode);
   `move_completed_upload()` moves that file or nothing — whatever was put in
   its place in between does not reach the destination, and the permissions
@@ -84,6 +86,7 @@ _UPLOAD_ID_RE = re.compile(
 )
 _HASH_READ_SIZE = 4 * 1024 * 1024
 _O_NOFOLLOW = getattr(os, "O_NOFOLLOW", 0)
+_O_NONBLOCK = getattr(os, "O_NONBLOCK", 0)
 
 # Without flock (Windows) one lock per process is all there is to exclude.
 _process_lock = threading.Lock()
@@ -92,6 +95,32 @@ _process_lock = threading.Lock()
 def _is_upload_id(value: object) -> bool:
     """Whether *value* may be used as a file name in the upload directory."""
     return isinstance(value, str) and _UPLOAD_ID_RE.fullmatch(value) is not None
+
+
+def _open_regular(path: Path, flags: int, mode: int = 0o600) -> int:
+    """Open *path* and return the descriptor — of a regular file or not at all.
+
+    Every open in this module goes through here, because the directory is
+    writable by others:
+
+    - never through a symlink (``O_NOFOLLOW``);
+    - never waiting: opening a named pipe blocks until its other end is
+      opened, which would park one worker thread per request for good.
+      ``O_NONBLOCK`` makes that open return (or fail) at once and changes
+      nothing for a regular file;
+    - whatever opened is checked on the descriptor, not on the path.
+
+    Raises ``OSError`` for anything else, a missing file included
+    (``FileNotFoundError``).
+    """
+    fd = os.open(path, flags | _O_NOFOLLOW | _O_NONBLOCK, mode)
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            raise OSError(errno.EINVAL, "Not a regular file", os.fspath(path))
+    except BaseException:
+        os.close(fd)
+        raise
+    return fd
 
 
 def _chmod(path: Path, mode: int) -> None:
@@ -104,13 +133,11 @@ def _chmod(path: Path, mode: int) -> None:
 def _append_to_data_file(path: Path, parts: Sequence[bytes]) -> int:
     """Append *parts* to the data file; returns the bytes written.
 
-    Never through a symlink: whoever can write to the upload directory must
-    not be able to redirect a chunk into another file.
+    Only into a regular file, never through a symlink: whoever can write to
+    the upload directory must not be able to redirect a chunk elsewhere.
     """
-    existed = path.exists() or path.is_symlink()
-    fd = os.open(
-        path, os.O_WRONLY | os.O_APPEND | os.O_CREAT | _O_NOFOLLOW, STORAGE_FILE_MODE,
-    )
+    existed = os.path.lexists(path)
+    fd = _open_regular(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, STORAGE_FILE_MODE)
     written = 0
     with os.fdopen(fd, "ab") as f:
         for part in parts:
@@ -172,13 +199,12 @@ def move_completed_upload(completed: CompletedUpload, destination: Path) -> None
     """
     changed = ValueError("Upload data changed after it was checked; not moved")
     try:
-        fd = os.open(completed.temp_path, os.O_RDONLY | _O_NOFOLLOW)
+        fd = _open_regular(completed.temp_path, os.O_RDONLY)
     except OSError as exc:
         raise changed from exc
     try:
         st = os.fstat(fd)
-        if not stat.S_ISREG(st.st_mode) \
-                or (st.st_dev, st.st_ino) != (completed.device, completed.inode):
+        if (st.st_dev, st.st_ino) != (completed.device, completed.inode):
             raise changed
         try:
             os.replace(completed.temp_path, destination)
@@ -285,7 +311,7 @@ class ChunkedUploadManager:
         on the unlinked inode and then finds no session file.
         """
         try:
-            fd = os.open(self._lock_path(upload_id), os.O_RDONLY | _O_NOFOLLOW)
+            fd = _open_regular(self._lock_path(upload_id), os.O_RDONLY)
         except OSError:
             yield False
             return
@@ -307,7 +333,7 @@ class ChunkedUploadManager:
         if not _is_upload_id(upload_id):
             return None
         try:
-            fd = os.open(self._meta_path(upload_id), os.O_RDONLY | _O_NOFOLLOW)
+            fd = _open_regular(self._meta_path(upload_id), os.O_RDONLY)
             with os.fdopen(fd, "r") as f:
                 data = json.load(f)
         except (OSError, ValueError):
@@ -556,22 +582,20 @@ class ChunkedUploadManager:
             # One open, never through a link; everything below — the check,
             # the hash, the identity handed to the mover — is about THIS file.
             try:
-                fd = os.open(session.temp_file_path, os.O_RDONLY | _O_NOFOLLOW)
+                fd = _open_regular(session.temp_file_path, os.O_RDONLY)
             except FileNotFoundError:
                 self._remove_files(upload_id)
                 raise FileNotFoundError(f"Temp file missing for session {upload_id}") from None
             except OSError:
-                # A link where the data file belongs (ELOOP). Moving it into
-                # the user's folder would hand out read access to its target.
+                # A link, a pipe or a directory where the data file belongs.
+                # Moving a link into the user's folder would hand out read
+                # access to its target.
                 self._remove_files(upload_id)
                 raise ValueError(
                     f"Temp file of session {upload_id} is not a regular file"
                 ) from None
             try:
                 st = os.fstat(fd)
-                if not stat.S_ISREG(st.st_mode):
-                    self._remove_files(upload_id)
-                    raise ValueError(f"Temp file of session {upload_id} is not a regular file")
                 completed = CompletedUpload(
                     temp_path=session.temp_file_path,
                     sha256_hex=self._checksum(session, fd),

@@ -1014,3 +1014,94 @@ class TestMoveCompletedUpload:
 
         assert secret.stat().st_mode & 0o777 == 0o600
         assert moved_aside.stat().st_mode & 0o777 == cu.STORAGE_FILE_MODE
+
+
+# ============================================================================
+# A named pipe where a file belongs must not hang the worker
+# ============================================================================
+
+def _finishes(fn, timeout=5.0):
+    """Run *fn* in a daemon thread; fail if it is still running after *timeout*.
+
+    Opening a FIFO for reading blocks until someone opens it for writing. A
+    regression here would hang, so the call must not run in the test's own
+    thread (nor in an executor thread, which would keep the interpreter alive).
+    """
+    outcome = {}
+
+    def _run():
+        try:
+            outcome["result"] = fn()
+        except BaseException as exc:  # noqa: BLE001 - handed to the caller
+            outcome["error"] = exc
+
+    thread = threading.Thread(target=_run, daemon=True)
+    thread.start()
+    thread.join(timeout)
+    assert not thread.is_alive(), "blocked on a named pipe"
+    if "error" in outcome:
+        raise outcome["error"]
+    return outcome.get("result")
+
+
+@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="needs named pipes")
+class TestNamedPipeDoesNotBlock:
+    """Whoever can write to the upload directory can put a FIFO where one of
+    a session's files belongs. Every open of those files used to wait on it
+    forever — one stuck thread per request."""
+
+    def test_pipe_as_session_file_is_an_unknown_session(self, manager, upload_dir):
+        upload_dir.mkdir(parents=True)
+        os.mkfifo(upload_dir / f"{_VALID_ID}.json")
+
+        assert _finishes(lambda: manager.get_session(_VALID_ID)) is None
+
+    def test_pipe_as_lock_file_is_an_unknown_session(self, manager, upload_dir):
+        _plant_session(upload_dir)
+        lock = upload_dir / f"{_VALID_ID}.lock"
+        lock.unlink()
+        os.mkfifo(lock)
+
+        with pytest.raises(ValueError, match="Unknown upload session"):
+            _finishes(lambda: manager._write_locked(_VALID_ID, 0, [b"x"]))
+
+    def test_pipe_as_data_file_refuses_the_chunk(self, manager, upload_dir):
+        _plant_session(upload_dir)
+        os.mkfifo(upload_dir / _VALID_ID)
+
+        with pytest.raises(ValueError):
+            _finishes(lambda: manager._write_locked(_VALID_ID, 0, [b"x"]))
+
+    def test_pipe_as_data_file_refuses_complete(self, manager, upload_dir):
+        _plant_session(upload_dir, received_bytes=1, next_chunk_index=1)
+        os.mkfifo(upload_dir / _VALID_ID)
+
+        with pytest.raises(ValueError, match="not a regular file"):
+            _finishes(lambda: manager._complete_locked(_VALID_ID))
+
+        assert manager.get_session(_VALID_ID) is None
+
+    @pytest.mark.asyncio
+    async def test_pipe_swapped_in_before_the_move_is_not_moved(self, manager, tmp_path):
+        session = await _create(manager, total_size=5)
+        await manager.write_chunk(session.upload_id, 0, b"Hello")
+        completed = await manager.complete_session_checked(session.upload_id)
+        completed.temp_path.unlink()
+        os.mkfifo(completed.temp_path)
+        destination = tmp_path / "big.bin"
+
+        with pytest.raises(ValueError, match="changed after it was checked"):
+            _finishes(lambda: cu.move_completed_upload(completed, destination))
+
+        assert not destination.exists()
+
+    def test_cleanup_is_not_stopped_by_a_pipe(self, manager, upload_dir, clock):
+        upload_dir.mkdir(parents=True)
+        old = clock.now - SESSION_MAX_AGE.total_seconds() - 3600
+        pipe = upload_dir / f"{_VALID_ID}.json"
+        os.mkfifo(pipe)
+        os.utime(pipe, (old, old))
+
+        _finishes(manager._cleanup_stale_sync)
+
+        assert not pipe.exists()
