@@ -13,6 +13,8 @@ import LanguageSettings from '../components/LanguageSettings';
 import ByteUnitSettings from '../components/ByteUnitSettings';
 import StorageTab from '../components/settings/StorageTab';
 import IntegrationsTab from '../components/settings/IntegrationsTab';
+import LocalTlsCard from '../components/settings/LocalTlsCard';
+import { listPlugins } from '../api/plugins';
 
 const NotificationPreferencesPage = lazy(() => import('./NotificationPreferencesPage'));
 
@@ -27,6 +29,15 @@ export default function SettingsPage() {
   const { t } = useTranslation('settings');
   const [searchParams, setSearchParams] = useSearchParams();
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [localTlsEnabled, setLocalTlsEnabled] = useState(false);
+
+  // Karte des Plugins local_tls nur zeigen, wenn es aktiv ist (Admins).
+  useEffect(() => {
+    if (profile?.role !== 'admin') return;
+    listPlugins()
+      .then((res) => setLocalTlsEnabled(res.plugins.some((p) => p.name === 'local_tls' && p.is_enabled)))
+      .catch(() => setLocalTlsEnabled(false));
+  }, [profile?.role]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -364,7 +375,10 @@ export default function SettingsPage() {
         )}
 
         {activeTab === 'integrations' && (
-          <IntegrationsTab isAdmin={profile?.role === 'admin'} />
+          <>
+            <IntegrationsTab isAdmin={profile?.role === 'admin'} />
+            {profile?.role === 'admin' && localTlsEnabled && <LocalTlsCard />}
+          </>
         )}
 
       </div>

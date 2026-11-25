@@ -1,0 +1,61 @@
+{
+  "title": "Local TLS certificate",
+  "settings": "Settings",
+  "domain": "Domain",
+  "notConfigured": "Not set up yet",
+  "address": {
+    "current": "Current LAN IP",
+    "last": "Last IP set",
+    "setAt": "set on {{date}}",
+    "none": "–"
+  },
+  "cert": {
+    "validUntil": "Certificate valid until",
+    "daysLeft": "{{count}} days left",
+    "none": "No certificate"
+  },
+  "renewal": {
+    "last": "Last renewal",
+    "ok": "succeeded",
+    "failed": "failed",
+    "never": "None yet"
+  },
+  "lego": {
+    "label": "lego",
+    "ok": "installed ({{version}})",
+    "missing": "lego is not installed. Install it with:",
+    "too_old": "lego is too old (4.35 or newer required). Update with:"
+  },
+  "token": {
+    "label": "DNS token",
+    "set": "set",
+    "notSet": "not set",
+    "save": "Save token",
+    "remove": "Remove token",
+    "saved": "Token saved",
+    "removed": "Token removed"
+  },
+  "providers": {
+    "duckdns": {
+      "token": "DuckDNS token"
+    }
+  },
+  "actions": {
+    "renew": "Renew now",
+    "updateDns": "Update DNS now",
+    "renewDone": "Check finished",
+    "dnsDone": "DNS check finished",
+    "copy": "Copy",
+    "copied": "Copied"
+  },
+  "nginx": {
+    "hint": "nginx is still serving a different certificate. Add this to the nginx site and reload nginx:"
+  },
+  "error": {
+    "already_running": "A run is already in progress.",
+    "encryption_key_missing": "No encryption key configured; the token was not saved.",
+    "invalid_token_format": "The token format is invalid.",
+    "unknown": "Action failed.",
+    "load": "Could not load status."
+  }
+}

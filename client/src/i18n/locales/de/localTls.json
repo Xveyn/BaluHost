@@ -1,0 +1,61 @@
+{
+  "title": "Lokales TLS-Zertifikat",
+  "settings": "Einstellungen",
+  "domain": "Domain",
+  "notConfigured": "Noch nicht eingerichtet",
+  "address": {
+    "current": "Aktuelle LAN-IP",
+    "last": "Zuletzt gesetzte IP",
+    "setAt": "gesetzt am {{date}}",
+    "none": "–"
+  },
+  "cert": {
+    "validUntil": "Zertifikat gültig bis",
+    "daysLeft": "noch {{count}} Tage",
+    "none": "Kein Zertifikat"
+  },
+  "renewal": {
+    "last": "Letzte Erneuerung",
+    "ok": "erfolgreich",
+    "failed": "fehlgeschlagen",
+    "never": "Noch keine"
+  },
+  "lego": {
+    "label": "lego",
+    "ok": "installiert ({{version}})",
+    "missing": "lego ist nicht installiert. Installation:",
+    "too_old": "lego ist zu alt (mindestens 4.35 nötig). Aktualisieren mit:"
+  },
+  "token": {
+    "label": "DNS-Token",
+    "set": "gesetzt",
+    "notSet": "nicht gesetzt",
+    "save": "Token speichern",
+    "remove": "Token entfernen",
+    "saved": "Token gespeichert",
+    "removed": "Token entfernt"
+  },
+  "providers": {
+    "duckdns": {
+      "token": "DuckDNS-Token"
+    }
+  },
+  "actions": {
+    "renew": "Jetzt erneuern",
+    "updateDns": "DNS jetzt aktualisieren",
+    "renewDone": "Prüfung abgeschlossen",
+    "dnsDone": "DNS-Prüfung abgeschlossen",
+    "copy": "Kopieren",
+    "copied": "Kopiert"
+  },
+  "nginx": {
+    "hint": "nginx liefert noch ein anderes Zertifikat aus. Trage dies in der nginx-Site ein und lade nginx neu:"
+  },
+  "error": {
+    "already_running": "Es läuft bereits ein Lauf.",
+    "encryption_key_missing": "Kein Verschlüsselungsschlüssel konfiguriert; der Token wurde nicht gespeichert.",
+    "invalid_token_format": "Das Token-Format ist ungültig.",
+    "unknown": "Aktion fehlgeschlagen.",
+    "load": "Status konnte nicht geladen werden."
+  }
+}
