@@ -15,6 +15,7 @@ import jwt as pyjwt
 from app.core.config import settings
 from app.models.audit_log import AuditLog
 from app.models.refresh_token import RefreshToken
+from app.models.sync_state import SyncState
 from app.models.user import User
 from app.services import refresh_rotation
 from app.services.token_service import token_service
@@ -35,8 +36,21 @@ def _aware(dt: datetime) -> datetime:
     return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
 
-def _paired_token(db, user: User, device_id: str, age_days: float) -> str:
-    """Geraete-Token ausstellen und seine Zeile ``age_days`` altern lassen."""
+def _paired_token(
+    db, user: User, device_id: str, age_days: float, desktop: bool = True
+) -> str:
+    """Geraete-Token ausstellen und seine Zeile ``age_days`` altern lassen.
+
+    ``desktop=True`` legt wie die Desktop-Kopplung eine SyncState-Zeile an;
+    nur solche Kopplungen duerfen rotieren.
+    """
+    if desktop and not (
+        db.query(SyncState)
+        .filter(SyncState.user_id == user.id, SyncState.device_id == device_id)
+        .first()
+    ):
+        db.add(SyncState(user_id=user.id, device_id=device_id, device_name="Tray"))
+        db.commit()
     token = refresh_rotation.issue_device_refresh_token(db, user, device_id)
     row = _row(db, token)
     row.expires_at = datetime.now(timezone.utc) + timedelta(
@@ -202,17 +216,68 @@ def test_rotation_is_audited_without_token(client, db_session, regular_user):
     assert "dev-1" in (audit[0].details or "")
 
 
-def test_superseded_token_is_rejected_without_killing_the_device(
-    client, db_session, regular_user
-):
+def test_superseded_token_counts_as_reuse(client, db_session, regular_user):
+    """Ein echtes Tray hat einen ueberholten Nachfolger nie erhalten — wer ihn
+    vorlegt, hat die verlorene Antwort abgefangen."""
     token = _paired_token(db_session, regular_user, "dev-1", age_days=4)
     lost = _refresh(client, token, rotate=True).json()["refresh_token"]
-    _refresh(client, token, rotate=True)  # macht `lost` zu "superseded"
+    current = _refresh(client, token, rotate=True).json()["refresh_token"]
 
     r = _refresh(client, lost)
 
     assert r.status_code == 401
-    assert _row(db_session, token).revoked is False
+    db_session.expire_all()
+    rows = db_session.query(RefreshToken).filter(RefreshToken.device_id == "dev-1").all()
+    assert rows and all(row.revoked for row in rows)
+    assert _row(db_session, current).revocation_reason == "reuse_detected"
+    assert _refresh(client, token).status_code == 401
+    assert (
+        db_session.query(AuditLog)
+        .filter(AuditLog.action == "refresh_token_reuse_detected")
+        .count()
+        == 1
+    )
+
+
+def test_reuse_only_revokes_the_users_own_device(
+    client, db_session, regular_user, another_user
+):
+    """device_id ist clientgewaehlt (Desktop) bzw. eine kleine Zahl (Mobile) —
+    eine Reuse-Erkennung darf keine fremden Tokens mit gleicher ID treffen."""
+    token = _paired_token(db_session, regular_user, "3", age_days=4)
+    foreign = _paired_token(db_session, another_user, "3", age_days=0, desktop=False)
+    successor = _refresh(client, token, rotate=True).json()["refresh_token"]
+    assert _refresh(client, successor).status_code == 200
+
+    assert _refresh(client, token).status_code == 401
+
+    assert _row(db_session, successor).revoked is True
+    assert _row(db_session, foreign).revoked is False
+    assert _refresh(client, foreign).status_code == 200
+
+
+def test_token_without_desktop_pairing_is_never_rotated(client, db_session, regular_user):
+    """Mobile-Tokens tragen ein device_id, aber ihre Laufzeit setzt der Admin
+    bei der Geraetefreigabe — sie duerfen nicht ueber Rotation weiterleben."""
+    token = _paired_token(db_session, regular_user, "17", age_days=4, desktop=False)
+
+    r = _refresh(client, token, rotate=True)
+
+    assert r.status_code == 200, r.text
+    assert r.json()["refresh_token"] is None
+    assert db_session.query(RefreshToken).count() == 1
+
+
+def test_desktop_pairing_of_another_user_does_not_enable_rotation(
+    client, db_session, regular_user, another_user
+):
+    _paired_token(db_session, another_user, "dev-x", age_days=0)  # SyncState gehoert another_user
+    token = _paired_token(db_session, regular_user, "dev-x", age_days=4, desktop=False)
+
+    r = _refresh(client, token, rotate=True)
+
+    assert r.status_code == 200, r.text
+    assert r.json()["refresh_token"] is None
 
 
 def test_pairing_still_issues_a_storable_token(client, db_session, regular_user):

@@ -11,8 +11,12 @@ Abschnitt "A1 — Gleitende Kopplung".
 
 "Lazy revoke": Ein rotierter Token bleibt gueltig, bis sein Nachfolger zum
 ersten Mal benutzt wird; erst dann bekommt er ``revocation_reason="rotated"``.
-Wird ein so widerrufener Token danach noch einmal vorgelegt, hat ihn jemand
-anderes als das Geraet — dann faellt die ganze Kopplung des Geraets.
+Wird ein so widerrufener (oder ein ``superseded``) Token danach noch einmal
+vorgelegt, hat ihn jemand anderes als das Geraet — dann faellt die ganze
+Kopplung dieses Geraets dieses Nutzers.
+
+Rotiert werden nur Desktop-Kopplungen (SyncState-Zeile fuer Nutzer + Geraet);
+Mobile-Tokens behalten die vom Admin gesetzte Laufzeit.
 
 Token-Strings landen nie in Logs oder Exceptions.
 """
@@ -27,6 +31,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.security import create_refresh_token
 from app.models.refresh_token import RefreshToken
+from app.models.sync_state import SyncState
 from app.models.user import User
 from app.services import auth as auth_service
 from app.services import users as user_service
@@ -75,6 +80,17 @@ def _aware(dt: datetime) -> datetime:
     return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
 
 
+def _is_desktop_pairing(db: Session, row: RefreshToken) -> bool:
+    """Gehoert ``row`` zu einer Desktop-Kopplung? Die legt eine SyncState-Zeile
+    fuer genau diesen Nutzer und dieses Geraet an (desktop_pairing.py)."""
+    return (
+        db.query(SyncState.id)
+        .filter(SyncState.user_id == row.user_id, SyncState.device_id == row.device_id)
+        .first()
+        is not None
+    )
+
+
 def issue_device_refresh_token(
     db: Session,
     user: User,
@@ -116,8 +132,9 @@ def use_refresh_token(
 ) -> tuple[User, RefreshToken]:
     """Vorgelegten Refresh-Token pruefen und seine Nutzung vermerken.
 
-    Reihenfolge: Decodieren, Reuse-Check (vor dem generischen Widerruf, sonst
-    saehe er den Grund nie), Widerruf/unbekannt, Nutzer. Bei Erfolg wird ein
+    Reihenfolge: Decodieren, Reuse-Check (``rotated``/``superseded``, vor dem
+    generischen Widerruf, sonst saehe er den Grund nie), Widerruf/unbekannt,
+    Nutzer. Bei Erfolg wird ein
     noch gueltiger Vorgaenger als ``rotated`` widerrufen; alles in einem Commit.
 
     Raises:
@@ -139,11 +156,21 @@ def use_refresh_token(
 
     row = token_service.get_token_by_jti(db, jti) if jti else None
 
-    if row is not None and row.revoked and row.revocation_reason == REASON_ROTATED:
+    # "rotated": der Nachfolger wurde nachweislich benutzt. "superseded": der
+    # Nachfolger kam beim Geraet nie an — wer ihn vorlegt, hat ihn abgefangen.
+    if (
+        row is not None
+        and row.revoked
+        and row.revocation_reason in (REASON_ROTATED, REASON_SUPERSEDED)
+    ):
         revoked_count = 0
         if row.device_id:
             revoked_count = token_service.revoke_device_tokens(
-                db, row.device_id, reason=REASON_REUSE, commit=False
+                db,
+                row.device_id,
+                reason=REASON_REUSE,
+                commit=False,
+                user_id=row.user_id,
             )
         db.commit()
         logger.warning(
@@ -213,6 +240,10 @@ def rotate_if_due(
     unbenutzten Nachfolger. Ein Commit fuer alles.
     """
     if not row.device_id:
+        return None
+    # Nur Desktop-Kopplungen gleiten. Mobile-Tokens tragen auch ein device_id,
+    # ihre Laufzeit ist aber die vom Admin gesetzte Geraetefreigabe.
+    if not _is_desktop_pairing(db, row):
         return None
 
     half_life = timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS) / 2

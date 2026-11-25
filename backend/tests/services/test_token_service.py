@@ -146,6 +146,20 @@ class TestRevokeDeviceTokens:
     def test_returns_zero_for_unknown_device(self, db_session: Session):
         assert TokenService.revoke_device_tokens(db_session, "no-device") == 0
 
+    def test_user_scope_leaves_other_users_alone(
+        self, db_session: Session, regular_user: User, another_user: User
+    ):
+        mine = _store_token(db_session, regular_user.id, device_id="3")
+        theirs = _store_token(db_session, another_user.id, device_id="3")
+
+        count = TokenService.revoke_device_tokens(
+            db_session, "3", user_id=regular_user.id, reason="reuse_detected"
+        )
+
+        assert count == 1
+        assert TokenService.get_token_by_jti(db_session, mine).revoked is True
+        assert TokenService.get_token_by_jti(db_session, theirs).revoked is False
+
 
 class TestUpdateTokenUsage:
     def test_updates_timestamp_and_ip(self, db_session: Session, regular_user: User):

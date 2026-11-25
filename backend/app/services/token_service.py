@@ -179,6 +179,7 @@ class TokenService:
         device_id: str,
         reason: Optional[str] = None,
         commit: bool = True,
+        user_id: Optional[int] = None,
     ) -> int:
         """
         Revoke all refresh tokens for a specific device.
@@ -188,14 +189,20 @@ class TokenService:
             device_id: Device whose tokens to revoke
             reason: Optional reason for revocation
             commit: False = nur flush, der Aufrufer committet
+            user_id: Nur Tokens dieses Nutzers widerrufen. device_id ist nicht
+                global eindeutig (Desktop: clientgewaehlt, Mobile: kleine
+                Zahl) — jeder Aufruf aus einem Nutzerkontext muss das setzen.
 
         Returns:
             Number of tokens revoked
         """
-        tokens = db.query(RefreshToken).filter(
+        query = db.query(RefreshToken).filter(
             RefreshToken.device_id == device_id,
             RefreshToken.revoked == False
-        ).all()
+        )
+        if user_id is not None:
+            query = query.filter(RefreshToken.user_id == user_id)
+        tokens = query.all()
 
         count = 0
         for token in tokens:
