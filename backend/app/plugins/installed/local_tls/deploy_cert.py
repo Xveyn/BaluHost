@@ -12,7 +12,7 @@ import socket
 import ssl
 import subprocess
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -44,6 +44,18 @@ class CertInfo:
     sans: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class DeployOutcome:
+    info: CertInfo
+    served: bool  # liefert nginx nach dem Reload das neue Zertifikat aus?
+
+
+def _utc(now: datetime) -> datetime:
+    if now.tzinfo is None or now.utcoffset() is None:
+        raise ValueError("now must be timezone-aware")
+    return now.astimezone(timezone.utc)
+
+
 def _fingerprint(cert: x509.Certificate) -> str:
     return hashlib.sha256(cert.public_bytes(serialization.Encoding.DER)).hexdigest()
 
@@ -55,7 +67,8 @@ def _public_bytes(public_key) -> bytes:
 
 
 def inspect(cert_pem: bytes, key_pem: bytes, domain: str, now: datetime) -> CertInfo:
-    """Prueft PEM, Schluesselpaar, SAN, Gueltigkeit und Kettenreihenfolge."""
+    """Prueft PEM, Schluesselpaar, SAN, Gueltigkeit und Vollstaendigkeit der Kette."""
+    now = _utc(now)
     try:
         chain = x509.load_pem_x509_certificates(cert_pem)
     except ValueError:
@@ -84,10 +97,13 @@ def inspect(cert_pem: bytes, key_pem: bytes, domain: str, now: datetime) -> Cert
     if now >= leaf.not_valid_after_utc:
         raise CertInvalid("certificate expired")
 
-    # Kette vollstaendig und in Reihenfolge: jedes Glied vom naechsten ausgestellt.
+    # Kette vollstaendig und in Reihenfolge: jedes Glied vom naechsten ausgestellt;
+    # ein nicht selbst ausgestelltes Leaf ohne Zwischenzertifikat ist unvollstaendig.
+    if len(chain) == 1 and leaf.issuer != leaf.subject:
+        raise CertInvalid("incomplete chain")
     for child, parent in zip(chain, chain[1:]):
         if child.issuer != parent.subject:
-            raise CertInvalid("certificate chain is incomplete or out of order")
+            raise CertInvalid("certificate chain is out of order")
 
     return CertInfo(fingerprint=_fingerprint(leaf), not_after=leaf.not_valid_after_utc, sans=sans)
 
@@ -149,6 +165,25 @@ def _prune(data_dir: Path) -> None:
         shutil.rmtree(releases / name, ignore_errors=True)
 
 
+def _release_fingerprint(data_dir: Path, target: Optional[str]) -> Optional[str]:
+    """Fingerabdruck des Leafs in ``<data>/<target>/fullchain.pem``; unlesbar -> None."""
+    if target is None:
+        return None
+    try:
+        pem = (data_dir / target / "fullchain.pem").read_bytes()
+        return _fingerprint(x509.load_pem_x509_certificates(pem)[0])
+    except (OSError, ValueError, IndexError):
+        return None
+
+
+def _clean_stale_tmp(data_dir: Path) -> None:
+    for p in data_dir.glob(".live.tmp.*"):
+        try:
+            p.unlink()
+        except OSError:
+            pass
+
+
 def deploy(
     cert_path: Path,
     key_path: Path,
@@ -158,61 +193,90 @@ def deploy(
     *,
     reload: Callable[[], None] = reload_nginx,
     served_fingerprint: Callable[[str], Optional[str]] = served_fingerprint,
-) -> CertInfo:
+) -> DeployOutcome:
     """Prueft, legt einen Release an, tauscht ``live``, laedt nginx neu und verifiziert.
 
-    Bei Reload-Fehler oder abweichendem ausgeliefertem Zertifikat wird ``live``
-    auf die vorige Version zurueckgesetzt und nginx erneut geladen; ohne vorige
-    Version wird ``live`` entfernt. In beiden Faellen: ``DeployFailed``.
-    """
-    cert_pem = Path(cert_path).read_bytes()
-    key_pem = Path(key_path).read_bytes()
-    info = inspect(cert_pem, key_pem, domain, now)
+    Vor dem Tausch wird gemessen, was nginx gerade ausliefert ("pre"). Verhalten:
 
-    for d in (data_dir, data_dir / "releases"):
-        d.mkdir(mode=0o700, parents=True, exist_ok=True)
-        os.chmod(d, 0o700)
+    - Ungueltiges Zertifikat -> ``CertInvalid``, nichts wird angefasst.
+    - Reload scheitert -> der Zustand von nginx ist unklar: gab es einen vorigen
+      Release, wird ``live`` darauf zurueckgesetzt (erneuter Reload, neuer Release
+      geloescht); sonst bleibt ``live`` auf dem neuen Release (nginx referenziert
+      ihn noch nicht). In beiden Faellen ``DeployFailed`` mit dem Reload-Grund.
+    - nginx lieferte vorher den vorigen Release des Plugins aus (pre == dessen
+      Fingerabdruck) und liefert nach dem Reload nicht den neuen -> Rueckabwicklung
+      wie oben, ``DeployFailed`` ("served ...").
+    - Sonst (Erstinstallation, oder die nginx-Site zeigt noch nicht auf ``live``)
+      bleiben neuer Release und ``live`` stehen; ``DeployOutcome.served`` sagt,
+      ob nginx ihn bereits ausliefert.
+    """
+    now = _utc(now)
+    try:
+        cert_pem = Path(cert_path).read_bytes()
+        key_pem = Path(key_path).read_bytes()
+    except OSError:
+        raise DeployFailed("certificate files not readable") from None
+    info = inspect(cert_pem, key_pem, domain, now)
 
     name = now.strftime("%Y%m%dT%H%M%SZ")
     target = f"releases/{name}"
     release = data_dir / target
     live = data_dir / "live"
+
+    try:
+        for d in (data_dir, data_dir / "releases"):
+            d.mkdir(mode=0o700, parents=True, exist_ok=True)
+            os.chmod(d, 0o700)
+        _clean_stale_tmp(data_dir)
+    except OSError:
+        raise DeployFailed("data directory not writable") from None
+
     previous = os.readlink(live) if live.is_symlink() else None
     if previous == target or os.path.lexists(release):
         raise DeployFailed("release for this timestamp already exists")
+    previous_fp = _release_fingerprint(data_dir, previous)
+    pre = served_fingerprint(domain)
+    was_serving_plugin = previous_fp is not None and pre == previous_fp
 
-    release.mkdir(mode=0o700)
-    os.chmod(release, 0o700)
-    _write_private(release / "fullchain.pem", cert_pem)
-    _write_private(release / "privkey.pem", key_pem)
-
-    _point_live(data_dir, target)
-
-    reason: Optional[str] = None
     try:
-        reload()
-    except DeployFailed as exc:
-        reason = exc.reason
-    else:
-        served = served_fingerprint(domain)
-        if served != info.fingerprint:
-            reason = "served certificate does not match new certificate"
+        release.mkdir(mode=0o700)
+        os.chmod(release, 0o700)
+        _write_private(release / "fullchain.pem", cert_pem)
+        _write_private(release / "privkey.pem", key_pem)
+        _point_live(data_dir, target)
+    except OSError:
+        if previous is not None and os.path.lexists(live) and os.readlink(live) != previous:
+            try:
+                _point_live(data_dir, previous)
+            except OSError:
+                pass
+        _clean_stale_tmp(data_dir)
+        shutil.rmtree(release, ignore_errors=True)
+        raise DeployFailed("could not write release or switch live") from None
 
-    if reason is None:
-        _prune(data_dir)
-        return info
-
-    # Rueckabwicklung
-    if previous is not None:
-        _point_live(data_dir, previous)
+    def _roll_back(reason: str) -> DeployFailed:
+        try:
+            _point_live(data_dir, previous)
+        except OSError:
+            return DeployFailed(f"{reason}; rollback failed")
         try:
             reload()
         except DeployFailed as exc:
             reason = f"{reason}; rollback reload failed: {exc.reason}"
-    else:
-        if os.path.lexists(live):
-            live.unlink()
-        reason = f"{reason}; no previous release to roll back to"
-    shutil.rmtree(release, ignore_errors=True)
+        shutil.rmtree(release, ignore_errors=True)
+        _prune(data_dir)
+        return DeployFailed(reason)
+
+    try:
+        reload()
+    except DeployFailed as exc:
+        if previous is not None:
+            raise _roll_back(exc.reason) from None
+        raise DeployFailed(exc.reason) from None
+
+    served = served_fingerprint(domain) == info.fingerprint
+    if not served and was_serving_plugin:
+        raise _roll_back("served certificate does not match new certificate")
+
     _prune(data_dir)
-    raise DeployFailed(reason)
+    return DeployOutcome(info=info, served=served)

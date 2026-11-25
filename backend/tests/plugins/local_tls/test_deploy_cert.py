@@ -15,6 +15,7 @@ from app.plugins.installed.local_tls import deploy_cert
 from app.plugins.installed.local_tls.deploy_cert import (
     CertInvalid,
     DeployFailed,
+    DeployOutcome,
     deploy,
     inspect,
     reload_nginx,
@@ -48,6 +49,40 @@ def _make_pair(domain=DOMAIN, not_before=None, not_after=None):
     return cert_pem, key_pem, fp
 
 
+def _make_chain(domain=DOMAIN, ca_cn="Test CA"):
+    """CA-ausgestelltes Leaf: liefert (leaf_pem, ca_pem, key_pem)."""
+    ca_key = ec.generate_private_key(ec.SECP256R1())
+    ca_name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, ca_cn)])
+    ca = (
+        x509.CertificateBuilder()
+        .subject_name(ca_name)
+        .issuer_name(ca_name)
+        .public_key(ca_key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(NOW - timedelta(days=10))
+        .not_valid_after(NOW + timedelta(days=900))
+        .add_extension(x509.BasicConstraints(ca=True, path_length=None), critical=True)
+        .sign(ca_key, hashes.SHA256())
+    )
+    key = ec.generate_private_key(ec.SECP256R1())
+    leaf = (
+        x509.CertificateBuilder()
+        .subject_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, domain)]))
+        .issuer_name(ca_name)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(NOW - timedelta(days=1))
+        .not_valid_after(NOW + timedelta(days=90))
+        .add_extension(x509.SubjectAlternativeName([x509.DNSName(domain)]), critical=False)
+        .sign(ca_key, hashes.SHA256())
+    )
+    pem = serialization.Encoding.PEM
+    key_pem = key.private_bytes(
+        pem, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()
+    )
+    return leaf.public_bytes(pem), ca.public_bytes(pem), key_pem
+
+
 def _write_pair(tmp_path, name, **kw):
     cert_pem, key_pem, fp = _make_pair(**kw)
     src = tmp_path / "src" / name
@@ -71,9 +106,24 @@ class FakeReload:
 def _served_live(data_dir):
     """Liefert den Fingerabdruck dessen, worauf live gerade zeigt (wie nginx)."""
     def served(domain):
-        pem = (data_dir / "live" / "fullchain.pem").read_bytes()
+        path = data_dir / "live" / "fullchain.pem"
+        if not path.exists():
+            return None
+        pem = path.read_bytes()
         cert = x509.load_pem_x509_certificate(pem)
         return hashlib.sha256(cert.public_bytes(serialization.Encoding.DER)).hexdigest()
+    return served
+
+
+def _served_then(data_dir, after):
+    """Vor dem Tausch: was live zeigt (nginx liefert Plugin-Zertifikat); danach ``after``."""
+    live = _served_live(data_dir)
+    calls = []
+
+    def served(domain):
+        calls.append(domain)
+        return live(domain) if len(calls) == 1 else after
+
     return served
 
 
@@ -109,6 +159,33 @@ def test_inspect_rejects_expired():
         inspect(cert_pem, key_pem, DOMAIN, NOW)
 
 
+def test_inspect_accepts_complete_chain():
+    leaf, ca, key = _make_chain()
+    info = inspect(leaf + ca, key, DOMAIN, NOW)
+    assert info.sans == (DOMAIN,)
+
+
+def test_inspect_rejects_leaf_only_chain():
+    leaf, _, key = _make_chain()
+    with pytest.raises(CertInvalid, match="incomplete chain"):
+        inspect(leaf, key, DOMAIN, NOW)
+
+
+def test_inspect_rejects_out_of_order_chain():
+    leaf, ca, key = _make_chain()
+    _, other_ca, _ = _make_chain(ca_cn="Other CA")
+    with pytest.raises(CertInvalid):
+        inspect(leaf + other_ca, key, DOMAIN, NOW)
+    with pytest.raises(CertInvalid):
+        inspect(leaf + ca + other_ca, key, DOMAIN, NOW)
+
+
+def test_inspect_requires_aware_now():
+    cert_pem, key_pem, _ = _make_pair()
+    with pytest.raises(ValueError):
+        inspect(cert_pem, key_pem, DOMAIN, NOW.replace(tzinfo=None))
+
+
 def test_inspect_rejects_broken_pem():
     with pytest.raises(CertInvalid):
         inspect(b"not a pem", b"nope", DOMAIN, NOW)
@@ -121,9 +198,11 @@ def test_deploy_switches_live_atomically(tmp_path):
     data = tmp_path / "data"
     cert, key, fp = _write_pair(tmp_path, "a")
     reload = FakeReload()
-    info = deploy(cert, key, DOMAIN, data, NOW, reload=reload, served_fingerprint=_served_live(data))
+    outcome = deploy(cert, key, DOMAIN, data, NOW, reload=reload, served_fingerprint=_served_live(data))
 
-    assert info.fingerprint == fp
+    assert isinstance(outcome, DeployOutcome)
+    assert outcome.info.fingerprint == fp
+    assert outcome.served is True
     live = data / "live"
     assert live.is_symlink()
     assert os.readlink(live) == "releases/20261125T120000Z"
@@ -144,8 +223,9 @@ def test_rolls_back_when_served_cert_differs(tmp_path):
     reload = FakeReload()
     with pytest.raises(DeployFailed) as exc:
         deploy(c2, k2, DOMAIN, data, NOW + timedelta(days=60), reload=reload,
-               served_fingerprint=lambda d: "deadbeef")
+               served_fingerprint=_served_then(data, "deadbeef"))
     assert "served" in exc.value.reason
+    assert not (data / "releases" / "20270124T120000Z").exists()
     assert os.readlink(data / "live") == old_target
     assert reload.calls == 2
 
@@ -166,13 +246,85 @@ def test_rolls_back_when_reload_fails(tmp_path):
     assert reload.calls == 2
 
 
-def test_first_deploy_without_previous_release_fails_cleanly(tmp_path):
+def test_first_deploy_keeps_cert_when_nginx_not_switched_yet(tmp_path):
+    data = tmp_path / "data"
+    cert, key, fp = _write_pair(tmp_path, "a")
+    reload = FakeReload()
+    outcome = deploy(cert, key, DOMAIN, data, NOW, reload=reload,
+                     served_fingerprint=lambda d: "certbot-fp")
+    assert outcome.served is False
+    assert outcome.info.fingerprint == fp
+    assert os.readlink(data / "live") == "releases/20261125T120000Z"
+    assert (data / "live" / "fullchain.pem").exists()
+    assert reload.calls == 1
+
+
+def test_renew_while_site_not_switched_keeps_new_cert(tmp_path):
+    data = tmp_path / "data"
+    c1, k1, _ = _write_pair(tmp_path, "a")
+    deploy(c1, k1, DOMAIN, data, NOW, reload=FakeReload(),
+           served_fingerprint=lambda d: "certbot-fp")
+    c2, k2, _ = _write_pair(tmp_path, "b")
+    reload = FakeReload()
+    outcome = deploy(c2, k2, DOMAIN, data, NOW + timedelta(days=60), reload=reload,
+                     served_fingerprint=lambda d: "certbot-fp")
+    assert outcome.served is False
+    assert os.readlink(data / "live") == "releases/20270124T120000Z"
+    assert (data / "releases" / "20261125T120000Z").exists()
+    assert reload.calls == 1
+
+
+def test_first_deploy_reload_failure_keeps_live_and_raises(tmp_path):
     data = tmp_path / "data"
     cert, key, _ = _write_pair(tmp_path, "a")
-    with pytest.raises(DeployFailed):
-        deploy(cert, key, DOMAIN, data, NOW, reload=FakeReload(),
+    reload = FakeReload(fail_on={1})
+    with pytest.raises(DeployFailed) as exc:
+        deploy(cert, key, DOMAIN, data, NOW, reload=reload,
                served_fingerprint=lambda d: None)
-    assert not os.path.lexists(data / "live")
+    assert "reload" in exc.value.reason
+    assert os.readlink(data / "live") == "releases/20261125T120000Z"
+    assert reload.calls == 1
+
+
+def test_naive_now_is_rejected(tmp_path):
+    cert, key, _ = _write_pair(tmp_path, "a")
+    with pytest.raises(ValueError):
+        deploy(cert, key, DOMAIN, tmp_path / "data", NOW.replace(tzinfo=None),
+               reload=FakeReload(), served_fingerprint=lambda d: None)
+
+
+def test_stale_tmp_symlinks_are_cleaned(tmp_path):
+    data = tmp_path / "data"
+    data.mkdir()
+    os.symlink("releases/old", data / ".live.tmp.99999")
+    cert, key, _ = _write_pair(tmp_path, "a")
+    deploy(cert, key, DOMAIN, data, NOW, reload=FakeReload(),
+           served_fingerprint=_served_live(data))
+    assert not os.path.lexists(data / ".live.tmp.99999")
+
+
+def test_write_error_becomes_deploy_failed_and_keeps_live(tmp_path, monkeypatch):
+    data = tmp_path / "data"
+    c1, k1, _ = _write_pair(tmp_path, "a")
+    deploy(c1, k1, DOMAIN, data, NOW, reload=FakeReload(), served_fingerprint=_served_live(data))
+    old_target = os.readlink(data / "live")
+
+    real_write = deploy_cert._write_private
+
+    def write_then_fail(path, data_bytes):
+        if path.name == "privkey.pem":
+            raise OSError("disk full")
+        real_write(path, data_bytes)
+
+    monkeypatch.setattr(deploy_cert, "_write_private", write_then_fail)
+    c2, k2, _ = _write_pair(tmp_path, "b")
+    reload = FakeReload()
+    with pytest.raises(DeployFailed):
+        deploy(c2, k2, DOMAIN, data, NOW + timedelta(days=1), reload=reload,
+               served_fingerprint=_served_live(data))
+    assert os.readlink(data / "live") == old_target
+    assert reload.calls == 0
+    assert sorted(p.name for p in (data / "releases").iterdir()) == ["20261125T120000Z"]
 
 
 def test_invalid_cert_is_not_deployed(tmp_path):
@@ -207,7 +359,7 @@ def test_prune_never_deletes_live_target(tmp_path):
         c, k, _ = _write_pair(tmp_path, f"p{i}")
         with pytest.raises(DeployFailed):
             deploy(c, k, DOMAIN, data, NOW + timedelta(days=i), reload=FakeReload(),
-                   served_fingerprint=lambda d: "deadbeef")
+                   served_fingerprint=_served_then(data, "deadbeef"))
     target = os.readlink(data / "live")
     assert target == "releases/20261125T120000Z"
     assert (data / target / "fullchain.pem").exists()
