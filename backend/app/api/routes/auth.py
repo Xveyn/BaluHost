@@ -1,3 +1,5 @@
+from typing import Any, Optional
+
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
@@ -15,6 +17,7 @@ from app.schemas.auth import (
     PinLoginRequest, PinSetRequest, PinRemoveRequest, PinStatusResponse,
     RecoveryCodesGenerateRequest, RecoveryCodesResponse, RecoveryCodesStatusResponse,
     RecoveryResetRequest,
+    HandoffRequest, HandoffResponse, HandoffRedeemRequest,
 )
 from app.schemas.auth_policy import SessionPolicyResponse
 from app.schemas.user import UserPublic, UserCreate
@@ -825,41 +828,22 @@ async def logout(
     return {"message": "Logged out"}
 
 
-@router.post("/refresh", response_model=TokenResponse)
-@limiter.limit(get_limit("auth_refresh"))  # ✅ Security Fix #5
-async def refresh_token(
-    payload: RefreshTokenRequest,
-    request: Request,
-    response: Response,
-    db: Session = Depends(get_db)
-) -> TokenResponse:
+def _use_refresh_token_or_401(
+    db: Session, raw_token: str, ip_address: Optional[str], audit_logger: Any
+) -> tuple:
+    """Refresh-Token pruefen und als benutzt vermerken, sonst auditiert 401.
+
+    Gemeinsam fuer ``/auth/refresh`` und ``/auth/handoff`` (#847): beide
+    zaehlen als Nutzung des Tokens, inklusive "lazy revoke" des Vorgaengers
+    und Wiederverwendungserkennung. Rotiert nie.
+
+    Returns:
+        ``(user_record, row)`` aus ``refresh_rotation.use_refresh_token``.
     """
-    Refresh access token using a refresh token (mobile, desktop, tray).
-
-    Mobile clients receive a refresh token during registration whose lifetime
-    matches the chosen device authorization validity (30-180 days, default 90).
-    This endpoint allows them to obtain new access tokens without re-authentication.
-
-    Rotation is opt-in (#847): with ``rotate=true`` a device-bound token
-    (one carrying a ``device_id``) in the second half of its lifetime gets a
-    successor in ``refresh_token``. The old token stays valid until the
-    successor is first used ("lazy revoke"); presenting it after that counts
-    as reuse and revokes every token of the device. Without ``rotate`` nothing
-    rotates and ``refresh_token`` is null.
-
-    ✅ Security Fix #6: Checks whether the refresh token has been revoked.
-    """
-    from datetime import datetime, timezone
-
     from app.services import refresh_rotation
 
-    audit_logger = get_audit_logger_db()
-    ip_address = request.client.host if request.client else None
-
     try:
-        user_record, row = refresh_rotation.use_refresh_token(
-            db, payload.refresh_token, ip_address=ip_address
-        )
+        return refresh_rotation.use_refresh_token(db, raw_token, ip_address=ip_address)
     except refresh_rotation.RefreshTokenReused as exc:
         audit_logger.log_security_event(
             action="refresh_token_reuse_detected",
@@ -898,6 +882,42 @@ async def refresh_token(
             detail="Invalid refresh token"
         )
 
+
+@router.post("/refresh", response_model=TokenResponse)
+@limiter.limit(get_limit("auth_refresh"))  # ✅ Security Fix #5
+async def refresh_token(
+    payload: RefreshTokenRequest,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db)
+) -> TokenResponse:
+    """
+    Refresh access token using a refresh token (mobile, desktop, tray).
+
+    Mobile clients receive a refresh token during registration whose lifetime
+    matches the chosen device authorization validity (30-180 days, default 90).
+    This endpoint allows them to obtain new access tokens without re-authentication.
+
+    Rotation is opt-in (#847): with ``rotate=true`` a device-bound token
+    (one carrying a ``device_id``) in the second half of its lifetime gets a
+    successor in ``refresh_token``. The old token stays valid until the
+    successor is first used ("lazy revoke"); presenting it after that counts
+    as reuse and revokes every token of the device. Without ``rotate`` nothing
+    rotates and ``refresh_token`` is null.
+
+    ✅ Security Fix #6: Checks whether the refresh token has been revoked.
+    """
+    from datetime import datetime, timezone
+
+    from app.services import refresh_rotation
+
+    audit_logger = get_audit_logger_db()
+    ip_address = request.client.host if request.client else None
+
+    user_record, row = _use_refresh_token_or_401(
+        db, payload.refresh_token, ip_address, audit_logger
+    )
+
     new_refresh_token = None
     if payload.rotate:
         new_refresh_token = refresh_rotation.rotate_if_due(
@@ -931,3 +951,141 @@ async def refresh_token(
         user=user_public,
         refresh_token=new_refresh_token,
     )
+
+
+def _pin_error(error: str, message: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail={"error": error, "message": message},
+    )
+
+
+@router.post("/handoff", response_model=HandoffResponse)
+@limiter.limit(get_limit("auth_handoff"))
+async def issue_session_handoff(
+    payload: HandoffRequest,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+) -> HandoffResponse:
+    """Einmal-Code fuer eine Browser-Sitzung ausstellen (Tray -> Web-UI, #847).
+
+    Nachweis ist der Refresh-Token einer Geraetekopplung im Body, kein
+    Access-Token — eine Browser-Sitzung hat keinen und kann sich so nicht
+    selbst verlaengern. Das Vorlegen zaehlt als Nutzung des Tokens (wie ein
+    Refresh, ohne Rotation). Nur aus dem LAN. Hat das Konto eine PIN, ist sie
+    Pflicht (unabhaengig von ``pin_login_enabled`` und 2FA).
+
+    Bewusst ohne Passwort und 2FA (vom Besitzer bestaetigt): siehe
+    docs/superpowers/specs/2026-11-25-tray-session-handoff-always-awake-design.md, B1.
+    """
+    from app.services import pin_service, session_handoff
+
+    audit_logger = get_audit_logger_db()
+    ip_address = request.client.host if request.client else None
+
+    if not ip_address or not is_private_or_local_ip(ip_address):
+        audit_logger.log_security_event(
+            action="session_handoff_remote_denied",
+            details={"ip_address": ip_address},
+            success=False,
+            ip_address=ip_address,
+            db=db,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "error": "local_network_required",
+                "message": "Session handoff is only available from the local network.",
+            },
+        )
+
+    user_record, row = _use_refresh_token_or_401(
+        db, payload.refresh_token, ip_address, audit_logger
+    )
+
+    # Nur Geraetekopplungen: ein Refresh-Token ohne Geraet (Altbestand) reicht nicht.
+    if not row.device_id:
+        audit_logger.log_security_event(
+            action="session_handoff_failed",
+            user=user_record.username,
+            error_message="Refresh token is not bound to a device",
+            ip_address=ip_address,
+            db=db,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token"
+        )
+
+    if user_record.pin_hash:
+        if pin_service.is_pin_locked(user_record):
+            raise _pin_error("pin_locked", "PIN locked — use your password")
+        if not payload.pin:
+            raise _pin_error("pin_required", "PIN required")
+        if not pin_service.verify_pin(payload.pin, user_record.pin_hash):
+            pin_service.register_pin_failure(db, user_record)
+            audit_logger.log_security_event(
+                action="session_handoff_pin_failed",
+                user=user_record.username,
+                details={"device_id": row.device_id},
+                success=False,
+                ip_address=ip_address,
+                db=db,
+            )
+            raise _pin_error("pin_invalid", "Invalid PIN")
+        pin_service.reset_pin_failures(db, user_record)
+
+    code = session_handoff.issue_code(db, user_record, ip_address)
+    audit_logger.log_security_event(
+        action="session_handoff_issued",
+        user=user_record.username,
+        details={"device_id": row.device_id},
+        success=True,
+        ip_address=ip_address,
+        db=db,
+    )
+    return HandoffResponse(code=code, expires_in=session_handoff.HANDOFF_TTL_SECONDS)
+
+
+@router.post("/handoff/redeem", response_model=TokenResponse)
+@limiter.limit(get_limit("auth_handoff_redeem"))
+async def redeem_session_handoff(
+    payload: HandoffRedeemRequest,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+) -> TokenResponse:
+    """Einmal-Code gegen eine normale Browser-Sitzung tauschen (#847).
+
+    Oeffentlich: der Code (256 Bit, 30 s, einmalig) ist der Nachweis. Kein
+    LAN-Gate — die konfigurierte Web-URL kann per Hairpin-NAT mit der
+    oeffentlichen IP ankommen. Jeder Fehler ist dasselbe generische 401.
+    """
+    from app.services import session_handoff
+
+    audit_logger = get_audit_logger_db()
+    ip_address = request.client.host if request.client else None
+
+    user_record = session_handoff.redeem_code(db, payload.code)
+    if user_record is None:
+        audit_logger.log_security_event(
+            action="session_handoff_redeem_failed",
+            details={"ip_address": ip_address},
+            success=False,
+            ip_address=ip_address,
+            db=db,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired code"
+        )
+
+    token = _issue_session_token(user_record, db)
+    audit_logger.log_security_event(
+        action="session_handoff_redeemed",
+        user=user_record.username,
+        details={"ip_address": ip_address},
+        success=True,
+        ip_address=ip_address,
+        db=db,
+    )
+    return TokenResponse(access_token=token, user=user_service.serialize_user(user_record))

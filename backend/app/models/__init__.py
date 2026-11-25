@@ -116,6 +116,7 @@ from app.models.status_bar import StatusBarPillConfig, StatusBarSettings
 from app.models.steam_session import SteamSession
 from app.models.auth_policy import AuthPolicy
 from app.models.scheduled_reboot import ScheduledRebootState
+from app.models.session_handoff import SessionHandoffCode
 
 __all__ = [
     "Base",
@@ -235,4 +236,5 @@ __all__ = [
     "StatusBarSettings",
     "SteamSession",
     "ScheduledRebootState",
+    "SessionHandoffCode",
 ]

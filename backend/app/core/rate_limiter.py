@@ -154,6 +154,8 @@ RATE_LIMITS = {
     "auth_2fa_verify": "5/minute",
     "auth_2fa_setup": "5/minute",
     "auth_pin_login": "5/minute",
+    "auth_handoff": "10/minute",  # Tray -> Web-UI Einmal-Code (#847)
+    "auth_handoff_redeem": "10/minute",
     "auth_recovery_reset": "5/minute",
 
     # API key management

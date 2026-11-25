@@ -130,6 +130,23 @@ class RefreshTokenRequest(BaseModel):
     rotate: bool = False
 
 
+class HandoffRequest(BaseModel):
+    """Tray -> ``POST /auth/handoff``: Nachweis ist der Geraete-Refresh-Token (#847)."""
+    refresh_token: str
+    # Pflicht, wenn das Konto eine PIN hat; sonst ignoriert.
+    pin: str | None = None
+
+
+class HandoffResponse(BaseModel):
+    code: str
+    expires_in: int
+
+
+class HandoffRedeemRequest(BaseModel):
+    """Browser -> ``POST /auth/handoff/redeem``: der Code ist der Nachweis."""
+    code: str = Field(..., min_length=1, max_length=128)
+
+
 # --- 2FA Schemas ---
 
 class TwoFactorRequiredResponse(BaseModel):
