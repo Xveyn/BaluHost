@@ -1,7 +1,7 @@
 import { StrictMode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import Login from '../../pages/Login';
 
 const auth = vi.hoisted(() => ({
@@ -13,6 +13,8 @@ vi.mock('../../contexts/VersionContext', () => ({
   useVersion: () => ({ version: '1', loading: false }),
 }));
 vi.mock('../../lib/localApi', () => ({ localApi: { isAvailable: vi.fn(async () => false) } }));
+const toastError = vi.hoisted(() => vi.fn());
+vi.mock('react-hot-toast', () => ({ default: { error: toastError }, toast: { error: toastError } }));
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (k: string, o?: Record<string, string>) => (o ? `${k}|${o.username}|${o.current}` : k),
@@ -32,7 +34,31 @@ function renderLogin() {
   );
 }
 
+function renderLoginInRouter() {
+  return render(
+    <MemoryRouter initialEntries={['/login']}>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="/" element={<div>HOME</div>} />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
+function failRedeem() {
+  fetchMock.mockImplementation(async (url: string) => {
+    if (String(url).includes('/handoff/redeem')) {
+      return new Response(JSON.stringify({ detail: 'Invalid or expired code' }), {
+        status: 401,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    return new Response(JSON.stringify({}), { status: 200, headers: { 'content-type': 'application/json' } });
+  });
+}
+
 beforeEach(() => {
+  toastError.mockClear();
   auth.login.mockClear();
   auth.user = null;
   fetchMock.mockReset();
@@ -83,6 +109,23 @@ describe('Login Handoff', () => {
     await screen.findByText('handoff.confirmText|bob|alice');
     fireEvent.click(screen.getByRole('button', { name: /cancel|abbrech/i }));
     await waitFor(() => expect(screen.queryByText('handoff.confirmText|bob|alice')).not.toBeInTheDocument());
+    expect(auth.login).not.toHaveBeenCalled();
+  });
+
+  it('fehlgeschlagener Handoff mit bestehender Sitzung: zurueck in die App', async () => {
+    auth.user = { id: 1, username: 'alice' };
+    failRedeem();
+    renderLoginInRouter();
+    await screen.findByText('HOME');
+    expect(auth.login).not.toHaveBeenCalled();
+    expect(toastError).toHaveBeenCalledWith('handoff.failed');
+  });
+
+  it('fehlgeschlagener Handoff ohne Sitzung: Login-Maske mit Fehler', async () => {
+    failRedeem();
+    renderLoginInRouter();
+    await screen.findByText('handoff.failed');
+    expect(screen.queryByText('HOME')).not.toBeInTheDocument();
     expect(auth.login).not.toHaveBeenCalled();
   });
 });

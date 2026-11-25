@@ -9,6 +9,7 @@ import { sanitizeTwoFactorCode, isTwoFactorCodeComplete } from '../lib/twoFactor
 import { loginWithPin, redeemHandoff } from '../api/pin';
 import { takeHandoffCode } from '../lib/sessionHandoff';
 import { useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import { ForgotPasswordForm } from '../components/auth/ForgotPasswordForm';
 import { useVersion } from '../contexts/VersionContext';
 import { DeveloperBadge } from '../components/ui/DeveloperBadge';
@@ -69,7 +70,17 @@ export default function Login() {
         login(user, access_token);
         navigate('/', { replace: true });
       })
-      .catch(() => setError(t('handoff.failed')))
+      .catch(() => {
+        // Mit bestehender Sitzung nicht auf der Login-Maske stranden: das
+        // Fragment ist per replaceState am Router vorbei entfernt, LoginRoute
+        // leitet deshalb nicht von selbst weiter.
+        if (currentUser) {
+          toast.error(t('handoff.failed'));
+          navigate('/', { replace: true });
+          return;
+        }
+        setError(t('handoff.failed'));
+      })
       .finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
