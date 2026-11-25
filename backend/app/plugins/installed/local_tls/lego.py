@@ -36,8 +36,13 @@ def version(*, run=subprocess.run) -> tuple[int, int, int]:
     return (int(m[1]), int(m[2]), int(m[3]))
 
 
-def cert_paths(domain: str, data_dir: Path) -> tuple[Path, Path]:
-    base = data_dir / "lego" / "certificates"
+def lego_dir(data_dir: Path, *, staging: bool = False) -> Path:
+    """lego-Zustand; Staging getrennt, damit der Wechsel auf Produktion neu ausstellt."""
+    return data_dir / ("lego-staging" if staging else "lego")
+
+
+def cert_paths(domain: str, data_dir: Path, *, staging: bool = False) -> tuple[Path, Path]:
+    base = lego_dir(data_dir, staging=staging) / "certificates"
     return base / f"{domain}.crt", base / f"{domain}.key"
 
 
@@ -65,10 +70,10 @@ def obtain_or_renew(
     run=subprocess.run,
 ) -> bool:
     """Stellt aus oder erneuert; True, wenn ein neues Zertifikat entstanden ist."""
-    crt, _ = cert_paths(domain, data_dir)
+    crt, _ = cert_paths(domain, data_dir, staging=staging)
     before = _fingerprint(crt)
     args = [
-        "lego", "--accept-tos", "--path", str(data_dir / "lego"),
+        "lego", "--accept-tos", "--path", str(lego_dir(data_dir, staging=staging)),
         "--dns", provider_lego_name, "--domains", domain,
     ]
     if email:

@@ -152,3 +152,35 @@ def test_ensure_dirs_mode(tmp_path):
     d = tmp_path / "data"
     ensure_dirs(d)
     assert (d.stat().st_mode & 0o777) == 0o700
+
+
+def test_staging_uses_separate_lego_path(tmp_path):
+    """Staging und Produktion teilen keinen lego-Zustand: ein Staging-Zertifikat
+    darf den Wechsel auf Produktion nicht zum No-op-``renew`` machen."""
+    crt_prod, _ = lego.cert_paths(DOMAIN, tmp_path)
+    crt_stg, key_stg = lego.cert_paths(DOMAIN, tmp_path, staging=True)
+    assert crt_stg == tmp_path / "lego-staging" / "certificates" / f"{DOMAIN}.crt"
+    assert key_stg == tmp_path / "lego-staging" / "certificates" / f"{DOMAIN}.key"
+    assert crt_prod != crt_stg
+
+    # Staging-Zertifikat vorhanden -> Staging erneuert, Produktion stellt neu aus.
+    crt_stg.parent.mkdir(parents=True)
+    crt_stg.write_bytes(b"staging")
+    run, calls = _recorder()
+    lego.obtain_or_renew(DOMAIN, "duckdns", {}, tmp_path, email=None, staging=True, run=run)
+    args = calls[0][0]
+    assert args[args.index("--path") + 1] == str(tmp_path / "lego-staging")
+    assert args[-3:] == ["renew", "--days", "30"]
+
+    run, calls = _recorder()
+    lego.obtain_or_renew(DOMAIN, "duckdns", {}, tmp_path, email=None, staging=False, run=run)
+    args = calls[0][0]
+    assert args[args.index("--path") + 1] == str(tmp_path / "lego")
+    assert args[-1] == "run"
+
+
+def test_ensure_dirs_creates_both_lego_paths(tmp_path):
+    d = tmp_path / "data"
+    ensure_dirs(d)
+    for sub in ("lego", "lego-staging"):
+        assert ((d / sub).stat().st_mode & 0o777) == 0o700

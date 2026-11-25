@@ -13,8 +13,8 @@ class AlreadyRunning(Exception):
 
 
 def ensure_dirs(data_dir: Path) -> None:
-    """Legt das Datenverzeichnis (und lego/) mit Modus 0700 an."""
-    for d in (data_dir, data_dir / "lego"):
+    """Legt das Datenverzeichnis (und lego/, lego-staging/) mit Modus 0700 an."""
+    for d in (data_dir, data_dir / "lego", data_dir / "lego-staging"):
         d.mkdir(mode=0o700, parents=True, exist_ok=True)
         os.chmod(d, 0o700)
 
