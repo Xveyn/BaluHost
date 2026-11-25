@@ -18,6 +18,29 @@ pytest.importorskip("PyQt6")
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 
+@pytest.fixture(autouse=True)
+def _qt_teardown_order():
+    """Erst die Widgets einsammeln, dann die QApplication freigeben.
+
+    run_tray() legt ein QApplication als lokale Variable an; Menues, Bridge
+    und Lambdas bilden mit ihm Referenzzyklen und ueberleben den Aufruf.
+    Raeumte erst pytests gc_collect_harder() beim Beenden auf, zerstoerte
+    der GC in beliebiger Reihenfolge — QMenu nach seiner QApplication —
+    und der Lauf endete mit Segfault (Exit 139), obwohl alle Tests gruen
+    waren. Solange `app` hier festgehalten wird, ist sie kein Muell; der
+    erste collect() raeumt nur den Rest ab.
+    """
+    yield
+    import gc
+
+    from PyQt6.QtWidgets import QApplication
+
+    app = QApplication.instance()
+    gc.collect()
+    del app
+    gc.collect()
+
+
 class _NoThread:
     """Der Worker-Thread wird nicht gestartet — kein Bus, kein Netzwerk."""
 
@@ -147,3 +170,26 @@ def test_awake_state_sets_check_and_title(monkeypatch):
     bridge.awake_state.emit(AwakeState(False, None))
     assert [a.text() for a in menu.actions() if a.isChecked()] == ["Aus"]
     assert menu.title() == "Always Awake"
+
+
+@pytest.mark.parametrize("title", ["BaluHost öffnen", "BaluHost neu starten"])
+def test_secret_dialog_is_wide_enough_for_its_title(title):
+    """Der statische getText()-Dialog war schmaler als sein Titel; KWin
+    kuerzte ihn zu "BaluH...ffnen"."""
+    from PyQt6.QtWidgets import QApplication, QLineEdit
+
+    from baluhost_tray import tray as tray_module
+
+    app = QApplication.instance() or QApplication([])  # noqa: F841
+    dialog = tray_module._secret_dialog(title, "PIN für BaluHost:")
+    try:
+        assert dialog.windowTitle() == title
+        assert dialog.textEchoMode() == QLineEdit.EchoMode.Password
+        # Die tatsaechliche Breite nach dem Layout, nicht minimumWidth():
+        # QInputDialog setzt die Mindestgroesse des Dialogs selbst zurueck.
+        dialog.adjustSize()
+        needed = dialog.fontMetrics().horizontalAdvance(title)
+        assert dialog.width() >= needed + tray_module.TITLEBAR_RESERVE
+        assert dialog.width() >= tray_module.MIN_DIALOG_WIDTH
+    finally:
+        dialog.deleteLater()
