@@ -29,6 +29,7 @@ from app.plugins.installer import (
     InstalledArtifact,
     PluginInstaller,
 )
+from app.plugins.naming import bundled_plugin_names
 from app.plugins.signing import SignatureError, verify_detached_ed25519
 from app.plugins.marketplace import (
     SUPPORTED_INDEX_VERSIONS,
@@ -62,6 +63,17 @@ class IndexSignatureError(MarketplaceError):
 
 class PluginNotFoundError(MarketplaceError):
     """The requested plugin (or version) is not in the marketplace index."""
+
+
+class BundledPluginNameError(MarketplaceError):
+    """The name belongs to a bundled plugin; the marketplace must not touch it."""
+
+
+def _refuse_bundled(name: str) -> None:
+    if name in bundled_plugin_names():
+        raise BundledPluginNameError(
+            f"plugin {name!r} is a bundled plugin and cannot be managed by the marketplace"
+        )
 
 
 @dataclass
@@ -214,12 +226,14 @@ class MarketplaceService:
         ``installed`` is the list of *other* already-installed plugins whose
         pinned dependencies must be cross-checked by the resolver.
         """
+        _refuse_bundled(name)
         entry = self.get_version_entry(name, version)
         return self._installer.install(
             entry, name, installed=installed, force=force
         )
 
     def uninstall(self, name: str) -> bool:
+        _refuse_bundled(name)
         return self._installer.uninstall(name)
 
 

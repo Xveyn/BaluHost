@@ -75,6 +75,10 @@ unmanageable. A new route or helper that joins a name onto a directory needs the
 `DELETE /api/plugins/{name}` stays a plain `str` on purpose: it only touches the DB, and a
 stale row under a name the rule rejects must remain removable.
 `..` reaching `shutil.rmtree` in `uninstall()` was the case that motivated this.
+The marketplace additionally refuses the names of bundled plugins
+(`naming.bundled_plugin_names()`, enforced in `MarketplaceService.install()`/`uninstall()`,
+409 in the routes): `plugins_external_dir / <name>` can be a bundled plugin's data
+directory — `local_tls` keeps its certificates in `/var/lib/baluhost/plugins/local_tls`.
 
 ## Plugin Lifecycle
 
