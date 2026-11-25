@@ -25,10 +25,14 @@ PAIR_LOCK = "baluhost-tray-pair"
 # Zwei Klassen von Fehlschlag, zwei Exit-Codes — der Unterschied ist, ob ein
 # Neustart helfen *kann*:
 #
-#   EXIT_DONE (0)      dauerhaft. Fehlende Kopplung behebt kein Neustart, das
-#                      braucht einen Menschen. Mit Restart=on-failure wuerde
-#                      ein Code ungleich null das alle zehn Sekunden
-#                      wiederholen, bis die Unit auf failed steht.
+#   EXIT_DONE (0)      dauerhaft und nichts zu tun: "laeuft schon" (die erste
+#                      Instanz tut das Richtige) oder das fehlende Extra
+#                      'tray' (ein Paket installiert sich nicht durch Warten).
+#                      Mit Restart=on-failure wuerde ein Code ungleich null das
+#                      alle zehn Sekunden wiederholen, bis die Unit auf failed
+#                      steht. Eine fehlende *Kopplung* gehoert nicht mehr
+#                      hierher: das Tray startet trotzdem und wartet auf
+#                      `--pair` (Tooltip sagt es).
 #   EXIT_TRANSIENT (3) moeglicherweise voruebergehend. Beim Anmelden kann das
 #                      Tray vor Plasma oder vor dem Session-Bus dran sein;
 #                      dann hilft ein Neustart wirklich. Ist es doch
@@ -96,12 +100,9 @@ def run(argv: list[str] | None = None) -> int:
     if args.pair:
         return run_pairing(args.base_url, args.web_url)
 
-    if tray_config.load_tokens() is None:
-        # Der dauerhafte Fall: ohne Kopplung gibt es nichts zu zeigen, und
-        # kein Neustart aendert daran etwas. Deshalb 0, siehe oben.
-        print("Nicht gekoppelt. Einmalig ausführen: baluhost-tray --pair")
-        return EXIT_DONE
-
+    # Keine Token-Pruefung mehr: ohne Kopplung startet das Tray trotzdem und
+    # wartet im Worker auf `--pair` (loop.wait_for_pairing). Tooltip und grauer
+    # Zustand sagen, was zu tun ist; ein Neustart danach entfaellt.
     try:
         return start_qt_app(args.base_url, args.web_url)
     except NotifierUnavailable as exc:

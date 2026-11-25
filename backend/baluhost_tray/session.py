@@ -104,10 +104,9 @@ class Session:
         The old `if code != 200: forget()` was far wider than the spec ("a
         refresh rejected with 401"): a 404 from a proxy that does not pass the
         path through, or a 422 after a schema change, wiped
-        ~/.baluhost/tray-tokens.json. That same file is the unit's
-        ConditionPathExists, so the next start reports "condition failed" and
-        it looks as though the tray had never been set up — recoverable only
-        by a human running --pair again.
+        ~/.baluhost/tray-tokens.json. Losing that file drops the tray
+        into the pairing wait — recoverable only by a human running --pair
+        again.
         """
         with self._lock:
             tokens = tray_config.load_tokens()

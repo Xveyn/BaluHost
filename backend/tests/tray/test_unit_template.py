@@ -130,9 +130,10 @@ def test_the_start_limit_is_actually_reachable(unit: ConfigParser):
     )
 
 
-def test_does_not_start_before_there_is_a_pairing(unit: ConfigParser):
-    """Der genaue Pfad zaehlt: ein falscher liesse die Unit nie starten."""
-    assert unit["Unit"]["ConditionPathExists"] == "%h/.baluhost/tray-tokens.json"
+def test_unit_template_has_no_condition_on_token_file(unit: ConfigParser):
+    """Das Tray startet auch ohne Kopplung und wartet auf --pair; eine
+    Bedingung auf die Token-Datei hielte es davon ab."""
+    assert "ConditionPathExists" not in unit["Unit"]
 
 
 def test_never_asks_for_root(unit: ConfigParser):

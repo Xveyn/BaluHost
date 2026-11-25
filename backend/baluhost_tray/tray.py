@@ -364,6 +364,15 @@ def run_tray(base_url: str, web_url: str) -> int:
                 menu_visible(account.is_admin, account.is_admin is not None)
             )
 
+            def _on_paired() -> None:
+                # Aus dem Loop-Thread: Kontofakten neu holen, nur Signale senden.
+                facts = fetch_account_facts(
+                    session.client(), session.refresh_access
+                )
+                bridge.restart_visible.emit(
+                    menu_visible(facts.is_admin, facts.is_admin is not None)
+                )
+
             ctx = LoopContext(
                 session=session,
                 watcher=Watcher(session, state),
@@ -374,6 +383,7 @@ def run_tray(base_url: str, web_url: str) -> int:
                 hold_probe=lambda: is_gaming_active(session.client()),
                 connect=websockets.connect,
                 quiet=quiet,
+                on_paired=_on_paired,
             )
             await run_loop(ctx)
         except Exception as exc:

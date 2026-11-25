@@ -46,14 +46,15 @@ def test_a_second_pairing_is_not_reported_as_a_running_tray(capsys):
     assert "Tray läuft bereits" not in out
 
 
-def test_missing_pairing_exits_zero_and_points_at_pair(capsys):
-    """Exit 0, nicht 2: mit Restart=on-failure wuerde systemd sonst alle zehn
-    Sekunden neu starten, bis die Unit auf failed steht."""
+def test_main_starts_tray_without_tokens():
+    """Ohne Kopplung startet die Qt-App trotzdem: sie wartet auf --pair und
+    zeigt das im Tooltip, statt sich zu beenden."""
     with patch("baluhost_tray.main.single_instance.acquire"), \
-         patch("baluhost_tray.main.tray_config.load_tokens", return_value=None):
+         patch("baluhost_tray.main.tray_config.load_tokens", return_value=None), \
+         patch("baluhost_tray.main.start_qt_app", return_value=0) as start:
         code = tray_main.run(argv=[])
     assert code == 0
-    assert "--pair" in capsys.readouterr().out
+    assert start.called
 
 
 def test_pairing_does_not_take_the_tray_lock():
