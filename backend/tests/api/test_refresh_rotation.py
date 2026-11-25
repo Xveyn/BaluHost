@@ -242,7 +242,7 @@ def test_superseded_token_counts_as_reuse(client, db_session, regular_user):
 def test_reuse_only_revokes_the_users_own_device(
     client, db_session, regular_user, another_user
 ):
-    """device_id ist clientgewaehlt (Desktop) bzw. eine kleine Zahl (Mobile) —
+    """device_id ist clientgewaehlt (Desktop) bzw. ein UUID-String (Mobile) —
     eine Reuse-Erkennung darf keine fremden Tokens mit gleicher ID treffen."""
     token = _paired_token(db_session, regular_user, "3", age_days=4)
     foreign = _paired_token(db_session, another_user, "3", age_days=0, desktop=False)

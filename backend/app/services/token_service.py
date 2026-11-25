@@ -190,8 +190,9 @@ class TokenService:
             reason: Optional reason for revocation
             commit: False = nur flush, der Aufrufer committet
             user_id: Nur Tokens dieses Nutzers widerrufen. device_id ist nicht
-                global eindeutig (Desktop: clientgewaehlt, Mobile: kleine
-                Zahl) — jeder Aufruf aus einem Nutzerkontext muss das setzen.
+                global eindeutig (Desktop: clientgewaehlt, Mobile:
+                UUID-String der MobileDevice-Zeile) — jeder Aufruf aus
+                einem Nutzerkontext muss das setzen.
 
         Returns:
             Number of tokens revoked

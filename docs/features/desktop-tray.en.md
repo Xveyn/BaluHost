@@ -84,6 +84,11 @@ not expire after 7 days. If an already-replaced token is presented again
 (suspected theft), the server revokes all tokens of that device — pairing again
 is then required.
 
+Pairing again **replaces** the previous pairing of the same machine: the tray
+uses the machine-id as its device id, and on approval the server revokes all
+older tokens of that account for that id. An old copy of the credentials
+becomes worthless.
+
 ---
 
 ## Menu and click
@@ -256,8 +261,13 @@ request, drops into the *not paired* state (grey icon), says so **once** with
 again) and deletes the credentials from disk. After that it stays quiet: there
 is no storm of requests in the log.
 
-Only the background worker stops here — the process itself keeps running with
-a grey icon, so the tooltip can keep carrying the explanation.
+Neither the process nor the background worker ends: the tray stays with a grey
+icon and tooltip, checks every 10 seconds whether credentials are back on disk,
+and then reconnects by itself.
+
+An access token that was already issued (for instance the one of a browser
+session opened via "BaluHost oeffnen") stays valid after removal until it
+expires — at most the lifetime set in the auth policy (24 h maximum).
 
 To pair again, run `/opt/baluhost/backend/.venv/bin/baluhost-tray --pair`; the
 running service adopts the new pairing by itself, no restart (see above).
@@ -328,8 +338,9 @@ The full path into the venv is a necessity, not convenience: a bare
   once** (see above), otherwise nothing changes — harmless, just without the
   waiting.
 - **`Restart=on-failure`**, not `always` — the exit codes carry meaning: `0`
-  means *permanently done* (not paired, a second instance is running, the extra
-  is missing), where a restart does not help. `3` means *possibly transient*:
+  means *permanently done* (a second instance is running, the extra is
+  missing), where a restart does not help. A missing pairing is no longer an
+  exit since #847 — the tray starts and waits. `3` means *possibly transient*:
   no session bus or no tray host in the session — at login the tray can simply
   be ready before Plasma is — **or** a failure passed through from the
   background worker, whose cause nobody knows. There a restart genuinely does

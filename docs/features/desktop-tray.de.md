@@ -85,6 +85,11 @@ laeuft die Kopplung also nicht nach 7 Tagen ab. Wird ein bereits ersetztes
 Token erneut vorgelegt (Diebstahlverdacht), widerruft der Server alle Tokens
 dieses Geraets — dann ist neu koppeln noetig.
 
+Neu koppeln **ersetzt** die bisherige Kopplung desselben Rechners: das Tray
+nimmt die machine-id als Geraete-ID, und der Server widerruft beim Freigeben
+alle aelteren Tokens dieses Kontos fuer diese ID. Eine alte Kopie der
+Zugangsdaten wird damit wertlos.
+
 ---
 
 ## Menue und Klick
@@ -256,8 +261,14 @@ Symbol), meldet sich **einmal** mit *„Kopplung aufgehoben — bitte neu
 koppeln"* und loescht die Zugangsdaten von der Platte. Danach ist Ruhe: es entsteht kein
 Sturm von Anfragen im Log.
 
-Beendet wird dabei nur der Hintergrund-Arbeiter — der Prozess selbst laeuft
-mit grauem Symbol weiter, damit der Tooltip die Erklaerung behalten kann.
+Weder Prozess noch Hintergrund-Arbeiter enden dabei: das Tray bleibt mit
+grauem Symbol und Tooltip stehen, sieht alle 10 Sekunden nach, ob wieder
+Zugangsdaten auf der Platte liegen, und verbindet sich dann selbst.
+
+Ein bereits ausgestelltes Access-Token (etwa das einer per „BaluHost oeffnen"
+angemeldeten Browser-Sitzung) bleibt nach dem Entfernen gueltig, bis es
+ablaeuft — hoechstens die in der Auth-Richtlinie eingestellte Laufzeit
+(maximal 24 h).
 
 Wer erneut koppeln will, fuehrt
 `/opt/baluhost/backend/.venv/bin/baluhost-tray --pair` aus; der laufende
@@ -330,8 +341,9 @@ Der volle Pfad ins venv ist noetig, nicht Bequemlichkeit: ein nacktes
   **einmal neu installieren** (siehe oben), sonst bleibt alles beim Alten —
   harmlos, nur ohne das Warten.
 - **`Restart=on-failure`**, nicht `always` — die Exit-Codes sind
-  bedeutungstragend: `0` heisst *dauerhaft erledigt* (nicht gekoppelt, zweite
-  Instanz laeuft, Extra fehlt), da hilft kein Neustart. `3` heisst
+  bedeutungstragend: `0` heisst *dauerhaft erledigt* (zweite Instanz
+  laeuft, Extra fehlt), da hilft kein Neustart. Fehlende Kopplung ist seit #847
+  kein Exit mehr — das Tray startet und wartet. `3` heisst
   *moeglicherweise voruebergehend*: kein Session-Bus oder kein Tray-Host in
   der Sitzung — beim Anmelden kann das Tray schlicht vor Plasma dran sein —,
   **oder** ein durchgereichter Fehler des Hintergrundprozesses, dessen
