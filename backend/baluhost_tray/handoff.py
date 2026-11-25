@@ -45,8 +45,8 @@ def open_url_for(
     """URL, die der Browser oeffnen soll. Wirft nie."""
     plain = HandoffResult(url=web_url)
     try:
-        token = session.current_refresh_token()
-        if not token:
+        # Nur die Vorpruefung: ohne Kopplung gar nicht erst nach der PIN fragen.
+        if not session.current_refresh_token():
             return plain
 
         pin: str | None = None
@@ -59,6 +59,13 @@ def open_url_for(
 
         retried = False
         while True:
+            # Pro Versuch frisch lesen: der PIN-Dialog kann minutenlang offen
+            # sein, und die Refresh-Schleife rotiert derweil womoeglich. Ein
+            # rotierter Token gaelte serverseitig als Wiederverwendung und
+            # kostete die ganze Kopplung.
+            token = session.current_refresh_token()
+            if not token:
+                return plain
             response = session.client().post(
                 HANDOFF_PATH,
                 json={"refresh_token": token, "pin": pin},

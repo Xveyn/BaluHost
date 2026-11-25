@@ -158,3 +158,29 @@ def test_single_flight_ignores_second_start_while_running():
         threading.Event().wait(0.02)
     assert flight.start(lambda: None) is True
     assert started == [1]
+
+
+def test_token_is_read_after_pin_dialog_and_per_attempt():
+    """Der PIN-Dialog kann minutenlang offen sein; die Refresh-Schleife
+    rotiert inzwischen womoeglich. Ein vorher gelesener, inzwischen rotierter
+    Token wuerde serverseitig als Wiederverwendung die Kopplung kosten."""
+    session, client = _session(_err(401, "pin_invalid"), _ok())
+    tokens = iter(["before-dialog", "after-dialog", "after-retry"])
+    session.current_refresh_token.side_effect = lambda: next(tokens)
+
+    result = handoff.open_url_for(session, WEB, True, _asker("1111", "2222"))
+
+    assert result.url.endswith(f"#handoff={SECRET_CODE}")
+    sent = [c.kwargs["json"]["refresh_token"] for c in client.post.call_args_list]
+    assert sent == ["after-dialog", "after-retry"]
+
+
+def test_token_lost_during_pin_dialog_opens_plain_url():
+    session, client = _session(_ok())
+    tokens = iter(["before-dialog", None])
+    session.current_refresh_token.side_effect = lambda: next(tokens)
+
+    result = handoff.open_url_for(session, WEB, True, _asker("1111"))
+
+    assert result == handoff.HandoffResult(url=WEB)
+    client.post.assert_not_called()
