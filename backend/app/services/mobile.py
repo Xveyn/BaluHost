@@ -622,6 +622,30 @@ def update_desktop_device_name(db: Session, device_id: str, name: str, user_id: 
     return {"success": True, "device_id": device_id, "name": name}
 
 
+def remove_desktop_device(db: Session, device_id: str, user_id: int, is_admin: bool) -> Optional[bool]:
+    """Desktop-Geraet entfernen und seine Kopplung widerrufen.
+
+    Returns None wenn nicht gefunden, True bei Erfolg; ValueError bei fremdem
+    Geraet ohne Admin. Widerruf und Loeschen gehen in einer Transaktion.
+    SyncMetadata-Zeilen fallen per ORM-Cascade mit.
+    """
+    from app.models.sync_state import SyncState
+    from app.services.token_service import token_service
+
+    device = db.query(SyncState).filter(SyncState.device_id == device_id).first()
+    if not device:
+        return None
+    if not is_admin and device.user_id != user_id:
+        raise ValueError("You don't have permission to remove this device")
+    # Immer auf den Besitzer begrenzen: device_id ist nicht global eindeutig.
+    token_service.revoke_device_tokens(
+        db, device_id, reason="device_removed", user_id=device.user_id, commit=False
+    )
+    db.delete(device)
+    db.commit()
+    return True
+
+
 def _mobile_device_dict(device: MobileDevice, username: Optional[str]) -> dict:
     return {
         "id": device.id,
