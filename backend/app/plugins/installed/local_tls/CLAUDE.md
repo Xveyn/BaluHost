@@ -26,8 +26,9 @@ Trust tier, lifecycle and the `PluginBase` contract are in `../../CLAUDE.md`.
 
 ## Flow
 
-- `address_check` every 300 s: LAN IP → `update_address` when it changed, when
-  forced, or when the last set is ≥ 86400 s old (daily reconfirm). `address_changed`
+- `address_check` every 300 s: LAN IP → `update_address` when it or the domain
+  (`last_ip_domain`) changed, when forced, or when the last set is ≥ 86400 s old
+  (daily reconfirm). Every attempt is booked (`last_dns_at/ok/reason`) for the card. `address_changed`
   only when a previous IP existed and differs.
 - `cert_check` every 86400 s (and on startup): lego version ≥ 4.35 → `obtain_or_renew`
   (`run` if no cert, else `renew --days 30`) → `deploy` on a new cert, on `force`,
@@ -35,8 +36,10 @@ Trust tier, lifecycle and the `PluginBase` contract are in `../../CLAUDE.md`.
   the installed `cert_fingerprint` — otherwise a failed deploy would never be
   retried (`renew` is then a no-op) and the served certificate would run out.
   `DeployOutcome.served=False` (installed, nginx not yet switched to `live/`) is a
-  **success** with reason "installiert, nginx liefert es noch nicht aus". Afterwards,
-  independently: installed cert expires in ≤ 21 days → `cert_expiring`.
+  **success** with reason `REASON_NOT_SERVED` ("installed, nginx is not serving it
+  yet"; reasons are stored in English, the card maps known ones to i18n). Afterwards,
+  independently — also when unconfigured, as long as a certificate is installed:
+  installed cert expires in ≤ 21 days → `cert_expiring`.
 - Checks return `PendingEvent`s; they are sent **after** booking via
   `emit_plugin_event`, which enforces the declared cooldowns (entity = domain).
   So the checks stay synchronous and run in `asyncio.to_thread`.
@@ -46,7 +49,10 @@ Trust tier, lifecycle and the `PluginBase` contract are in `../../CLAUDE.md`.
 - Both checks take the same lock. Background runs skip on `AlreadyRunning`
   (`raise_if_running=False`); manual routes pass `True` and map it to 409.
 - On failure `record_renew` keeps the previous fingerprint/expiry — the installed
-  certificate has not changed.
+  certificate has not changed. An unexpected exception is booked as
+  "unexpected error (<type>)" (type only, never the message).
+- After the reload `deploy` polls the served certificate for up to 15 s: nginx
+  reloads gracefully and old workers keep serving the old certificate briefly.
 
 ## Invariants
 

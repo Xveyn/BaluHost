@@ -122,7 +122,10 @@ def test_status_nginx_hint_only_when_not_served(client, status_stub):
     hint = client.get(BASE + "/status").json()["nginx_hint"]
     assert f"ssl_certificate {paths.DATA_DIR}/live/fullchain.pem;" in hint
     assert f"ssl_certificate_key {paths.DATA_DIR}/live/privkey.pem;" in hint
-    assert f"server_name {DOMAIN};" in hint
+    # Domain an server_name anhaengen, nicht ersetzen; beide TLS-Bloecke
+    assert DOMAIN in hint and "server_name" in hint
+    assert f"server_name {DOMAIN};" not in hint
+    assert "443" in hint and "8443" in hint
     status_stub["status"] = _fake_status(served_matches=None)
     assert client.get(BASE + "/status").json()["nginx_hint"] is None
 
@@ -182,7 +185,43 @@ def test_renew_runs_forced_and_audits(client, status_stub, checks, audit):
     assert checks == [
         {"check": "run_cert_check", "force": True, "raise_if_running": True}
     ]
+    assert len(audit) == 1
     assert audit[-1]["action"] == "local_tls_renew_triggered"
+    assert audit[-1]["success"] is True
+    assert audit[-1]["ip_address"] == "testclient"
+
+
+def test_renew_failure_is_audited_as_failure(client, status_stub, checks, audit):
+    status_stub["status"] = _fake_status(last_renew_ok=False, last_renew_reason="acme: error 429")
+    resp = client.post(BASE + "/renew")
+    assert resp.status_code == 202
+    assert audit[-1]["success"] is False
+    assert audit[-1]["details"]["reason"] == "acme: error 429"
+
+
+def test_update_dns_failure_is_audited_as_failure(client, status_stub, checks, audit):
+    status_stub["status"] = _fake_status(last_dns_ok=False, last_dns_reason="duckdns rejected the update")
+    resp = client.post(BASE + "/update-dns")
+    assert resp.status_code == 200
+    assert audit[-1]["action"] == "local_tls_dns_update_triggered"
+    assert audit[-1]["success"] is False
+
+
+def test_already_running_is_audited_as_failed_attempt(client, status_stub, monkeypatch, audit):
+    async def boom(check, load_config, **kw):
+        raise paths.AlreadyRunning("x")
+
+    monkeypatch.setattr(service, "run_check", boom)
+    assert client.post(BASE + "/renew").status_code == 409
+    assert audit[-1]["action"] == "local_tls_renew_triggered"
+    assert audit[-1]["success"] is False
+    assert audit[-1]["details"] == {"reason": "already_running"}
+
+
+def test_put_credentials_strips_whitespace(client, db_session, key):
+    resp = client.put(BASE + "/credentials", json={"token": f"  {TOKEN}\n"})
+    assert resp.status_code == 204
+    assert state.get_token(db_session) == TOKEN
 
 
 def test_renew_while_running_is_409(client, status_stub, monkeypatch, tmp_path, key, db_session):
@@ -227,6 +266,7 @@ def test_update_dns_triggers_forced_check(client, status_stub, checks, audit):
         {"check": "run_address_check", "force": True, "raise_if_running": True}
     ]
     assert audit[-1]["action"] == "local_tls_dns_update_triggered"
+    assert audit[-1]["success"] is True
 
 
 def test_rate_limit_key_registered():

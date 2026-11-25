@@ -55,8 +55,17 @@ EXPIRY_WARNING = timedelta(days=21)
 REASON_CREDENTIALS_UNREADABLE = (
     "credentials unreadable (encryption key missing or changed) - set the token again"
 )
-REASON_NOT_SERVED = "installiert, nginx liefert es noch nicht aus"
+REASON_NOT_SERVED = "installed, nginx is not serving it yet"
 REASON_DATA_DIR = "data directory not writable"
+
+
+def _expires_in(days: int) -> str:
+    """Restlaufzeit fuer den deutschen Benachrichtigungstext (Singular/Plural)."""
+    if days <= 0:
+        return "heute"
+    if days == 1:
+        return "in 1 Tag"
+    return f"in {days} Tagen"
 
 
 def _unexpected(exc: BaseException) -> str:
@@ -251,13 +260,46 @@ def run_cert_check(
     ``lock_wait``: so lange wird auf einen fremden Lauf gewartet (der
     Hintergrundlauf beim Start nutzt 60 s, weil der Adress-Check gleichzeitig
     startet und der Zertifikats-Check sonst einen ganzen Tag ausfiele). Die
-    Ablaufwarnung wird auch bei uebersprungenem Lauf geprueft.
+    Ablaufwarnung wird immer geprueft, sobald ein Zertifikat installiert ist --
+    auch bei uebersprungenem Lauf und ohne Konfiguration.
     """
-    if not _is_configured(db, config):
-        return []
-    domain = config.domain
     now = _as_utc(now)
     events: list[PendingEvent] = []
+    if _is_configured(db, config):
+        _cert_run(
+            db, config, now, events,
+            force=force, raise_if_running=raise_if_running,
+            data_dir=data_dir, lock_wait=lock_wait,
+        )
+
+    # Auch ohne Konfiguration (Token entfernt, Domain geleert): nginx liefert
+    # das installierte Zertifikat womoeglich weiter aus.
+    row = state.get_state(db)
+    not_after = _as_utc(row.cert_not_after)
+    if not_after is not None and not_after - now <= EXPIRY_WARNING:
+        days = max(0, (not_after - now).days)
+        domain = config.domain or row.last_ip_domain or PLUGIN_NAME
+        events.append(
+            PendingEvent(
+                EVENT_CERT_EXPIRING, domain,
+                {"domain": domain, "days": days, "expires_in": _expires_in(days)},
+            )
+        )
+    return events
+
+
+def _cert_run(
+    db: Session,
+    config: LocalTlsConfig,
+    now: datetime,
+    events: list[PendingEvent],
+    *,
+    force: bool,
+    raise_if_running: bool,
+    data_dir: Optional[Path],
+    lock_wait: float,
+) -> None:
+    domain = config.domain
 
     def fail(reason: str) -> None:
         row = state.get_state(db)
@@ -281,14 +323,6 @@ def run_cert_check(
     except Exception as exc:  # noqa: BLE001 - buchen, melden, Ablauf trotzdem pruefen
         logger.error("local_tls: certificate check failed with %s", type(exc).__name__)
         fail(_unexpected(exc))
-
-    not_after = _as_utc(state.get_state(db).cert_not_after)
-    if not_after is not None and not_after - now <= EXPIRY_WARNING:
-        days = max(0, (not_after - now).days)
-        events.append(
-            PendingEvent(EVENT_CERT_EXPIRING, domain, {"domain": domain, "days": days})
-        )
-    return events
 
 
 def _renew(

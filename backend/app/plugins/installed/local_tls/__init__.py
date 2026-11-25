@@ -104,7 +104,7 @@ class LocalTlsPlugin(PluginBase):
                 priority=1,
                 title_template="Zertifikat für {domain} läuft bald ab",
                 message_template=(
-                    "Das Zertifikat für {domain} läuft in {days} Tagen ab und wurde "
+                    "Das Zertifikat für {domain} läuft {expires_in} ab und wurde "
                     "bisher nicht automatisch erneuert."
                 ),
                 action_url=_ACTION_URL,

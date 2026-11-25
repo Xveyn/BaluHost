@@ -45,7 +45,7 @@ def test_notification_events():
         assert e.default_target == "admins"
     # Platzhalter passen zu dem, was der Service uebergibt
     kwargs = {
-        "cert_expiring": {"domain": "d", "days": 3},
+        "cert_expiring": {"domain": "d", "days": 1, "expires_in": "in 1 Tag"},
         "renew_failed": {"domain": "d", "reason": "r"},
         "dns_update_failed": {"domain": "d", "reason": "r"},
         "address_changed": {"domain": "d", "ip": "192.168.1.2"},
@@ -107,3 +107,9 @@ async def test_plugin_is_not_enabled_by_default(db_session):
 
 def test_router_is_importable():
     assert LocalTlsPlugin().get_router() is not None
+
+
+def test_expiry_message_singular():
+    spec = {e.id: e for e in LocalTlsPlugin().get_notification_events()}["cert_expiring"]
+    text = spec.message_template.format(domain="d", days=1, expires_in="in 1 Tag")
+    assert "in 1 Tag ab" in text and "Tagen" not in text

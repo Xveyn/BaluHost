@@ -383,7 +383,9 @@ def test_expiry_warning_at_21_days(db_session, configured, world, days, expected
     events = service.run_cert_check(db_session, configured, NOW)
     if expected:
         assert _ids(events) == ["cert_expiring"]
-        assert events[0].kwargs == {"domain": DOMAIN, "days": days}
+        assert events[0].kwargs == {
+            "domain": DOMAIN, "days": days, "expires_in": f"in {days} Tagen",
+        }
     else:
         assert events == []
 
@@ -691,3 +693,37 @@ def test_status_lego_unreadable_is_distinct_from_missing(db_session, key, world)
     assert st.lego == "unreadable" and st.lego_version is None
     world.lego_version = lego.LegoMissing("lego is not installed")
     assert service.get_status(db_session, LocalTlsConfig(), NOW).lego == "missing"
+
+
+# --- Fix-Runde final: Ablaufwarnung auch ohne Konfiguration -----------------
+
+def test_expiry_warning_without_token(db_session, configured, world):
+    state.record_renew(db_session, True, None, "a" * 64, NOW + timedelta(days=5), NOW)
+    state.clear_token(db_session)
+    events = service.run_cert_check(db_session, configured, NOW)
+    assert _ids(events) == ["cert_expiring"]
+    assert events[0].entity_id == DOMAIN
+    assert world.lego_calls == []
+
+
+def test_expiry_warning_without_domain_uses_last_dns_domain(db_session, configured, world):
+    service.run_address_check(db_session, configured, NOW)
+    state.record_renew(db_session, True, None, "a" * 64, NOW + timedelta(days=5), NOW)
+    events = service.run_cert_check(db_session, LocalTlsConfig(), NOW)
+    assert _ids(events) == ["cert_expiring"]
+    assert events[0].kwargs["domain"] == DOMAIN
+    assert world.lego_calls == []
+
+
+@pytest.mark.parametrize(
+    "days, text", [(0, "heute"), (1, "in 1 Tag"), (2, "in 2 Tagen")]
+)
+def test_expiry_text_singular_plural(days, text):
+    assert service._expires_in(days) == text
+
+
+def test_not_served_reason_is_english(db_session, configured, world):
+    world.served = False
+    service.run_cert_check(db_session, configured, NOW)
+    assert state.get_state(db_session).last_renew_reason == service.REASON_NOT_SERVED
+    assert service.REASON_NOT_SERVED == "installed, nginx is not serving it yet"

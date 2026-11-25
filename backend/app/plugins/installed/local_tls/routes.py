@@ -43,22 +43,32 @@ def _error(code: int, name: str) -> JSONResponse:
     return JSONResponse(status_code=code, content={"error": name})
 
 
-def _audit(action: str, user: UserPublic, details: Optional[dict] = None) -> None:
+def _audit(
+    action: str,
+    user: UserPublic,
+    details: Optional[dict] = None,
+    *,
+    request: Optional[Request] = None,
+    success: bool = True,
+) -> None:
     get_audit_logger_db().log_event(
         event_type="SYSTEM_CONFIG",
         action=action,
         user=user.username,
         resource="local_tls",
-        success=True,
+        success=success,
         details=details or {},
+        ip_address=request.client.host if request is not None and request.client else None,
     )
 
 
 def _nginx_hint(domain: str) -> str:
     live = paths.DATA_DIR / "live"
     return (
-        "# In beiden TLS-Bloecken der nginx-Site (listen 443 ssl ...):\n"
-        f"server_name {domain};\n"
+        "# In beiden TLS-Bloecken der nginx-Site (listen 443 ssl und listen 8443 ssl):\n"
+        f"# {domain} an die bestehende server_name-Zeile anhaengen, z. B.\n"
+        f"#   server_name <bisherige Namen> {domain};\n"
+        "# und die Zertifikatszeilen ersetzen:\n"
         f"ssl_certificate {live}/fullchain.pem;\n"
         f"ssl_certificate_key {live}/privkey.pem;\n"
     )
@@ -100,7 +110,8 @@ async def put_credentials(
 ):
     config = _load_config(db)
     fields = [f for f in providers.get_provider(config.provider).credential_fields if f.secret]
-    token = body.token
+    # Kopierte Tokens bringen oft Leerzeichen/Zeilenumbruch mit.
+    token = body.token.strip()
     # Weder Token noch Teile davon in die Antwort.
     if not (1 <= len(token) <= _TOKEN_MAX) or any(
         re.fullmatch(f.pattern, token) is None for f in fields
@@ -140,6 +151,21 @@ async def _manual_run(check, db: Session):
     return await asyncio.to_thread(_build_status, db, config)
 
 
+async def _audited_run(
+    check, db: Session, request: Request, user: UserPublic, action: str,
+    ok_field: str, reason_field: str,
+):
+    """Lauf + Audit danach: Erfolg aus dem Status, 409 als gescheiterter Versuch."""
+    result = await _manual_run(check, db)
+    if result is None:
+        _audit(action, user, {"reason": "already_running"}, request=request, success=False)
+        return None
+    ok = getattr(result, ok_field) is not False
+    reason = getattr(result, reason_field)
+    _audit(action, user, {"reason": reason} if reason else {}, request=request, success=ok)
+    return result
+
+
 @router.post("/renew", response_model=StatusResponse, status_code=status.HTTP_202_ACCEPTED)
 @user_limiter.limit(_LIMIT)
 async def renew(
@@ -148,8 +174,10 @@ async def renew(
     current_user: UserPublic = Depends(deps.get_current_admin),
     db: Session = Depends(get_db),
 ):
-    _audit("local_tls_renew_triggered", current_user)
-    result = await _manual_run(service.run_cert_check, db)
+    result = await _audited_run(
+        service.run_cert_check, db, request, current_user,
+        "local_tls_renew_triggered", "last_renew_ok", "last_renew_reason",
+    )
     if result is None:
         return _error(409, "already_running")
     return result
@@ -163,8 +191,10 @@ async def update_dns(
     current_user: UserPublic = Depends(deps.get_current_admin),
     db: Session = Depends(get_db),
 ):
-    _audit("local_tls_dns_update_triggered", current_user)
-    result = await _manual_run(service.run_address_check, db)
+    result = await _audited_run(
+        service.run_address_check, db, request, current_user,
+        "local_tls_dns_update_triggered", "last_dns_ok", "last_dns_reason",
+    )
     if result is None:
         return _error(409, "already_running")
     return result
