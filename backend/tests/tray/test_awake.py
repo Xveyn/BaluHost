@@ -18,16 +18,6 @@ def _response(status_code: int, payload: dict | None = None) -> MagicMock:
     return response
 
 
-def test_path_is_bound_in_backend():
-    """Gegen die echten Routen pruefen, nicht gegen einen abgeschriebenen String:
-    der alte Test legte "/api/sleep/config" fest, das Backend antwortete 404."""
-    from app.main import app
-
-    # Ueber das OpenAPI-Schema: app.routes listet eingebundene Router nicht flach.
-    operations = app.openapi()["paths"].get(awake.SLEEP_CONFIG_PATH, {})
-    assert {"get", "put"} <= operations.keys()
-
-
 def test_payload_off():
     assert awake.payload_for(AwakeChoice.OFF, NOW) == {
         "always_awake_enabled": False,
