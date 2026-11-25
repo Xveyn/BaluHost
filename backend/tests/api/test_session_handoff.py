@@ -243,3 +243,26 @@ def test_issuing_purges_codes_older_than_a_day(db_session, regular_user):
     hashes = [h for (h,) in db_session.query(SessionHandoffCode.token_hash).all()]
     assert "0" * 64 not in hashes
     assert len(hashes) == 1
+
+
+def test_db_error_during_handoff_is_not_a_401(
+    client, db_session, regular_user, lan, monkeypatch
+):
+    """Das Tray wertet 401 als Widerruf. Ein DB-Fehler muss als 5xx enden."""
+    from fastapi.testclient import TestClient
+    from sqlalchemy.exc import OperationalError
+
+    token = _paired_token(db_session, regular_user)
+
+    def _boom(*args, **kwargs):
+        raise OperationalError("SELECT 1", {}, Exception("db down"))
+
+    monkeypatch.setattr(refresh_rotation, "use_refresh_token", _boom)
+    c = TestClient(client.app, raise_server_exceptions=False)
+    c.headers.update(client.headers)
+
+    r = c.post(HANDOFF_URL, json={"refresh_token": token})
+
+    assert r.status_code != 401
+    assert r.status_code >= 500
+    assert db_session.query(SessionHandoffCode).count() == 0

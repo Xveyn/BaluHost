@@ -317,3 +317,32 @@ def test_pairing_still_issues_a_storable_token(client, db_session, regular_user)
     assert row.parent_jti is None
     assert row.token_hash == RefreshToken.hash_token(refresh)
     assert _refresh(client, refresh).status_code == 200
+
+
+def _non_raising(client):
+    """TestClient, der 5xx als Antwort liefert statt die Exception zu werfen —
+    nur so laesst sich pruefen, dass ein DB-Fehler *kein* 401 wird."""
+    from fastapi.testclient import TestClient
+
+    c = TestClient(client.app, raise_server_exceptions=False)
+    c.headers.update(client.headers)
+    return c
+
+
+def test_db_error_during_refresh_is_not_a_401(client, db_session, regular_user, monkeypatch):
+    """Ein 401 heisst fuer das Tray "Kopplung widerrufen" — es vergisst sie.
+    Ein voruebergehender DB-Fehler darf deshalb nie als 401 enden."""
+    from sqlalchemy.exc import OperationalError
+
+    token = _paired_token(db_session, regular_user, "dev-1", age_days=1)
+
+    def _boom(*args, **kwargs):
+        raise OperationalError("SELECT 1", {}, Exception("db down"))
+
+    monkeypatch.setattr(refresh_rotation, "use_refresh_token", _boom)
+
+    r = _non_raising(client).post(REFRESH_URL, json={"refresh_token": token})
+
+    assert r.status_code != 401
+    assert r.status_code >= 500
+

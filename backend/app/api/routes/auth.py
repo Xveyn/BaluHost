@@ -25,6 +25,7 @@ from app.services import auth as auth_service
 from app.services.auth_policy import get_auth_policy, session_token_minutes
 from app.services import users as user_service
 from app.services import totp_service
+from app.models.refresh_token import RefreshToken
 from app.models.user import User as UserModel
 from app.core.config import settings
 from app.services.audit.logger_db import get_audit_logger_db
@@ -830,7 +831,7 @@ async def logout(
 
 def _use_refresh_token_or_401(
     db: Session, raw_token: str, ip_address: Optional[str], audit_logger: Any
-) -> tuple:
+) -> tuple[UserModel, RefreshToken]:
     """Refresh-Token pruefen und als benutzt vermerken, sonst auditiert 401.
 
     Gemeinsam fuer ``/auth/refresh`` und ``/auth/handoff`` (#847): beide
@@ -869,18 +870,9 @@ def _use_refresh_token_or_401(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=exc.detail,
         )
-    except Exception as e:
-        audit_logger.log_security_event(
-            action="refresh_token_failed",
-            user="unknown",
-            error_message=str(e),
-            ip_address=ip_address,
-            db=db
-        )
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid refresh token"
-        )
+    # Alles andere (z.B. OperationalError) ist kein Urteil ueber den Token und
+    # endet als 5xx: ein 401 hiesse fuer das Tray "Kopplung widerrufen", und es
+    # wuerde sie bei einem voruebergehenden DB-Fehler vergessen.
 
 
 @router.post("/refresh", response_model=TokenResponse)
