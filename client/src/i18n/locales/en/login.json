@@ -52,6 +52,8 @@
   "optimal": "Optimal",
   "firmware": "Firmware",
   "handoff": {
-    "failed": "Automatic sign-in failed — please sign in normally."
+    "failed": "Automatic sign-in failed — please sign in normally.",
+    "confirmTitle": "Switch account?",
+    "confirmText": "Sign in as {{username}}? The current session of {{current}} will end."
   }
 }

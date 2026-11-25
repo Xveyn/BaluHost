@@ -52,6 +52,8 @@
   "optimal": "Optimal",
   "firmware": "Firmware",
   "handoff": {
-    "failed": "Automatische Anmeldung fehlgeschlagen — bitte normal anmelden."
+    "failed": "Automatische Anmeldung fehlgeschlagen — bitte normal anmelden.",
+    "confirmTitle": "Konto wechseln?",
+    "confirmText": "Als {{username}} anmelden? Die aktuelle Sitzung von {{current}} wird beendet."
   }
 }

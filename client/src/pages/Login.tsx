@@ -13,9 +13,11 @@ import { ForgotPasswordForm } from '../components/auth/ForgotPasswordForm';
 import { useVersion } from '../contexts/VersionContext';
 import { DeveloperBadge } from '../components/ui/DeveloperBadge';
 import { useAuth } from '../contexts/AuthContext';
+import { useConfirmDialog } from '../hooks/useConfirmDialog';
 
 export default function Login() {
-  const { login } = useAuth();
+  const { login, user: currentUser } = useAuth();
+  const { confirm, dialog: confirmDialog } = useConfirmDialog();
   const navigate = useNavigate();
   const { t } = useTranslation('login');
   const { version, loading: versionLoading } = useVersion();
@@ -51,7 +53,19 @@ export default function Login() {
     if (!code) return;
     setLoading(true);
     redeemHandoff(code)
-      .then(({ user, access_token }) => {
+      .then(async ({ user, access_token }) => {
+        // Login-CSRF: ein fremder Code darf eine bestehende Sitzung eines
+        // anderen Nutzers nicht ohne Rueckfrage ersetzen.
+        if (currentUser && currentUser.id !== user.id) {
+          const ok = await confirm(
+            t('handoff.confirmText', { username: user.username, current: currentUser.username }),
+            { title: t('handoff.confirmTitle'), variant: 'warning' },
+          );
+          if (!ok) {
+            navigate('/', { replace: true });
+            return;
+          }
+        }
         login(user, access_token);
         navigate('/', { replace: true });
       })
@@ -240,6 +254,8 @@ export default function Login() {
   };
 
   return (
+    <>
+    {confirmDialog}
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden text-slate-100">
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute -left-24 top-[-120px] h-[420px] w-[420px] rounded-full bg-sky-500/10 blur-3xl" />
@@ -462,5 +478,6 @@ export default function Login() {
         </div>
       </div>
     </div>
+    </>
   );
 }

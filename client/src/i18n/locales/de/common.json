@@ -220,7 +220,6 @@
     "deviceUpdated": "Gerät aktualisiert",
     "deviceDeleted": "Gerät gelöscht",
     "selectDevice": "Bitte Gerät auswählen",
-    "desktopDeleteNotImplemented": "Desktop-Geräte löschen noch nicht implementiert",
     "scheduleCreated": "Zeitplan erstellt",
     "scheduleFailed": "Zeitplan konnte nicht erstellt werden",
     "scheduleDisabled": "Zeitplan deaktiviert",
