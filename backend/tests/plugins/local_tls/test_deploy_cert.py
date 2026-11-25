@@ -92,6 +92,20 @@ def _write_pair(tmp_path, name, **kw):
     return src / "cert.pem", src / "key.pem", fp
 
 
+@pytest.fixture(autouse=True)
+def fake_clock(monkeypatch):
+    """Kein echtes Warten beim Abfragen nach dem Reload: Schlaf rueckt die Uhr vor."""
+    clock = {"t": 0.0, "sleeps": []}
+
+    def sleep(seconds):
+        clock["sleeps"].append(seconds)
+        clock["t"] += seconds
+
+    monkeypatch.setattr(deploy_cert, "_sleep", sleep)
+    monkeypatch.setattr(deploy_cert, "_monotonic", lambda: clock["t"])
+    return clock
+
+
 class FakeReload:
     def __init__(self, fail_on=()):
         self.calls = 0
@@ -228,6 +242,69 @@ def test_rolls_back_when_served_cert_differs(tmp_path):
     assert not (data / "releases" / "20270124T120000Z").exists()
     assert os.readlink(data / "live") == old_target
     assert reload.calls == 2
+
+
+def _served_sequence(data_dir, after_values):
+    """Vor dem Tausch: was live zeigt; danach nacheinander ``after_values``
+    (der letzte Wert bleibt stehen) -- wie nginx' sanfter Reload, bei dem alte
+    Worker noch kurz das alte Zertifikat ausliefern."""
+    live = _served_live(data_dir)
+    calls = []
+
+    def served(domain):
+        calls.append(domain)
+        if len(calls) == 1:
+            return live(domain)
+        i = min(len(calls) - 2, len(after_values) - 1)
+        value = after_values[i]
+        return live(domain) if value == "live" else value
+
+    served.calls = calls
+    return served
+
+
+def test_graceful_reload_old_cert_briefly_is_not_rolled_back(tmp_path, fake_clock):
+    data = tmp_path / "data"
+    c1, k1, _ = _write_pair(tmp_path, "a")
+    deploy(c1, k1, DOMAIN, data, NOW, reload=FakeReload(), served_fingerprint=_served_live(data))
+    old_fp = _served_live(data)(DOMAIN)
+
+    c2, k2, new_fp = _write_pair(tmp_path, "b")
+    reload = FakeReload()
+    served = _served_sequence(data, [old_fp, old_fp, new_fp])
+    outcome = deploy(c2, k2, DOMAIN, data, NOW + timedelta(days=60), reload=reload,
+                     served_fingerprint=served)
+    assert outcome.served is True
+    assert outcome.info.fingerprint == new_fp
+    assert os.readlink(data / "live") == "releases/20270124T120000Z"
+    assert reload.calls == 1
+    assert len(served.calls) == 4  # pre + drei Abfragen
+    assert fake_clock["sleeps"] and all(s <= 0.5 for s in fake_clock["sleeps"])
+
+
+def test_served_never_matches_rolls_back_after_deadline(tmp_path, fake_clock):
+    data = tmp_path / "data"
+    c1, k1, _ = _write_pair(tmp_path, "a")
+    deploy(c1, k1, DOMAIN, data, NOW, reload=FakeReload(), served_fingerprint=_served_live(data))
+    old_fp = _served_live(data)(DOMAIN)
+    old_target = os.readlink(data / "live")
+    fake_clock["t"] = 0.0
+
+    c2, k2, _ = _write_pair(tmp_path, "b")
+    with pytest.raises(DeployFailed, match="served"):
+        deploy(c2, k2, DOMAIN, data, NOW + timedelta(days=60), reload=FakeReload(),
+               served_fingerprint=_served_sequence(data, [old_fp]))
+    assert os.readlink(data / "live") == old_target
+    assert 15 <= fake_clock["t"] <= 16
+
+
+def test_not_served_without_plugin_before_waits_then_keeps(tmp_path, fake_clock):
+    data = tmp_path / "data"
+    cert, key, _ = _write_pair(tmp_path, "a")
+    outcome = deploy(cert, key, DOMAIN, data, NOW, reload=FakeReload(),
+                     served_fingerprint=lambda d: "certbot-fp")
+    assert outcome.served is False
+    assert 15 <= fake_clock["t"] <= 16
 
 
 def test_rolls_back_when_reload_fails(tmp_path):

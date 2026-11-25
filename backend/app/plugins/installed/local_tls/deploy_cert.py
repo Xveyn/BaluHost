@@ -11,6 +11,7 @@ import shutil
 import socket
 import ssl
 import subprocess
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -23,6 +24,14 @@ RELOAD_ARGS = ["sudo", "-n", "/usr/bin/systemctl", "reload", "nginx"]
 RELOAD_TIMEOUT = 30
 HANDSHAKE_TIMEOUT = 5
 KEEP_RELEASES = 3
+# nginx laedt sanft neu: alte Worker liefern das alte Zertifikat noch einige
+# hundert Millisekunden aus. Daher nach dem Reload bis VERIFY_TIMEOUT abfragen.
+VERIFY_TIMEOUT = 15.0
+VERIFY_INTERVAL = 0.5
+
+# Indirektionen, damit Tests das Warten ohne echte Pausen pruefen.
+_sleep = time.sleep
+_monotonic = time.monotonic
 
 
 class CertInvalid(Exception):
@@ -184,6 +193,20 @@ def _clean_stale_tmp(data_dir: Path) -> None:
             pass
 
 
+def _await_served(
+    domain: str, expected: str, served_fingerprint: Callable[[str], Optional[str]]
+) -> bool:
+    """Fragt ab, bis nginx ``expected`` ausliefert oder VERIFY_TIMEOUT verstrichen ist."""
+    deadline = _monotonic() + VERIFY_TIMEOUT
+    while True:
+        if served_fingerprint(domain) == expected:
+            return True
+        remaining = deadline - _monotonic()
+        if remaining <= 0:
+            return False
+        _sleep(min(VERIFY_INTERVAL, remaining))
+
+
 def deploy(
     cert_path: Path,
     key_path: Path,
@@ -204,8 +227,10 @@ def deploy(
       geloescht); sonst bleibt ``live`` auf dem neuen Release (nginx referenziert
       ihn noch nicht). In beiden Faellen ``DeployFailed`` mit dem Reload-Grund.
     - nginx lieferte vorher den vorigen Release des Plugins aus (pre == dessen
-      Fingerabdruck) und liefert nach dem Reload nicht den neuen -> Rueckabwicklung
-      wie oben, ``DeployFailed`` ("served ...").
+      Fingerabdruck) und liefert nach dem Reload auch nach VERIFY_TIMEOUT
+      Sekunden Abfragen nicht den neuen -> Rueckabwicklung wie oben,
+      ``DeployFailed`` ("served ..."). Abgefragt wird wiederholt, weil nginx'
+      alte Worker nach dem Reload noch kurz das alte Zertifikat ausliefern.
     - Sonst (Erstinstallation, oder die nginx-Site zeigt noch nicht auf ``live``)
       bleiben neuer Release und ``live`` stehen; ``DeployOutcome.served`` sagt,
       ob nginx ihn bereits ausliefert.
@@ -274,7 +299,7 @@ def deploy(
             raise _roll_back(exc.reason) from None
         raise DeployFailed(exc.reason) from None
 
-    served = served_fingerprint(domain) == info.fingerprint
+    served = _await_served(domain, info.fingerprint, served_fingerprint)
     if not served and was_serving_plugin:
         raise _roll_back("served certificate does not match new certificate")
 
