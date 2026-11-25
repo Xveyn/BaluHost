@@ -524,3 +524,13 @@ def test_data_dir_dev_vs_prod(monkeypatch, tmp_path):
     monkeypatch.setattr(settings, "is_dev_mode", False)
     assert paths.default_data_dir() == paths.PROD_DATA_DIR
     assert str(paths.PROD_DATA_DIR) == "/var/lib/baluhost/plugins/local_tls"
+
+
+def test_probe_context_requires_tls12():
+    """CodeQL py/insecure-protocol: the served-fingerprint probe must not allow TLS < 1.2."""
+    import ssl
+
+    ctx = deploy_cert._probe_context()
+    assert ctx.minimum_version >= ssl.TLSVersion.TLSv1_2
+    assert ctx.verify_mode == ssl.CERT_NONE
+    assert ctx.check_hostname is False

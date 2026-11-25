@@ -140,6 +140,19 @@ def reload_nginx(*, run: Callable[..., subprocess.CompletedProcess] = subprocess
         raise DeployFailed("nginx reload not permitted or failed")
 
 
+def _probe_context() -> ssl.SSLContext:
+    """TLS-Kontext fuer den Fingerabdruck-Abgleich gegen das lokale nginx.
+
+    Ohne Zertifikatspruefung: verglichen wird nur der Fingerabdruck dessen, was
+    ausgeliefert wird. Mindestens TLS 1.2 — aeltere Versionen braucht hier
+    niemand, und nginx bietet sie ohnehin nicht an."""
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    return ctx
+
+
 def served_fingerprint(domain: str, host: str = "127.0.0.1", port: int = 443) -> Optional[str]:
     """sha256 des Zertifikats, das ``host:port`` fuer SNI=``domain`` ausliefert; Netzfehler -> None.
 
@@ -147,9 +160,7 @@ def served_fingerprint(domain: str, host: str = "127.0.0.1", port: int = 443) ->
     Produktion, nicht das des Dev-Backends."""
     if settings.is_dev_mode:
         return None
-    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-    ctx.check_hostname = False
-    ctx.verify_mode = ssl.CERT_NONE
+    ctx = _probe_context()
     try:
         with socket.create_connection((host, port), timeout=HANDSHAKE_TIMEOUT) as sock:
             with ctx.wrap_socket(sock, server_hostname=domain) as tls:
