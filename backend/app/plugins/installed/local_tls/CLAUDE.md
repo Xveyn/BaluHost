@@ -30,13 +30,19 @@ Trust tier, lifecycle and the `PluginBase` contract are in `../../CLAUDE.md`.
   forced, or when the last set is ≥ 86400 s old (daily reconfirm). `address_changed`
   only when a previous IP existed and differs.
 - `cert_check` every 86400 s (and on startup): lego version ≥ 4.35 → `obtain_or_renew`
-  (`run` if no cert, else `renew --days 30`) → on a new cert (or `force`) `deploy`.
+  (`run` if no cert, else `renew --days 30`) → `deploy` on a new cert, on `force`,
+  **or** when lego's leaf fingerprint (DER, via `deploy_cert.inspect`) differs from
+  the installed `cert_fingerprint` — otherwise a failed deploy would never be
+  retried (`renew` is then a no-op) and the served certificate would run out.
   `DeployOutcome.served=False` (installed, nginx not yet switched to `live/`) is a
   **success** with reason "installiert, nginx liefert es noch nicht aus". Afterwards,
   independently: installed cert expires in ≤ 21 days → `cert_expiring`.
 - Checks return `PendingEvent`s; they are sent **after** booking via
   `emit_plugin_event`, which enforces the declared cooldowns (entity = domain).
   So the checks stay synchronous and run in `asyncio.to_thread`.
+- The background cert check waits up to 60 s for the lock (`lock_wait`): both
+  tasks start together and it would otherwise lose a whole day. The expiry warning
+  is evaluated even when the run is skipped.
 - Both checks take the same lock. Background runs skip on `AlreadyRunning`
   (`raise_if_running=False`); manual routes pass `True` and map it to 409.
 - On failure `record_renew` keeps the previous fingerprint/expiry — the installed

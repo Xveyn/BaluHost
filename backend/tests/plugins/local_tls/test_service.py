@@ -81,6 +81,14 @@ class World:
         self.not_after = NOW + timedelta(days=90)
         self.served = True
         self.served_fp: str | None = "f" * 64
+        self.lego_fp = "f" * 64  # Leaf-Fingerabdruck des Zertifikats in lego/
+        self.inspect_calls = 0
+
+        def _inspect(cert_pem, key_pem, domain, now):
+            self.inspect_calls += 1
+            return CertInfo(fingerprint=self.lego_fp, not_after=self.not_after, sans=(domain,))
+
+        monkeypatch.setattr(deploy_cert, "inspect", _inspect)
 
         monkeypatch.setattr(paths, "DATA_DIR", self.data_dir)
         monkeypatch.setattr(address, "current_lan_ip", self._current_lan_ip)
@@ -109,13 +117,17 @@ class World:
         )
         if self.lego_error:
             raise self.lego_error
+        crt, keyp = lego.cert_paths(domain, data_dir, staging=staging)
+        crt.parent.mkdir(parents=True, exist_ok=True)
+        crt.write_bytes(b"cert")
+        keyp.write_bytes(b"key")
         return self.lego_new
 
     def _deploy(self, cert_path, key_path, domain, data_dir, now):
         self.deploy_calls.append((cert_path, key_path, domain, data_dir, now))
         if self.deploy_error:
             raise self.deploy_error
-        info = CertInfo(fingerprint="f" * 64, not_after=self.not_after, sans=(domain,))
+        info = CertInfo(fingerprint=self.lego_fp, not_after=self.not_after, sans=(domain,))
         return DeployOutcome(info=info, served=self.served)
 
     @property
@@ -282,6 +294,7 @@ def test_installed_but_not_served_counts_as_success(db_session, configured, worl
 def test_no_new_cert_no_deploy(db_session, configured, world):
     state.record_renew(db_session, True, None, "a" * 64, NOW + timedelta(days=60), NOW - timedelta(days=1))
     world.lego_new = False
+    world.lego_fp = "a" * 64  # lego haelt dasselbe Zertifikat, das installiert ist
     events = service.run_cert_check(db_session, configured, NOW)
     assert events == []
     assert len(world.lego_calls) == 1
@@ -365,6 +378,7 @@ async def test_lego_missing_records_status_once_per_day(db_session, configured, 
 @pytest.mark.parametrize("days, expected", [(20, True), (21, True), (22, False)])
 def test_expiry_warning_at_21_days(db_session, configured, world, days, expected):
     world.lego_new = False
+    world.lego_fp = "a" * 64
     state.record_renew(db_session, True, None, "a" * 64, NOW + timedelta(days=days), NOW)
     events = service.run_cert_check(db_session, configured, NOW)
     if expected:
@@ -491,3 +505,109 @@ def test_config_rejects_unknown_provider_and_bad_fields():
     assert LocalTlsConfig(interface="", email="").interface is None
     assert LocalTlsConfig(interface="", email="").email is None
     assert LocalTlsConfig(interface="enp3s0").interface == "enp3s0"
+
+
+# --- Fix-Runde 1: gescheiterte Uebernahme wird wiederholt -----------------
+
+def test_failed_deploy_is_retried_on_next_run(db_session, configured, world):
+    state.record_renew(db_session, True, None, "a" * 64, NOW + timedelta(days=30), NOW - timedelta(days=1))
+    world.deploy_error = DeployFailed("nginx reload not permitted or failed")
+    service.run_cert_check(db_session, configured, NOW)
+    assert state.get_state(db_session).last_renew_ok is False
+
+    # Naechster Tag: lego renew ist ein No-op, das neue Zertifikat liegt aber
+    # noch nicht installiert vor -> erneut uebernehmen.
+    world.deploy_error = None
+    world.lego_new = False
+    events = service.run_cert_check(db_session, configured, NOW + timedelta(days=1))
+    assert events == []
+    assert len(world.deploy_calls) == 2
+    row = state.get_state(db_session)
+    assert row.last_renew_ok is True
+    assert row.cert_fingerprint == "f" * 64
+
+
+def test_failed_first_deploy_is_retried_after_noop_renew(db_session, configured, world):
+    world.deploy_error = deploy_cert.CertInvalid("domain not in certificate SAN")
+    service.run_cert_check(db_session, configured, NOW)
+    row = state.get_state(db_session)
+    assert row.last_renew_ok is False and row.cert_fingerprint is None
+
+    world.lego_new = False
+    world.deploy_error = DeployFailed("nginx reload not permitted or failed")
+    events = service.run_cert_check(db_session, configured, NOW + timedelta(days=1))
+    assert len(world.deploy_calls) == 2
+    assert _ids(events) == ["renew_failed"]
+    # Kein ok=True ueber dem Fehler, solange nichts uebernommen ist
+    assert state.get_state(db_session).last_renew_ok is False
+
+
+def test_matching_fingerprint_is_not_redeployed(db_session, configured, world):
+    service.run_cert_check(db_session, configured, NOW)
+    assert len(world.deploy_calls) == 1
+    world.lego_new = False
+    service.run_cert_check(db_session, configured, NOW + timedelta(days=1))
+    assert len(world.deploy_calls) == 1
+    assert state.get_state(db_session).last_renew_ok is True
+
+
+def test_switching_to_staging_with_old_staging_cert_deploys(db_session, configured, world):
+    service.run_cert_check(db_session, configured, NOW)
+    world.lego_new = False
+    world.lego_fp = "b" * 64  # altes Staging-Zertifikat in lego-staging/
+    cfg = configured.model_copy(update={"staging": True})
+    service.run_cert_check(db_session, cfg, NOW + timedelta(days=1))
+    assert len(world.deploy_calls) == 2
+    crt, keyp, *_ = world.deploy_calls[1]
+    assert (crt, keyp) == lego.cert_paths(DOMAIN, world.data_dir, staging=True)
+
+
+# --- Fix-Runde 1: Start-Wettlauf um den Lock -------------------------------
+
+def test_cert_check_waits_for_lock(db_session, configured, world, monkeypatch):
+    from contextlib import ExitStack
+
+    paths.ensure_dirs(world.data_dir)
+    held = ExitStack()
+    held.enter_context(paths.lock(world.data_dir))
+    sleeps = []
+
+    def fake_sleep(seconds):
+        sleeps.append(seconds)
+        held.close()  # der Adress-Check ist fertig
+
+    monkeypatch.setattr(service, "_sleep", fake_sleep)
+    service.run_cert_check(db_session, configured, NOW, lock_wait=60)
+    assert len(sleeps) == 1
+    assert len(world.lego_calls) == 1
+
+
+def test_cert_check_gives_up_after_lock_wait(db_session, configured, world, monkeypatch):
+    paths.ensure_dirs(world.data_dir)
+    clock = [0.0]
+    sleeps = []
+
+    def fake_sleep(seconds):
+        sleeps.append(seconds)
+        clock[0] += seconds
+
+    monkeypatch.setattr(service, "_sleep", fake_sleep)
+    monkeypatch.setattr(service, "_monotonic", lambda: clock[0])
+    with paths.lock(world.data_dir):
+        assert service.run_cert_check(db_session, configured, NOW, lock_wait=60) == []
+        with pytest.raises(paths.AlreadyRunning):
+            service.run_cert_check(
+                db_session, configured, NOW, lock_wait=5, raise_if_running=True
+            )
+    assert world.lego_calls == []
+    assert 60 <= clock[0] <= 66
+    assert all(s <= 5 for s in sleeps)
+
+
+def test_expiry_warning_even_when_skipped(db_session, configured, world):
+    state.record_renew(db_session, True, None, "a" * 64, NOW + timedelta(days=5), NOW)
+    paths.ensure_dirs(world.data_dir)
+    with paths.lock(world.data_dir):
+        events = service.run_cert_check(db_session, configured, NOW)
+    assert _ids(events) == ["cert_expiring"]
+    assert world.lego_calls == []

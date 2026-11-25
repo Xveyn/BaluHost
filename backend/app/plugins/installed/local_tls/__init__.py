@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 
 ADDRESS_CHECK_SECONDS = 300
 CERT_CHECK_SECONDS = 86400
+CERT_LOCK_WAIT_SECONDS = 60
 _ACTION_URL = "/settings?tab=integrations"
 
 
@@ -89,7 +90,11 @@ class LocalTlsPlugin(PluginBase):
         await service.run_check(service.run_address_check, self.load_config)
 
     async def _cert_check(self) -> None:
-        await service.run_check(service.run_cert_check, self.load_config)
+        # Startet zusammen mit dem Adress-Check; ohne Warten auf dessen Lock
+        # fiele der Zertifikats-Check (samt Ablaufwarnung) einen Tag aus.
+        await service.run_check(
+            service.run_cert_check, self.load_config, lock_wait=CERT_LOCK_WAIT_SECONDS
+        )
 
     def get_notification_events(self) -> List[PluginEventSpec]:
         return [

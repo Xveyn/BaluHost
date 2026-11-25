@@ -17,10 +17,12 @@ gemeldeter Fehler, kein Absturz.
 """
 import asyncio
 import logging
+import time
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Awaitable, Callable, Iterable, Optional
+from typing import Any, Awaitable, Callable, Iterable, Iterator, Optional
 
 from cryptography.fernet import InvalidToken
 from sqlalchemy.orm import Session
@@ -89,6 +91,30 @@ class _CredentialsUnreadable(Exception):
 
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+# Indirektionen, damit Tests das Warten auf den Lock ohne echte Pausen pruefen.
+_sleep = time.sleep
+_monotonic = time.monotonic
+_LOCK_POLL_SECONDS = 2.0
+
+
+@contextmanager
+def _lock(data_dir: Path, wait: float) -> Iterator[None]:
+    """``paths.lock`` mit optionalem Warten: nicht blockierende Versuche bis
+    ``wait`` Sekunden, dazwischen kurze Pausen; danach ``AlreadyRunning``."""
+    deadline = _monotonic() + wait
+    with ExitStack() as stack:
+        while True:
+            try:
+                stack.enter_context(paths.lock(data_dir))
+                break
+            except paths.AlreadyRunning:
+                remaining = deadline - _monotonic()
+                if remaining <= 0:
+                    raise
+                _sleep(min(_LOCK_POLL_SECONDS, remaining))
+        yield
 
 
 def _as_utc(value: Optional[datetime]) -> Optional[datetime]:
@@ -202,9 +228,16 @@ def run_cert_check(
     force: bool = False,
     raise_if_running: bool = False,
     data_dir: Optional[Path] = None,
+    lock_wait: float = 0,
 ) -> list[PendingEvent]:
     """Stellt aus bzw. erneuert ueber lego, installiert ein neues Zertifikat und
-    warnt, wenn das installierte in hoechstens 21 Tagen ablaeuft."""
+    warnt, wenn das installierte in hoechstens 21 Tagen ablaeuft.
+
+    ``lock_wait``: so lange wird auf einen fremden Lauf gewartet (der
+    Hintergrundlauf beim Start nutzt 60 s, weil der Adress-Check gleichzeitig
+    startet und der Zertifikats-Check sonst einen ganzen Tag ausfiele). Die
+    Ablaufwarnung wird auch bei uebersprungenem Lauf geprueft.
+    """
     if not _is_configured(db, config):
         return []
     domain = config.domain
@@ -222,12 +255,14 @@ def run_cert_check(
         )
 
     try:
-        _renew(db, config, now, force=force, data_dir=_data_dir(data_dir), fail=fail)
+        _renew(
+            db, config, now,
+            force=force, data_dir=_data_dir(data_dir), lock_wait=lock_wait, fail=fail,
+        )
     except paths.AlreadyRunning:
         if raise_if_running:
             raise
         logger.info("local_tls: certificate check skipped, another run holds the lock")
-        return []
 
     not_after = _as_utc(state.get_state(db).cert_not_after)
     if not_after is not None and not_after - now <= EXPIRY_WARNING:
@@ -245,6 +280,7 @@ def _renew(
     *,
     force: bool,
     data_dir: Path,
+    lock_wait: float,
     fail: Callable[[str], None],
 ) -> None:
     domain = config.domain
@@ -268,7 +304,7 @@ def _renew(
     except OSError:
         return fail(REASON_DATA_DIR)
 
-    with paths.lock(data_dir):  # AlreadyRunning geht an den Aufrufer
+    with _lock(data_dir, lock_wait):  # AlreadyRunning geht an den Aufrufer
         try:
             created = lego.obtain_or_renew(
                 domain,
@@ -281,14 +317,21 @@ def _renew(
         except lego.LegoError as exc:
             return fail(str(exc))
 
-        if not (created or force):
-            row = state.get_state(db)
-            state.record_renew(
-                db, True, None, row.cert_fingerprint, _as_utc(row.cert_not_after), now
-            )
-            return None
-
         cert_path, key_path = lego.cert_paths(domain, data_dir, staging=config.staging)
+        row = state.get_state(db)
+        # Nicht nur bei neuem Zertifikat uebernehmen: ist ein frueherer Deploy
+        # gescheitert (oder liegt nach einem Wechsel Staging/Produktion ein
+        # anderes Zertifikat in lego), meldet ``renew`` nichts Neues, das
+        # installierte ist aber ein anderes. Unbestimmbar (None) -> uebernehmen;
+        # deploy() meldet dann den eigentlichen Grund.
+        if not (created or force):
+            leaf = _leaf_fingerprint(cert_path, key_path, domain, now)
+            if leaf is not None and leaf == row.cert_fingerprint:
+                state.record_renew(
+                    db, True, None, row.cert_fingerprint, _as_utc(row.cert_not_after), now
+                )
+                return None
+
         try:
             outcome = deploy_cert.deploy(cert_path, key_path, domain, data_dir, now)
         except deploy_cert.DeployFailed as exc:
@@ -303,6 +346,18 @@ def _renew(
         db, True, reason, outcome.info.fingerprint, outcome.info.not_after, now
     )
     return None
+
+
+def _leaf_fingerprint(cert_path: Path, key_path: Path, domain: str, now: datetime) -> Optional[str]:
+    """DER-Leaf-Fingerabdruck von lego's Zertifikat, vergleichbar mit
+    ``cert_fingerprint`` (``lego._fingerprint`` hasht PEM-Bytes und ist es nicht)."""
+    try:
+        info = deploy_cert.inspect(
+            Path(cert_path).read_bytes(), Path(key_path).read_bytes(), domain, now
+        )
+    except (OSError, deploy_cert.CertInvalid):
+        return None
+    return info.fingerprint
 
 
 # --- Zustellung und Hintergrundlauf ---------------------------------------
@@ -326,6 +381,7 @@ async def run_check(
     session_factory: Callable[[], Session] = SessionLocal,
     emit: Callable[..., Awaitable[None]] = emit_plugin_event,
     clock: Callable[[], datetime] = _utc_now,
+    **check_kwargs: Any,
 ) -> list[PendingEvent]:
     """Fuehrt einen Check in einem Thread mit eigener DB-Session aus und sendet danach.
 
@@ -338,7 +394,8 @@ async def run_check(
         try:
             config = load_config(db)
             return check(
-                db, config, clock(), force=force, raise_if_running=raise_if_running
+                db, config, clock(),
+                force=force, raise_if_running=raise_if_running, **check_kwargs,
             )
         finally:
             db.close()

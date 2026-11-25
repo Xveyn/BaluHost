@@ -71,6 +71,9 @@ async def test_background_tasks_use_run_check():
     assert [c[0] for c in fake.calls] == [service.run_address_check, service.run_cert_check]
     # Hintergrund: kein raise_if_running, kein force
     assert all(not c[1].get("raise_if_running") and not c[1].get("force") for c in fake.calls)
+    # Der Zertifikats-Check wartet beim Start bis zu 60 s auf den Lock
+    assert fake.calls[1][1].get("lock_wait") == 60
+    assert "lock_wait" not in fake.calls[0][1]
 
 
 def test_load_config_reads_stored_config(db_session):
