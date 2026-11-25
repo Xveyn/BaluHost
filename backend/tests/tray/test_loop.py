@@ -537,6 +537,26 @@ async def test_start_without_tokens_waits_for_pairing(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_on_paired_runs_off_the_event_loop(monkeypatch):
+    """on_paired macht blockierendes HTTP — nicht in der Schleife selbst."""
+    import threading
+
+    clock = FakeClock()
+    ctx, _ = _loop_ctx(clock)
+    ctx.session.reload.side_effect = [True, _EndOfScript()]
+    seen: list[int] = []
+    ctx.on_paired = lambda: seen.append(threading.get_ident())
+    cycle = _scripted_cycle(
+        clock, [(0.0, PairingLost("revoked")), (0.0, PairingLost("again"))]
+    )
+    monkeypatch.setattr(loop_module, "run_cycle", cycle)
+
+    await _run(ctx)
+
+    assert seen and seen[0] != threading.get_ident()
+
+
+@pytest.mark.asyncio
 async def test_failing_on_paired_is_not_fatal(monkeypatch):
     clock = FakeClock()
     ctx, _ = _loop_ctx(clock)

@@ -332,7 +332,8 @@ async def wait_for_pairing(ctx: LoopContext) -> None:
         await ctx.sleep(PAIRING_POLL_SECONDS)
     ctx.state.set_paired(True)
     try:
-        ctx.on_paired()
+        # on_paired macht blockierendes HTTP — nicht in der Schleife selbst.
+        await asyncio.to_thread(ctx.on_paired)
     except Exception:
         logger.exception("on_paired failed, carrying on")
     _publish(ctx)

@@ -12,6 +12,7 @@ import asyncio
 import logging
 import threading
 import time
+from datetime import datetime, timezone
 from queue import Empty, Full, Queue    # NICHT `import queue`: run_tray() hat
                                          # schon eine lokale Variable `queue`
                                          # (PopupQueue) — ein Modulimport wuerde
@@ -19,13 +20,15 @@ from queue import Empty, Full, Queue    # NICHT `import queue`: run_tray() hat
 
 import websockets
 from PyQt6.QtCore import QObject, QTimer, QUrl, pyqtSignal
-from PyQt6.QtGui import QDesktopServices, QIcon
+from PyQt6.QtGui import QActionGroup, QDesktopServices, QIcon
 from PyQt6.QtWidgets import (
     QApplication, QInputDialog, QLineEdit, QMenu, QMessageBox, QSystemTrayIcon,
 )
 
+from baluhost_tray import awake as awake_module
 from baluhost_tray import config as tray_config
 from baluhost_tray.announce import QuietMode
+from baluhost_tray.awake import AwakeChoice, AwakeError, AwakeState
 from baluhost_tray.handoff import SingleFlight, open_url_for
 from baluhost_tray.icons import SIZES, icon_path
 from baluhost_tray.loop import LoopContext, is_gaming_active, run_loop
@@ -57,6 +60,14 @@ TITLE_ASK = "BaluHost neu starten?"
 TITLE_PROMPT = "BaluHost neu starten"
 TITLE_DONE = "Neustart abgeschlossen"
 TITLE_FAILED = "Neustart unvollständig"
+MENU_AWAKE = "Always Awake"
+AWAKE_CHOICES: tuple[tuple[AwakeChoice, str], ...] = (
+    (AwakeChoice.OFF, "Aus"),
+    (AwakeChoice.HOUR, "1 Stunde"),
+    (AwakeChoice.EIGHT_HOURS, "8 Stunden"),
+    (AwakeChoice.PERMANENT, "Dauerhaft"),
+)
+NOTICE_AWAKE_FAILED = "Always Awake konnte nicht gesetzt werden"
 MENU_QUIT = "Beenden"
 QUIET_SECONDS = 3600.0
 PROMPT_TIMEOUT = 300.0      # der Worker wartet nicht ewig auf einen Dialog
@@ -78,6 +89,8 @@ class _Bridge(QObject):
     restart_visible = pyqtSignal(bool)
     pin_prompt = pyqtSignal(bool)     # retry?
     open_url = pyqtSignal(str)        # QDesktopServices gehoert in den GUI-Thread
+    awake_visible = pyqtSignal(bool)
+    awake_state = pyqtSignal(object)  # AwakeState
 
 
 def _build_icons() -> dict[IconState, QIcon]:
@@ -367,6 +380,73 @@ def run_tray(base_url: str, web_url: str) -> int:
 
     restart_action.triggered.connect(_start_restart)
 
+    # Always Awake: nur fuer Admins (das Backend entscheidet ohnehin). Anders
+    # als der Neustart bleibt es bei unbekannter Rolle verborgen — es gibt
+    # keinen Notweg, der es bei toter API brauchte.
+    awake_menu = QMenu(MENU_AWAKE)
+    awake_menu.menuAction().setVisible(False)
+    awake_group = QActionGroup(awake_menu)
+    awake_group.setExclusive(True)
+    awake_actions: dict[AwakeChoice, object] = {}
+    for choice, label in AWAKE_CHOICES:
+        action = awake_menu.addAction(label)
+        action.setCheckable(True)
+        awake_group.addAction(action)
+        awake_actions[choice] = action
+    menu.addMenu(awake_menu)
+    awake_last: dict = {"state": AwakeState(False, None)}
+
+    def _show_awake_state(state: AwakeState) -> None:
+        # GUI-Thread. Haken und Titel immer aus dem Stand des Backends.
+        awake_last["state"] = state
+        checked = awake_module.checked_choice(state)
+        for choice, action in awake_actions.items():
+            action.setChecked(choice is checked)
+        if checked is None:
+            # Befristet: kein Eintrag passt, der Titel traegt die Frist.
+            checked_action = awake_group.checkedAction()
+            if checked_action is not None:
+                awake_group.setExclusive(False)
+                checked_action.setChecked(False)
+                awake_group.setExclusive(True)
+        awake_menu.setTitle(awake_module.submenu_title(state))
+
+    bridge.awake_visible.connect(awake_menu.menuAction().setVisible)
+    bridge.awake_state.connect(_show_awake_state)
+
+    def _awake_fetch_worker() -> None:
+        try:
+            bridge.awake_state.emit(
+                awake_module.fetch_state(session.client(), session.refresh_access)
+            )
+        except Exception:                           # noqa: BLE001
+            logger.warning("could not read the always-awake state", exc_info=False)
+
+    def _awake_apply_worker(choice: AwakeChoice) -> None:
+        try:
+            state = awake_module.apply(
+                session.client(),
+                choice,
+                datetime.now(timezone.utc),
+                session.refresh_access,
+            )
+            bridge.awake_state.emit(state)
+        except Exception:                           # noqa: BLE001
+            logger.warning("could not set always-awake", exc_info=False)
+            # Haken zurueck auf den letzten bekannten Stand.
+            bridge.awake_state.emit(awake_last["state"])
+            _notify_from_worker(NOTICE_AWAKE_FAILED)
+
+    def _spawn(target, *args) -> None:
+        try:
+            threading.Thread(target=target, args=args, daemon=True).start()
+        except Exception:                           # noqa: BLE001
+            logger.exception("could not start an always-awake thread")
+
+    awake_menu.aboutToShow.connect(lambda: _spawn(_awake_fetch_worker))
+    for choice, action in awake_actions.items():
+        action.triggered.connect(lambda _checked=False, c=choice: _spawn(_awake_apply_worker, c))
+
     menu.addSeparator()
     menu.addAction(MENU_QUIT).triggered.connect(app.quit)
     tray_icon.setContextMenu(menu)
@@ -430,6 +510,7 @@ def run_tray(base_url: str, web_url: str) -> int:
             bridge.restart_visible.emit(
                 menu_visible(account.is_admin, account.is_admin is not None)
             )
+            bridge.awake_visible.emit(account.is_admin is True)
 
             def _on_paired() -> None:
                 # Aus dem Loop-Thread: Kontofakten neu holen, nur Signale senden.
@@ -440,6 +521,7 @@ def run_tray(base_url: str, web_url: str) -> int:
                 bridge.restart_visible.emit(
                     menu_visible(facts.is_admin, facts.is_admin is not None)
                 )
+                bridge.awake_visible.emit(facts.is_admin is True)
 
             ctx = LoopContext(
                 session=session,
