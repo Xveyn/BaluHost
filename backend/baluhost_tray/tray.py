@@ -418,29 +418,44 @@ def run_tray(base_url: str, web_url: str) -> int:
     awake_menu.menuAction().setVisible(False)
     awake_group = QActionGroup(awake_menu)
     awake_group.setExclusive(True)
+    # Frist ("Bis 14:30"): nur Anzeige. Sie traegt den Haken, sobald eine Frist
+    # laeuft — auch eine in der Web-UI frei gewaehlte. Setzen geht nur dort.
+    awake_deadline = awake_menu.addAction("")
+    awake_deadline.setCheckable(True)
+    awake_deadline.setEnabled(False)
+    awake_deadline.setVisible(False)
+    awake_group.addAction(awake_deadline)
     awake_actions: dict[AwakeChoice, object] = {}
     for choice, label in AWAKE_CHOICES:
         action = awake_menu.addAction(label)
         action.setCheckable(True)
         awake_group.addAction(action)
         awake_actions[choice] = action
+    # Laufendes Kernzeitfenster: Hinweis, kein Schalter.
+    awake_core_separator = awake_menu.addSeparator()
+    awake_core_separator.setVisible(False)
+    awake_core = awake_menu.addAction("")
+    awake_core.setEnabled(False)
+    awake_core.setVisible(False)
     menu.addMenu(awake_menu)
     awake_last: dict = {"state": AwakeState(False, None)}
 
     def _show_awake_state(state: AwakeState) -> None:
         # GUI-Thread. Haken und Titel immer aus dem Stand des Backends.
         awake_last["state"] = state
+        now = datetime.now(timezone.utc)
+        deadline = awake_module.deadline_text(state, now)
+        awake_deadline.setText(deadline or "")
+        awake_deadline.setVisible(deadline is not None)
+        awake_deadline.setChecked(deadline is not None)
         checked = awake_module.checked_choice(state)
         for choice, action in awake_actions.items():
             action.setChecked(choice is checked)
-        if checked is None:
-            # Befristet: kein Eintrag passt, der Titel traegt die Frist.
-            checked_action = awake_group.checkedAction()
-            if checked_action is not None:
-                awake_group.setExclusive(False)
-                checked_action.setChecked(False)
-                awake_group.setExclusive(True)
-        awake_menu.setTitle(awake_module.submenu_title(state))
+        core = awake_module.core_text(state, now)
+        awake_core.setText(core or "")
+        awake_core.setVisible(core is not None)
+        awake_core_separator.setVisible(core is not None)
+        awake_menu.setTitle(awake_module.submenu_title(state, now))
 
     bridge.awake_visible.connect(awake_menu.menuAction().setVisible)
     bridge.awake_state.connect(_show_awake_state)
@@ -474,7 +489,14 @@ def run_tray(base_url: str, web_url: str) -> int:
         except Exception:                           # noqa: BLE001
             logger.exception("could not start an always-awake thread")
 
-    awake_menu.aboutToShow.connect(lambda: _spawn(_awake_fetch_worker))
+    def _refresh_awake() -> None:
+        # Schon beim Oeffnen des Hauptmenues: der Titel des Untermenues (Frist,
+        # Kernzeit) soll stimmen, bevor jemand es aufklappt.
+        if awake_menu.menuAction().isVisible():
+            _spawn(_awake_fetch_worker)
+
+    menu.aboutToShow.connect(_refresh_awake)
+    awake_menu.aboutToShow.connect(_refresh_awake)
     for choice, action in awake_actions.items():
         action.triggered.connect(lambda _checked=False, c=choice: _spawn(_awake_apply_worker, c))
 

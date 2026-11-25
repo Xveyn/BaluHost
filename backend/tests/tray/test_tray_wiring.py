@@ -150,6 +150,10 @@ def test_awake_submenu_visibility_follows_admin(monkeypatch):
     assert action.isVisible() is False
 
 
+def _visible(menu):
+    return [a for a in menu.actions() if a.isVisible() and not a.isSeparator()]
+
+
 def test_awake_state_sets_check_and_title(monkeypatch):
     from datetime import datetime, timezone
 
@@ -161,15 +165,61 @@ def test_awake_state_sets_check_and_title(monkeypatch):
     bridge.awake_state.emit(AwakeState(True, None))
     checked = [a.text() for a in menu.actions() if a.isChecked()]
     assert checked == ["Dauerhaft"]
+    assert [a.text() for a in _visible(menu)] == ["Aus", "1 Stunde", "8 Stunden", "Dauerhaft"]
 
     until = datetime(2026, 11, 25, 13, 0, tzinfo=timezone.utc)
     bridge.awake_state.emit(AwakeState(True, until))
-    assert not any(a.isChecked() for a in menu.actions())
     assert menu.title().startswith("Always Awake — bis ")
 
     bridge.awake_state.emit(AwakeState(False, None))
     assert [a.text() for a in menu.actions() if a.isChecked()] == ["Aus"]
     assert menu.title() == "Always Awake"
+    assert not any(a.text().startswith("Bis ") for a in _visible(menu))
+
+
+def test_awake_custom_deadline_is_shown_but_not_settable(monkeypatch):
+    """Frist aus der Web-UI, die keinem Eintrag entspricht: angezeigt und
+    angehakt, aber nicht anklickbar; die vier Eintraege bleiben waehlbar."""
+    from datetime import datetime, timedelta, timezone
+
+    from baluhost_tray.awake import AwakeState
+
+    captured = _build_menu(monkeypatch)
+    menu, bridge = captured["menu"], captured["bridge"]
+
+    until = datetime.now(timezone.utc) + timedelta(hours=3, minutes=17)
+    bridge.awake_state.emit(AwakeState(True, until))
+
+    label = f"Bis {until.astimezone():%H:%M}"
+    visible = _visible(menu)
+    assert [a.text() for a in visible] == [label, "Aus", "1 Stunde", "8 Stunden", "Dauerhaft"]
+    deadline = visible[0]
+    assert deadline.isChecked() and not deadline.isEnabled()
+    assert [a.text() for a in menu.actions() if a.isChecked()] == [label]
+    assert all(a.isEnabled() for a in visible[1:])
+
+
+def test_awake_shows_running_core_window(monkeypatch):
+    from datetime import datetime, timedelta
+
+    from baluhost_tray.awake import AwakeState
+
+    captured = _build_menu(monkeypatch)
+    menu, bridge = captured["menu"], captured["bridge"]
+
+    ends = datetime.now() + timedelta(hours=2)
+    bridge.awake_state.emit(
+        AwakeState(False, None, core_active=True, core_label="Büro", core_until=ends)
+    )
+    core = [a for a in _visible(menu) if a.text().startswith("Kernzeit")]
+    assert [a.text() for a in core] == [f"Kernzeit „Büro“ bis {ends:%H:%M}"]
+    assert not core[0].isEnabled()
+    assert menu.title() == f"Always Awake — Kernzeit bis {ends:%H:%M}"
+    assert [a.text() for a in menu.actions() if a.isChecked()] == ["Aus"]
+
+    bridge.awake_state.emit(AwakeState(False, None))
+    assert not any(a.text().startswith("Kernzeit") for a in _visible(menu))
+    assert all(not a.isVisible() for a in menu.actions() if a.isSeparator())
 
 
 @pytest.mark.parametrize("title", ["BaluHost öffnen", "BaluHost neu starten"])
