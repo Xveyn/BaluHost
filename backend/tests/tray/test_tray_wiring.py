@@ -18,6 +18,29 @@ pytest.importorskip("PyQt6")
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 
+@pytest.fixture(autouse=True)
+def _qt_teardown_order():
+    """Erst die Widgets einsammeln, dann die QApplication freigeben.
+
+    run_tray() legt ein QApplication als lokale Variable an; Menues, Bridge
+    und Lambdas bilden mit ihm Referenzzyklen und ueberleben den Aufruf.
+    Raeumte erst pytests gc_collect_harder() beim Beenden auf, zerstoerte
+    der GC in beliebiger Reihenfolge — QMenu nach seiner QApplication —
+    und der Lauf endete mit Segfault (Exit 139), obwohl alle Tests gruen
+    waren. Solange `app` hier festgehalten wird, ist sie kein Muell; der
+    erste collect() raeumt nur den Rest ab.
+    """
+    yield
+    import gc
+
+    from PyQt6.QtWidgets import QApplication
+
+    app = QApplication.instance()
+    gc.collect()
+    del app
+    gc.collect()
+
+
 class _NoThread:
     """Der Worker-Thread wird nicht gestartet — kein Bus, kein Netzwerk."""
 
