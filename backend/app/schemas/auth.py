@@ -83,6 +83,8 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: UserPublic
+    # Nur von /auth/refresh gesetzt, und nur wenn rotiert wurde (#847).
+    refresh_token: str | None = None
 
 
 class ChangePasswordRequest(BaseModel):
@@ -123,6 +125,9 @@ class RecoveryResetRequest(BaseModel):
 
 class RefreshTokenRequest(BaseModel):
     refresh_token: str
+    # Opt-in: gleitende Rotation fuer Geraete-Tokens (Tray, #847).
+    # Bestehende Clients senden das Feld nicht und sehen keine Aenderung.
+    rotate: bool = False
 
 
 # --- 2FA Schemas ---

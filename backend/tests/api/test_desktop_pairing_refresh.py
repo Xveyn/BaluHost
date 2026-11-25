@@ -33,12 +33,12 @@ def test_pairing_stores_the_refresh_token_jti():
         return MagicMock()
 
     with patch(
-        "app.services.desktop_pairing.create_refresh_token",
+        "app.services.refresh_rotation.create_refresh_token",
         return_value=("rt", "jti-123"),
     ), patch(
         "app.services.desktop_pairing.create_access_token", return_value="at"
     ), patch(
-        "app.services.desktop_pairing.token_service.store_refresh_token",
+        "app.services.refresh_rotation.token_service.store_refresh_token",
         side_effect=_capture,
     ):
         desktop_pairing._issue_tokens(

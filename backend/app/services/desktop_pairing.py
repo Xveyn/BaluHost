@@ -10,9 +10,8 @@ from fastapi import HTTPException, status
 from app.models.desktop_pairing import DesktopPairingCode
 from app.models.sync_state import SyncState
 from app.models.user import User
-from app.core.config import settings
-from app.core.security import create_access_token, create_refresh_token
-from app.services.token_service import token_service
+from app.core.security import create_access_token
+from app.services.refresh_rotation import issue_device_refresh_token
 from app.schemas.desktop_pairing import (
     DeviceCodeRequest,
     DeviceCodeResponse,
@@ -35,18 +34,12 @@ def _issue_tokens(db: Session, user: User, device_id: str) -> tuple[str, str]:
     Without this row, /auth/refresh rejects the token: is_token_revoked()
     treats an unknown jti as revoked. A paired device would lose its session
     when the access token expires and could never recover.
+
+    The refresh token comes from refresh_rotation.issue_device_refresh_token,
+    the same path the sliding rotation uses (#847).
     """
     access_token = create_access_token(user)
-    expires_delta = timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
-    refresh_token, jti = create_refresh_token(user, expires_delta=expires_delta)
-    token_service.store_refresh_token(
-        db=db,
-        jti=jti,
-        user_id=user.id,
-        token=refresh_token,
-        expires_at=datetime.now(timezone.utc) + expires_delta,
-        device_id=device_id,
-    )
+    refresh_token = issue_device_refresh_token(db, user, device_id)
     return access_token, refresh_token
 
 

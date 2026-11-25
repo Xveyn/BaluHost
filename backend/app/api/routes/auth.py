@@ -834,90 +834,57 @@ async def refresh_token(
     db: Session = Depends(get_db)
 ) -> TokenResponse:
     """
-    Refresh access token using a refresh token (for mobile clients).
+    Refresh access token using a refresh token (mobile, desktop, tray).
 
     Mobile clients receive a refresh token during registration whose lifetime
     matches the chosen device authorization validity (30-180 days, default 90).
-    This endpoint allows them to obtain new access tokens without re-authentication;
-    it does not rotate the refresh token, so once it expires the user re-registers.
+    This endpoint allows them to obtain new access tokens without re-authentication.
 
-    ✅ Security Fix #6: Now checks if refresh token has been revoked.
+    Rotation is opt-in (#847): with ``rotate=true`` a device-bound token
+    (one carrying a ``device_id``) in the second half of its lifetime gets a
+    successor in ``refresh_token``. The old token stays valid until the
+    successor is first used ("lazy revoke"); presenting it after that counts
+    as reuse and revokes every token of the device. Without ``rotate`` nothing
+    rotates and ``refresh_token`` is null.
+
+    ✅ Security Fix #6: Checks whether the refresh token has been revoked.
     """
-    from app.services.token_service import token_service
+    from datetime import datetime, timezone
+
+    from app.services import refresh_rotation
 
     audit_logger = get_audit_logger_db()
     ip_address = request.client.host if request.client else None
 
-    # Verify refresh token (must be type="refresh", not access)
     try:
-        token_data = auth_service.decode_token(payload.refresh_token, token_type="refresh")
-        user_id = token_data.sub  # TokenPayload is a Pydantic model, use attribute access
-
-        # ✅ Security Fix #6: Check if token has been revoked
-        jti = token_data.jti
-        if jti and token_service.is_token_revoked(db, jti):
-            audit_logger.log_security_event(
-                action="refresh_token_revoked",
-                user=f"user_id:{user_id}",
-                error_message="Refresh token has been revoked",
-                ip_address=ip_address,
-                db=db
-            )
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Refresh token has been revoked"
-            )
-
-        # Get user from database
-        user_record = user_service.get_user(int(user_id), db=db)
-        if not user_record:
-            audit_logger.log_security_event(
-                action="refresh_token_invalid_user",
-                user=f"user_id:{user_id}",
-                error_message="User not found",
-                ip_address=ip_address,
-                db=db
-            )
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid refresh token"
-            )
-
-        # Check if user is active
-        if not getattr(user_record, "is_active", True):
-            audit_logger.log_security_event(
-                action="refresh_token_inactive_user",
-                user=getattr(user_record, "username", None),
-                error_message="User account is inactive",
-                ip_address=ip_address,
-                db=db
-            )
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="User account is inactive"
-            )
-
-        # ✅ Security Fix #6: Update token usage timestamp
-        if jti:
-            token_service.update_token_usage(db, jti, ip_address=ip_address)
-
-        # Generate new access token
-        new_access_token = _issue_session_token(user_record, db)
-
-        # Log successful token refresh
-        audit_logger.log_security_event(
-            action="token_refreshed",
-            user=getattr(user_record, "username", None),
-            success=True,
-            ip_address=ip_address,
-            db=db
+        user_record, row = refresh_rotation.use_refresh_token(
+            db, payload.refresh_token, ip_address=ip_address
         )
-
-        user_public = user_service.serialize_user(user_record)
-        return TokenResponse(access_token=new_access_token, user=user_public)
-
-    except HTTPException:
-        raise
+    except refresh_rotation.RefreshTokenReused as exc:
+        audit_logger.log_security_event(
+            action="refresh_token_reuse_detected",
+            user=f"user_id:{exc.user_id}",
+            details={"device_id": exc.device_id, "revoked_tokens": exc.revoked_count},
+            error_message="Rotated refresh token presented again; device revoked",
+            ip_address=ip_address,
+            db=db,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid refresh token",
+        )
+    except refresh_rotation.RefreshTokenInvalid as exc:
+        audit_logger.log_security_event(
+            action=exc.audit_action,
+            user=exc.audit_user,
+            error_message=exc.error_message,
+            ip_address=ip_address,
+            db=db,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=exc.detail,
+        )
     except Exception as e:
         audit_logger.log_security_event(
             action="refresh_token_failed",
@@ -930,3 +897,37 @@ async def refresh_token(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid refresh token"
         )
+
+    new_refresh_token = None
+    if payload.rotate:
+        new_refresh_token = refresh_rotation.rotate_if_due(
+            db, row, user_record, now=datetime.now(timezone.utc)
+        )
+        if new_refresh_token:
+            audit_logger.log_security_event(
+                action="refresh_token_rotated",
+                user=getattr(user_record, "username", None),
+                details={"device_id": row.device_id, "user_id": user_record.id},
+                success=True,
+                ip_address=ip_address,
+                db=db,
+            )
+
+    # Generate new access token
+    new_access_token = _issue_session_token(user_record, db)
+
+    # Log successful token refresh
+    audit_logger.log_security_event(
+        action="token_refreshed",
+        user=getattr(user_record, "username", None),
+        success=True,
+        ip_address=ip_address,
+        db=db
+    )
+
+    user_public = user_service.serialize_user(user_record)
+    return TokenResponse(
+        access_token=new_access_token,
+        user=user_public,
+        refresh_token=new_refresh_token,
+    )
