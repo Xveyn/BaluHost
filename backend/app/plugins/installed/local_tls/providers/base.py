@@ -51,15 +51,20 @@ class DnsProvider(Protocol):
     ) -> None: ...
 
 
-def require_private_ipv4(ip: str) -> None:
-    """Wirft ProviderError, wenn ip keine private (nicht-Loopback) IPv4 ist."""
+def is_private_ipv4(ip: str) -> bool:
+    """True, wenn ip eine private (nicht-Loopback, nicht-Link-Local) IPv4 ist."""
     try:
         addr = ipaddress.IPv4Address(ip)
     except ValueError:
-        raise ProviderError("address must be a private IPv4 address") from None
-    if (
+        return False
+    return not (
         addr.is_loopback
         or addr.is_link_local
         or not is_private_or_local_ip(str(addr))
-    ):
+    )
+
+
+def require_private_ipv4(ip: str) -> None:
+    """Wirft ProviderError, wenn ip keine private (nicht-Loopback) IPv4 ist."""
+    if not is_private_ipv4(ip):
         raise ProviderError("address must be a private IPv4 address")
