@@ -59,6 +59,12 @@ REASON_NOT_SERVED = "installiert, nginx liefert es noch nicht aus"
 REASON_DATA_DIR = "data directory not writable"
 
 
+def _unexpected(exc: BaseException) -> str:
+    """Grund fuer eine unerwartete Exception: nur der Typ -- die Meldung
+    koennte den Token enthalten."""
+    return f"unexpected error ({type(exc).__name__})"
+
+
 @dataclass(frozen=True)
 class PendingEvent:
     """Eine faellige Benachrichtigung; ``entity_id`` ist die Domain (Cooldown-Schluessel)."""
@@ -211,6 +217,8 @@ def run_address_check(
         return []
     except ProviderError as exc:
         return failed(str(exc))
+    except Exception as exc:  # noqa: BLE001 - als DNS-Fehler buchen statt abbrechen
+        return failed(_unexpected(exc))
 
     state.record_ip(db, ip, now)
     if previous is not None and previous != ip:
@@ -263,6 +271,9 @@ def run_cert_check(
         if raise_if_running:
             raise
         logger.info("local_tls: certificate check skipped, another run holds the lock")
+    except Exception as exc:  # noqa: BLE001 - buchen, melden, Ablauf trotzdem pruefen
+        logger.error("local_tls: certificate check failed with %s", type(exc).__name__)
+        fail(_unexpected(exc))
 
     not_after = _as_utc(state.get_state(db).cert_not_after)
     if not_after is not None and not_after - now <= EXPIRY_WARNING:

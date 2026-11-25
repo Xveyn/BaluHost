@@ -184,3 +184,32 @@ def test_ensure_dirs_creates_both_lego_paths(tmp_path):
     ensure_dirs(d)
     for sub in ("lego", "lego-staging"):
         assert ((d / sub).stat().st_mode & 0o777) == 0o700
+
+
+# --- Fix-Runde final: OSError und Dekodierung ---------------------------------
+
+def test_version_oserror_is_lego_error():
+    def run(args, **kwargs):
+        raise PermissionError("lego")
+
+    with pytest.raises(LegoError):
+        lego.version(run=run)
+
+
+def test_obtain_oserror_is_lego_error(tmp_path):
+    def run(args, **kwargs):
+        raise PermissionError("lego")
+
+    with pytest.raises(LegoError):
+        lego.obtain_or_renew(
+            DOMAIN, "duckdns", {"DUCKDNS_TOKEN": TOKEN}, tmp_path, email=None, staging=False, run=run
+        )
+
+
+def test_subprocess_output_decoded_with_replace(tmp_path):
+    run, calls = _recorder(stdout="lego version 4.35.2\n")
+    lego.version(run=run)
+    lego.obtain_or_renew(
+        DOMAIN, "duckdns", {"DUCKDNS_TOKEN": TOKEN}, tmp_path, email=None, staging=False, run=run
+    )
+    assert all(kw.get("errors") == "replace" for _, kw in calls)

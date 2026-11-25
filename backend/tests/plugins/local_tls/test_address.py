@@ -65,3 +65,18 @@ def test_interface_name_is_validated():
     with pytest.raises(AddressError):
         current_lan_ip("eth0; rm", run=_fake("[]", calls=calls))
     assert calls == []
+
+
+def test_oserror_is_an_address_error():
+    def run(args, **kwargs):
+        raise PermissionError("ip")
+
+    with pytest.raises(AddressError):
+        current_lan_ip(run=run)
+
+
+def test_output_decoded_with_replace():
+    calls = []
+    out = json.dumps([{"prefsrc": "192.168.178.53"}])
+    current_lan_ip(run=_fake(out, calls=calls))
+    assert calls[0][1]["errors"] == "replace"

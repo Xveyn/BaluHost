@@ -611,3 +611,29 @@ def test_expiry_warning_even_when_skipped(db_session, configured, world):
         events = service.run_cert_check(db_session, configured, NOW)
     assert _ids(events) == ["cert_expiring"]
     assert world.lego_calls == []
+
+
+# --- Fix-Runde final: unerwartete Fehler werden gebucht --------------------
+
+def test_unexpected_deploy_error_is_booked_and_notified(db_session, configured, world):
+    state.record_renew(db_session, True, None, "a" * 64, NOW + timedelta(days=5), NOW - timedelta(days=1))
+    world.deploy_error = RuntimeError(f"boom {TOKEN}")
+    events = service.run_cert_check(db_session, configured, NOW)
+    assert _ids(events) == ["renew_failed", "cert_expiring"]
+    assert events[0].kwargs["reason"] == "unexpected error (RuntimeError)"
+    row = state.get_state(db_session)
+    assert row.last_renew_ok is False
+    assert row.last_renew_reason == "unexpected error (RuntimeError)"
+    assert TOKEN not in row.last_renew_reason
+    assert row.cert_fingerprint == "a" * 64
+
+
+def test_unexpected_provider_error_is_dns_failure(db_session, configured, world, monkeypatch):
+    def boom(domain, ip, credentials, *, client=None):
+        raise RuntimeError(f"boom {TOKEN}")
+
+    monkeypatch.setattr(world.provider, "update_address", boom)
+    events = service.run_address_check(db_session, configured, NOW)
+    assert _ids(events) == ["dns_update_failed"]
+    assert events[0].kwargs["reason"] == "unexpected error (RuntimeError)"
+    assert state.get_state(db_session).last_ip is None

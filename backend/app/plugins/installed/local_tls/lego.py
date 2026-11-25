@@ -25,11 +25,16 @@ class LegoTooOld(LegoError):
 
 def version(*, run=subprocess.run) -> tuple[int, int, int]:
     try:
-        proc = run(["lego", "--version"], capture_output=True, text=True, timeout=15)
+        proc = run(
+            ["lego", "--version"],
+            capture_output=True, text=True, errors="replace", timeout=15,
+        )
     except FileNotFoundError:
         raise LegoMissing("lego is not installed") from None
     except subprocess.TimeoutExpired:
         raise LegoError("lego --version timed out") from None
+    except OSError:
+        raise LegoError("lego could not be started") from None
     m = re.search(r"(\d+)\.(\d+)\.(\d+)", proc.stdout or "")
     if proc.returncode != 0 or not m:
         raise LegoError("could not determine lego version")
@@ -86,11 +91,16 @@ def obtain_or_renew(
     full_env = {k: os.environ[k] for k in _SAFE_ENV if k in os.environ}
     full_env.update(env)
     try:
-        proc = run(args, capture_output=True, text=True, timeout=_TIMEOUT, env=full_env)
+        proc = run(
+            args, capture_output=True, text=True, errors="replace",
+            timeout=_TIMEOUT, env=full_env,
+        )
     except FileNotFoundError:
         raise LegoMissing("lego is not installed") from None
     except subprocess.TimeoutExpired:
         raise LegoError("lego timed out") from None
+    except OSError:
+        raise LegoError("lego could not be started") from None
     if proc.returncode != 0:
         lines = [ln for ln in (proc.stderr or "").strip().splitlines() if ln.strip()]
         last = lines[-1].strip() if lines else f"lego exited with {proc.returncode}"

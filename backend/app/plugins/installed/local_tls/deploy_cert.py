@@ -120,7 +120,9 @@ def inspect(cert_pem: bytes, key_pem: bytes, domain: str, now: datetime) -> Cert
 def reload_nginx(*, run: Callable[..., subprocess.CompletedProcess] = subprocess.run) -> None:
     """Laedt nginx ueber die bestehende sudoers-Regel neu (ohne Passwortabfrage)."""
     try:
-        result = run(RELOAD_ARGS, capture_output=True, text=True, timeout=RELOAD_TIMEOUT)
+        result = run(
+            RELOAD_ARGS, capture_output=True, text=True, errors="replace", timeout=RELOAD_TIMEOUT
+        )
     except (OSError, subprocess.TimeoutExpired):
         raise DeployFailed("nginx reload not permitted or failed") from None
     if result.returncode != 0:

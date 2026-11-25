@@ -21,8 +21,8 @@ def current_lan_ip(interface: str | None = None, *, run=subprocess.run) -> str:
     else:
         cmd = ["ip", "-j", "route", "get", "1.1.1.1"]
     try:
-        proc = run(cmd, capture_output=True, text=True, timeout=_TIMEOUT)
-    except (FileNotFoundError, subprocess.TimeoutExpired):
+        proc = run(cmd, capture_output=True, text=True, errors="replace", timeout=_TIMEOUT)
+    except (OSError, subprocess.TimeoutExpired):
         raise AddressError("could not determine LAN address") from None
     if proc.returncode != 0:
         raise AddressError("no route / interface found")
