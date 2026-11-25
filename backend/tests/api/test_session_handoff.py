@@ -266,3 +266,61 @@ def test_db_error_during_handoff_is_not_a_401(
     assert r.status_code != 401
     assert r.status_code >= 500
     assert db_session.query(SessionHandoffCode).count() == 0
+
+
+def test_handoff_with_rotated_token_triggers_reuse_detection(
+    client, db_session, regular_user, lan
+):
+    """Der Handoff zaehlt als Nutzung — ein rotierter Token, dessen Nachfolger
+    schon benutzt wurde, muss hier dieselbe Wiederverwendungserkennung
+    ausloesen wie bei /auth/refresh."""
+    from app.models.refresh_token import RefreshToken
+
+    token = _paired_token(db_session, regular_user)
+    jti = pyjwt.decode(token, options={"verify_signature": False})["jti"]
+    row = db_session.query(RefreshToken).filter(RefreshToken.jti == jti).one()
+    row.expires_at = datetime.now(timezone.utc) + timedelta(days=1)
+    db_session.commit()
+    refresh_url = f"{settings.api_prefix}/auth/refresh"
+    successor = client.post(
+        refresh_url, json={"refresh_token": token, "rotate": True}
+    ).json()["refresh_token"]
+    assert successor
+    assert client.post(refresh_url, json={"refresh_token": successor}).status_code == 200
+
+    r = _handoff(client, token)
+
+    assert r.status_code == 401
+    assert db_session.query(SessionHandoffCode).count() == 0
+    db_session.expire_all()
+    rows = db_session.query(RefreshToken).filter(RefreshToken.device_id == "tray-1").all()
+    assert rows and all(rt.revoked for rt in rows)
+    assert (
+        db_session.query(AuditLog)
+        .filter(AuditLog.action == "refresh_token_reuse_detected")
+        .count()
+        == 1
+    )
+    assert client.post(refresh_url, json={"refresh_token": successor}).status_code == 401
+
+
+def test_plaintext_code_never_reaches_the_audit_log(client, db_session, regular_user, lan):
+    import json
+
+    token = _paired_token(db_session, regular_user)
+    code = _code(client, token)
+    assert client.post(REDEEM_URL, json={"code": code}).status_code == 200
+    # auch ein fehlgeschlagener Versuch schreibt den Code nicht mit
+    assert client.post(REDEEM_URL, json={"code": code}).status_code == 401
+
+    entries = db_session.query(AuditLog).all()
+    assert entries
+    blob = json.dumps(
+        [
+            [e.action, e.user, e.resource, e.details, e.error_message]
+            for e in entries
+        ],
+        default=str,
+    )
+    assert code not in blob
+    assert token not in blob

@@ -22,3 +22,25 @@ def test_system_restart_is_strict():
     Prozessspeicher, den der Endpunkt selbst neu startet. Siehe security-agent.md.
     """
     assert RATE_LIMITS["system_restart"] == "5/minute"
+
+
+def test_session_handoff_limits_are_registered():
+    """Ohne Eintrag faellt get_limit() fuer die Handoff-Routen auf einen
+    Standard zurueck, der nicht fuer sie gedacht ist (#847)."""
+    assert RATE_LIMITS["auth_handoff"] == "10/minute"
+    assert RATE_LIMITS["auth_handoff_redeem"] == "10/minute"
+
+
+def test_session_handoff_limits_are_seeded(db_session):
+    """Die Admin-UI zeigt nur, was seed_defaults anlegt."""
+    from app.models.rate_limit_config import RateLimitConfig
+    from app.services.rate_limit_config import RateLimitConfigService
+
+    RateLimitConfigService.seed_defaults(db_session)
+
+    seeded = {
+        c.endpoint_type: c.limit_string
+        for c in db_session.query(RateLimitConfig).all()
+    }
+    assert seeded.get("auth_handoff") == RATE_LIMITS["auth_handoff"]
+    assert seeded.get("auth_handoff_redeem") == RATE_LIMITS["auth_handoff_redeem"]
