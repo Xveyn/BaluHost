@@ -54,8 +54,11 @@ next to `sites-available/baluhost` — update both.
   atomically; the last 3 releases are kept. nginx is then reloaded through the
   existing `sudo -n /usr/bin/systemctl reload nginx`. No new sudoers rule.
 - First use, or nginx not switched yet: the certificate is only installed, no
-  rollback. A rollback happens only when nginx was serving the plugin's previous
-  certificate and stops serving after the reload.
+  rollback. `live` is switched back to the previous release (with another
+  reload) in two cases: (a) nginx was serving the plugin's previous certificate
+  before and does not serve the new one after the reload; (b) the nginx reload
+  fails and a previous release exists. Without a previous release, a reload
+  failure leaves `live` in place and the failure is reported.
 - If lego's certificate fingerprint differs from the installed one, it is
   redeployed, so failed deploys are retried daily.
 - Admin notifications: `cert_expiring` (from 21 days before expiry),
@@ -67,15 +70,27 @@ next to `sites-available/baluhost` — update both.
 The existing certbot certificate for `baluhost.duckdns.org` is valid until
 2027-02-23.
 
+Precondition: the service user may run `sudo -n /usr/bin/systemctl reload nginx`
+(entry from `baluhost-deploy-sudoers`). Check as the service user:
+`sudo -n -l | awk '/reload nginx/'` — if the line is missing, run
+`deploy/scripts/install-deploy-sudoers.sh` once as root. Without it every reload
+fails.
+
 1. Install lego (`sudo apt install -t trixie-backports lego`).
 2. Enable the plugin, set domain and provider in the plugin settings.
 3. Save the token under Settings → Integrations.
 4. "Renew now".
-5. Switch nginx (both TLS blocks `:443`/`:8443` including `server_name`; mind
+5. Check the reload permission (above), then switch nginx (both TLS blocks `:443`/`:8443` including `server_name`; mind
    `sites-enabled` vs `sites-available`), `nginx -t`, reload.
 6. Verify the card shows "being served".
-7. Disable the old certbot renewal for `baluhost.duckdns.org` and remove the
-   pipx certbot.
+7. Only now retire the old renewal:
+   `sudo certbot delete --cert-name baluhost.duckdns.org` (or move
+   `/etc/letsencrypt/renewal/baluhost.duckdns.org.conf` away), then remove the
+   pipx certbot (`sudo pipx uninstall certbot` or delete `/usr/local/bin/certbot`).
+   Debian's `certbot.timer` may stay for other certificates.
+
+Fallback: the old certificate paths stay valid until 2027-02-23. If step 6
+fails, point the nginx site back at them and reload.
 
 ## DNS rebind protection
 

@@ -24,6 +24,18 @@ def test_backports_source_only_added_when_missing():
     assert "if ! grep" in text and "trixie-backports.list" in text
 
 
+def test_backports_detection_ignores_comments(tmp_path):
+    import re
+
+    text = _SCRIPT.read_text(encoding="utf-8")
+    pattern = re.search(r"grep -hsE '([^']+)'", text).group(1)
+    posix = pattern.replace("[[:space:]]", r"\s")
+    rx = re.compile(posix)
+    assert not rx.search("# deb http://deb.debian.org/debian trixie-backports main")
+    assert rx.search("deb http://deb.debian.org/debian trixie-backports main")
+    assert rx.search("Suites: trixie-backports")
+
+
 def test_lego_is_an_optional_feature_off_by_default():
     assert "LEGO)" in _FEATURES.read_text(encoding="utf-8")
     assert "install-lego.sh" in _FEATURES.read_text(encoding="utf-8")

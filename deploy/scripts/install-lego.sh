@@ -10,7 +10,9 @@ if [[ $EUID -ne 0 ]]; then
     exit 1
 fi
 
-if ! grep -rqs 'trixie-backports' /etc/apt/sources.list /etc/apt/sources.list.d/ 2>/dev/null; then
+# Nur aktive Eintraege zaehlen (deb-Zeile oder deb822 "Suites:"), keine Kommentare.
+SOURCES_GLOB=(/etc/apt/sources.list /etc/apt/sources.list.d/*)
+if ! grep -hsE '^[[:space:]]*(deb(-src)?[[:space:]]|Suites:).*trixie-backports' "${SOURCES_GLOB[@]}" >/dev/null 2>&1; then
     echo "Ergaenze trixie-backports-Quelle"
     echo "deb http://deb.debian.org/debian trixie-backports main" \
         > /etc/apt/sources.list.d/trixie-backports.list
