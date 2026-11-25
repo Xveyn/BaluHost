@@ -23,7 +23,7 @@ class Tokens:
 
 
 def save_tokens(tokens: Tokens) -> None:
-    """Write tokens, owner-only from the first byte.
+    """Write tokens atomically, owner-only from the first byte.
 
     write_text() + chmod would create the file world-readable for the length
     of the write, with a token inside it. On a multi-user box that is a real
@@ -32,14 +32,23 @@ def save_tokens(tokens: Tokens) -> None:
     TOKEN_DIR.mkdir(parents=True, exist_ok=True)
     os.chmod(TOKEN_DIR, 0o700)
 
-    payload = json.dumps(asdict(tokens))
-    fd = os.open(TOKEN_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    payload = json.dumps(asdict(tokens)).encode("utf-8")
+    # Atomar: erst in eine Temp-Datei im selben Verzeichnis, dann ersetzen.
+    # Ein Absturz mitten im Schreiben darf das rotierte Refresh-Token nicht
+    # halb ueberschrieben zuruecklassen — es waere die einzige Kopplung.
+    tmp = TOKEN_DIR / f".tray-tokens.{os.getpid()}.tmp"
+    tmp.unlink(missing_ok=True)  # Rest eines frueheren Absturzes derselben PID
     try:
-        os.write(fd, payload.encode("utf-8"))
-    finally:
-        os.close(fd)
-    # An existing file keeps its old mode through O_CREAT, so enforce it.
-    os.chmod(TOKEN_FILE, 0o600)
+        fd = os.open(tmp, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        try:
+            os.write(fd, payload)
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+        os.replace(tmp, TOKEN_FILE)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
 
 
 def load_tokens() -> Tokens | None:
