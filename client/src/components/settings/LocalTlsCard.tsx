@@ -34,6 +34,17 @@ function severityFor(days: number): Severity {
 
 const fmt = (iso: string | null) => (iso ? new Date(iso).toLocaleString() : null);
 
+// Das Backend bucht Gruende auf Englisch; bekannte werden uebersetzt, alle
+// anderen (z. B. Meldungen von lego oder DuckDNS) bleiben roh.
+const KNOWN_REASONS: Record<string, string> = {
+  'installed, nginx is not serving it yet': 'notServed',
+  'credentials unreadable (encryption key missing or changed) - set the token again': 'credentialsUnreadable',
+  'data directory not writable': 'dataDir',
+  'lego is not installed': 'legoMissing',
+  'nginx reload not permitted or failed': 'nginxReload',
+  'served certificate does not match new certificate': 'servedMismatch',
+};
+
 export default function LocalTlsCard() {
   const { t } = useTranslation('localTls');
   const [status, setStatus] = useState<LocalTlsStatus | null>(null);
@@ -59,6 +70,12 @@ export default function LocalTlsCard() {
       .catch(() => setDomain(null));
   }, [load]);
 
+  const reasonText = (reason: string | null) => {
+    if (!reason) return '';
+    const key = KNOWN_REASONS[reason];
+    return key ? t(`reasons.${key}`) : reason;
+  };
+
   const errorText = (err: unknown) => {
     const key = localTlsErrorKey(err);
     return t(key ? `error.${key}` : 'error.unknown', { defaultValue: t('error.unknown') });
@@ -78,7 +95,7 @@ export default function LocalTlsCard() {
 
   const onSaveToken = () =>
     run('token', async () => {
-      const value = token;
+      const value = token.trim();
       try {
         await setLocalTlsToken(value);
       } finally {
@@ -98,7 +115,7 @@ export default function LocalTlsCard() {
   // Die Laeufe antworten mit dem Status; ein gescheiterter Lauf ist kein Erfolg.
   const reportResult = (ok: boolean | null, reason: string | null, done: string, failed: string) => {
     if (ok === false) {
-      const text = t(failed, { reason: reason ?? '' });
+      const text = t(failed, { reason: reasonText(reason) });
       setNotice(text);
       toast.error(text);
     } else {
@@ -159,7 +176,7 @@ export default function LocalTlsCard() {
           <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
             <div>
               <dt className="text-slate-400">{t('domain')}</dt>
-              <dd>{domain ?? t('notConfigured')}</dd>
+              <dd>{domain || t('notConfigured')}</dd>
             </div>
             <div>
               <dt className="text-slate-400">{t('address.current')}</dt>
@@ -184,7 +201,7 @@ export default function LocalTlsCard() {
                       {status.last_dns_ok ? t('dns.ok') : t('dns.failed')}
                     </span>
                     {status.last_dns_reason && (
-                      <span className="text-slate-500"> ({status.last_dns_reason})</span>
+                      <span className="text-slate-500"> ({reasonText(status.last_dns_reason)})</span>
                     )}
                   </>
                 ) : (
@@ -208,6 +225,25 @@ export default function LocalTlsCard() {
                   : t('cert.none')}
               </dd>
             </div>
+            <div>
+              <dt className="text-slate-400">{t('served.label')}</dt>
+              <dd
+                data-testid="served"
+                className={
+                  status.served_matches === true
+                    ? 'text-green-400'
+                    : status.served_matches === false
+                      ? 'text-yellow-400'
+                      : 'text-slate-400'
+                }
+              >
+                {status.served_matches === true
+                  ? t('served.yes')
+                  : status.served_matches === false
+                    ? t('served.no')
+                    : t('served.unknown')}
+              </dd>
+            </div>
             <div className="sm:col-span-2">
               <dt className="text-slate-400">{t('renewal.last')}</dt>
               <dd>
@@ -218,7 +254,7 @@ export default function LocalTlsCard() {
                       {status.last_renew_ok ? t('renewal.ok') : t('renewal.failed')}
                     </span>
                     {status.last_renew_reason && (
-                      <span className="text-slate-500"> ({status.last_renew_reason})</span>
+                      <span className="text-slate-500"> ({reasonText(status.last_renew_reason)})</span>
                     )}
                   </>
                 ) : (
@@ -276,7 +312,7 @@ export default function LocalTlsCard() {
               <button
                 type="button"
                 className="btn btn-primary"
-                disabled={!token || busy !== null}
+                disabled={!token.trim() || busy !== null}
                 onClick={onSaveToken}
               >
                 {t('token.save')}
@@ -289,12 +325,28 @@ export default function LocalTlsCard() {
             </div>
           </div>
 
+          {status.running && (
+            <p className="text-slate-300 flex items-center gap-1">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              {t('running')}
+            </p>
+          )}
           <div className="flex flex-wrap gap-2">
-            <button type="button" className="btn btn-primary" disabled={busy !== null} onClick={onRenew}>
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={busy !== null || !status.configured}
+              onClick={onRenew}
+            >
               {busy === 'renew' && <Loader2 className="w-4 h-4 animate-spin inline mr-1" />}
               {t('actions.renew')}
             </button>
-            <button type="button" className="btn btn-secondary" disabled={busy !== null} onClick={onUpdateDns}>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              disabled={busy !== null || !status.configured}
+              onClick={onUpdateDns}
+            >
               {busy === 'dns' && <Loader2 className="w-4 h-4 animate-spin inline mr-1" />}
               {t('actions.updateDns')}
             </button>

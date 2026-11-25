@@ -1,8 +1,9 @@
 {
-  "title": "Local TLS certificate",
+  "title": "Fixed local address",
   "settings": "Settings",
   "domain": "Domain",
   "notConfigured": "Not set up yet",
+  "running": "A run is in progress …",
   "address": {
     "current": "Current LAN IP",
     "last": "Last IP set",
@@ -21,6 +22,12 @@
     "daysLeft_one": "{{count}} day left",
     "daysLeft_other": "{{count}} days left",
     "expired": "expired"
+  },
+  "served": {
+    "label": "Served by nginx",
+    "yes": "yes",
+    "no": "no",
+    "unknown": "unknown"
   },
   "renewal": {
     "last": "Last renewal",
@@ -68,5 +75,13 @@
     "invalid_token_format": "The token format is invalid.",
     "unknown": "Action failed.",
     "load": "Could not load status."
+  },
+  "reasons": {
+    "notServed": "installed, nginx is not serving it yet",
+    "credentialsUnreadable": "credentials unreadable (encryption key missing or changed) – set the token again",
+    "dataDir": "data directory not writable",
+    "legoMissing": "lego is not installed",
+    "nginxReload": "nginx reload not permitted or failed",
+    "servedMismatch": "nginx does not serve the new certificate; rolled back"
   }
 }

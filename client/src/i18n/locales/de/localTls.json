@@ -1,8 +1,9 @@
 {
-  "title": "Lokales TLS-Zertifikat",
+  "title": "Feste Adresse im Heimnetz",
   "settings": "Einstellungen",
   "domain": "Domain",
   "notConfigured": "Noch nicht eingerichtet",
+  "running": "Ein Lauf ist gerade aktiv …",
   "address": {
     "current": "Aktuelle LAN-IP",
     "last": "Zuletzt gesetzte IP",
@@ -21,6 +22,12 @@
     "daysLeft_one": "noch {{count}} Tag",
     "daysLeft_other": "noch {{count}} Tage",
     "expired": "abgelaufen"
+  },
+  "served": {
+    "label": "Ausgeliefert von nginx",
+    "yes": "ja",
+    "no": "nein",
+    "unknown": "unbekannt"
   },
   "renewal": {
     "last": "Letzte Erneuerung",
@@ -68,5 +75,13 @@
     "invalid_token_format": "Das Token-Format ist ungültig.",
     "unknown": "Aktion fehlgeschlagen.",
     "load": "Status konnte nicht geladen werden."
+  },
+  "reasons": {
+    "notServed": "installiert, nginx liefert es noch nicht aus",
+    "credentialsUnreadable": "Zugangsdaten nicht lesbar (Verschlüsselungsschlüssel fehlt oder wurde geändert) – Token neu setzen",
+    "dataDir": "Datenverzeichnis nicht beschreibbar",
+    "legoMissing": "lego ist nicht installiert",
+    "nginxReload": "nginx-Reload nicht erlaubt oder fehlgeschlagen",
+    "servedMismatch": "nginx liefert das neue Zertifikat nicht aus; zurückgerollt"
   }
 }

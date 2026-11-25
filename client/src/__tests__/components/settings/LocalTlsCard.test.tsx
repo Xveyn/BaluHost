@@ -168,4 +168,53 @@ describe('<LocalTlsCard>', () => {
     expect(screen.getByText('lego --version')).toBeTruthy();
     expect(screen.queryByText('sudo apt install -t trixie-backports lego')).toBeNull();
   });
+
+  it('Token wird getrimmt gespeichert', async () => {
+    (api.setLocalTlsToken as any).mockResolvedValue(undefined);
+    renderCard();
+    const input = (await screen.findByTestId('token-input')) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: '  geheim-token\n' } });
+    fireEvent.click(screen.getByText('token.save'));
+    await waitFor(() => expect(api.setLocalTlsToken).toHaveBeenCalledWith('geheim-token'));
+  });
+
+  it('nur Leerzeichen: Speichern bleibt gesperrt', async () => {
+    renderCard();
+    const input = (await screen.findByTestId('token-input')) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: '   ' } });
+    expect((screen.getByText('token.save') as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('leere Domain zeigt notConfigured', async () => {
+    (getPluginConfig as any).mockResolvedValue({ name: 'local_tls', config: { domain: '' } });
+    (api.getLocalTlsStatus as any).mockResolvedValue({ ...base, configured: false });
+    render(<MemoryRouter><LocalTlsCard /></MemoryRouter>);
+    expect(await screen.findByText('notConfigured')).toBeTruthy();
+  });
+
+  it('nicht konfiguriert: Laeufe gesperrt', async () => {
+    renderCard({ configured: false });
+    const renew = (await screen.findByText('actions.renew')).closest('button') as HTMLButtonElement;
+    const dns = screen.getByText('actions.updateDns').closest('button') as HTMLButtonElement;
+    expect(renew.disabled).toBe(true);
+    expect(dns.disabled).toBe(true);
+  });
+
+  it('laufender Lauf wird angezeigt', async () => {
+    renderCard({ running: true });
+    expect(await screen.findByText('running')).toBeTruthy();
+  });
+
+  it.each([
+    [true, 'served.yes'], [false, 'served.no'], [null, 'served.unknown'],
+  ])('Ausgeliefert von nginx (%s)', async (value, key) => {
+    renderCard({ served_matches: value as boolean | null });
+    const el = await screen.findByTestId('served');
+    expect(el.textContent).toContain(key);
+  });
+
+  it('bekannte Gruende werden uebersetzt, unbekannte roh gezeigt', async () => {
+    renderCard({ last_renew_reason: 'installed, nginx is not serving it yet' });
+    expect(await screen.findByText('(reasons.notServed)', { exact: false })).toBeTruthy();
+  });
 });
