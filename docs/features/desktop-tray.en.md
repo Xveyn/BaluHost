@@ -72,19 +72,17 @@ code in the web UI under **Devices** — done, the credentials land on disk.
 This works **while the service is running**: pairing takes its own lock, so
 nothing has to be stopped first.
 
-> **Important: restart the service after pairing.**
->
-> ```bash
-> systemctl --user restart baluhost-tray
-> ```
->
-> The background worker reads the credentials **only at startup**. Without a
-> restart the running service never picks up the fresh tokens — the icon would
-> stay grey even though pairing succeeded. This is the most common stumbling
-> block during first setup.
+**No service restart is needed**: a running tray without a pairing stays grey
+(tooltip *"BaluHost — nicht gekoppelt. Einmalig ausfuehren: baluhost-tray
+--pair"*), checks every 10 seconds and adopts the fresh credentials after
+`--pair` by itself. Even on the very first run the unit starts without a
+pairing and waits.
 
-On the very first run the restart is needed anyway: without existing
-credentials the unit does not start at all (see *Autostart*).
+The pairing is **sliding**: on refresh the tray asks for rotated refresh
+tokens and stores them atomically, so as long as the tray runs the pairing does
+not expire after 7 days. If an already-replaced token is presented again
+(suspected theft), the server revokes all tokens of that device — pairing again
+is then required.
 
 ---
 
@@ -94,7 +92,8 @@ Right-click the icon:
 
 | Entry | Effect |
 |---|---|
-| **BaluHost oeffnen** | Opens the web UI in the default browser |
+| **BaluHost oeffnen** | Opens the web UI in the default browser and signs in automatically (see *Auto-login*) |
+| **Always Awake** (admin only) | Submenu: Off / 1 hour / 8 hours / Permanent (`PUT /api/sleep/config`). While time-limited the menu shows *"Always Awake — bis HH:MM"* with no entry checked |
 | **Eine Stunde stumm** | Holds popups back for one hour (toggle) |
 | **Geraete in der Web-UI** | Opens the devices page — where you pair and revoke |
 | **BaluHost neu starten…** | Restarts all BaluHost services — asks first |
@@ -209,6 +208,24 @@ notifications on).
 Held popups are never lost. Seeing a notification late is better than not
 seeing it at all.
 
+### Auto-login
+
+*Open BaluHost* fetches a **one-time code valid for 30 seconds** from the
+server and opens the web UI with that code in the URL fragment
+(`#handoff=…`; it therefore never appears in server logs and is stripped from
+the address bar before redemption). The web UI exchanges it for a normal
+session. The proof is the pairing itself, no password is asked — **if the
+account has a PIN, the tray asks for it first** (with the usual lockout after
+failed attempts).
+
+- The code is only issued from the local network.
+- If a **different** account is already signed in in the browser, the web UI
+  asks *"Konto wechseln?"* instead of switching silently.
+- With no session or the same account it proceeds without a prompt.
+
+This is a deliberate owner decision (2026-11-25); trust model and residual
+risks are in `.claude/rules/security-agent.md`.
+
 ---
 
 ## Where the credentials live
@@ -231,7 +248,9 @@ within your own account.
 
 ## Revoking the pairing
 
-Remove the device in the web UI under **Devices**. The tray notices on its next
+Remove the desktop device in the web UI under **Devices**
+(`DELETE /api/devices/desktop/{device_id}`, owner or admin): this revokes its
+tokens, deletes the sync state and is written to the audit log. The tray notices on its next
 request, drops into the *not paired* state (grey icon), says so **once** with
 *"Kopplung aufgehoben — bitte neu koppeln"* (pairing revoked — please pair
 again) and deletes the credentials from disk. After that it stays quiet: there
@@ -240,8 +259,8 @@ is no storm of requests in the log.
 Only the background worker stops here — the process itself keeps running with
 a grey icon, so the tooltip can keep carrying the explanation.
 
-To pair again, run `/opt/baluhost/backend/.venv/bin/baluhost-tray --pair` and
-restart the service (see above).
+To pair again, run `/opt/baluhost/backend/.venv/bin/baluhost-tray --pair`; the
+running service adopts the new pairing by itself, no restart (see above).
 
 ---
 
@@ -303,12 +322,11 @@ The full path into the venv is a necessity, not convenience: a bare
 
 ### Three properties of the unit are deliberate
 
-- **`ConditionPathExists=%h/.baluhost/tray-tokens.json`** — without a pairing
-  the unit does not even start. This prevents *no* restart storm: the unpaired
-  case exits with 0, and `Restart=on-failure` does not restart on 0 anyway.
-  The gain is a readable state — `systemctl --user status` shows
-  `condition failed`, which reads as "not set up yet". A start that exits
-  immediately and cleanly would look like a failed start instead.
+- **No `ConditionPathExists` any more** (since #847) — the unit also starts
+  without a pairing; the tray stays grey and waits for `--pair`. Existing
+  installs still carry the condition in their unit: **re-install the user unit
+  once** (see above), otherwise nothing changes — harmless, just without the
+  waiting.
 - **`Restart=on-failure`**, not `always` — the exit codes carry meaning: `0`
   means *permanently done* (not paired, a second instance is running, the extra
   is missing), where a restart does not help. `3` means *possibly transient*:
@@ -329,7 +347,7 @@ The full path into the venv is a necessity, not convenience: a bare
 
 ```bash
 systemctl --user status baluhost-tray      # Is it running?
-systemctl --user restart baluhost-tray     # Required after --pair
+systemctl --user restart baluhost-tray     # Only needed after code updates (deploy)
 systemctl --user enable  baluhost-tray     # Turn on autostart
 journalctl --user -u baluhost-tray -f      # Follow the log
 ```
@@ -352,8 +370,8 @@ finding the cause.
 
 | Symptom | Cause | Remedy |
 |---|---|---|
-| No icon, unit "inactive (dead)", condition failed | Never paired | `/opt/baluhost/backend/.venv/bin/baluhost-tray --pair`, then `systemctl --user restart baluhost-tray` |
-| Icon stays grey, tooltip *"nicht gekoppelt"* | Just paired, service not restarted | `systemctl --user restart baluhost-tray` |
+| No icon, unit "inactive (dead)", condition failed | Old unit with `ConditionPathExists`, never paired | Re-install the user unit once (it then starts without a pairing); then `…/baluhost-tray --pair` |
+| Icon stays grey, tooltip *"nicht gekoppelt"* | Not paired or pairing revoked; or service still running old code | `…/baluhost-tray --pair` (no restart needed, the tray checks every 10 s); after a deploy `systemctl --user restart baluhost-tray` |
 | Icon stays grey, tooltip *"nicht erreichbar"* | Backend down or network gone | Wait; the tray reconnects on its own |
 | Icon turns red but no popup | The notification was created in a different backend worker process ([#685](https://github.com/Xveyn/BaluHost/issues/685)) | Wait up to ten minutes; the tray catches it up at the next resync |
 | Exits with code 3 at login | Tray was ready before Plasma — **or** the background worker failed unexpectedly | At login: nothing, `Restart=on-failure` tries again. Otherwise check the journal (`journalctl --user -u baluhost-tray`): if it says *"Tray-Hintergrund beendet"* or shows a traceback, it is a real crash and not a startup-order problem |
@@ -385,13 +403,11 @@ machine.
 - [ ] **0c.** `/opt/baluhost/backend/.venv/bin/baluhost-tray --pair` → a six
       digit code appears; approve it in the web UI under **Devices**; output
       `Gekoppelt.`
-- [ ] **0d.** **`systemctl --user restart baluhost-tray`** — mandatory. The
-      worker reads the credentials **only at startup**; without a restart a
-      running service never picks up the fresh tokens and the icon stays grey
-      even though pairing succeeded. Before the first pairing the unit does not
-      start at all because of `ConditionPathExists`
-      (`systemctl --user status` shows `condition failed`) — that is by design,
-      not a fault.
+- [ ] **0d.** No restart needed: the running service (grey, tooltip
+      *"nicht gekoppelt"*) adopts the pairing by itself within about 10 s and
+      the icon turns green. Only if the unit still carries the old
+      `ConditionPathExists` (`condition failed`), re-install the user unit once
+      or start the service once.
 
 ### The walkthrough
 
@@ -461,11 +477,7 @@ machine.
 
 - [ ] **13.** Pair again after the revocation:
       `/opt/baluhost/backend/.venv/bin/baluhost-tray --pair`, approve,
-      **then `systemctl --user restart baluhost-tray`** → the icon turns green
-      again. Without the restart it stays grey — the same trap as in 0d, for
-      the same reason. It is set a second time exactly here because point 11
-      shows that pairing works while the service runs: it does, but the service
-      only *adopts* the new tokens after a restart.
+      → within about 10 s the icon turns green again, no restart.
 
 ### Check the autostart
 

@@ -39,6 +39,7 @@ All modules import from `lib/api.ts`:
 | `cloud-import.ts` | `/api/cloud` | Cloud import (rclone) operations |
 | `cloud-export.ts` | `/api/cloud` | Cloud export operations |
 | `users.ts` | `/api/users` | User CRUD, role management |
+| `devices.ts` | `/api/devices` | Device list, rename, remove mobile/desktop devices (`removeDesktopDevice` revokes the pairing, #847), desktop pairing approval |
 | `mobile.ts` | `/api/mobile` | Mobile device registration and management |
 | `samba.ts` | `/api/samba` | Samba/SMB share configuration |
 | `webdav.ts` | `/api/webdav` | WebDAV server management |

@@ -73,19 +73,17 @@ landen auf der Platte.
 Das funktioniert **auch waehrend der Dienst laeuft**: die Kopplung nimmt ein
 eigenes Schloss, es muss also nichts gestoppt werden.
 
-> **Wichtig: nach dem Koppeln den Dienst neu starten.**
->
-> ```bash
-> systemctl --user restart baluhost-tray
-> ```
->
-> Der Hintergrundprozess liest die Zugangsdaten **nur beim Start**. Ohne
-> Neustart nimmt der laufende Dienst die frischen Token nie auf — das Symbol
-> bliebe grau, obwohl das Koppeln erfolgreich war. Das ist der haeufigste
-> Stolperstein beim ersten Einrichten.
+Ein **Neustart des Dienstes ist nicht noetig**: ein laufendes Tray ohne
+Kopplung bleibt grau und wartet (Tooltip *„BaluHost — nicht gekoppelt.
+Einmalig ausfuehren: baluhost-tray --pair"*), prueft alle 10 Sekunden nach
+und uebernimmt die frischen Zugangsdaten nach `--pair` selbst. Auch beim
+allerersten Mal startet die Unit ohne Kopplung und wartet.
 
-Beim allerersten Mal ist der Neustart ohnehin noetig: die Unit startet ohne
-vorhandene Zugangsdaten gar nicht erst (siehe *Autostart*).
+Die Kopplung ist **gleitend**: das Tray fordert beim Auffrischen
+rotierte Refresh-Tokens an und speichert sie atomar. Solange das Tray laeuft,
+laeuft die Kopplung also nicht nach 7 Tagen ab. Wird ein bereits ersetztes
+Token erneut vorgelegt (Diebstahlverdacht), widerruft der Server alle Tokens
+dieses Geraets — dann ist neu koppeln noetig.
 
 ---
 
@@ -95,7 +93,8 @@ Rechtsklick auf das Symbol:
 
 | Eintrag | Wirkung |
 |---|---|
-| **BaluHost oeffnen** | Oeffnet die Web-UI im Standardbrowser |
+| **BaluHost oeffnen** | Oeffnet die Web-UI im Standardbrowser und meldet automatisch an (siehe *Auto-Login*) |
+| **Always Awake** (nur Admin) | Untermenue: Aus / 1 Stunde / 8 Stunden / Dauerhaft (`PUT /api/sleep/config`). Zeitbegrenzt steht *„Always Awake — bis HH:MM"* im Menue, ohne gesetzten Haken |
 | **Eine Stunde stumm** | Haelt Popups eine Stunde zurueck (umschaltbar) |
 | **Geraete in der Web-UI** | Oeffnet die Geraeteseite — dort wird gekoppelt und widerrufen |
 | **BaluHost neu starten…** | Startet alle BaluHost-Dienste neu — fragt vorher nach |
@@ -208,6 +207,24 @@ derselben Regel wie beim Spielen (ab vier Meldungen gesammelt).
 Zurueckgehaltenes geht nie verloren. Eine Meldung spaet zu sehen ist besser,
 als sie gar nicht zu sehen.
 
+### Auto-Login
+
+*BaluHost oeffnen* holt vom Server einen **30 Sekunden gueltigen
+Einmal-Code** und oeffnet die Web-UI mit diesem Code im URL-Fragment
+(`#handoff=…`; er steht damit nie in Server-Logs und wird vor dem Einloesen
+aus der Adresszeile entfernt). Die Web-UI tauscht ihn gegen eine normale
+Sitzung. Der Nachweis ist die Kopplung selbst, es wird kein Passwort
+abgefragt — **hat das Konto eine PIN, fragt das Tray sie vorher ab** (mit der
+ueblichen Sperre nach Fehlversuchen).
+
+- Ausgestellt wird der Code nur aus dem lokalen Netz.
+- Ist im Browser bereits ein **anderes** Konto angemeldet, fragt die Web-UI
+  *„Konto wechseln?"*, statt still umzuschalten.
+- Ohne Sitzung oder mit demselben Konto geht es ohne Rueckfrage.
+
+Das ist eine bewusste Entscheidung des Besitzers (2026-11-25); Vertrauensmodell
+und Restrisiken stehen in `.claude/rules/security-agent.md`.
+
 ---
 
 ## Wo die Zugangsdaten liegen
@@ -231,18 +248,20 @@ eigenen Konto zu koppeln.
 
 ## Kopplung widerrufen
 
-In der Web-UI unter **Geraete** das Geraet entfernen. Das Tray merkt es beim
-naechsten Zugriff, geht in den Zustand *„nicht gekoppelt"* (graues Symbol),
-meldet sich **einmal** mit *„Kopplung aufgehoben — bitte neu koppeln"* und
-loescht die Zugangsdaten von der Platte. Danach ist Ruhe: es entsteht kein
+In der Web-UI unter **Geraete** das Desktop-Geraet entfernen
+(`DELETE /api/devices/desktop/{device_id}`, Besitzer oder Admin): das widerruft
+seine Tokens, loescht den Sync-Zustand und steht im Audit-Log. Das Tray merkt
+es beim naechsten Zugriff, geht in den Zustand *„nicht gekoppelt"* (graues
+Symbol), meldet sich **einmal** mit *„Kopplung aufgehoben — bitte neu
+koppeln"* und loescht die Zugangsdaten von der Platte. Danach ist Ruhe: es entsteht kein
 Sturm von Anfragen im Log.
 
 Beendet wird dabei nur der Hintergrund-Arbeiter — der Prozess selbst laeuft
 mit grauem Symbol weiter, damit der Tooltip die Erklaerung behalten kann.
 
 Wer erneut koppeln will, fuehrt
-`/opt/baluhost/backend/.venv/bin/baluhost-tray --pair` aus und startet den
-Dienst neu (siehe oben).
+`/opt/baluhost/backend/.venv/bin/baluhost-tray --pair` aus; der laufende
+Dienst nimmt die neue Kopplung selbst auf, ohne Neustart (siehe oben).
 
 ---
 
@@ -305,13 +324,11 @@ Der volle Pfad ins venv ist noetig, nicht Bequemlichkeit: ein nacktes
 
 ### Drei Eigenheiten der Unit sind Absicht
 
-- **`ConditionPathExists=%h/.baluhost/tray-tokens.json`** — ohne Kopplung
-  startet die Unit gar nicht erst. Das verhindert *keinen* Neustart-Sturm:
-  der ungekoppelte Fall endet mit Exit 0, und `Restart=on-failure` startet
-  bei 0 ohnehin nicht neu. Der Gewinn ist die Lesbarkeit des Zustands —
-  `systemctl --user status` zeigt `condition failed`, und das heisst fuer
-  einen Menschen „noch nicht eingerichtet". Ein Start, der sich sofort sauber
-  beendet, saehe dort dagegen wie ein Fehlstart aus.
+- **Keine `ConditionPathExists` mehr** (seit #847) — die Unit startet auch
+  ohne Kopplung, das Tray bleibt grau und wartet auf `--pair`. Bestehende
+  Installationen tragen die Bedingung noch in ihrer Unit: die User-Unit
+  **einmal neu installieren** (siehe oben), sonst bleibt alles beim Alten —
+  harmlos, nur ohne das Warten.
 - **`Restart=on-failure`**, nicht `always` — die Exit-Codes sind
   bedeutungstragend: `0` heisst *dauerhaft erledigt* (nicht gekoppelt, zweite
   Instanz laeuft, Extra fehlt), da hilft kein Neustart. `3` heisst
@@ -332,7 +349,7 @@ Der volle Pfad ins venv ist noetig, nicht Bequemlichkeit: ein nacktes
 
 ```bash
 systemctl --user status baluhost-tray      # Laeuft es?
-systemctl --user restart baluhost-tray     # Nach --pair noetig
+systemctl --user restart baluhost-tray     # Nur nach Code-Updates noetig (Deploy)
 systemctl --user enable  baluhost-tray     # Autostart einschalten
 journalctl --user -u baluhost-tray -f      # Mitlesen
 ```
@@ -355,8 +372,8 @@ Traceback fuer die Ursachensuche.
 
 | Beobachtung | Ursache | Abhilfe |
 |---|---|---|
-| Symbol erscheint nicht, Unit „inactive (dead)", Condition nicht erfuellt | Nie gekoppelt | `/opt/baluhost/backend/.venv/bin/baluhost-tray --pair`, dann `systemctl --user restart baluhost-tray` |
-| Symbol bleibt grau, Tooltip *„nicht gekoppelt"* | Gerade gekoppelt, Dienst nicht neu gestartet | `systemctl --user restart baluhost-tray` |
+| Symbol erscheint nicht, Unit „inactive (dead)", Condition nicht erfuellt | Alte Unit mit `ConditionPathExists`, nie gekoppelt | User-Unit einmal neu installieren (startet dann auch ohne Kopplung); danach `…/baluhost-tray --pair` |
+| Symbol bleibt grau, Tooltip *„nicht gekoppelt"* | Nicht gekoppelt oder Kopplung widerrufen; oder Dienst laeuft noch mit altem Code | `…/baluhost-tray --pair` (kein Neustart noetig, das Tray prueft alle 10 s); nach einem Deploy `systemctl --user restart baluhost-tray` |
 | Symbol bleibt grau, Tooltip *„nicht erreichbar"* | Backend aus oder Netz weg | Warten; das Tray verbindet sich selbst wieder |
 | Symbol wird rot, aber kein Popup | Die Meldung entstand in einem anderen Arbeitsprozess des Backends ([#685](https://github.com/Xveyn/BaluHost/issues/685)) | Bis zu zehn Minuten warten; das Tray reicht sie beim naechsten Abgleich nach |
 | Beim Start beendet mit Code 3 | Tray war vor Plasma dran — **oder** der Hintergrundprozess ist unerwartet gescheitert | Beim Anmelden: nichts tun, `Restart=on-failure` versucht es erneut. Sonst ins Journal sehen (`journalctl --user -u baluhost-tray`): steht dort *„Tray-Hintergrund beendet"* oder ein Traceback, ist es ein echter Absturz und kein Startreihenfolge-Problem |
@@ -388,13 +405,11 @@ der echten Maschine geschrieben.
 - [ ] **0c.** `/opt/baluhost/backend/.venv/bin/baluhost-tray --pair` →
       sechsstelliger Code erscheint; in der Web-UI unter **Geraete**
       freigeben; Ausgabe `Gekoppelt.`
-- [ ] **0d.** **`systemctl --user restart baluhost-tray`** — zwingend. Der
-      Arbeiter liest die Zugangsdaten **nur beim Start**; ohne Neustart nimmt
-      ein laufender Dienst die frischen Token nie auf und das Symbol bleibt
-      grau, obwohl das Koppeln geklappt hat. Vor dem ersten Koppeln startet
-      die Unit wegen `ConditionPathExists` ohnehin nicht
-      (`systemctl --user status` zeigt `condition failed`) — das ist Absicht,
-      kein Fehler.
+- [ ] **0d.** Kein Neustart noetig: der laufende Dienst (grau, Tooltip
+      *„nicht gekoppelt"*) nimmt die Kopplung innerhalb von ca. 10 s selbst
+      auf, das Symbol wird gruen. Nur wenn die Unit noch die alte
+      `ConditionPathExists` traegt (`condition failed`), die User-Unit einmal
+      neu installieren bzw. den Dienst einmal starten.
 
 ### Der Durchgang
 
@@ -465,11 +480,7 @@ der echten Maschine geschrieben.
 
 - [ ] **13.** Nach dem Widerruf erneut koppeln:
       `/opt/baluhost/backend/.venv/bin/baluhost-tray --pair`, freigeben,
-      **dann `systemctl --user restart baluhost-tray`** → Symbol wird wieder
-      gruen. Ohne den Neustart bleibt es grau — dieselbe Falle wie bei 0d, und
-      derselbe Grund. Genau hier wird sie ein zweites Mal gestellt, weil Punkt
-      11 zeigt, dass Koppeln bei laufendem Dienst geht: es geht, aber der
-      Dienst *uebernimmt* die neuen Token erst nach einem Neustart.
+      → innerhalb von ca. 10 s wird das Symbol ohne Neustart wieder gruen.
 
 ### Autostart pruefen
 
