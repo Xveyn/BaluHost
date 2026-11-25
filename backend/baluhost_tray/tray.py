@@ -28,7 +28,7 @@ from PyQt6.QtWidgets import (
 from baluhost_tray import awake as awake_module
 from baluhost_tray import config as tray_config
 from baluhost_tray.announce import QuietMode
-from baluhost_tray.awake import AwakeChoice, AwakeError, AwakeState
+from baluhost_tray.awake import AwakeChoice, AwakeState
 from baluhost_tray.handoff import SingleFlight, open_url_for
 from baluhost_tray.icons import SIZES, icon_path
 from baluhost_tray.loop import LoopContext, is_gaming_active, run_loop

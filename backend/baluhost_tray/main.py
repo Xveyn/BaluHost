@@ -11,7 +11,6 @@ import logging
 import os
 import sys
 
-from baluhost_tray import config as tray_config
 from baluhost_tray import single_instance
 from baluhost_tray.notify import NotifierUnavailable
 
