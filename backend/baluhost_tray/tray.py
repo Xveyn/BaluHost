@@ -26,6 +26,7 @@ from PyQt6.QtWidgets import (
 
 from baluhost_tray import config as tray_config
 from baluhost_tray.announce import QuietMode
+from baluhost_tray.handoff import SingleFlight, open_url_for
 from baluhost_tray.icons import SIZES, icon_path
 from baluhost_tray.loop import LoopContext, is_gaming_active, run_loop
 from baluhost_tray.notify import Notifier, NotifierUnavailable
@@ -75,6 +76,8 @@ class _Bridge(QObject):
     restart_prompt = pyqtSignal(str)
     restart_finished = pyqtSignal(bool, str)
     restart_visible = pyqtSignal(bool)
+    pin_prompt = pyqtSignal(bool)     # retry?
+    open_url = pyqtSignal(str)        # QDesktopServices gehoert in den GUI-Thread
 
 
 def _build_icons() -> dict[IconState, QIcon]:
@@ -126,8 +129,70 @@ def run_tray(base_url: str, web_url: str) -> int:
     )
     bridge.tooltip_changed.connect(tray_icon.setToolTip)
 
+    bridge.open_url.connect(lambda url: QDesktopServices.openUrl(QUrl(url)))
+
+    # Letzter bekannter Kontostand (PIN) und die asyncio-Schleife des Workers,
+    # auf der der Notifier lebt. Beides schreibt der Worker, der Oeffnen-Ablauf liest.
+    latest: dict = {"pin_enabled": False, "loop": None}
+    pin_answers: Queue = Queue(maxsize=1)
+    open_flight = SingleFlight()
+
+    def _show_pin_prompt(retry: bool) -> None:
+        value = None
+        try:
+            typed, ok = QInputDialog.getText(
+                None,
+                "BaluHost öffnen",
+                "PIN stimmt nicht. Noch einmal:" if retry else "PIN für BaluHost:",
+                QLineEdit.EchoMode.Password,
+            )
+            value = typed if ok and typed else None
+        finally:
+            try:
+                pin_answers.put_nowait(value)
+            except Full:
+                pass
+
+    bridge.pin_prompt.connect(_show_pin_prompt)
+
+    def _ask_pin_from_worker(retry: bool) -> str | None:
+        while True:
+            try:
+                pin_answers.get_nowait()
+            except Empty:
+                break
+        bridge.pin_prompt.emit(retry)
+        try:
+            return pin_answers.get(timeout=PROMPT_TIMEOUT)
+        except Empty:
+            return None
+
+    def _notify_from_worker(text: str) -> None:
+        # Der Notifier haengt an der asyncio-Schleife des Worker-Threads; von
+        # einem normalen Thread aus also thread-sicher dorthin einreihen.
+        loop = latest["loop"]
+        if loop is None:
+            return
+        try:
+            asyncio.run_coroutine_threadsafe(
+                notifier.show_summary("BaluHost", text), loop
+            )
+        except Exception:                           # noqa: BLE001
+            logger.exception("could not show the handoff notice")
+
+    def _open_worker() -> None:
+        result = open_url_for(
+            session, web_url, bool(latest["pin_enabled"]), _ask_pin_from_worker
+        )
+        bridge.open_url.emit(result.url)
+        if result.notice:
+            _notify_from_worker(result.notice)
+
     def _open_web() -> None:
-        QDesktopServices.openUrl(QUrl(web_url))
+        # Menue und Linksklick: derselbe Weg, ein zweiter Klick waehrend des
+        # laufenden Ablaufs wird ignoriert.
+        if not open_flight.start(_open_worker):
+            return
 
     menu = QMenu()
     menu.addAction(MENU_OPEN).triggered.connect(_open_web)
@@ -357,9 +422,11 @@ def run_tray(base_url: str, web_url: str) -> int:
         try:
             # Sichtbarkeit einmal beim Start bestimmen. Eine Rollenaenderung
             # braucht danach einen Neustart des Trays — das ist selten genug.
+            latest["loop"] = asyncio.get_running_loop()
             account = await asyncio.to_thread(
                 fetch_account_facts, session.client(), session.refresh_access
             )
+            latest["pin_enabled"] = account.pin_enabled
             bridge.restart_visible.emit(
                 menu_visible(account.is_admin, account.is_admin is not None)
             )
@@ -369,6 +436,7 @@ def run_tray(base_url: str, web_url: str) -> int:
                 facts = fetch_account_facts(
                     session.client(), session.refresh_access
                 )
+                latest["pin_enabled"] = facts.pin_enabled
                 bridge.restart_visible.emit(
                     menu_visible(facts.is_admin, facts.is_admin is not None)
                 )

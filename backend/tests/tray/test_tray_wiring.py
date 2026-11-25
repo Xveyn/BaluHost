@@ -70,3 +70,16 @@ def test_dialog_titles_differ_by_role():
     }
     assert len(titles) == 4
     assert tray_module.TITLE_DONE != tray_module.TITLE_FAILED
+
+
+def test_open_menu_and_left_click_share_one_guarded_handler():
+    """Menue und Linksklick laufen ueber denselben Handler (SingleFlight)."""
+    import inspect
+
+    from baluhost_tray import tray as tray_module
+
+    source = inspect.getsource(tray_module.run_tray)
+    assert "_open_web" in source
+    assert source.count("_open_web") >= 3          # def + Menue + Linksklick
+    assert "SingleFlight" in source
+    assert "open_url" in source
