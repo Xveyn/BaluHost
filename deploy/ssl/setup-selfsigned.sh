@@ -84,6 +84,14 @@ log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 log_step()  { echo -e "\n${BLUE}${BOLD}▸ $1${NC}"; }
 log_dry()   { echo -e "${YELLOW}[DRY-RUN]${NC} Would: $1"; }
 
+# Besitzer und Modus ausdruecklich setzen: `cp`, `sed -i` und `>` behalten
+# beides von einer vorhandenen Datei. Der Dienstnutzer darf nginx neu laden --
+# eine Konfigurationsdatei, die er schreiben kann, ist damit die Konfiguration
+# eines root-Prozesses in seiner Hand (#862).
+root_owned_0644() {
+    chown root:root "$@" && chmod 0644 "$@"
+}
+
 check_root() {
     if [ "$EUID" -ne 0 ]; then
         log_error "This script must be run as root or with sudo"
@@ -295,6 +303,7 @@ install_ssl_snippets() {
                 -e 's/^ssl_stapling_verify on;/# ssl_stapling_verify on;  # Disabled: requires CA-signed certificate/' \
                 -e '/^ssl_stapling_file/s/^/# /' \
                 "$DEPLOY_DIR/nginx/ssl-params.conf" > "$SNIPPETS_DIR/ssl-params.conf"
+            root_owned_0644 "$SNIPPETS_DIR/ssl-params.conf"
             log_info "Installed ssl-params.conf (OCSP stapling disabled for self-signed)"
         fi
     else
@@ -307,6 +316,7 @@ install_ssl_snippets() {
             log_dry "Install security-headers.conf to $SNIPPETS_DIR/"
         else
             cp "$DEPLOY_DIR/nginx/security-headers.conf" "$SNIPPETS_DIR/"
+            root_owned_0644 "$SNIPPETS_DIR/security-headers.conf"
             log_info "Installed security-headers.conf"
         fi
     else
@@ -369,6 +379,8 @@ update_nginx_config() {
 
     # Update server_name in all server blocks
     sed -i "s/server_name .*/server_name ${HOSTNAME_NAME} ${HOSTNAME_NAME}.local ${LAN_IP};/" "$NGINX_CONF"
+
+    root_owned_0644 "$NGINX_CONF"
 
     log_info "Nginx config updated with self-signed certificate paths"
 }

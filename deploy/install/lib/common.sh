@@ -148,6 +148,19 @@ process_template() {
     echo "$content" > "$output"
 }
 
+root_owned_0644() {
+    # Give config files to root, readable by all, writable by root only.
+    # Usage: root_owned_0644 <file>...
+    #
+    # process_template writes with `>`, and `>` keeps the owner and mode of a
+    # file that already exists. A config a root process loads must not stay
+    # writable by whoever owned it before -- for nginx that turned code
+    # execution as the service user into the configuration of a root process
+    # (#862). Returns non-zero when either step fails, so a caller under
+    # `set -e` stops instead of activating the file as it is.
+    chown root:root "$@" && chmod 0644 "$@"
+}
+
 install_sudoers_file() {
     # Render a sudoers template to <dest>, set 0440 and validate with visudo.
     # A file that fails any step is removed so a broken rule never stays live.

@@ -674,6 +674,19 @@ if health_check; then
     ( cd "$INSTALL_DIR/backend" && "$VENV_BIN/python" -m app.services.unit_drift --install-dir "$INSTALL_DIR" ) \
         || log_warn "Unit drift smoke-check could not run (non-fatal)."
 
+    # ─── 8d. Nginx Config Permission Smoke-Check (non-fatal, #862) ───────
+    # Der Deploy-Benutzer darf `systemctl reload nginx`, der nginx-Master
+    # laeuft als root. Kann jemand ausser root die Konfiguration schreiben,
+    # reicht Codeausfuehrung als Dienstnutzer, um einen root-Prozess
+    # umzukonfigurieren. Kein Skript hier schreibt die Site als Dienstnutzer --
+    # aber auch keines repariert eine, die ihm schon gehoert, und der Deploy
+    # fasst /etc/nginx gar nicht an. Dieser Check liest deshalb den
+    # Ist-Zustand und WARNt mit dem Befehl, der ihn behebt. Read-only, braucht
+    # kein sudo, endet immer mit 0.
+    log_step "Nginx Config Permission Smoke-Check"
+    ( cd "$INSTALL_DIR/backend" && "$VENV_BIN/python" -m app.services.nginx_perms ) \
+        || log_warn "Nginx permission smoke-check could not run (non-fatal)."
+
     # Opt-in companion build+install runs last, after the deploy is already
     # marked successful, so it can never trigger a rollback of a healthy box.
     if [[ "${INSTALL_COMPANION:-0}" == "1" || "${INSTALL_COMPANION,,}" == "true" ]]; then

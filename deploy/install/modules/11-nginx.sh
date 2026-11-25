@@ -43,7 +43,12 @@ process_template "$TEMPLATE" "$SITES_AVAILABLE" \
     "FRONTEND_ROOT=$FRONTEND_STATIC_DIR" \
     "SERVER_NAME=$SERVER_NAME"
 
-log_info "Config written to $SITES_AVAILABLE."
+# Rendering keeps the owner and mode of a site that already exists. The
+# service user may reload nginx, so a site it can write is the configuration
+# of a root process in its hands (#862).
+root_owned_0644 "$SITES_AVAILABLE"
+
+log_info "Config written to $SITES_AVAILABLE (root:root 0644)."
 
 # --- Create symlink ---
 if [[ -L "$SITES_ENABLED" ]]; then

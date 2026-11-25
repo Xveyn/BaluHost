@@ -39,6 +39,17 @@ log_step "Nginx & Frontend"
 check "Nginx is active" systemctl is-active --quiet nginx
 check "Frontend responds on :80" curl -sf --max-time 5 http://localhost/ -o /dev/null
 
+# The service user may reload nginx; a config file it can write is the
+# configuration of a root process in its hands (#862). Not via check(): that
+# swallows the output, and the output names the files and the fix.
+VENV_PYTHON="${INSTALL_DIR:-/opt/baluhost}/backend/.venv/bin/python"
+if ( cd "${INSTALL_DIR:-/opt/baluhost}/backend" && "$VENV_PYTHON" -m app.services.nginx_perms --strict ); then
+    PASS=$((PASS + 1))
+else
+    log_error "FAIL: nginx configuration is writable by someone other than root"
+    FAIL=$((FAIL + 1))
+fi
+
 # ─── PostgreSQL ───────────────────────────────────────────────────────
 log_step "PostgreSQL"
 check "PostgreSQL is active" systemctl is-active --quiet postgresql
