@@ -5,7 +5,21 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
 
-DATA_DIR = Path("/var/lib/baluhost/plugins/local_tls")
+from app.core.config import settings
+
+PROD_DATA_DIR = Path("/var/lib/baluhost/plugins/local_tls")
+
+
+def default_data_dir() -> Path:
+    """Produktion: ``PROD_DATA_DIR``. Entwicklungsmodus: unter dem Dev-Speicher
+    (``<nas_storage_path>/.system/local_tls``), damit ein Dev-Backend auf der
+    Produktionsbox nie das Verzeichnis anfasst, aus dem nginx liest."""
+    if settings.is_dev_mode:
+        return Path(settings.nas_storage_path).absolute() / ".system" / "local_tls"
+    return PROD_DATA_DIR
+
+
+DATA_DIR = default_data_dir()
 
 
 class AlreadyRunning(Exception):

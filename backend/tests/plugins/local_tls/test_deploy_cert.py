@@ -11,7 +11,8 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509.oid import NameOID
 
-from app.plugins.installed.local_tls import deploy_cert
+from app.core.config import settings
+from app.plugins.installed.local_tls import deploy_cert, paths
 from app.plugins.installed.local_tls.deploy_cert import (
     CertInvalid,
     DeployFailed,
@@ -445,7 +446,12 @@ def test_prune_never_deletes_live_target(tmp_path):
 # --- reload_nginx -----------------------------------------------------------
 
 
-def test_reload_uses_existing_sudo_rule_only():
+@pytest.fixture
+def prod_mode(monkeypatch):
+    monkeypatch.setattr(settings, "is_dev_mode", False)
+
+
+def test_reload_uses_existing_sudo_rule_only(prod_mode):
     calls = []
 
     def run(args, **kwargs):
@@ -458,7 +464,7 @@ def test_reload_uses_existing_sudo_rule_only():
     assert "shell" not in calls[0][1]
 
 
-def test_reload_failure_raises_deploy_failed():
+def test_reload_failure_raises_deploy_failed(prod_mode):
     def run(args, **kwargs):
         return subprocess.CompletedProcess(args, 1, stdout="", stderr="sudo: a password is required")
 
@@ -467,7 +473,7 @@ def test_reload_failure_raises_deploy_failed():
     assert exc.value.reason == "nginx reload not permitted or failed"
 
 
-def test_reload_timeout_raises_deploy_failed():
+def test_reload_timeout_raises_deploy_failed(prod_mode):
     def run(args, **kwargs):
         raise subprocess.TimeoutExpired(args, 30)
 
@@ -478,9 +484,43 @@ def test_reload_timeout_raises_deploy_failed():
 # --- served_fingerprint ------------------------------------------------------
 
 
-def test_served_fingerprint_network_error_returns_none(monkeypatch):
+def test_served_fingerprint_network_error_returns_none(monkeypatch, prod_mode):
     def boom(*a, **kw):
         raise OSError("connection refused")
 
     monkeypatch.setattr(deploy_cert.socket, "create_connection", boom)
     assert deploy_cert.served_fingerprint(DOMAIN) is None
+
+
+# --- Entwicklungsmodus -------------------------------------------------------
+
+
+def test_dev_mode_reload_is_a_noop(monkeypatch):
+    monkeypatch.setattr(settings, "is_dev_mode", True)
+    calls = []
+
+    def run(args, **kwargs):
+        calls.append(args)
+        return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+
+    reload_nginx(run=run)
+    assert calls == []
+
+
+def test_dev_mode_served_fingerprint_is_unknown(monkeypatch):
+    monkeypatch.setattr(settings, "is_dev_mode", True)
+
+    def boom(*a, **kw):
+        raise AssertionError("no handshake in dev mode")
+
+    monkeypatch.setattr(deploy_cert.socket, "create_connection", boom)
+    assert deploy_cert.served_fingerprint(DOMAIN) is None
+
+
+def test_data_dir_dev_vs_prod(monkeypatch, tmp_path):
+    monkeypatch.setattr(settings, "is_dev_mode", True)
+    monkeypatch.setattr(settings, "nas_storage_path", str(tmp_path / "dev-storage"))
+    assert paths.default_data_dir() == (tmp_path / "dev-storage" / ".system" / "local_tls")
+    monkeypatch.setattr(settings, "is_dev_mode", False)
+    assert paths.default_data_dir() == paths.PROD_DATA_DIR
+    assert str(paths.PROD_DATA_DIR) == "/var/lib/baluhost/plugins/local_tls"

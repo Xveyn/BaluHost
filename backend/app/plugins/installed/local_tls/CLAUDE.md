@@ -65,5 +65,11 @@ Trust tier, lifecycle and the `PluginBase` contract are in `../../CLAUDE.md`.
 - **nginx paths:** `<data>/live/fullchain.pem` and `<data>/live/privkey.pem`; `live`
   is a relative symlink to `releases/<UTC timestamp>/`; the last 3 releases stay.
   `<data>` is fixed at `/var/lib/baluhost/plugins/local_tls/` (dirs 0700, keys 0600).
+- **Dev mode** (`settings.is_dev_mode`): `<data>` is `<nas_storage_path>/.system/local_tls`
+  (`paths.default_data_dir()`), `reload_nginx` is a logged no-op and
+  `served_fingerprint` returns `None` — this box is also production, a dev backend
+  must never touch its nginx or its certificate directory.
+- The marketplace refuses the name `local_tls` (all bundled names): `<data>` lies in
+  `plugins_external_dir` and an external uninstall would `rmtree` it.
 - Background tasks run primary-only (framework); do not add a cross-worker guard.
 - `routes.py` must not use `from __future__ import annotations` (slowapi body detection).

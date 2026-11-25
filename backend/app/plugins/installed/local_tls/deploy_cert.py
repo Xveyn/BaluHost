@@ -6,6 +6,7 @@ ist ein ``os.replace`` eines temporaeren Symlinks. Neu geladen wird nginx nur ue
 die bestehende sudoers-Regel (``sudo -n /usr/bin/systemctl reload nginx``).
 """
 import hashlib
+import logging
 import os
 import shutil
 import socket
@@ -19,6 +20,10 @@ from typing import Callable, Optional
 
 from cryptography import x509
 from cryptography.hazmat.primitives import serialization
+
+from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 RELOAD_ARGS = ["sudo", "-n", "/usr/bin/systemctl", "reload", "nginx"]
 RELOAD_TIMEOUT = 30
@@ -118,7 +123,13 @@ def inspect(cert_pem: bytes, key_pem: bytes, domain: str, now: datetime) -> Cert
 
 
 def reload_nginx(*, run: Callable[..., subprocess.CompletedProcess] = subprocess.run) -> None:
-    """Laedt nginx ueber die bestehende sudoers-Regel neu (ohne Passwortabfrage)."""
+    """Laedt nginx ueber die bestehende sudoers-Regel neu (ohne Passwortabfrage).
+
+    Im Entwicklungsmodus ein No-op: ein Dev-Backend darf das nginx der Box nicht
+    neu laden."""
+    if settings.is_dev_mode:
+        logger.info("local_tls: dev mode, skipping nginx reload")
+        return
     try:
         result = run(
             RELOAD_ARGS, capture_output=True, text=True, errors="replace", timeout=RELOAD_TIMEOUT
@@ -130,7 +141,12 @@ def reload_nginx(*, run: Callable[..., subprocess.CompletedProcess] = subprocess
 
 
 def served_fingerprint(domain: str, host: str = "127.0.0.1", port: int = 443) -> Optional[str]:
-    """sha256 des Zertifikats, das ``host:port`` fuer SNI=``domain`` ausliefert; Netzfehler -> None."""
+    """sha256 des Zertifikats, das ``host:port`` fuer SNI=``domain`` ausliefert; Netzfehler -> None.
+
+    Im Entwicklungsmodus immer None (unbekannt): das lokale nginx ist das der
+    Produktion, nicht das des Dev-Backends."""
+    if settings.is_dev_mode:
+        return None
     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE
