@@ -11,8 +11,10 @@
   },
   "cert": {
     "validUntil": "Certificate valid until",
-    "daysLeft": "{{count}} days left",
-    "none": "No certificate"
+    "none": "No certificate",
+    "daysLeft_one": "{{count}} day left",
+    "daysLeft_other": "{{count}} days left",
+    "expired": "expired"
   },
   "renewal": {
     "last": "Last renewal",

@@ -18,4 +18,11 @@ describe('localTls locale contract', () => {
     expect(de.providers.duckdns.token.length).toBeGreaterThan(0);
     expect(en.providers.duckdns.token.length).toBeGreaterThan(0);
   });
+  it('Pluralformen und expired in beiden Sprachen', () => {
+    for (const l of [de, en]) {
+      expect(l.cert.daysLeft_one).toContain('{{count}}');
+      expect(l.cert.daysLeft_other).toContain('{{count}}');
+      expect(l.cert.expired.length).toBeGreaterThan(0);
+    }
+  });
 });

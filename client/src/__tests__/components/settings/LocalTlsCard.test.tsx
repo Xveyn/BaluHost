@@ -67,6 +67,20 @@ describe('<LocalTlsCard>', () => {
     expect(el.getAttribute('data-severity')).toBe(color);
   });
 
+  it('Einstellungen-Link fuehrt zur Plugin-Verwaltung', async () => {
+    renderCard();
+    const link = await screen.findByText('settings');
+    expect(link.closest('a')?.getAttribute('href')).toBe('/plugins');
+  });
+
+  it('abgelaufenes Zertifikat zeigt expired statt negativer Tage', async () => {
+    renderCard({ cert_not_after: inDays(-3) });
+    const el = await screen.findByTestId('cert-expiry');
+    expect(el.textContent).toContain('cert.expired');
+    expect(el.textContent).not.toContain('daysLeft');
+    expect(el.getAttribute('data-severity')).toBe('red');
+  });
+
   it('lego fehlt: Installationsbefehl sichtbar', async () => {
     renderCard({ lego: 'missing', lego_version: null });
     expect(await screen.findByText('sudo apt install -t trixie-backports lego')).toBeTruthy();

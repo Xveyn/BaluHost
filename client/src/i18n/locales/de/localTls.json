@@ -11,8 +11,10 @@
   },
   "cert": {
     "validUntil": "Zertifikat gültig bis",
-    "daysLeft": "noch {{count}} Tage",
-    "none": "Kein Zertifikat"
+    "none": "Kein Zertifikat",
+    "daysLeft_one": "noch {{count}} Tag",
+    "daysLeft_other": "noch {{count}} Tage",
+    "expired": "abgelaufen"
   },
   "renewal": {
     "last": "Letzte Erneuerung",

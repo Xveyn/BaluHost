@@ -129,7 +129,7 @@ export default function LocalTlsCard() {
           {t('title')}
         </h3>
         <Link
-          to="/plugins/local_tls"
+          to="/plugins"
           className="text-sm text-indigo-300 hover:text-indigo-200 flex items-center gap-1"
         >
           <Settings className="w-4 h-4" />
@@ -168,7 +168,11 @@ export default function LocalTlsCard() {
                 className={severity ? SEVERITY_CLASS[severity] : 'text-slate-400'}
               >
                 {status.cert_not_after
-                  ? `${fmt(status.cert_not_after)} (${t('cert.daysLeft', { count: days ?? 0 })})`
+                  ? `${fmt(status.cert_not_after)} (${
+                      days !== null && days < 0
+                        ? t('cert.expired')
+                        : t('cert.daysLeft', { count: days ?? 0 })
+                    })`
                   : t('cert.none')}
               </dd>
             </div>
