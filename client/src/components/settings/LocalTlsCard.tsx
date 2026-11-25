@@ -94,16 +94,29 @@ export default function LocalTlsCard() {
       await load();
     });
 
+  // Die Laeufe antworten mit dem Status; ein gescheiterter Lauf ist kein Erfolg.
+  const reportResult = (ok: boolean | null, reason: string | null, done: string, failed: string) => {
+    if (ok === false) {
+      const text = t(failed, { reason: reason ?? '' });
+      setNotice(text);
+      toast.error(text);
+    } else {
+      toast.success(t(done));
+    }
+  };
+
   const onRenew = () =>
     run('renew', async () => {
-      setStatus(await renewLocalTls());
-      toast.success(t('actions.renewDone'));
+      const next = await renewLocalTls();
+      setStatus(next);
+      reportResult(next.last_renew_ok, next.last_renew_reason, 'actions.renewDone', 'actions.renewFailed');
     });
 
   const onUpdateDns = () =>
     run('dns', async () => {
-      setStatus(await updateLocalTlsDns());
-      toast.success(t('actions.dnsDone'));
+      const next = await updateLocalTlsDns();
+      setStatus(next);
+      reportResult(next.last_dns_ok, next.last_dns_reason, 'actions.dnsDone', 'actions.dnsFailed');
     });
 
   const copyHint = async () => {
@@ -157,6 +170,24 @@ export default function LocalTlsCard() {
                 {status.last_ip ?? t('address.none')}
                 {status.last_ip_set_at && (
                   <span className="text-slate-500"> ({t('address.setAt', { date: fmt(status.last_ip_set_at) })})</span>
+                )}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-slate-400">{t('dns.last')}</dt>
+              <dd data-testid="dns-result">
+                {status.last_dns_at ? (
+                  <>
+                    {fmt(status.last_dns_at)} –{' '}
+                    <span className={status.last_dns_ok ? 'text-green-400' : 'text-red-400'}>
+                      {status.last_dns_ok ? t('dns.ok') : t('dns.failed')}
+                    </span>
+                    {status.last_dns_reason && (
+                      <span className="text-slate-500"> ({status.last_dns_reason})</span>
+                    )}
+                  </>
+                ) : (
+                  t('dns.never')
                 )}
               </dd>
             </div>

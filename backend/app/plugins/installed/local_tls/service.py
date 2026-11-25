@@ -82,6 +82,9 @@ class Status:
     current_ip: Optional[str]
     last_ip: Optional[str]
     last_ip_set_at: Optional[datetime]
+    last_dns_at: Optional[datetime]
+    last_dns_ok: Optional[bool]
+    last_dns_reason: Optional[str]
     cert_not_after: Optional[datetime]
     cert_fingerprint: Optional[str]
     served_matches: Optional[bool]
@@ -168,14 +171,16 @@ def run_address_check(
     raise_if_running: bool = False,
     data_dir: Optional[Path] = None,
 ) -> list[PendingEvent]:
-    """Setzt den DNS-Eintrag auf die LAN-IP, wenn sie sich geaendert hat,
-    ``force`` gesetzt ist oder das letzte Setzen einen Tag zurueckliegt."""
+    """Setzt den DNS-Eintrag auf die LAN-IP, wenn sie oder die Domain sich
+    geaendert hat, ``force`` gesetzt ist oder das letzte Setzen einen Tag
+    zurueckliegt. Jeder Versuch (Erfolg wie Fehlschlag) wird mit Grund gebucht."""
     if not _is_configured(db, config):
         return []
     domain = config.domain
     now = _as_utc(now)
 
     def failed(reason: str) -> list[PendingEvent]:
+        state.record_dns(db, False, reason, now)
         return [PendingEvent(EVENT_DNS_UPDATE_FAILED, domain, {"domain": domain, "reason": reason})]
 
     try:
@@ -189,6 +194,7 @@ def run_address_check(
     due = (
         force
         or ip != previous
+        or row.last_ip_domain != domain
         or set_at is None
         or (now - set_at).total_seconds() >= RECONFIRM_SECONDS
     )
@@ -220,7 +226,8 @@ def run_address_check(
     except Exception as exc:  # noqa: BLE001 - als DNS-Fehler buchen statt abbrechen
         return failed(_unexpected(exc))
 
-    state.record_ip(db, ip, now)
+    state.record_ip(db, ip, now, domain)
+    state.record_dns(db, True, None, now)
     if previous is not None and previous != ip:
         return [PendingEvent(EVENT_ADDRESS_CHANGED, domain, {"domain": domain, "ip": ip})]
     return []
@@ -481,6 +488,9 @@ def get_status(
         current_ip=current_ip,
         last_ip=row.last_ip,
         last_ip_set_at=_as_utc(row.last_ip_set_at),
+        last_dns_at=_as_utc(row.last_dns_at),
+        last_dns_ok=row.last_dns_ok,
+        last_dns_reason=row.last_dns_reason,
         cert_not_after=_as_utc(row.cert_not_after),
         cert_fingerprint=row.cert_fingerprint,
         served_matches=served_matches,

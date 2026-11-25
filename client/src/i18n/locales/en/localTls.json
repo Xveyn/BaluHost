@@ -9,6 +9,12 @@
     "setAt": "set on {{date}}",
     "none": "–"
   },
+  "dns": {
+    "last": "Last DNS update",
+    "ok": "succeeded",
+    "failed": "failed",
+    "never": "None yet"
+  },
   "cert": {
     "validUntil": "Certificate valid until",
     "none": "No certificate",
@@ -48,7 +54,9 @@
     "renewDone": "Check finished",
     "dnsDone": "DNS check finished",
     "copy": "Copy",
-    "copied": "Copied"
+    "copied": "Copied",
+    "renewFailed": "Renewal failed: {{reason}}",
+    "dnsFailed": "DNS update failed: {{reason}}"
   },
   "nginx": {
     "hint": "nginx is still serving a different certificate. Add this to the nginx site and reload nginx:"

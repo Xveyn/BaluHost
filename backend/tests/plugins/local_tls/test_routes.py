@@ -67,7 +67,8 @@ def client(db_session, cfg, audit):
 def _fake_status(**over):
     base = dict(
         configured=True, lego="ok", lego_version="4.35.2", current_ip="192.168.1.20",
-        last_ip="192.168.1.20", last_ip_set_at=NOW, cert_not_after=NOW,
+        last_ip="192.168.1.20", last_ip_set_at=NOW, last_dns_at=NOW, last_dns_ok=True,
+        last_dns_reason=None, cert_not_after=NOW,
         cert_fingerprint="ab" * 32, served_matches=True, last_renew_at=NOW,
         last_renew_ok=True, last_renew_reason=None, running=False,
     )

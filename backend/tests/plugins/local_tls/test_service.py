@@ -172,7 +172,7 @@ def test_unconfigured_plugin_stays_quiet(db_session, key, world):
 # --- Adress-Check ---------------------------------------------------------
 
 def test_address_unchanged_no_update_within_day(db_session, configured, world):
-    state.record_ip(db_session, IP, NOW - timedelta(hours=23))
+    state.record_ip(db_session, IP, NOW - timedelta(hours=23), DOMAIN)
     events = service.run_address_check(db_session, configured, NOW)
     assert events == []
     assert world.provider.calls == []
@@ -206,7 +206,7 @@ def test_daily_reconfirm(db_session, configured, world):
 
 
 def test_force_updates_unchanged_address(db_session, configured, world):
-    state.record_ip(db_session, IP, NOW - timedelta(minutes=1))
+    state.record_ip(db_session, IP, NOW - timedelta(minutes=1), DOMAIN)
     service.run_address_check(db_session, configured, NOW, force=True)
     assert len(world.provider.calls) == 1
 
@@ -637,3 +637,49 @@ def test_unexpected_provider_error_is_dns_failure(db_session, configured, world,
     assert _ids(events) == ["dns_update_failed"]
     assert events[0].kwargs["reason"] == "unexpected error (RuntimeError)"
     assert state.get_state(db_session).last_ip is None
+
+
+# --- Fix-Runde final: Ergebnis des DNS-Updates sichtbar --------------------
+
+def test_dns_success_is_recorded(db_session, configured, world):
+    service.run_address_check(db_session, configured, NOW)
+    row = state.get_state(db_session)
+    assert row.last_dns_ok is True
+    assert row.last_dns_reason is None
+    assert service._as_utc(row.last_dns_at) == NOW
+    st = service.get_status(db_session, configured, NOW)
+    assert st.last_dns_ok is True and st.last_dns_at == NOW and st.last_dns_reason is None
+
+
+def test_dns_failure_is_recorded(db_session, configured, world):
+    service.run_address_check(db_session, configured, NOW)
+    world.provider.fail = True
+    later = NOW + timedelta(days=2)
+    service.run_address_check(db_session, configured, later)
+    row = state.get_state(db_session)
+    assert row.last_dns_ok is False
+    assert row.last_dns_reason == "duckdns rejected the update"
+    assert service._as_utc(row.last_dns_at) == later
+    assert row.last_ip == IP  # zuletzt erfolgreich gesetzt bleibt stehen
+    st = service.get_status(db_session, configured, later)
+    assert st.last_dns_ok is False and st.last_dns_reason == "duckdns rejected the update"
+
+
+def test_address_error_is_recorded_as_dns_failure(db_session, configured, world):
+    world.ip_error = address.AddressError("no route / interface found")
+    service.run_address_check(db_session, configured, NOW)
+    row = state.get_state(db_session)
+    assert row.last_dns_ok is False
+    assert row.last_dns_reason == "no route / interface found"
+
+
+def test_domain_change_triggers_dns_update(db_session, configured, world):
+    service.run_address_check(db_session, configured, NOW)
+    assert len(world.provider.calls) == 1
+    assert state.get_state(db_session).last_ip_domain == DOMAIN
+    other = configured.model_copy(update={"domain": "other.duckdns.org"})
+    events = service.run_address_check(db_session, other, NOW + timedelta(minutes=5))
+    assert world.provider.calls[-1][:2] == ("other.duckdns.org", IP)
+    assert len(world.provider.calls) == 2
+    assert events == []  # gleiche IP: keine Adressaenderung
+    assert state.get_state(db_session).last_ip_domain == "other.duckdns.org"

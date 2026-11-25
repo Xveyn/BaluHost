@@ -54,10 +54,20 @@ def has_token(db: Session) -> bool:
     return bool(get_state(db).provider_secret)
 
 
-def record_ip(db: Session, ip: str, now: datetime) -> None:
+def record_ip(db: Session, ip: str, now: datetime, domain: Optional[str] = None) -> None:
     row = get_state(db)
     row.last_ip = ip
     row.last_ip_set_at = now
+    row.last_ip_domain = domain
+    db.commit()
+
+
+def record_dns(db: Session, ok: bool, reason: Optional[str], now: datetime) -> None:
+    """Ergebnis des letzten DNS-Update-Versuchs (fuer die Statuskarte)."""
+    row = get_state(db)
+    row.last_dns_at = now
+    row.last_dns_ok = ok
+    row.last_dns_reason = reason[:_REASON_MAX] if reason else None
     db.commit()
 
 

@@ -9,6 +9,12 @@
     "setAt": "gesetzt am {{date}}",
     "none": "–"
   },
+  "dns": {
+    "last": "Letzte DNS-Aktualisierung",
+    "ok": "erfolgreich",
+    "failed": "fehlgeschlagen",
+    "never": "Noch keine"
+  },
   "cert": {
     "validUntil": "Zertifikat gültig bis",
     "none": "Kein Zertifikat",
@@ -48,7 +54,9 @@
     "renewDone": "Prüfung abgeschlossen",
     "dnsDone": "DNS-Prüfung abgeschlossen",
     "copy": "Kopieren",
-    "copied": "Kopiert"
+    "copied": "Kopiert",
+    "renewFailed": "Erneuerung fehlgeschlagen: {{reason}}",
+    "dnsFailed": "DNS-Aktualisierung fehlgeschlagen: {{reason}}"
   },
   "nginx": {
     "hint": "nginx liefert noch ein anderes Zertifikat aus. Trage dies in der nginx-Site ein und lade nginx neu:"

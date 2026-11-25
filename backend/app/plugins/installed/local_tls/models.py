@@ -21,6 +21,9 @@ class StatusResponse(BaseModel):
     current_ip: Optional[str] = None
     last_ip: Optional[str] = None
     last_ip_set_at: Optional[datetime] = None
+    last_dns_at: Optional[datetime] = None
+    last_dns_ok: Optional[bool] = None
+    last_dns_reason: Optional[str] = None
     cert_not_after: Optional[datetime] = None
     cert_fingerprint: Optional[str] = None
     served_matches: Optional[bool] = None

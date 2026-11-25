@@ -18,6 +18,9 @@ export interface LocalTlsStatus {
   current_ip: string | null;
   last_ip: string | null;
   last_ip_set_at: string | null;
+  last_dns_at: string | null;
+  last_dns_ok: boolean | null;
+  last_dns_reason: string | null;
   cert_not_after: string | null;
   cert_fingerprint: string | null;
   served_matches: boolean | null;

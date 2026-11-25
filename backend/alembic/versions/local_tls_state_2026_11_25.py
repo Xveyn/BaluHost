@@ -4,8 +4,9 @@ Revision ID: e5c8a1f3b702
 Revises: d4b7e2c9a610
 Create Date: 2026-11-25 00:00:00.000000
 
-Eine Zeile mit Anbieter-Token (verschluesselt), zuletzt gesetzter Adresse und
-Erneuerungsstatus des Zertifikats.
+Eine Zeile mit Anbieter-Token (verschluesselt), zuletzt gesetzter Adresse
+(samt Domain), Ergebnis des letzten DNS-Updates und Erneuerungsstatus des
+Zertifikats.
 """
 from typing import Sequence, Union
 
@@ -28,6 +29,10 @@ def upgrade() -> None:
         sa.Column('provider_secret', sa.Text(), nullable=True),
         sa.Column('last_ip', sa.String(length=45), nullable=True),
         sa.Column('last_ip_set_at', sa.DateTime(timezone=True), nullable=True),
+        sa.Column('last_ip_domain', sa.String(length=253), nullable=True),
+        sa.Column('last_dns_at', sa.DateTime(timezone=True), nullable=True),
+        sa.Column('last_dns_ok', sa.Boolean(), nullable=True),
+        sa.Column('last_dns_reason', sa.String(length=500), nullable=True),
         sa.Column('last_renew_at', sa.DateTime(timezone=True), nullable=True),
         sa.Column('last_renew_ok', sa.Boolean(), nullable=True),
         sa.Column('last_renew_reason', sa.String(length=500), nullable=True),

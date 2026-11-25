@@ -24,6 +24,14 @@ class LocalTlsState(Base):
     last_ip_set_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # Domain, fuer die ``last_ip`` gesetzt wurde: eine andere Domain ist faellig.
+    last_ip_domain: Mapped[Optional[str]] = mapped_column(String(253), nullable=True)
+    # Ergebnis des letzten DNS-Update-Versuchs (Erfolg wie Fehlschlag).
+    last_dns_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_dns_ok: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+    last_dns_reason: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     last_renew_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

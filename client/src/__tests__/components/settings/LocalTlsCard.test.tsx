@@ -10,6 +10,7 @@ vi.mock('react-i18next', () => ({
   }),
 }));
 vi.mock('react-hot-toast', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+import { toast } from 'react-hot-toast';
 vi.mock('../../../api/localTls', async () => {
   const actual = await vi.importActual<typeof import('../../../api/localTls')>('../../../api/localTls');
   return {
@@ -34,7 +35,8 @@ const inDays = (d: number) => new Date(NOW.getTime() + d * 86400_000).toISOStrin
 
 const base: api.LocalTlsStatus = {
   configured: true, lego: 'ok', lego_version: '4.35.0', current_ip: '192.168.1.5',
-  last_ip: '192.168.1.5', last_ip_set_at: inDays(-1), cert_not_after: inDays(60),
+  last_ip: '192.168.1.5', last_ip_set_at: inDays(-1),
+  last_dns_at: inDays(-1), last_dns_ok: true, last_dns_reason: null, cert_not_after: inDays(60),
   cert_fingerprint: 'AA', served_matches: true, last_renew_at: inDays(-3),
   last_renew_ok: true, last_renew_reason: null, running: false, token_set: false, nginx_hint: null,
 };
@@ -121,5 +123,42 @@ describe('<LocalTlsCard>', () => {
     renderCard();
     await screen.findByTestId('cert-expiry');
     expect(screen.queryByText('actions.copy')).toBeNull();
+  });
+
+  it('zeigt das letzte DNS-Ergebnis samt Grund', async () => {
+    renderCard({ last_dns_ok: false, last_dns_reason: 'duckdns rejected the update' });
+    const el = await screen.findByTestId('dns-result');
+    expect(el.textContent).toContain('dns.failed');
+    expect(el.textContent).toContain('duckdns rejected the update');
+  });
+
+  it('DNS jetzt aktualisieren: Fehlschlag meldet den Grund statt Erfolg', async () => {
+    (api.updateLocalTlsDns as any).mockResolvedValue({
+      ...base, last_dns_ok: false, last_dns_reason: 'duckdns rejected the update',
+    });
+    renderCard();
+    fireEvent.click(await screen.findByText('actions.updateDns'));
+    expect(await screen.findByRole('alert')).toBeTruthy();
+    expect(screen.getByRole('alert').textContent).toContain('actions.dnsFailed');
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(toast.error).toHaveBeenCalled();
+  });
+
+  it('DNS jetzt aktualisieren: Erfolg meldet Erfolg', async () => {
+    (api.updateLocalTlsDns as any).mockResolvedValue({ ...base });
+    renderCard();
+    fireEvent.click(await screen.findByText('actions.updateDns'));
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('actions.dnsDone'));
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('Jetzt erneuern: Fehlschlag meldet den Grund statt Erfolg', async () => {
+    (api.renewLocalTls as any).mockResolvedValue({
+      ...base, last_renew_ok: false, last_renew_reason: 'acme: error 429',
+    });
+    renderCard();
+    fireEvent.click(await screen.findByText('actions.renew'));
+    expect(await screen.findByRole('alert')).toBeTruthy();
+    expect(toast.success).not.toHaveBeenCalled();
   });
 });
