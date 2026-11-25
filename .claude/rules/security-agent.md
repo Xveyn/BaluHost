@@ -97,6 +97,25 @@ verify_mobile_device_token — Validates JWT + X-Device-ID header + device expir
   erfolgreiche **nicht**: das Tray fragt alle 30 Sekunden, ein Eintrag je
   Abfrage würde die Spur zuschütten statt eine zu sein. Durchgesetzt in
   `plugins/installed/steam_gaming/routes.py`.
+- Das Plugin `local_tls` (standardmäßig aus) hält einen DuckDNS-Namen auf der
+  LAN-IP und holt per `lego` (DNS-01) ein Let's-Encrypt-Zertifikat. Alle Routen
+  unter `/api/plugins/local_tls/` sind `get_current_admin`, Audit-Aktionen
+  `local_tls_credentials_changed`, `local_tls_renew_triggered`,
+  `local_tls_dns_update_triggered`. **Keine neue sudoers-Regel:** nginx wird nur
+  über das bestehende `sudo -n /usr/bin/systemctl reload nginx` neu geladen; lego
+  und certbot laufen nie als root, Zertifikate liegen unter
+  `/var/lib/baluhost/plugins/local_tls/` (Verzeichnisse 0700, Schlüssel 0600).
+  *Ehrliche Grenze:* der Dienstnutzer kann die nginx-Site ohnehin selbst
+  umschreiben (#862) — das Plugin erweitert diese Fähigkeit nicht, es schließt
+  sie aber auch nicht. *Token:* Fernet (`VPN_ENCRYPTION_KEY`) in
+  `local_tls_state.provider_secret` (passt auf `REDACT_PATTERN`), eigene
+  Schreib-Route (nie in Antworten, Logs, Audit oder Fehlertexten); ohne Schlüssel
+  lehnt sie mit 400 ab statt Klartext zu speichern. Die übrigen Einstellungen
+  laufen über die generische Plugin-Konfiguration (Core-Routen, nur Admin); echte
+  Secret-Felder im Core sind #863. *Adapter-Regeln:* nur HTTPS zum Host des
+  Anbieters, Timeout ≤ 15 s, kein Shell-Aufruf, keine Dateizugriffe, Domain und
+  IP vor jedem Aufruf validiert, nur private IPv4. Durchgesetzt in
+  `plugins/installed/local_tls/`.
 - `POST /api/system/restart-all` startet alle fünf BaluHost-Units neu. Dreifach
   gegated: `get_current_admin`, `is_private_or_local_ip(request.client.host)`
   und ein Step-up (`services/step_up.verify_step_up`) — Code bei aktivem 2FA,

@@ -119,6 +119,7 @@ class RateLimitConfigService:
             ("backup_operations", "10/minute", "Backup create/restore operations"),
             ("sync_operations", "30/minute", "Sync management operations"),
             ("admin_benchmark", "3/minute", "Benchmark operations (resource intensive)"),
+            ("local_tls", "30/minute", "local_tls plugin admin routes"),
         ]
         
         for endpoint_type, limit_string, description in defaults:

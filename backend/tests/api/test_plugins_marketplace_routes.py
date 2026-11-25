@@ -338,6 +338,28 @@ class TestUninstallPlugin:
         assert response.status_code == 204
         assert not (plugins_dir / "demo").exists()
 
+    def test_bundled_name_is_409_for_install_and_uninstall(
+        self,
+        client: TestClient,
+        admin_headers: dict,
+        override_marketplace,
+    ):
+        plugins_dir, attach = override_marketplace
+        archive = _build_plugin_zip("local_tls")
+        url = "https://plugins.example/local_tls.bhplugin"
+        attach(_make_index([("local_tls", "1.0.0", archive, url)]), {url: archive})
+        (plugins_dir / "local_tls").mkdir()
+
+        install = client.post(
+            "/api/plugins/marketplace/local_tls/install", json={}, headers=admin_headers
+        )
+        assert install.status_code == 409
+        uninstall = client.delete(
+            "/api/plugins/marketplace/local_tls", headers=admin_headers
+        )
+        assert uninstall.status_code == 409
+        assert (plugins_dir / "local_tls").exists()
+
     def test_uninstall_missing_returns_404(
         self,
         client: TestClient,

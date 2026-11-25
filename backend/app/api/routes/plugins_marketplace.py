@@ -36,6 +36,7 @@ from app.schemas.plugin_marketplace import (
     MarketplaceVersionResponse,
 )
 from app.services.plugin_marketplace import (
+    BundledPluginNameError,
     IndexFetchError,
     IndexParseError,
     IndexSignatureError,
@@ -90,6 +91,15 @@ def _conflicts_to_http(exc: ResolverConflictError) -> HTTPException:
                 for c in exc.result.conflicts
             ],
         },
+    )
+
+
+def _bundled_to_http(plugin_name: str) -> HTTPException:
+    # Bundled-Plugins gehoeren nicht dem Marktplatz; ihr Name kann unter
+    # plugins_external_dir ein Datenverzeichnis sein (local_tls).
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=f"plugin {plugin_name!r} is a bundled plugin",
     )
 
 
@@ -152,6 +162,8 @@ async def install_plugin(
             installed=installed,
             force=payload.force,
         )
+    except BundledPluginNameError as exc:
+        raise _bundled_to_http(plugin_name) from exc
     except PluginNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -214,6 +226,8 @@ async def uninstall_plugin(
     """Remove an installed marketplace plugin from the filesystem."""
     try:
         removed = service.uninstall(plugin_name)
+    except BundledPluginNameError as exc:
+        raise _bundled_to_http(plugin_name) from exc
     except InvalidPluginNameError as exc:
         # PluginNameParam already refuses these; this is the second line.
         logger.warning("marketplace uninstall refused for %r: %s", plugin_name, exc)

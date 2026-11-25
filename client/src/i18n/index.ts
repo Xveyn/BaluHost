@@ -47,6 +47,8 @@ import displayDe from './locales/de/display.json';
 import displayEn from './locales/en/display.json';
 import bluetoothDe from './locales/de/bluetooth.json';
 import bluetoothEn from './locales/en/bluetooth.json';
+import localTlsDe from './locales/de/localTls.json';
+import localTlsEn from './locales/en/localTls.json';
 
 const resources = {
   de: {
@@ -72,6 +74,7 @@ const resources = {
     audio: audioDe,
     display: displayDe,
     bluetooth: bluetoothDe,
+    localTls: localTlsDe,
   },
   en: {
     common: commonEn,
@@ -96,6 +99,7 @@ const resources = {
     audio: audioEn,
     display: displayEn,
     bluetooth: bluetoothEn,
+    localTls: localTlsEn,
   },
 };
 
@@ -106,7 +110,7 @@ i18n
     resources,
     fallbackLng: 'de',
     defaultNS: 'common',
-    ns: ['common', 'dashboard', 'fileManager', 'settings', 'admin', 'login', 'system', 'shares', 'plugins', 'devices', 'scheduler', 'notifications', 'updates', 'remoteServers', 'apiDocs', 'manual', 'setup', 'pihole', 'statusBar', 'audio', 'display', 'bluetooth'],
+    ns: ['common', 'dashboard', 'fileManager', 'settings', 'admin', 'login', 'system', 'shares', 'plugins', 'devices', 'scheduler', 'notifications', 'updates', 'remoteServers', 'apiDocs', 'manual', 'setup', 'pihole', 'statusBar', 'audio', 'display', 'bluetooth', 'localTls'],
     
     detection: {
       // Order of language detection methods

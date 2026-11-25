@@ -32,6 +32,7 @@ plugins/
     ├── audio_control/      # Volume, output device and per-app mixer of the desktop session (pactl)
     ├── bluetooth/          # BlueZ over D-Bus: devices, scan, pairing with an own agent
     ├── display_output/     # KWin output selection and video mode (kscreen-doctor) + brightness (powerdevil over D-Bus)
+    ├── local_tls/          # DNS name on the LAN IP + Let's Encrypt via lego (DNS-01), nginx reload over the existing sudoers rule
     ├── optical_drive/      # CD/DVD burning, reading, ISO browsing (own router)
     ├── steam_gaming/       # Status pill, session ledger, Gaming-Mode menu action, game launch routes
     ├── storage_analytics/  # DEMO ONLY — every number is hard-coded, see its CLAUDE.md
@@ -74,6 +75,10 @@ unmanageable. A new route or helper that joins a name onto a directory needs the
 `DELETE /api/plugins/{name}` stays a plain `str` on purpose: it only touches the DB, and a
 stale row under a name the rule rejects must remain removable.
 `..` reaching `shutil.rmtree` in `uninstall()` was the case that motivated this.
+The marketplace additionally refuses the names of bundled plugins
+(`naming.bundled_plugin_names()`, enforced in `MarketplaceService.install()`/`uninstall()`,
+409 in the routes): `plugins_external_dir / <name>` can be a bundled plugin's data
+directory — `local_tls` keeps its certificates in `/var/lib/baluhost/plugins/local_tls`.
 
 ## Plugin Lifecycle
 

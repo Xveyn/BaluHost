@@ -1,0 +1,87 @@
+{
+  "title": "Feste Adresse im Heimnetz",
+  "settings": "Einstellungen",
+  "domain": "Domain",
+  "notConfigured": "Noch nicht eingerichtet",
+  "running": "Ein Lauf ist gerade aktiv …",
+  "address": {
+    "current": "Aktuelle LAN-IP",
+    "last": "Zuletzt gesetzte IP",
+    "setAt": "gesetzt am {{date}}",
+    "none": "–"
+  },
+  "dns": {
+    "last": "Letzte DNS-Aktualisierung",
+    "ok": "erfolgreich",
+    "failed": "fehlgeschlagen",
+    "never": "Noch keine"
+  },
+  "cert": {
+    "validUntil": "Zertifikat gültig bis",
+    "none": "Kein Zertifikat",
+    "daysLeft_one": "noch {{count}} Tag",
+    "daysLeft_other": "noch {{count}} Tage",
+    "expired": "abgelaufen"
+  },
+  "served": {
+    "label": "Ausgeliefert von nginx",
+    "yes": "ja",
+    "no": "nein",
+    "unknown": "unbekannt"
+  },
+  "renewal": {
+    "last": "Letzte Erneuerung",
+    "ok": "erfolgreich",
+    "failed": "fehlgeschlagen",
+    "never": "Noch keine"
+  },
+  "lego": {
+    "label": "lego",
+    "ok": "installiert ({{version}})",
+    "missing": "lego ist nicht installiert. Installation:",
+    "too_old": "lego ist zu alt (mindestens 4.35 nötig). Aktualisieren mit:",
+    "unreadable": "lego ist installiert, aber die Version ließ sich nicht lesen. Prüfe die Ausgabe von:"
+  },
+  "token": {
+    "label": "DNS-Token",
+    "set": "gesetzt",
+    "notSet": "nicht gesetzt",
+    "save": "Token speichern",
+    "remove": "Token entfernen",
+    "saved": "Token gespeichert",
+    "removed": "Token entfernt"
+  },
+  "providers": {
+    "duckdns": {
+      "token": "DuckDNS-Token"
+    }
+  },
+  "actions": {
+    "renew": "Jetzt erneuern",
+    "updateDns": "DNS jetzt aktualisieren",
+    "renewDone": "Prüfung abgeschlossen",
+    "dnsDone": "DNS-Prüfung abgeschlossen",
+    "copy": "Kopieren",
+    "copied": "Kopiert",
+    "renewFailed": "Erneuerung fehlgeschlagen: {{reason}}",
+    "dnsFailed": "DNS-Aktualisierung fehlgeschlagen: {{reason}}"
+  },
+  "nginx": {
+    "hint": "nginx liefert noch ein anderes Zertifikat aus. Trage dies in der nginx-Site ein und lade nginx neu:"
+  },
+  "error": {
+    "already_running": "Es läuft bereits ein Lauf.",
+    "encryption_key_missing": "Kein Verschlüsselungsschlüssel konfiguriert; der Token wurde nicht gespeichert.",
+    "invalid_token_format": "Das Token-Format ist ungültig.",
+    "unknown": "Aktion fehlgeschlagen.",
+    "load": "Status konnte nicht geladen werden."
+  },
+  "reasons": {
+    "notServed": "installiert, nginx liefert es noch nicht aus",
+    "credentialsUnreadable": "Zugangsdaten nicht lesbar (Verschlüsselungsschlüssel fehlt oder wurde geändert) – Token neu setzen",
+    "dataDir": "Datenverzeichnis nicht beschreibbar",
+    "legoMissing": "lego ist nicht installiert",
+    "nginxReload": "nginx-Reload nicht erlaubt oder fehlgeschlagen",
+    "servedMismatch": "nginx liefert das neue Zertifikat nicht aus; zurückgerollt"
+  }
+}

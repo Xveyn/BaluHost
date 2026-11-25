@@ -23,6 +23,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from app.plugins.core_versions import CoreVersions, CoreVersionsError
 from app.plugins.installer import PluginInstaller
 from app.services.plugin_marketplace import (
+    BundledPluginNameError,
     IndexFetchError,
     IndexParseError,
     IndexSignatureError,
@@ -367,6 +368,39 @@ class TestInstallDelegate:
         svc.install("demo")
         # Same cached index used for lookup on both installs.
         assert fake.index_calls == 1
+
+
+class TestBundledNamesRefused:
+    """Ein Marktplatz-Plugin darf keinen Namen eines Bundled-Plugins tragen:
+    ``plugins_external_dir / <name>`` kann dessen Datenverzeichnis sein
+    (local_tls: /var/lib/baluhost/plugins/local_tls)."""
+
+    def test_install_refuses_bundled_name(self, plugins_dir: Path, core: CoreVersions):
+        archive = _build_plugin_zip("local_tls")
+        url = "https://plugins.example/local_tls.bhplugin"
+        fake = _Fake(index=_make_index([("local_tls", "1.0.0", archive, url)]),
+                     archives={url: archive})
+        svc = _build_service(plugins_dir, core, fake)
+        with pytest.raises(BundledPluginNameError):
+            svc.install("local_tls")
+        assert not (plugins_dir / "local_tls").exists()
+
+    def test_uninstall_refuses_bundled_name(self, plugins_dir: Path, core: CoreVersions):
+        data = plugins_dir / "local_tls"
+        data.mkdir()
+        (data / "keep").write_text("x")
+        fake = _Fake(index=_make_index([]), archives={})
+        svc = _build_service(plugins_dir, core, fake)
+        with pytest.raises(BundledPluginNameError):
+            svc.uninstall("local_tls")
+        assert (data / "keep").exists()
+
+    def test_bundled_names_come_from_installed_dir(self):
+        from app.plugins.naming import bundled_plugin_names
+
+        names = bundled_plugin_names()
+        assert {"local_tls", "bluetooth", "steam_gaming"} <= names
+        assert "__pycache__" not in names
 
 
 class TestGetMarketplaceServiceDependency:

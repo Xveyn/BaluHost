@@ -14,6 +14,7 @@ only addition.
 from __future__ import annotations
 
 import re
+from pathlib import Path
 from typing import Annotated
 
 from fastapi import Path as PathParam
@@ -33,6 +34,28 @@ def is_valid_plugin_name(name: object) -> bool:
     trailing newline, which would let ``"demo\\n"`` through.
     """
     return isinstance(name, str) and _PLUGIN_NAME_RE.fullmatch(name) is not None
+
+
+_INSTALLED_DIR = Path(__file__).resolve().parent / "installed"
+
+
+def bundled_plugin_names() -> frozenset[str]:
+    """Names of the bundled plugins (packages under ``app/plugins/installed/``).
+
+    The marketplace must not install or uninstall a plugin under one of these
+    names: ``plugins_external_dir / <name>`` may be a bundled plugin's data
+    directory (``local_tls`` keeps its certificates in
+    ``/var/lib/baluhost/plugins/local_tls``), which an uninstall would
+    ``rmtree`` and an install would swap out.
+    """
+    try:
+        return frozenset(
+            p.name
+            for p in _INSTALLED_DIR.iterdir()
+            if p.is_dir() and (p / "__init__.py").is_file()
+        )
+    except OSError:
+        return frozenset()
 
 
 #: A plugin name taken from a URL segment. Routes that build a path from it

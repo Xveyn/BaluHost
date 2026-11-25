@@ -114,6 +114,7 @@ from app.models.sync_progress import ChunkedUpload, SyncBandwidthLimit, SyncSche
 from app.models.sync_state import SyncState, SyncMetadata, SyncFileVersion
 from app.models.status_bar import StatusBarPillConfig, StatusBarSettings
 from app.models.steam_session import SteamSession
+from app.models.local_tls_state import LocalTlsState
 from app.models.auth_policy import AuthPolicy
 from app.models.scheduled_reboot import ScheduledRebootState
 from app.models.session_handoff import SessionHandoffCode
@@ -235,6 +236,7 @@ __all__ = [
     "StatusBarPillConfig",
     "StatusBarSettings",
     "SteamSession",
+    "LocalTlsState",
     "ScheduledRebootState",
     "SessionHandoffCode",
 ]

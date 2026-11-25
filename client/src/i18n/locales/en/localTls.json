@@ -1,0 +1,87 @@
+{
+  "title": "Fixed local address",
+  "settings": "Settings",
+  "domain": "Domain",
+  "notConfigured": "Not set up yet",
+  "running": "A run is in progress …",
+  "address": {
+    "current": "Current LAN IP",
+    "last": "Last IP set",
+    "setAt": "set on {{date}}",
+    "none": "–"
+  },
+  "dns": {
+    "last": "Last DNS update",
+    "ok": "succeeded",
+    "failed": "failed",
+    "never": "None yet"
+  },
+  "cert": {
+    "validUntil": "Certificate valid until",
+    "none": "No certificate",
+    "daysLeft_one": "{{count}} day left",
+    "daysLeft_other": "{{count}} days left",
+    "expired": "expired"
+  },
+  "served": {
+    "label": "Served by nginx",
+    "yes": "yes",
+    "no": "no",
+    "unknown": "unknown"
+  },
+  "renewal": {
+    "last": "Last renewal",
+    "ok": "succeeded",
+    "failed": "failed",
+    "never": "None yet"
+  },
+  "lego": {
+    "label": "lego",
+    "ok": "installed ({{version}})",
+    "missing": "lego is not installed. Install it with:",
+    "too_old": "lego is too old (4.35 or newer required). Update with:",
+    "unreadable": "lego is installed, but its version could not be read. Check the output of:"
+  },
+  "token": {
+    "label": "DNS token",
+    "set": "set",
+    "notSet": "not set",
+    "save": "Save token",
+    "remove": "Remove token",
+    "saved": "Token saved",
+    "removed": "Token removed"
+  },
+  "providers": {
+    "duckdns": {
+      "token": "DuckDNS token"
+    }
+  },
+  "actions": {
+    "renew": "Renew now",
+    "updateDns": "Update DNS now",
+    "renewDone": "Check finished",
+    "dnsDone": "DNS check finished",
+    "copy": "Copy",
+    "copied": "Copied",
+    "renewFailed": "Renewal failed: {{reason}}",
+    "dnsFailed": "DNS update failed: {{reason}}"
+  },
+  "nginx": {
+    "hint": "nginx is still serving a different certificate. Add this to the nginx site and reload nginx:"
+  },
+  "error": {
+    "already_running": "A run is already in progress.",
+    "encryption_key_missing": "No encryption key configured; the token was not saved.",
+    "invalid_token_format": "The token format is invalid.",
+    "unknown": "Action failed.",
+    "load": "Could not load status."
+  },
+  "reasons": {
+    "notServed": "installed, nginx is not serving it yet",
+    "credentialsUnreadable": "credentials unreadable (encryption key missing or changed) – set the token again",
+    "dataDir": "data directory not writable",
+    "legoMissing": "lego is not installed",
+    "nginxReload": "nginx reload not permitted or failed",
+    "servedMismatch": "nginx does not serve the new certificate; rolled back"
+  }
+}

@@ -2,6 +2,10 @@
 # ===================================
 # Let's Encrypt SSL Setup Script
 # ===================================
+# ALTLAST: nutzt HTTP-01 und setzt damit einen oeffentlich erreichbaren Port 80
+# voraus. Fuer lokale Namen (DuckDNS-Domain auf private LAN-IP) stattdessen das
+# Plugin `local_tls` verwenden (DNS-01 per lego): docs/features/local-tls.de.md
+# ===================================
 # Automates SSL/TLS certificate setup with Let's Encrypt
 # Uses Certbot with nginx plugin
 #

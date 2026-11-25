@@ -208,6 +208,9 @@ RATE_LIMITS = {
     # sind selten, 6/Minute haelt Doppeltipps und Skripte klein.
     "steam_games_read": "60/minute",
     "steam_launch": "6/minute",
+
+    # local_tls-Plugin (Admin: Status, Token, manuelle Laeufe) — selten genutzt.
+    "local_tls": "30/minute",
 }
 
 

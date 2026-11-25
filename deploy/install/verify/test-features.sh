@@ -64,6 +64,12 @@ run_feature MDNS
 [[ "$(logcount 'install-avahi.sh')" == "1" ]] && ok "MDNS runs install-avahi.sh" || bad "MDNS script not run"
 [[ "$(logcount '^apt:')" == "0" ]] && ok "MDNS installs no module packages" || bad "MDNS apt-installed packages"
 
+echo "== run_feature LEGO (self-installs from trixie-backports) =="
+reset
+run_feature LEGO
+[[ "$(logcount 'install-lego.sh')" == "1" ]] && ok "LEGO runs install-lego.sh" || bad "LEGO script not run"
+[[ "$(logcount '^apt:')" == "0" ]] && ok "LEGO installs no module packages" || bad "LEGO apt-installed packages"
+
 echo "== run_feature VPN (package + user arg) =="
 reset
 run_feature VPN
