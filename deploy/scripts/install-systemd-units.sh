@@ -27,9 +27,17 @@
 # verwirft die Umgebung (env_reset). Wer die Umgebung eines root-Aufrufs
 # kontrolliert, braucht diese Naehte nicht.
 #
-# Nicht verwaltet: baluhost-backend-local (#717) und die Tray-User-Unit.
+# Der Local-Channel (#717) besteht aus zwei Dateien, Service und Socket, und
+# ist optional: Modul 10 legt sie an, nicht jede Box hat sie. Abgeglichen
+# werden sie nur, wenn mindestens eine der beiden schon installiert ist --
+# dann beide, damit das Paar zusammenpasst. Ein Deploy fuehrt nie eine Unit
+# ein, die es auf der Box nicht gab, und aktiviert nichts.
+#
+# Nicht verwaltet: die Tray-User-Unit.
 # UNITS muss mit Modul 10, ci-deploy.sh und unit_drift.MANAGED_UNITS
-# uebereinstimmen -- backend/tests/test_deploy_install_systemd_units.py prueft das.
+# uebereinstimmen, OPTIONAL_UNIT_FILES mit Modul 10 und
+# unit_drift.OPTIONAL_UNIT_FILES --
+# backend/tests/test_deploy_install_systemd_units.py prueft das.
 
 set -euo pipefail
 
@@ -42,6 +50,20 @@ UNIT_BACKUP_DIR="${UNIT_BACKUP_DIR:-/var/backups/baluhost/units}"
 BACKUP_KEEP=10
 
 UNITS=(baluhost-backend baluhost-scheduler baluhost-webdav baluhost-monitoring)
+OPTIONAL_UNIT_FILES=(baluhost-backend-local.service baluhost-backend-local.socket)
+
+# Die Dateien, um die es in diesem Lauf geht: die vier Kern-Units immer, das
+# optionale Paar nur, wenn es auf der Box schon existiert.
+UNIT_FILES=()
+for unit in "${UNITS[@]}"; do
+    UNIT_FILES+=("$unit.service")
+done
+for file in "${OPTIONAL_UNIT_FILES[@]}"; do
+    if [[ -f "$SYSTEMD_DIR/$file" ]]; then
+        UNIT_FILES+=("${OPTIONAL_UNIT_FILES[@]}")
+        break
+    fi
+done
 
 # shellcheck source=../install/lib/common.sh
 source "$INSTALL_DIR/deploy/install/lib/common.sh"
@@ -52,10 +74,10 @@ fail() {
 }
 
 prune_backups() {
-    local unit="$1" i excess
+    local file="$1" i excess
     local -a old
     shopt -s nullglob
-    old=("$UNIT_BACKUP_DIR/$unit.service".*)
+    old=("$UNIT_BACKUP_DIR/$file".*)
     shopt -u nullglob
     # Der Zeitstempel im Namen ist fest breit, die Glob-Sortierung ist also
     # chronologisch: vorne stehen die aeltesten.
@@ -87,20 +109,20 @@ id -u "$BALUHOST_USER" >/dev/null 2>&1 \
 RENDER_DIR="$(mktemp -d)"
 cleanup() {
     rm -rf "$RENDER_DIR"
-    rm -f "$SYSTEMD_DIR"/.baluhost-*.service.new
+    rm -f "$SYSTEMD_DIR"/.baluhost-*.service.new "$SYSTEMD_DIR"/.baluhost-*.socket.new
 }
 trap cleanup EXIT
 
 rendered=()
-for unit in "${UNITS[@]}"; do
-    out="$RENDER_DIR/$unit.service"
-    process_template "$TEMPLATE_DIR/$unit.service" "$out" \
+for file in "${UNIT_FILES[@]}"; do
+    out="$RENDER_DIR/$file"
+    process_template "$TEMPLATE_DIR/$file" "$out" \
         "BALUHOST_USER=$BALUHOST_USER" \
         "INSTALL_DIR=$INSTALL_DIR" \
         "VENV_BIN=$VENV_BIN" \
-        || fail "cannot render $unit.service"
+        || fail "cannot render $file"
     if leftover="$(grep -oE '@@[A-Z_]+@@' "$out" | sort -u | tr '\n' ' ')" && [[ -n "$leftover" ]]; then
-        fail "$unit.service: unrendered placeholder(s) left: $leftover-- nothing installed."
+        fail "$file: unrendered placeholder(s) left: $leftover-- nothing installed."
     fi
     rendered+=("$out")
 done
@@ -127,24 +149,25 @@ fi
 stamp="$(date +%Y%m%d-%H%M%S-%N)"
 changed=0
 
-for unit in "${UNITS[@]}"; do
-    src="$RENDER_DIR/$unit.service"
-    dst="$SYSTEMD_DIR/$unit.service"
+for file in "${UNIT_FILES[@]}"; do
+    src="$RENDER_DIR/$file"
+    dst="$SYSTEMD_DIR/$file"
     if [[ -f "$dst" ]] && cmp -s "$src" "$dst"; then
         continue
     fi
     if [[ -f "$dst" ]]; then
         mkdir -p "$UNIT_BACKUP_DIR"
-        cp -p "$dst" "$UNIT_BACKUP_DIR/$unit.service.$stamp"
-        prune_backups "$unit"
+        cp -p "$dst" "$UNIT_BACKUP_DIR/$file.$stamp"
+        prune_backups "$file"
     fi
     # Temp-Datei im Zielverzeichnis, damit mv ein atomarer Rename auf demselben
     # Dateisystem ist: systemd sieht nie eine halb geschriebene Unit. Der
     # Punkt-Praefix und die Endung .new halten sie aus systemds Unit-Suche.
-    tmp="$SYSTEMD_DIR/.$unit.service.new"
+    tmp="$SYSTEMD_DIR/.$file.new"
     install "${install_args[@]}" "$src" "$tmp"
     mv -f "$tmp" "$dst"
-    echo "CHANGED: $unit"
+    # Services heissen im Log wie bisher ohne Endung; ein Socket mit.
+    echo "CHANGED: ${file%.service}"
     changed=$(( changed + 1 ))
 done
 
@@ -154,21 +177,21 @@ done
 # aber die alte Fassung. Ein erneuter Aufruf -- den der Drift-Check als
 # Reparatur empfiehlt -- muss genau diesen Fall beheben.
 stale=0
-for unit in "${UNITS[@]}"; do
-    if [[ "$(systemctl show -p NeedDaemonReload --value "$unit.service" 2>/dev/null || true)" == "yes" ]]; then
+for file in "${UNIT_FILES[@]}"; do
+    if [[ "$(systemctl show -p NeedDaemonReload --value "$file" 2>/dev/null || true)" == "yes" ]]; then
         stale=1
     fi
 done
 
 if [[ "$changed" -eq 0 && "$stale" -eq 0 ]]; then
-    echo "OK: all ${#UNITS[@]} units up to date"
+    echo "OK: all ${#UNIT_FILES[@]} units up to date"
     exit 0
 fi
 
 systemctl daemon-reload \
     || fail "systemctl daemon-reload failed -- unit files are written, systemd still runs the old ones."
 if [[ "$changed" -eq 0 ]]; then
-    echo "OK: all ${#UNITS[@]} units up to date, stale systemd state fixed by daemon-reload"
+    echo "OK: all ${#UNIT_FILES[@]} units up to date, stale systemd state fixed by daemon-reload"
 else
     echo "OK: $changed unit(s) replaced"
 fi

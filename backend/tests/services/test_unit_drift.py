@@ -11,6 +11,7 @@ import pytest
 from app.services import unit_drift
 from app.services.unit_drift import (
     MANAGED_UNITS,
+    OPTIONAL_UNIT_FILES,
     check_units,
     parse_exec_start,
     parse_show_argv,
@@ -40,6 +41,16 @@ ExecStart=/opt/baluhost/backend/.venv/bin/uvicorn app.main:app \\
 
 GOOD_ARGV = "/opt/baluhost/backend/.venv/bin/uvicorn app.main:app --port 8000 --proxy-headers"
 
+SOCKET_TEMPLATE = """[Socket]
+ListenStream=/run/baluhost/local.sock
+SocketUser=@@BALUHOST_USER@@
+"""
+
+SOCKET_RENDERED = """[Socket]
+ListenStream=/run/baluhost/local.sock
+SocketUser=sven
+"""
+
 
 def _show(argv=GOOD_ARGV, dropins="", reload="no", load="loaded", user=USER, name="x"):
     exec_start = (
@@ -68,16 +79,31 @@ class FakeBox:
         return self.templates[unit]
 
     def read_file(self, path):
-        unit = Path(path).stem
+        name = Path(path).name
+        unit = name if name in self.installed else Path(path).stem
         if unit not in self.installed:
             raise FileNotFoundError(path)
         return self.installed[unit]
 
     def systemctl_show(self, unit):
+        if unit not in self.shows:
+            # What systemctl answers for a unit that is not installed.
+            return {"LoadState": "not-found", "FragmentPath": "", "DropInPaths": "",
+                    "NeedDaemonReload": "no", "User": "", "ExecStart": ""}
         show = dict(self.shows[unit])
         if show["LoadState"] == "loaded":
-            show["FragmentPath"] = f"/etc/systemd/system/{unit}.service"
+            show["FragmentPath"] = f"/etc/systemd/system/{unit_drift.unit_file_name(unit)}"
         return show
+
+    def install_local_channel(self):
+        """Put the optional pair on the box, in sync with its templates."""
+        service, socket = OPTIONAL_UNIT_FILES
+        self.templates[service] = TEMPLATE
+        self.installed[service] = RENDERED
+        self.shows[service] = _show(name=service)
+        self.templates[socket] = SOCKET_TEMPLATE
+        self.installed[socket] = SOCKET_RENDERED
+        self.shows[socket] = {**_show(name=socket), "ExecStart": ""}
 
     def run(self):
         return check_units(
@@ -260,3 +286,128 @@ def test_ci_deploy_runs_the_check_after_the_health_check_non_fatally():
     line = next(l for l in text.splitlines() if call in l)
     following = text.splitlines()[text.splitlines().index(line) + 1]
     assert "|| log_warn" in following, "a failure to launch python must not fail the deploy"
+
+
+# ─── The local channel: optional, a service plus its socket (#717) ───
+
+
+def test_box_without_the_local_channel_passes_with_four_units():
+    assert FakeBox().run() == ["PASS: 4 systemd units match their templates"]
+
+
+def test_local_channel_in_sync_passes_with_six_units():
+    box = FakeBox()
+    box.install_local_channel()
+
+    assert box.run() == ["PASS: 6 systemd units match their templates"]
+
+
+def test_local_service_differing_from_its_template_warns():
+    """The state of the production box before #717: a hand-written unit that
+    no template described."""
+    box = FakeBox()
+    box.install_local_channel()
+    service = OPTIONAL_UNIT_FILES[0]
+    box.installed[service] = RENDERED.replace("User=sven", "User=baluhost")
+
+    lines = box.run()
+
+    assert any(f"{service}: /etc/systemd/system/{service} differs from template" in l
+               for l in lines)
+    assert any("install-systemd-units.sh" in l for l in lines)
+
+
+def test_local_socket_differing_from_its_template_warns():
+    box = FakeBox()
+    box.install_local_channel()
+    socket = OPTIONAL_UNIT_FILES[1]
+    box.installed[socket] = SOCKET_RENDERED.replace("SocketUser=sven", "SocketUser=baluhost")
+
+    lines = box.run()
+
+    assert any(f"{socket}: /etc/systemd/system/{socket} differs from template" in l
+               for l in lines)
+
+
+def test_socket_unit_is_not_asked_for_an_exec_start():
+    """A socket runs no command; its empty ExecStart is not drift."""
+    box = FakeBox()
+    box.install_local_channel()
+
+    assert not any("ExecStart" in l for l in box.run())
+
+
+def test_dropin_on_the_local_service_is_reported():
+    """primary-worker.conf from #710 lived on the box only."""
+    box = FakeBox()
+    box.install_local_channel()
+    service = OPTIONAL_UNIT_FILES[0]
+    box.shows[service] = _show(
+        name=service,
+        dropins="/etc/systemd/system/baluhost-backend-local.service.d/primary-worker.conf",
+    )
+
+    lines = _warns(box.run())
+
+    assert len(lines) == 1
+    assert "primary-worker.conf" in lines[0]
+
+
+def test_half_installed_local_channel_is_reported():
+    box = FakeBox()
+    box.install_local_channel()
+    service, socket = OPTIONAL_UNIT_FILES
+    del box.shows[service]
+
+    lines = box.run()
+
+    assert any(f"{service}: not installed" in l for l in lines)
+    assert not any(f"{socket}:" in l for l in lines)
+
+
+def test_failing_query_for_the_local_channel_does_not_hide_the_core_units():
+    box = FakeBox()
+    real_show = box.systemctl_show
+
+    def _show_or_fail(unit):
+        if unit in OPTIONAL_UNIT_FILES:
+            raise RuntimeError("systemctl timed out")
+        return real_show(unit)
+
+    box.systemctl_show = _show_or_fail
+
+    lines = box.run()
+
+    assert lines == ["WARN: local channel units: check failed: systemctl timed out"]
+
+
+@pytest.mark.parametrize("name", OPTIONAL_UNIT_FILES)
+def test_real_local_channel_templates_render_completely(name):
+    text = (_REPO_TEMPLATES / name).read_text(encoding="utf-8")
+    rendered = render_template(text, {
+        "BALUHOST_USER": USER, "INSTALL_DIR": INSTALL_DIR,
+        "VENV_BIN": f"{INSTALL_DIR}/backend/.venv/bin",
+    })
+
+    assert "@@" not in rendered
+
+
+def test_unit_file_name_keeps_a_suffix_and_adds_the_default():
+    assert unit_drift.unit_file_name("baluhost-backend") == "baluhost-backend.service"
+    assert unit_drift.unit_file_name("baluhost-backend-local.socket") == "baluhost-backend-local.socket"
+    assert unit_drift.unit_file_name("baluhost-backend-local.service") == "baluhost-backend-local.service"
+
+
+def test_local_service_with_another_effective_command_is_caught():
+    """The file can match its template while a drop-in swaps the command."""
+    box = FakeBox()
+    box.install_local_channel()
+    service = OPTIONAL_UNIT_FILES[0]
+    box.shows[service] = _show(
+        name=service,
+        argv="/opt/baluhost/backend/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 9000",
+    )
+
+    lines = box.run()
+
+    assert any(f"{service}: effective ExecStart differs from template" in l for l in lines)
