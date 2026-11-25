@@ -222,3 +222,40 @@ class TestVerifyTokenOwnership:
 
     def test_returns_false_for_unknown_token(self, db_session: Session):
         assert TokenService.verify_token_ownership(db_session, "unknown", 1) is False
+
+
+class TestCommitFreeVariants:
+    def test_store_refresh_token_keeps_parent_jti(self, db_session: Session, regular_user: User):
+        jti = _store_token(db_session, regular_user.id, parent_jti="p-1")
+        assert TokenService.get_token_by_jti(db_session, jti).parent_jti == "p-1"
+
+    def test_store_without_commit_is_rolled_back_with_the_session(
+        self, db_session: Session, regular_user: User
+    ):
+        jti = _make_jti()
+        TokenService.store_refresh_token(
+            db_session,
+            jti=jti,
+            user_id=regular_user.id,
+            token="t",
+            expires_at=_future(),
+            commit=False,
+        )
+        db_session.rollback()
+        assert TokenService.get_token_by_jti(db_session, jti) is None
+
+    def test_revoke_without_commit_is_rolled_back_with_the_session(
+        self, db_session: Session, regular_user: User
+    ):
+        jti = _store_token(db_session, regular_user.id)
+        assert TokenService.revoke_token(db_session, jti, reason="x", commit=False) is True
+        db_session.rollback()
+        assert TokenService.get_token_by_jti(db_session, jti).revoked is False
+
+    def test_revoke_device_tokens_without_commit_is_rolled_back(
+        self, db_session: Session, regular_user: User
+    ):
+        jti = _store_token(db_session, regular_user.id, device_id="dev-x")
+        assert TokenService.revoke_device_tokens(db_session, "dev-x", reason="x", commit=False) == 1
+        db_session.rollback()
+        assert TokenService.get_token_by_jti(db_session, jti).revoked is False

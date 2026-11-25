@@ -29,6 +29,8 @@ class TokenService:
         device_id: Optional[str] = None,
         ip_address: Optional[str] = None,
         user_agent: Optional[str] = None,
+        parent_jti: Optional[str] = None,
+        commit: bool = True,
     ) -> RefreshToken:
         """
         Store a refresh token in the database.
@@ -42,6 +44,8 @@ class TokenService:
             device_id: Optional device identifier for mobile/desktop clients
             ip_address: IP address where token was issued
             user_agent: User agent string from request
+            parent_jti: JTI des Vorgaengers bei Rotation (None = Erstausgabe)
+            commit: False = nur flush, der Aufrufer committet (eine Transaktion)
 
         Returns:
             RefreshToken model instance
@@ -57,12 +61,16 @@ class TokenService:
             created_ip=ip_address,
             last_used_ip=ip_address,
             user_agent=user_agent,
+            parent_jti=parent_jti,
             revoked=False,
         )
 
         db.add(refresh_token)
-        db.commit()
-        db.refresh(refresh_token)
+        if commit:
+            db.commit()
+            db.refresh(refresh_token)
+        else:
+            db.flush()
 
         logger.info(f"Stored refresh token for user_id={user_id}, jti={jti}, device_id={device_id}")
         return refresh_token
@@ -105,6 +113,7 @@ class TokenService:
         db: Session,
         jti: str,
         reason: Optional[str] = None,
+        commit: bool = True,
     ) -> bool:
         """
         Revoke a specific refresh token.
@@ -113,6 +122,7 @@ class TokenService:
             db: Database session
             jti: JWT ID to revoke
             reason: Optional reason for revocation
+            commit: False = nur flush, der Aufrufer committet
 
         Returns:
             True if token was revoked, False if not found
@@ -123,7 +133,10 @@ class TokenService:
             return False
 
         token.revoke(reason=reason)
-        db.commit()
+        if commit:
+            db.commit()
+        else:
+            db.flush()
 
         logger.info(f"Revoked refresh token: jti={jti}, reason={reason}")
         return True
@@ -165,6 +178,7 @@ class TokenService:
         db: Session,
         device_id: str,
         reason: Optional[str] = None,
+        commit: bool = True,
     ) -> int:
         """
         Revoke all refresh tokens for a specific device.
@@ -173,6 +187,7 @@ class TokenService:
             db: Database session
             device_id: Device whose tokens to revoke
             reason: Optional reason for revocation
+            commit: False = nur flush, der Aufrufer committet
 
         Returns:
             Number of tokens revoked
@@ -187,7 +202,10 @@ class TokenService:
             token.revoke(reason=reason)
             count += 1
 
-        db.commit()
+        if commit:
+            db.commit()
+        else:
+            db.flush()
 
         logger.info(f"Revoked {count} refresh tokens for device_id={device_id}, reason={reason}")
         return count
