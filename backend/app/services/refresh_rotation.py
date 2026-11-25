@@ -30,6 +30,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.security import create_refresh_token
+from app.models.mobile import MobileDevice
 from app.models.refresh_token import RefreshToken
 from app.models.sync_state import SyncState
 from app.models.user import User
@@ -81,8 +82,23 @@ def _aware(dt: datetime) -> datetime:
 
 
 def _is_desktop_pairing(db: Session, row: RefreshToken) -> bool:
-    """Gehoert ``row`` zu einer Desktop-Kopplung? Die legt eine SyncState-Zeile
-    fuer genau diesen Nutzer und dieses Geraet an (desktop_pairing.py)."""
+    """Gehoert ``row`` zu einer Desktop-Kopplung?
+
+    Die Desktop-Kopplung legt eine SyncState-Zeile fuer genau diesen Nutzer und
+    dieses Geraet an (desktop_pairing.py). Das allein reicht nicht:
+    ``/sync/register-desktop`` legt SyncState frei an, auch unter der ID des
+    eigenen Mobilgeraets. Mobile-Tokens tragen ``str(MobileDevice.id)``
+    (UUID-String) als device_id — existiert so ein Geraet fuer den Nutzer, ist
+    es nie eine Desktop-Kopplung.
+    """
+    is_mobile = (
+        db.query(MobileDevice.id)
+        .filter(MobileDevice.id == row.device_id, MobileDevice.user_id == row.user_id)
+        .first()
+        is not None
+    )
+    if is_mobile:
+        return False
     return (
         db.query(SyncState.id)
         .filter(SyncState.user_id == row.user_id, SyncState.device_id == row.device_id)

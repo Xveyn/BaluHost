@@ -268,6 +268,33 @@ def test_token_without_desktop_pairing_is_never_rotated(client, db_session, regu
     assert db_session.query(RefreshToken).count() == 1
 
 
+def test_mobile_token_is_never_rotated_even_with_syncstate(client, db_session, regular_user):
+    """/sync/register-desktop legt SyncState frei an — auch unter der ID des
+    eigenen Mobilgeraets. Die Admin-Freigabelaufzeit darf trotzdem nicht gleiten."""
+    import uuid
+
+    from app.models.mobile import MobileDevice
+
+    mobile_id = str(uuid.uuid4())
+    db_session.add(
+        MobileDevice(
+            id=mobile_id,
+            user_id=regular_user.id,
+            device_name="Phone",
+            device_type="android",
+        )
+    )
+    db_session.commit()
+    # desktop=True legt die SyncState-Zeile fuer dieselbe ID an
+    token = _paired_token(db_session, regular_user, mobile_id, age_days=4, desktop=True)
+
+    r = _refresh(client, token, rotate=True)
+
+    assert r.status_code == 200, r.text
+    assert r.json()["refresh_token"] is None
+    assert db_session.query(RefreshToken).count() == 1
+
+
 def test_desktop_pairing_of_another_user_does_not_enable_rotation(
     client, db_session, regular_user, another_user
 ):
