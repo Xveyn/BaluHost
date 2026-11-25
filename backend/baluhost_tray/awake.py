@@ -1,7 +1,7 @@
 """Always Awake direkt im Tray-Menue (#847).
 
 Alles Entscheidbare liegt hier, ohne Qt. Die Rechte entscheidet das Backend
-(`/api/sleep/config` ist Admin-only); das Tray blendet das Untermenue nur aus,
+(`/api/system/sleep/config` ist Admin-only); das Tray blendet das Untermenue nur aus,
 wenn der Nutzer kein Admin ist. Der angezeigte Stand kommt immer aus der
 Antwort des Backends — es darf die Frist kuerzen (Kernzeitfenster).
 """
@@ -15,7 +15,8 @@ from typing import Callable
 
 import httpx
 
-SLEEP_CONFIG_PATH = "/api/sleep/config"
+# Der Sleep-Router haengt unter prefix="/system/sleep"; "/api/sleep/..." ist nicht gebunden.
+SLEEP_CONFIG_PATH = "/api/system/sleep/config"
 REQUEST_TIMEOUT = 5.0
 
 
