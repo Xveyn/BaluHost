@@ -161,4 +161,11 @@ describe('<LocalTlsCard>', () => {
     expect(await screen.findByRole('alert')).toBeTruthy();
     expect(toast.success).not.toHaveBeenCalled();
   });
+
+  it('lego unlesbar: eigener Text und Pruefbefehl statt Installationsbefehl', async () => {
+    renderCard({ lego: 'unreadable', lego_version: null });
+    expect(await screen.findByText('lego.unreadable')).toBeTruthy();
+    expect(screen.getByText('lego --version')).toBeTruthy();
+    expect(screen.queryByText('sudo apt install -t trixie-backports lego')).toBeNull();
+  });
 });

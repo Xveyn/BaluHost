@@ -77,7 +77,7 @@ class PendingEvent:
 @dataclass
 class Status:
     configured: bool
-    lego: str  # "ok" | "missing" | "too_old"
+    lego: str  # "ok" | "missing" | "too_old" | "unreadable"
     lego_version: Optional[str]
     current_ip: Optional[str]
     last_ip: Optional[str]
@@ -464,8 +464,11 @@ def get_status(
         v = lego.version()
         lego_state = "ok" if v >= lego.MIN_VERSION else "too_old"
         lego_version: Optional[str] = _version_str(v)
-    except lego.LegoError:
+    except lego.LegoMissing:
         lego_state, lego_version = "missing", None
+    except lego.LegoError:
+        # Installiert, aber ``lego --version`` liefert nichts Verwertbares.
+        lego_state, lego_version = "unreadable", None
 
     try:
         current_ip: Optional[str] = address.current_lan_ip(config.interface)

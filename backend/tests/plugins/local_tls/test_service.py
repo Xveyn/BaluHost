@@ -683,3 +683,11 @@ def test_domain_change_triggers_dns_update(db_session, configured, world):
     assert len(world.provider.calls) == 2
     assert events == []  # gleiche IP: keine Adressaenderung
     assert state.get_state(db_session).last_ip_domain == "other.duckdns.org"
+
+
+def test_status_lego_unreadable_is_distinct_from_missing(db_session, key, world):
+    world.lego_version = lego.LegoError("could not determine lego version")
+    st = service.get_status(db_session, LocalTlsConfig(), NOW)
+    assert st.lego == "unreadable" and st.lego_version is None
+    world.lego_version = lego.LegoMissing("lego is not installed")
+    assert service.get_status(db_session, LocalTlsConfig(), NOW).lego == "missing"

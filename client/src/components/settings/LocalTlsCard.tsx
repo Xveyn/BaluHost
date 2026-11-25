@@ -16,6 +16,7 @@ import {
 import { getPluginConfig } from '../../api/plugins';
 
 const LEGO_INSTALL_COMMAND = 'sudo apt install -t trixie-backports lego';
+const LEGO_VERSION_COMMAND = 'lego --version';
 
 type Severity = 'red' | 'yellow' | 'green';
 
@@ -233,7 +234,7 @@ export default function LocalTlsCard() {
               <>
                 <span className="text-yellow-400">{t(`lego.${status.lego}`)}</span>
                 <pre className="mt-1 p-2 rounded bg-slate-950/70 border border-slate-700/40 overflow-x-auto">
-                  <code>{LEGO_INSTALL_COMMAND}</code>
+                  <code>{status.lego === 'unreadable' ? LEGO_VERSION_COMMAND : LEGO_INSTALL_COMMAND}</code>
                 </pre>
               </>
             ) : (

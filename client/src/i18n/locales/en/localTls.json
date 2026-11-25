@@ -32,7 +32,8 @@
     "label": "lego",
     "ok": "installed ({{version}})",
     "missing": "lego is not installed. Install it with:",
-    "too_old": "lego is too old (4.35 or newer required). Update with:"
+    "too_old": "lego is too old (4.35 or newer required). Update with:",
+    "unreadable": "lego is installed, but its version could not be read. Check the output of:"
   },
   "token": {
     "label": "DNS token",

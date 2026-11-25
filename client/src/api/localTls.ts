@@ -9,7 +9,7 @@ import { apiClient } from '../lib/api';
 
 const BASE = '/api/plugins/local_tls';
 
-export type LegoState = 'ok' | 'missing' | 'too_old';
+export type LegoState = 'ok' | 'missing' | 'too_old' | 'unreadable';
 
 export interface LocalTlsStatus {
   configured: boolean;
