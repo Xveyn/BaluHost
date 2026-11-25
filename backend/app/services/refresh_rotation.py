@@ -233,6 +233,21 @@ def use_refresh_token(
         parent = token_service.get_token_by_jti(db, row.parent_jti)
         if parent is not None and not parent.revoked:
             parent.revoke(reason=REASON_ROTATED)
+        # Zwei gleichzeitige Rotationen desselben Vorgaengers koennen je einen
+        # Nachfolger ausstellen (der Superseded-Schritt in rotate_if_due sieht
+        # den jeweils anderen noch nicht). Der benutzte gewinnt; ein
+        # unbenutzter Geschwister-Token darf nicht 7 Tage weiterleben.
+        siblings = (
+            db.query(RefreshToken)
+            .filter(
+                RefreshToken.parent_jti == row.parent_jti,
+                RefreshToken.jti != row.jti,
+                RefreshToken.revoked == False,  # noqa: E712
+            )
+            .all()
+        )
+        for sibling in siblings:
+            sibling.revoke(reason=REASON_SUPERSEDED)
 
     row.last_used_at = datetime.now(timezone.utc)
     if ip_address:

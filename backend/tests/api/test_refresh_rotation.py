@@ -346,3 +346,26 @@ def test_db_error_during_refresh_is_not_a_401(client, db_session, regular_user, 
     assert r.status_code != 401
     assert r.status_code >= 500
 
+
+def test_concurrent_rotation_orphan_is_superseded_on_first_use(
+    client, db_session, regular_user
+):
+    """Zwei gleichzeitige Rotationen desselben Vorgaengers koennen je einen
+    Nachfolger ausstellen. Sobald einer benutzt wird, darf der andere nicht
+    sieben Tage lang gueltig bleiben (#847, I2b)."""
+    token = _paired_token(db_session, regular_user, "dev-1", age_days=4)
+    parent_jti = _jti(token)
+    used = refresh_rotation.issue_device_refresh_token(
+        db_session, regular_user, "dev-1", parent_jti=parent_jti
+    )
+    orphan = refresh_rotation.issue_device_refresh_token(
+        db_session, regular_user, "dev-1", parent_jti=parent_jti
+    )
+
+    assert _refresh(client, used).status_code == 200
+
+    orphan_row = _row(db_session, orphan)
+    assert orphan_row.revoked is True
+    assert orphan_row.revocation_reason == "superseded"
+    assert _row(db_session, used).revoked is False
+    assert _row(db_session, token).revocation_reason == "rotated"

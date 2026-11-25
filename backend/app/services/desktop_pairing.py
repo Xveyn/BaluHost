@@ -12,6 +12,7 @@ from app.models.sync_state import SyncState
 from app.models.user import User
 from app.core.security import create_access_token
 from app.services.refresh_rotation import issue_device_refresh_token
+from app.services.token_service import token_service
 from app.schemas.desktop_pairing import (
     DeviceCodeRequest,
     DeviceCodeResponse,
@@ -37,7 +38,16 @@ def _issue_tokens(db: Session, user: User, device_id: str) -> tuple[str, str]:
 
     The refresh token comes from refresh_rotation.issue_device_refresh_token,
     the same path the sliding rotation uses (#847).
+
+    A re-pairing starts a fresh chain, so the previous chain of this user on
+    this device is revoked first (``repaired``). The tray uses the machine-id
+    as device_id, so every ``--pair`` reuses it; with sliding rotation the old
+    chain would otherwise live on indefinitely. Flush only — the caller
+    commits once.
     """
+    token_service.revoke_device_tokens(
+        db, device_id, reason="repaired", user_id=user.id, commit=False
+    )
     access_token = create_access_token(user)
     refresh_token = issue_device_refresh_token(db, user, device_id)
     return access_token, refresh_token
