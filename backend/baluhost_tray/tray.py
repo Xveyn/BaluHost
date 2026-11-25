@@ -93,6 +93,43 @@ class _Bridge(QObject):
     awake_state = pyqtSignal(object)  # AwakeState
 
 
+# Platz neben dem Titel in der Fensterleiste: App-Icon, drei Knoepfe, Raender.
+TITLEBAR_RESERVE = 200
+MIN_DIALOG_WIDTH = 320
+
+
+def _secret_dialog(title: str, label: str) -> QInputDialog:
+    """Passwort-/PIN-Abfrage, breit genug fuer den Fenstertitel.
+
+    Der statische ``QInputDialog.getText()`` richtet die Breite nur nach
+    Beschriftung und Eingabefeld; KWin kuerzt den Titel dann zu
+    "BaluH...ffnen". Die Titelleiste zeichnet der Fenstermanager, ihre
+    Schrift kennt Qt nicht — die Anwendungsschrift plus Reserve ist die
+    Naeherung.
+
+    Die Breite sitzt am Eingabefeld, nicht am Dialog: QInputDialog baut sein
+    Layout erst beim Anzeigen und setzt dabei die Mindestgroesse des Dialogs
+    neu, ein ``dialog.setMinimumWidth()`` waere danach wieder weg.
+    """
+    dialog = QInputDialog()
+    dialog.setWindowTitle(title)
+    dialog.setLabelText(label)
+    dialog.setTextEchoMode(QLineEdit.EchoMode.Password)
+    title_width = dialog.fontMetrics().horizontalAdvance(title)
+    line_edit = dialog.findChild(QLineEdit)
+    if line_edit is not None:
+        line_edit.setMinimumWidth(max(MIN_DIALOG_WIDTH, title_width + TITLEBAR_RESERVE))
+    return dialog
+
+
+def _ask_secret(title: str, label: str) -> str | None:
+    """Modal fragen; ``None`` bei Abbruch oder leerer Eingabe."""
+    dialog = _secret_dialog(title, label)
+    if dialog.exec() != QInputDialog.DialogCode.Accepted:
+        return None
+    return dialog.textValue() or None
+
+
 def _build_icons() -> dict[IconState, QIcon]:
     """One QIcon per state, all sizes inside it.
 
@@ -153,13 +190,10 @@ def run_tray(base_url: str, web_url: str) -> int:
     def _show_pin_prompt(retry: bool) -> None:
         value = None
         try:
-            typed, ok = QInputDialog.getText(
-                None,
+            value = _ask_secret(
                 "BaluHost öffnen",
                 "PIN stimmt nicht. Noch einmal:" if retry else "PIN für BaluHost:",
-                QLineEdit.EchoMode.Password,
             )
-            value = typed if ok and typed else None
         finally:
             try:
                 pin_answers.put_nowait(value)
@@ -269,10 +303,7 @@ def run_tray(base_url: str, web_url: str) -> int:
                 else f"{label} für BaluHost:\n\nLaufende Aufträge und Uploads "
                      f"werden abgebrochen."
             )
-            typed, ok = QInputDialog.getText(
-                None, TITLE_PROMPT, text, QLineEdit.EchoMode.Password
-            )
-            value = typed if ok and typed else None
+            value = _ask_secret(TITLE_PROMPT, text)
         finally:
             # put_nowait, nicht put: laeuft der Worker laengst im
             # PROMPT_TIMEOUT (niemand liest answers.get() mehr) und wird
