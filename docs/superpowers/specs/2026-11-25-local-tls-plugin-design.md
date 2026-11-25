@@ -101,7 +101,7 @@ backend/app/plugins/installed/local_tls/
 ├── address.py         # LAN-IP bestimmen
 ├── lego.py            # einziger Kontakt zu lego (subprocess, Listen-Args)
 ├── deploy_cert.py     # Prüfen, atomar tauschen, nginx neu laden, verifizieren, ggf. zurück
-├── models.py          # Tabelle local_tls_config (+ Statusfelder), Alembic-Migration
+├── state.py           # Zugriff auf Tabelle local_tls_state (Modell in app/models/)
 ├── routes.py          # Admin-API
 └── CLAUDE.md
 client/src/…           # UI als normaler Client-Code (Muster bluetooth/audio_control)
@@ -198,34 +198,44 @@ Zertifikat“ installiert, brächte deshalb keine echte Grenze, nur Deploy-Aufwa
   (auch Knopfdruck während Hintergrundlauf).
 - Hintergrundaufgaben laufen nur im Primary-Worker (Plugin-Framework, #448/#465).
 
-### Zugangsdaten und Einstellungen
+### Einstellungen, Zugangsdaten, Status
 
-- **Eigene Tabelle** `local_tls_config` (eine Zeile; Alembic-Migration) für
-  Domain, Anbieter, nicht-geheime Felder, Interface-Override, Staging, E-Mail und
-  die Statusfelder (zuletzt gesetzte IP + Zeitpunkt, letzte Erneuerung + Ergebnis).
-  *Meine Entscheidung:* `InstalledPlugin.config` liefert `GET /api/plugins/{name}`
-  an jeden eingeloggten Nutzer aus und ist über den Core-`PUT …/config`
-  überschreibbar; `_storage` ist pro Nutzer. Das Plugin deklariert daher **kein**
-  `get_config_schema()` (sonst gäbe es einen zweiten, nicht auditierten Schreibweg).
-- Geheimnisse verschlüsselt (Fernet über `VPNEncryption`, wie bei Tapos
-  `SmartDevice.config_secret`) in einer Spalte, deren Name `REDACT_PATTERN`
-  trifft (z. B. `provider_secret`).
-- **Write-only:** Die API gibt nur „gesetzt ja/nein“ zurück, nie den Wert.
-- Ohne `VPN_ENCRYPTION_KEY` lässt sich das Plugin nicht konfigurieren (klare
-  Fehlermeldung), statt Klartext zu speichern.
+Muster für mitgelieferte Plugins (#522), vom Besitzer am 2026-11-25 bestätigt;
+die Plugin-Schnittstelle wird **nicht** umgebaut (Secret-Felder im Core: #863).
+
+- **Einstellungen** (Domain, Anbieter, nicht-geheime Anbieterfelder,
+  Interface-Override, Staging, E-Mail) über `get_config_schema()` →
+  `InstalledPlugin.config`, gelesen mit `self.get_config(db)`. Lesen/Schreiben
+  über die Core-Routen `GET`/`PUT /api/plugins/local_tls/config` (admin-only) und
+  das generische Einstellungsformular. Validierung im Schema (Domain-Format,
+  Anbieter aus der Registry).
+- **Daten** in einer eigenen Tabelle wie bei `steam_sessions`:
+  `app/models/local_tls_state.py`, Tabelle `local_tls_state` (eine Zeile),
+  normale Core-Migration. Inhalt: zuletzt gesetzte IP + Zeitpunkt, letzte
+  Erneuerung + Ergebnis + Grund, Fingerabdruck des installierten Zertifikats,
+  **und** der verschlüsselte Anbieter-Token.
+- **Token:** Fernet über `VPNEncryption` (wie Tapos `SmartDevice.config_secret`),
+  Spaltenname trifft `REDACT_PATTERN` (z. B. `provider_secret`). Gesetzt nur über
+  eine eigene Plugin-Route, die ihn **nie** zurückgibt (nur „gesetzt ja/nein“)
+  und auditiert. Ohne `VPN_ENCRYPTION_KEY` lehnt die Route ab, statt Klartext zu
+  speichern.
+- Der Core-`PUT …/config` auditiert heute nicht (#863). Das Plugin protokolliert
+  Einstellungsänderungen deshalb nicht selbst nach; sicherheitsrelevant ist hier
+  der Token, und der läuft über die eigene, auditierte Route.
 
 ### Admin-API (`routes.py`, alle `get_current_admin`, Rate-Limits, Pydantic, Audit)
 
-- `GET /api/plugins/local_tls/settings` — Domain, Anbieter, welche Felder gesetzt
-  sind, Interface-Override, Staging, E-Mail.
-- `PUT /api/plugins/local_tls/settings` — dieselben Felder; Secrets nur schreibend.
-  Audit `local_tls_settings_changed` (ohne Secrets).
+- Einstellungen: Core-Routen `GET`/`PUT /api/plugins/local_tls/config` (s. o.).
+- `PUT /api/plugins/local_tls/credentials` — setzt den Anbieter-Token (nur
+  schreibend), `DELETE` entfernt ihn. Audit `local_tls_credentials_changed`
+  (ohne Wert).
 - `GET /api/plugins/local_tls/status` — aktuelle LAN-IP, zuletzt gesetzte IP und
   Zeitpunkt, Zertifikat (Aussteller, gültig bis, SAN), letzte Erneuerung + Ergebnis,
   nginx-Reload erlaubt ja/nein, ausgeliefertes Zertifikat == Plugin-Zertifikat ja/nein, lego installiert ja/nein + Version.
 - `POST /api/plugins/local_tls/renew` und `POST /api/plugins/local_tls/update-dns`
   — sofort ausführen; Audit.
-- Pfad `settings` statt `config` (reservierter Core-Pfad, siehe plugins/CLAUDE.md).
+- `config` ist ein reservierter Core-Pfad (plugins/CLAUDE.md) — das Plugin
+  definiert dort keine eigene Route.
 
 ### Benachrichtigungen (`get_notification_events`, an Admins)
 
@@ -239,7 +249,9 @@ Zertifikat“ installiert, brächte deshalb keine echte Grenze, nur Deploy-Aufwa
 Normaler Client-Code wie bei `bluetooth`/`audio_control` (Komponenten +
 `client/src/api/localTls.ts`, eigener i18n-Namespace `de` + `en`), *meine
 Entscheidung* — das vorgebaute iframe-Bundle (`optical_drive`) hat keine i18n und
-keine Build-Pipeline. Einstellungsformular und Statuskarte; optional ein
+keine Build-Pipeline. Die Einstellungen selbst laufen über das generische
+Plugin-Formular; die eigene UI zeigt die Statuskarte, das Token-Feld (nur
+schreibend) und die Knöpfe „Jetzt erneuern“ / „DNS jetzt aktualisieren“; optional ein
 Dashboard-Panel/Status-Pill „Zertifikat gültig bis …“ (Builder entscheidet).
 
 ### Installation von lego
@@ -284,7 +296,7 @@ als Altlast markiert, nicht entfernt.
 
 ## Dem Umsetzer überlassen
 
-- Spalten der Tabelle `local_tls_config` im Einzelnen.
+- Spalten der Tabelle `local_tls_state` im Einzelnen.
 - Form der UI (eigene Seite vs. Einstellungs-Tab).
 - Ob ein Status-Pill/Dashboard-Panel dazukommt.
 - Wie die LAN-IP technisch ermittelt wird, solange ohne Root und ohne neue
