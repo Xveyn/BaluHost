@@ -165,3 +165,74 @@ def test_forget_clears_tokens():
     session = _session(_response(200))
     session.forget()
     assert tray_config.load_tokens() is None
+
+
+def test_refresh_sends_rotate_flag():
+    session = _session(_response(200, {"access_token": "new"}))
+    session.refresh_access()
+    session._client.post.assert_called_once()
+    assert session._client.post.call_args.kwargs["json"] == {
+        "refresh_token": "rt",
+        "rotate": True,
+    }
+
+
+def test_rotated_refresh_token_is_stored():
+    session = _session(
+        _response(200, {"access_token": "new", "refresh_token": "rt2"})
+    )
+    session.refresh_access()
+    assert tray_config.load_tokens() == tray_config.Tokens(access="new", refresh="rt2")
+
+
+def test_missing_refresh_token_keeps_the_old_one():
+    session = _session(
+        _response(200, {"access_token": "new", "refresh_token": None})
+    )
+    session.refresh_access()
+    assert tray_config.load_tokens() == tray_config.Tokens(access="new", refresh="rt")
+
+
+def test_concurrent_refreshes_are_serialized():
+    import threading
+    import time
+
+    state = {"active": 0, "max": 0, "sent": []}
+    guard = threading.Lock()
+
+    def _post(path, json=None):
+        with guard:
+            state["active"] += 1
+            state["max"] = max(state["max"], state["active"])
+            state["sent"].append(json["refresh_token"])
+        time.sleep(0.1)
+        with guard:
+            state["active"] -= 1
+        n = len(state["sent"])
+        return _response(200, {"access_token": f"a{n}", "refresh_token": f"rt{n}"})
+
+    session = Session("http://localhost:8000")
+    session._client = MagicMock()
+    session._client.post.side_effect = _post
+
+    threads = [threading.Thread(target=session.refresh_access) for _ in range(2)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert state["max"] == 1
+    assert state["sent"] == ["rt", "rt1"]
+
+
+def test_reload_picks_up_a_new_pairing():
+    session = _session(_response(200))
+    tray_config.save_tokens(tray_config.Tokens(access="fresh", refresh="r9"))
+    assert session.reload() is True
+    session._client.set_token.assert_called_with("fresh")
+    assert session.current_refresh_token() == "r9"
+
+    tray_config.clear_tokens()
+    assert session.reload() is False
+    session._client.clear_token.assert_called()
+    assert session.current_refresh_token() is None

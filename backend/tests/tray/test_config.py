@@ -72,3 +72,20 @@ def test_clear_removes_file_and_is_idempotent():
     tray_config.clear_tokens()
     assert not tray_config.TOKEN_FILE.exists()
     tray_config.clear_tokens()
+
+
+def test_save_tokens_is_atomic(monkeypatch):
+    """Scheitert das Ersetzen, bleibt die alte Datei lesbar und kein .tmp zurueck."""
+    tray_config.save_tokens(tray_config.Tokens(access="old", refresh="old-r"))
+
+    def _boom(src, dst):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(tray_config.os, "replace", _boom)
+    with pytest.raises(OSError):
+        tray_config.save_tokens(tray_config.Tokens(access="new", refresh="new-r"))
+
+    assert tray_config.load_tokens() == tray_config.Tokens(
+        access="old", refresh="old-r"
+    )
+    assert [p.name for p in tray_config.TOKEN_DIR.iterdir()] == ["tray-tokens.json"]

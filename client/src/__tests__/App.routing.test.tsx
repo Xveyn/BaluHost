@@ -118,6 +118,20 @@ describe('App routing mit Layout-Route', () => {
     expect(getStatusBarStateMock.mock.calls.length).toBe(fetchesBefore);
   });
 
+  it('eingeloggt + /login#handoff=abc → Login wird gerendert (kein Redirect)', async () => {
+    window.history.pushState({}, '', '/login#handoff=abc');
+    render(<AppRoutes />);
+    await screen.findByTestId('login-page');
+    expect(screen.queryByTestId('dashboard-page')).not.toBeInTheDocument();
+  });
+
+  it('eingeloggt + /login ohne Fragment → Redirect auf Dashboard', async () => {
+    window.history.pushState({}, '', '/login');
+    render(<AppRoutes />);
+    await screen.findByTestId('dashboard-page');
+    expect(screen.queryByTestId('login-page')).not.toBeInTheDocument();
+  });
+
   it('ausgeloggt → /login', async () => {
     authState.user = null;
     authState.isAdmin = false;

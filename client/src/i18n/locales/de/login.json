@@ -50,5 +50,10 @@
   "defaultCredentials": "Standard-Anmeldedaten",
   "systemStatus": "System-Status",
   "optimal": "Optimal",
-  "firmware": "Firmware"
+  "firmware": "Firmware",
+  "handoff": {
+    "failed": "Automatische Anmeldung fehlgeschlagen — bitte normal anmelden.",
+    "confirmTitle": "Konto wechseln?",
+    "confirmText": "Als {{username}} anmelden? Die aktuelle Sitzung von {{current}} wird beendet."
+  }
 }

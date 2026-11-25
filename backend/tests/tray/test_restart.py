@@ -551,3 +551,23 @@ def test_api_failure_names_the_units_that_did_restart_too():
     assert "baluhost-backend-local" in outcome.message
     assert "baluhost-scheduler" in outcome.message
     assert "baluhost-webdav" in outcome.message
+
+
+def test_account_facts_include_pin_state():
+    client = MagicMock()
+    client.get.side_effect = [
+        _response(200, {"role": "user"}),
+        _response(200, {"enabled": False}),
+        _response(200, {"pin_enabled": True}),
+    ]
+    assert restart.fetch_account_facts(client).pin_enabled is True
+
+
+def test_account_facts_pin_defaults_false_on_failure():
+    client = MagicMock()
+    client.get.side_effect = [
+        _response(200, {"role": "user"}),
+        _response(200, {"enabled": False}),
+        httpx.ConnectError("x"),
+    ]
+    assert restart.fetch_account_facts(client).pin_enabled is False

@@ -6,14 +6,20 @@ import logoMark from '../assets/baluhost-logo.png';
 import { localApi } from '../lib/localApi';
 import { buildApiUrl, isTauri } from '../lib/api';
 import { sanitizeTwoFactorCode, isTwoFactorCodeComplete } from '../lib/twoFactorCode';
-import { loginWithPin } from '../api/pin';
+import { loginWithPin, redeemHandoff } from '../api/pin';
+import { takeHandoffCode } from '../lib/sessionHandoff';
+import { useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import { ForgotPasswordForm } from '../components/auth/ForgotPasswordForm';
 import { useVersion } from '../contexts/VersionContext';
 import { DeveloperBadge } from '../components/ui/DeveloperBadge';
 import { useAuth } from '../contexts/AuthContext';
+import { useConfirmDialog } from '../hooks/useConfirmDialog';
 
 export default function Login() {
-  const { login } = useAuth();
+  const { login, user: currentUser } = useAuth();
+  const { confirm, dialog: confirmDialog } = useConfirmDialog();
+  const navigate = useNavigate();
   const { t } = useTranslation('login');
   const { version, loading: versionLoading } = useVersion();
   const [username, setUsername] = useState('');
@@ -36,6 +42,48 @@ export default function Login() {
   const [pinMode, setPinMode] = useState(false);
   const [pin, setPin] = useState('');
   const [forgotMode, setForgotMode] = useState(false);
+
+  // Tray-Handoff (#847): Code aus dem Fragment holen, Fragment sofort entfernen,
+  // dann einloesen. Der Ref verhindert ein zweites Einloesen bei StrictMode-
+  // Doppelmount (der Code ist einmalig); bewusst ohne Cleanup-Abbruch.
+  const handoffStarted = useRef(false);
+  useEffect(() => {
+    if (handoffStarted.current) return;
+    handoffStarted.current = true;
+    const code = takeHandoffCode(window.location, window.history);
+    if (!code) return;
+    setLoading(true);
+    redeemHandoff(code)
+      .then(async ({ user, access_token }) => {
+        // Login-CSRF: ein fremder Code darf eine bestehende Sitzung eines
+        // anderen Nutzers nicht ohne Rueckfrage ersetzen.
+        if (currentUser && currentUser.id !== user.id) {
+          const ok = await confirm(
+            t('handoff.confirmText', { username: user.username, current: currentUser.username }),
+            { title: t('handoff.confirmTitle'), variant: 'warning' },
+          );
+          if (!ok) {
+            navigate('/', { replace: true });
+            return;
+          }
+        }
+        login(user, access_token);
+        navigate('/', { replace: true });
+      })
+      .catch(() => {
+        // Mit bestehender Sitzung nicht auf der Login-Maske stranden: das
+        // Fragment ist per replaceState am Router vorbei entfernt, LoginRoute
+        // leitet deshalb nicht von selbst weiter.
+        if (currentUser) {
+          toast.error(t('handoff.failed'));
+          navigate('/', { replace: true });
+          return;
+        }
+        setError(t('handoff.failed'));
+      })
+      .finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Check if local backend is available on component mount
   useEffect(() => {
@@ -217,6 +265,8 @@ export default function Login() {
   };
 
   return (
+    <>
+    {confirmDialog}
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden text-slate-100">
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute -left-24 top-[-120px] h-[420px] w-[420px] rounded-full bg-sky-500/10 blur-3xl" />
@@ -439,5 +489,6 @@ export default function Login() {
         </div>
       </div>
     </div>
+    </>
   );
 }

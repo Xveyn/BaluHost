@@ -115,6 +115,93 @@ verify_mobile_device_token — Validates JWT + X-Device-ID header + device expir
   Fähigkeit „Backend neu starten" also auch ohne Step-up. Geschützt ist der
   *Sammel*neustart, nicht die Fähigkeit als solche.
 
+- **Tray-Auto-Login (Handoff) und Token-Rotation (#847).** „BaluHost öffnen"
+  im Tray meldet den Browser ohne Passwort an. Ablauf: das Tray schickt sein
+  Geräte-Refresh-Token an `POST /api/auth/handoff`, bekommt einen 30 s gültigen
+  Einmal-Code und öffnet `…/login#handoff=<code>`; die Web-UI löst ihn über
+  `POST /api/auth/handoff/redeem` gegen eine normale Sitzung ein
+  (`_issue_session_token`, also mit der `auth_policy`-Laufzeit).
+  - *Nachweis ist das Refresh-Token einer Desktop-/Geräte-Kopplung*, kein
+    Access-Token. Es zählt als **Benutzung** (Lazy-Revoke, siehe unten) und
+    wird vor der PIN-Prüfung verbraucht. Ein Token ohne `device_id` wird
+    abgelehnt (`session_handoff_failed`).
+  - *LAN-Gate nur beim Ausstellen* (`is_private_or_local_ip(request.client.host)`,
+    alle Rollen). Abgelehnt → `session_handoff_remote_denied`. Beim Einlösen
+    **bewusst kein** Gate: der Browser erreicht die Web-UI womöglich über eine
+    öffentliche `--web-url` per Hairpin-NAT und käme sonst nicht durch; der
+    Code ist ohnehin nur 30 s gültig und einmalig.
+  - *Code*: nur SHA-256 gespeichert (Spalte `token_hash`), Einlösen ist ein
+    einziges atomares `UPDATE` (auch über Worker hinweg einmalig). Codes landen
+    nie in Logs oder Audit-Einträgen.
+  - *PIN*: Hat das Konto eine PIN, ist sie Pflicht (bestehende Sperre,
+    unabhängig von `pin_login_enabled`); Fehlversuch → `session_handoff_pin_failed`.
+  - *Bewusst kein Passwort und kein 2FA* — vom Besitzer am 2026-11-25 so
+    entschieden. Vertrauensmodell: der Aufrufer sitzt auf der BaluHost-Maschine
+    selbst, hält eine Kopplung, die aus einer angemeldeten Sitzung heraus
+    freigegeben wurde, und die Desktop-Sitzung ist entsperrt. LAN-Gate und PIN
+    schützen den **Klick am Desktop**, nicht das Token: wer das Kopplungs-Token
+    stiehlt, holt sich über `POST /api/auth/refresh` von überall ein volles
+    Access-Token, ganz ohne LAN und PIN. Der Handoff gibt nichts her, was das
+    Token über `/auth/refresh` nicht ohnehin schon hat — er ist kein
+    zusätzlicher Schutz des Tokens, sondern nur kein zusätzliches Risiko.
+  - Audit: `session_handoff_issued`, `session_handoff_remote_denied`,
+    `session_handoff_failed`, `session_handoff_pin_failed`,
+    `session_handoff_redeemed`, `session_handoff_redeem_failed`.
+    Rate-Limits `auth_handoff` und `auth_handoff_redeem` (je 10/minute).
+  - *Web-UI* (`client/src/pages/Login.tsx`): der Code steht im URL-Fragment
+    (erscheint nie in Server-Logs) und wird vor dem Einlösen per
+    `history.replaceState` entfernt. Existiert eine Sitzung eines **anderen**
+    Kontos, verlangt die UI eine Bestätigung („Konto wechseln?") — Schutz gegen
+    Session-Swap per Login-CSRF; ohne Sitzung oder bei gleichem Konto läuft es
+    automatisch.
+  - **Rotation** (`services/refresh_rotation.py`): opt-in über `rotate: true`
+    in `/auth/refresh`, nur für Desktop-Kopplungen — es muss eine
+    `SyncState(user_id, device_id)`-Zeile geben **und** darf keine
+    `MobileDevice` mit dieser ID für den Nutzer existieren (Mobile-Tokens
+    behalten ihre vom Admin gesetzte Laufzeit). Rotiert wird nur in der zweiten
+    Hälfte von `REFRESH_TOKEN_EXPIRE_DAYS`. *Lazy Revoke*: der Vorgänger wird
+    erst beim ersten Gebrauch des Nachfolgers widerrufen (`rotated`); ein
+    unbenutzter Nachfolger wird bei erneuter Rotation `superseded`. Wer ein
+    `rotated`- **oder** `superseded`-Token vorlegt, löst Reuse-Erkennung aus:
+    alle Tokens dieses Nutzers für dieses Gerät werden widerrufen
+    (`reuse_detected`, Audit `refresh_token_reuse_detected`). Der Widerruf ist
+    immer auf `user_id` **und** `device_id` begrenzt, weil die `device_id`
+    clientseitig gewählt ist. Liefern zwei gleichzeitige Rotationen desselben
+    Vorgängers je einen Nachfolger, widerruft die erste Nutzung eines davon
+    die unbenutzten Geschwister als `superseded`.
+  - **Neukopplung widerruft die alte Kette:** Eine freigegebene Desktop-Kopplung
+    widerruft vor dem Ausstellen alle Tokens desselben Nutzers auf derselben
+    `device_id` (`repaired`, `services/desktop_pairing.py:_issue_tokens`). Das
+    Tray nimmt die machine-id als `device_id`, jedes `--pair` verwendet sie
+    wieder; mit gleitender Rotation lebte die alte Kette sonst ewig.
+  - **Nur Token-Fehler sind 401:** `/auth/refresh` und `/auth/handoff`
+    antworten 401 ausschließlich bei `RefreshTokenReused`/`RefreshTokenInvalid`.
+    Ein anderer Fehler (z. B. DB nicht erreichbar) endet als 5xx — das Tray
+    wertet 401 als Widerruf und vergisst seine Kopplung.
+  - **Desktop-Geräte sind widerrufbar:** `DELETE /api/devices/desktop/{device_id}`
+    (Besitzer oder Admin) widerruft die Tokens (`device_removed`), löscht die
+    `SyncState`-Zeile und schreibt `desktop_device_removed` ins Audit.
+  - **Akzeptierte Restrisiken** (hier statt in „Known Gaps", weil sie Teil des
+    Vertrags dieses Features sind): (1) *Lazy-Revoke-Lücke* — ein Dieb, der
+    das Token in der zweiten Lebenshälfte mit `rotate: true` vorlegt, bekommt
+    einen eigenen Nachfolger. Benutzt er ihn, wird das Token des Trays
+    `rotated`; rotiert stattdessen das Tray erneut, wird der Nachfolger des
+    Diebs `superseded`. Die Erkennung schlägt erst an, wenn die jeweils andere
+    Seite danach ihr nun `rotated`/`superseded` gewordenes Token vorlegt —
+    dann widerruft sie alle Tokens des Geräts; im ersten Fall ist das der
+    nächste Refresh des Trays. Bis dahin läuft die Sitzung des Diebs. Legt er
+    das Token nur ohne `rotate` vor (oder nur am Handoff), entsteht gar kein
+    Signal — er teilt sich die Kette dann unbemerkt mit dem Tray. (2) *Login-CSRF ohne bestehende Sitzung* braucht ein
+    eigenes gekoppeltes Gerät des Angreifers, LAN-Zugang und einen Klick des
+    Opfers innerhalb von 30 s. (3) Der Code steht bis zum Einlösen (~1 s) in
+    den Prozessargumenten des Browsers (`/proc/<pid>/cmdline`); ausnutzbar nur
+    mit einem zweiten lokalen Konto auf der Maschine — der Besitzer ist der
+    einzige Nutzer. (4) *Entfernen widerruft keine Access-Tokens:* nach
+    `DELETE /api/devices/desktop/{device_id}` (oder einer Neukopplung) bleibt
+    ein schon ausgestelltes Access-Token gültig, bis es abläuft — die
+    `auth_policy`-Laufzeit, höchstens 24 h (`MAX_TOKEN_MINUTES` = 1440). Es
+    gibt keine serverseitige Sperrliste für Access-Tokens.
+
 ### Password Policy (`schemas/auth.py:20-59`)
 - Length: 8-128 characters
 - Required: uppercase + lowercase + digit

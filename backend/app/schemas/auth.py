@@ -83,6 +83,8 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: UserPublic
+    # Nur von /auth/refresh gesetzt, und nur wenn rotiert wurde (#847).
+    refresh_token: str | None = None
 
 
 class ChangePasswordRequest(BaseModel):
@@ -123,6 +125,26 @@ class RecoveryResetRequest(BaseModel):
 
 class RefreshTokenRequest(BaseModel):
     refresh_token: str
+    # Opt-in: gleitende Rotation fuer Geraete-Tokens (Tray, #847).
+    # Bestehende Clients senden das Feld nicht und sehen keine Aenderung.
+    rotate: bool = False
+
+
+class HandoffRequest(BaseModel):
+    """Tray -> ``POST /auth/handoff``: Nachweis ist der Geraete-Refresh-Token (#847)."""
+    refresh_token: str
+    # Pflicht, wenn das Konto eine PIN hat; sonst ignoriert.
+    pin: str | None = None
+
+
+class HandoffResponse(BaseModel):
+    code: str
+    expires_in: int
+
+
+class HandoffRedeemRequest(BaseModel):
+    """Browser -> ``POST /auth/handoff/redeem``: der Code ist der Nachweis."""
+    code: str = Field(..., min_length=1, max_length=128)
 
 
 # --- 2FA Schemas ---

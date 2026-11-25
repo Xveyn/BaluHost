@@ -16,6 +16,7 @@ from baluhost_tray.loop import (
     LoopContext,
     deliver,
     is_gaming_active,
+    PAIRING_POLL_SECONDS,
     run_cycle,
     run_loop,
 )
@@ -406,10 +407,24 @@ class FakeClock:
         self.t += seconds
 
 
+class _EndOfScript(Exception):
+    """Beendet run_loop im Test: die Schleife wartet nun nach PairingLost,
+    statt zurueckzukehren. reload() wirft das, sobald die Wartephase beginnt."""
+
+
+async def _run(ctx: LoopContext) -> None:
+    try:
+        await asyncio.wait_for(run_loop(ctx), timeout=5)
+    except _EndOfScript:
+        pass
+
+
 def _loop_ctx(clock: FakeClock) -> tuple[LoopContext, list[IconState]]:
     seen: list[IconState] = []
+    session = MagicMock()
+    session.reload.side_effect = _EndOfScript
     ctx = LoopContext(
-        session=MagicMock(),
+        session=session,
         watcher=MagicMock(),
         state=TrayState(),
         queue=PopupQueue(),
@@ -467,7 +482,7 @@ async def test_pairing_lost_stops_the_loop_visibly(monkeypatch):
         loop_module, "run_cycle", _scripted_cycle(clock, [(0.0, PairingLost("revoked"))])
     )
 
-    await asyncio.wait_for(run_loop(ctx), timeout=5)
+    await _run(ctx)
 
     ctx.session.forget.assert_called_once()
     assert seen[-1] is IconState.OFFLINE
@@ -480,6 +495,84 @@ async def test_pairing_lost_stops_the_loop_visibly(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_pairing_lost_waits_and_resumes(monkeypatch):
+    """Nach Kopplungsverlust wartet die Schleife und verbindet nach --pair neu."""
+    clock = FakeClock()
+    ctx, seen = _loop_ctx(clock)
+    ctx.session.reload.side_effect = [False, True, _EndOfScript()]
+    on_paired = MagicMock()
+    ctx.on_paired = on_paired
+    cycle = _scripted_cycle(
+        clock, [(0.0, PairingLost("revoked")), (0.0, PairingLost("again"))]
+    )
+    monkeypatch.setattr(loop_module, "run_cycle", cycle)
+
+    await _run(ctx)
+
+    assert len(cycle.calls) == 2, "nach dem Koppeln muss neu verbunden werden"
+    on_paired.assert_called_once()
+    assert _delays(ctx) == [PAIRING_POLL_SECONDS]
+    assert cycle.calls[1]["forget_calls"] == 1
+    assert cycle.calls[1]["sleeps"] == 1
+
+
+@pytest.mark.asyncio
+async def test_start_without_tokens_waits_for_pairing(monkeypatch):
+    """Ohne Kopplung beim Start kein Verbindungsversuch, bis Tokens da sind."""
+    clock = FakeClock()
+    ctx, seen = _loop_ctx(clock)
+    ctx.session.current_refresh_token.return_value = None
+    ctx.session.reload.side_effect = [False, False, True, _EndOfScript()]
+    on_paired = MagicMock()
+    ctx.on_paired = on_paired
+    cycle = _scripted_cycle(clock, [(0.0, PairingLost("stop"))])
+    monkeypatch.setattr(loop_module, "run_cycle", cycle)
+
+    await _run(ctx)
+
+    assert _delays(ctx)[:2] == [PAIRING_POLL_SECONDS] * 2
+    assert cycle.calls[0]["sleeps"] == 2, "erst nach der Wartephase verbinden"
+    on_paired.assert_called_once()
+    ctx.session.forget.assert_called_once()   # nur durch das spaetere PairingLost
+
+
+@pytest.mark.asyncio
+async def test_on_paired_runs_off_the_event_loop(monkeypatch):
+    """on_paired macht blockierendes HTTP — nicht in der Schleife selbst."""
+    import threading
+
+    clock = FakeClock()
+    ctx, _ = _loop_ctx(clock)
+    ctx.session.reload.side_effect = [True, _EndOfScript()]
+    seen: list[int] = []
+    ctx.on_paired = lambda: seen.append(threading.get_ident())
+    cycle = _scripted_cycle(
+        clock, [(0.0, PairingLost("revoked")), (0.0, PairingLost("again"))]
+    )
+    monkeypatch.setattr(loop_module, "run_cycle", cycle)
+
+    await _run(ctx)
+
+    assert seen and seen[0] != threading.get_ident()
+
+
+@pytest.mark.asyncio
+async def test_failing_on_paired_is_not_fatal(monkeypatch):
+    clock = FakeClock()
+    ctx, _ = _loop_ctx(clock)
+    ctx.session.reload.side_effect = [True, _EndOfScript()]
+    ctx.on_paired = MagicMock(side_effect=RuntimeError("qt gone"))
+    cycle = _scripted_cycle(
+        clock, [(0.0, PairingLost("revoked")), (0.0, PairingLost("again"))]
+    )
+    monkeypatch.setattr(loop_module, "run_cycle", cycle)
+
+    await _run(ctx)
+
+    assert len(cycle.calls) == 2
+
+
+@pytest.mark.asyncio
 async def test_temporary_failure_backs_off_and_keeps_going(monkeypatch):
     """Ratelimit kostet einen Backoff — und *nur* das."""
     clock = FakeClock()
@@ -488,7 +581,7 @@ async def test_temporary_failure_backs_off_and_keeps_going(monkeypatch):
     cycle = _scripted_cycle(clock, script)
     monkeypatch.setattr(loop_module, "run_cycle", cycle)
 
-    await asyncio.wait_for(run_loop(ctx), timeout=5)
+    await _run(ctx)
 
     assert len(cycle.calls) == 4, "die Schleife muss weitergelaufen sein"
     # Vor jeder Folge-Runde genau ein Backoff, und nie ein forget() unterwegs.
@@ -512,7 +605,7 @@ async def test_auth_expired_refreshes_once_then_backs_off(monkeypatch):
     cycle = _scripted_cycle(clock, script)
     monkeypatch.setattr(loop_module, "run_cycle", cycle)
 
-    await asyncio.wait_for(run_loop(ctx), timeout=5)
+    await _run(ctx)
 
     assert ctx.session.refresh_access.call_count == 1
     assert ctx.sleep.await_count == 3, "jede weitere 401 muss einen Backoff kosten"
@@ -533,7 +626,7 @@ async def test_healthy_cycle_resets_the_backoff(monkeypatch):
     )
     monkeypatch.setattr(loop_module, "run_cycle", _scripted_cycle(clock, script))
 
-    await asyncio.wait_for(run_loop(ctx), timeout=5)
+    await _run(ctx)
 
     delays = _delays(ctx)
     assert len(delays) == 6
@@ -558,7 +651,7 @@ async def test_healthy_cycle_hands_back_the_refresh(monkeypatch):
     ]
     monkeypatch.setattr(loop_module, "run_cycle", _scripted_cycle(clock, script))
 
-    await asyncio.wait_for(run_loop(ctx), timeout=5)
+    await _run(ctx)
 
     assert ctx.session.refresh_access.call_count == 2
 
@@ -588,7 +681,7 @@ async def test_a_spent_refresh_comes_back_after_the_cooldown(monkeypatch):
     cycle = _scripted_cycle(clock, script)
     monkeypatch.setattr(loop_module, "run_cycle", cycle)
 
-    await asyncio.wait_for(run_loop(ctx), timeout=5)
+    await _run(ctx)
 
     assert ctx.session.refresh_access.call_count == 2
     # Und die Bremse bleibt eine Bremse: die zweite Runde lag innerhalb der
@@ -615,7 +708,7 @@ async def test_unexpected_refresh_failure_backs_off_instead_of_dying(monkeypatch
     cycle = _scripted_cycle(clock, script)
     monkeypatch.setattr(loop_module, "run_cycle", cycle)
 
-    await asyncio.wait_for(run_loop(ctx), timeout=5)
+    await _run(ctx)
 
     assert len(cycle.calls) == 3, "die Schleife muss weitergelaufen sein"
     assert ctx.sleep.await_count == 2, "jeder Fehlschlag muss einen Backoff kosten"
@@ -635,7 +728,7 @@ async def test_cancellation_still_gets_through(monkeypatch):
     )
 
     with pytest.raises(asyncio.CancelledError):
-        await asyncio.wait_for(run_loop(ctx), timeout=5)
+        await _run(ctx)
 
     ctx.session.forget.assert_not_called()
 
@@ -663,7 +756,7 @@ async def test_failing_sink_does_not_kill_the_loop(monkeypatch):
     cycle = _scripted_cycle(clock, script)
     monkeypatch.setattr(loop_module, "run_cycle", cycle)
 
-    await asyncio.wait_for(run_loop(ctx), timeout=5)
+    await _run(ctx)
 
     assert len(cycle.calls) == 3, "die Schleife muss weitergelaufen sein"
     assert ctx.sleep.await_count == 2
@@ -687,7 +780,7 @@ async def test_failing_forget_still_reports_the_lost_pairing(monkeypatch):
         loop_module, "run_cycle", _scripted_cycle(clock, [(0.0, PairingLost("revoked"))])
     )
 
-    await asyncio.wait_for(run_loop(ctx), timeout=5)
+    await _run(ctx)
 
     assert seen[-1] is IconState.OFFLINE
     assert ctx.notifier.show_summary.await_count == 1
@@ -711,7 +804,7 @@ async def test_slow_failure_before_the_connection_stands_does_not_reset(monkeypa
     )
     monkeypatch.setattr(loop_module, "run_cycle", _scripted_cycle(clock, script))
 
-    await asyncio.wait_for(run_loop(ctx), timeout=5)
+    await _run(ctx)
 
     delays = _delays(ctx)
     assert len(delays) == 5
@@ -948,6 +1041,7 @@ async def test_a_401_on_the_snapshot_reaches_the_refresh():
     ctx = _ctx(frames=[])
     ctx.session.client.return_value.get.return_value.status_code = 401
     ctx.session.refresh_access.side_effect = PairingLost("Schluss")
+    ctx.session.reload.side_effect = _EndOfScript
 
     rounds = 0
 
@@ -959,7 +1053,8 @@ async def test_a_401_on_the_snapshot_reaches_the_refresh():
 
     ctx.sleep = _sleep
 
-    await run_loop(ctx)
+    with pytest.raises(_EndOfScript):
+        await run_loop(ctx)
 
     assert ctx.session.refresh_access.call_count == 1, (
         "Der 401 des Abgleichs hat den Refresh nicht erreicht"

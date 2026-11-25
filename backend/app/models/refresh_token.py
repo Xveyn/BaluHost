@@ -43,6 +43,9 @@ class RefreshToken(Base):
         index=True
     )
 
+    # JTI des Vorgaengers bei Rotation (None = Erstausgabe)
+    parent_jti: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, index=True)
+
     # Optional device ID for mobile/desktop clients
     device_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
 

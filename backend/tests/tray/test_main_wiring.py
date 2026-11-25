@@ -46,14 +46,15 @@ def test_a_second_pairing_is_not_reported_as_a_running_tray(capsys):
     assert "Tray läuft bereits" not in out
 
 
-def test_missing_pairing_exits_zero_and_points_at_pair(capsys):
-    """Exit 0, nicht 2: mit Restart=on-failure wuerde systemd sonst alle zehn
-    Sekunden neu starten, bis die Unit auf failed steht."""
+def test_main_starts_tray_without_tokens():
+    """Ohne Kopplung startet die Qt-App trotzdem: sie wartet auf --pair und
+    zeigt das im Tooltip, statt sich zu beenden."""
     with patch("baluhost_tray.main.single_instance.acquire"), \
-         patch("baluhost_tray.main.tray_config.load_tokens", return_value=None):
+         patch("baluhost_tray.config.load_tokens", return_value=None), \
+         patch("baluhost_tray.main.start_qt_app", return_value=0) as start:
         code = tray_main.run(argv=[])
     assert code == 0
-    assert "--pair" in capsys.readouterr().out
+    assert start.called
 
 
 def test_pairing_does_not_take_the_tray_lock():
@@ -75,7 +76,7 @@ def test_no_session_bus_exits_with_hint(capsys):
     from baluhost_tray.notify import NotifierUnavailable
 
     with patch("baluhost_tray.main.single_instance.acquire"), \
-         patch("baluhost_tray.main.tray_config.load_tokens", return_value=object()), \
+         patch("baluhost_tray.config.load_tokens", return_value=object()), \
          patch("baluhost_tray.main.start_qt_app",
                side_effect=NotifierUnavailable("no bus")):
         code = tray_main.run(argv=[])
@@ -92,7 +93,7 @@ def test_unexpected_worker_failure_is_treated_as_transient(capsys):
     gestartet hat, fuer systemd sauber beendet.
     """
     with patch("baluhost_tray.main.single_instance.acquire"), \
-         patch("baluhost_tray.main.tray_config.load_tokens", return_value=object()), \
+         patch("baluhost_tray.config.load_tokens", return_value=object()), \
          patch("baluhost_tray.main.start_qt_app",
                side_effect=RuntimeError("bus went away")):
         code = tray_main.run(argv=[])
@@ -104,7 +105,7 @@ def test_unexpected_worker_failure_is_treated_as_transient(capsys):
 def test_a_missing_extra_is_permanent_not_transient(capsys):
     """PyQt6 installiert sich nicht durch Warten — kein Neustart-Karussell."""
     with patch("baluhost_tray.main.single_instance.acquire"), \
-         patch("baluhost_tray.main.tray_config.load_tokens", return_value=object()), \
+         patch("baluhost_tray.config.load_tokens", return_value=object()), \
          patch("baluhost_tray.main.start_qt_app",
                side_effect=ModuleNotFoundError(
                    "No module named 'PyQt6'", name="PyQt6")):
@@ -123,7 +124,7 @@ def test_an_importerror_from_the_worker_is_transient_not_a_missing_extra(capsys)
     Worker-Fehler EXIT_TRANSIENT, damit systemd es noch einmal versuchen darf.
     """
     with patch("baluhost_tray.main.single_instance.acquire"), \
-         patch("baluhost_tray.main.tray_config.load_tokens", return_value=object()), \
+         patch("baluhost_tray.config.load_tokens", return_value=object()), \
          patch("baluhost_tray.main.start_qt_app",
                side_effect=ImportError(
                    "cannot import name 'foo' from 'irgendwas'",
@@ -138,7 +139,7 @@ def test_an_importerror_from_the_worker_is_transient_not_a_missing_extra(capsys)
 def test_an_importerror_without_a_name_is_not_mistaken_for_the_extra(capsys):
     """ImportError.name darf None sein — dann ist es nicht das Extra."""
     with patch("baluhost_tray.main.single_instance.acquire"), \
-         patch("baluhost_tray.main.tray_config.load_tokens", return_value=object()), \
+         patch("baluhost_tray.config.load_tokens", return_value=object()), \
          patch("baluhost_tray.main.start_qt_app",
                side_effect=ImportError("irgendwas ging schief")):
         code = tray_main.run(argv=[])
@@ -148,7 +149,7 @@ def test_an_importerror_without_a_name_is_not_mistaken_for_the_extra(capsys):
 def test_pairing_runs_before_the_token_check():
     """Wer koppeln will, hat per Definition noch keine Token."""
     with patch("baluhost_tray.main.single_instance.acquire"), \
-         patch("baluhost_tray.main.tray_config.load_tokens", return_value=None), \
+         patch("baluhost_tray.config.load_tokens", return_value=None), \
          patch("baluhost_tray.main.run_pairing", return_value=0) as pair:
         code = tray_main.run(argv=["--pair"])
     assert code == 0
@@ -171,7 +172,7 @@ def test_both_urls_reach_the_qt_layer():
         return 0
 
     with patch("baluhost_tray.main.single_instance.acquire"), \
-         patch("baluhost_tray.main.tray_config.load_tokens", return_value=object()), \
+         patch("baluhost_tray.config.load_tokens", return_value=object()), \
          patch("baluhost_tray.main.start_qt_app", side_effect=_start):
         code = tray_main.run(
             argv=["--base-url", "http://box:8000", "--web-url", "https://box"]
@@ -206,7 +207,7 @@ def test_the_library_layer_does_not_configure_logging():
     Prozess besitzt, und das ist hier das Konsolenskript.
     """
     with patch("baluhost_tray.main.single_instance.acquire"), \
-         patch("baluhost_tray.main.tray_config.load_tokens", return_value=object()), \
+         patch("baluhost_tray.config.load_tokens", return_value=object()), \
          patch("baluhost_tray.main.start_qt_app", return_value=0), \
          patch("baluhost_tray.main.logging.basicConfig") as basic:
         tray_main.run(argv=[])

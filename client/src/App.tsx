@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useState, useEffect, lazy, Suspense } from 'react';
 import { AppLayout } from './components/layout/AppLayout';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -15,6 +15,7 @@ import { usePresenceHeartbeat } from './hooks/usePresenceHeartbeat';
 import { FEATURES, isDesktop } from './lib/features';
 import { LoadingFallback } from './components/ui/LoadingFallback';
 import logoMark from './assets/baluhost-logo.png';
+import { hasHandoffFragment } from './lib/sessionHandoff';
 import './App.css';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -134,6 +135,13 @@ function LoadingScreen({ backendReady, backendCheckAttempts }: { backendReady: b
   );
 }
 
+// Eingeloggte Nutzer werden von /login weggeleitet, ausser das Tray bringt einen
+// Handoff-Code mit: dann muss Login laufen und die Sitzung ersetzen (#847).
+function LoginRoute({ loggedIn }: { loggedIn: boolean }) {
+  const { hash } = useLocation();
+  return loggedIn && !hasHandoffFragment(hash) ? <Navigate to="/" /> : <Login />;
+}
+
 export function AppRoutes() {
   const { user, logout, loading, isAdmin } = useAuth();
 
@@ -169,7 +177,7 @@ export function AppRoutes() {
       <Routes>
         <Route
           path="/login"
-          element={user ? <Navigate to="/" /> : <Login />}
+          element={<LoginRoute loggedIn={!!user} />}
         />
 
         {/* `replace` is an intentional deviation from the original per-route guards,

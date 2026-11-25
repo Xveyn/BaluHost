@@ -32,6 +32,10 @@ RESNAPSHOT_SECONDS = 600.0
 # verhindert das Kreisen ohne sleep(); dass sie wieder aufgeht, verhindert den
 # Zustand ohne Ausweg — siehe run_loop.
 REFRESH_COOLDOWN_SECONDS = 300.0
+# Wie oft die Token-Datei nach einem Kopplungsverlust (oder ohne Kopplung beim
+# Start) neu gelesen wird. `baluhost-tray --pair` laeuft in einem anderen
+# Prozess; das Tray bemerkt es nur durch Nachsehen.
+PAIRING_POLL_SECONDS = 10.0
 
 
 def is_gaming_active(client) -> bool:
@@ -128,6 +132,9 @@ class LoopContext:
     now: Callable[[], float] = time.monotonic
     announcer: ConnectionAnnouncer = field(default_factory=ConnectionAnnouncer)
     quiet: QuietMode = field(default_factory=QuietMode)
+    # Wird aus dem Worker-Thread gerufen, sobald nach einer Wartephase wieder
+    # Tokens da sind. Darf nur Signale senden, keine Qt-Objekte anfassen.
+    on_paired: Callable[[], None] = lambda: None
 
     # When the current cycle's connection actually stood, or None if it never
     # got that far. run_cycle writes it, run_loop clears it before each round
@@ -288,7 +295,7 @@ async def _give_up_pairing(ctx: LoopContext) -> None:
     on disk. ws_token() can raise PairingLost without ever touching the
     store, so forgetting happens here rather than only in refresh_access().
     """
-    logger.warning("pairing lost — tray goes idle until re-paired")
+    logger.warning("pairing lost — tray waits until re-paired")
     try:
         await asyncio.to_thread(ctx.session.forget)
     except Exception:
@@ -311,13 +318,35 @@ async def _give_up_pairing(ctx: LoopContext) -> None:
         logger.debug("pairing notice failed: %s", exc)
 
 
+async def wait_for_pairing(ctx: LoopContext) -> None:
+    """Warten, bis wieder Tokens auf der Platte liegen (`--pair` in anderem Prozess).
+
+    Kein Neustart des Dienstes noetig: die Schleife liest die Datei alle
+    PAIRING_POLL_SECONDS neu. Ein Fehler in on_paired ist nicht fatal — die
+    Verbindung soll trotzdem aufgebaut werden.
+    """
+    ctx.state.set_paired(False)
+    ctx.state.set_connected(False)
+    _publish(ctx)
+    while not await asyncio.to_thread(ctx.session.reload):
+        await ctx.sleep(PAIRING_POLL_SECONDS)
+    ctx.state.set_paired(True)
+    try:
+        # on_paired macht blockierendes HTTP — nicht in der Schleife selbst.
+        await asyncio.to_thread(ctx.on_paired)
+    except Exception:
+        logger.exception("on_paired failed, carrying on")
+    _publish(ctx)
+
+
 async def run_loop(ctx: LoopContext) -> None:
     """Reconnect forever, with the failure classes kept apart.
 
     A 401 is worth one refresh and another try — one, counted, not "every
     time round". A rate limit or a server error is worth a backoff. Only a
-    lost pairing stops the loop — and even then it stops by going grey, not
-    by killing the thread silently.
+    lost pairing pauses the loop — it goes grey, says so, and waits for a new
+    pairing (wait_for_pairing) instead of ending. The same wait happens at
+    start when no tokens exist.
 
     The refresh brake reopens after REFRESH_COOLDOWN_SECONDS. A healthy cycle
     hands it back too, but a tray whose refreshed access token keeps getting
@@ -327,6 +356,9 @@ async def run_loop(ctx: LoopContext) -> None:
     """
     attempt = 0
     refreshed_at: float | None = None
+
+    if await asyncio.to_thread(ctx.session.current_refresh_token) is None:
+        await wait_for_pairing(ctx)
 
     while True:
         # run_cycle never returns normally — its inner loop has no break and
@@ -363,7 +395,10 @@ async def run_loop(ctx: LoopContext) -> None:
                     continue
                 except PairingLost:
                     await _give_up_pairing(ctx)
-                    return
+                    await wait_for_pairing(ctx)
+                    attempt = 0
+                    refreshed_at = None
+                    continue
                 except TemporaryFailure as exc:
                     logger.info("refresh temporarily unavailable: %s", exc)
                 except Exception:
@@ -382,7 +417,10 @@ async def run_loop(ctx: LoopContext) -> None:
                     logger.exception("unexpected failure while refreshing the access token")
         except PairingLost:
             await _give_up_pairing(ctx)
-            return
+            await wait_for_pairing(ctx)
+            attempt = 0
+            refreshed_at = None
+            continue
         except Exception as exc:
             logger.info("connection lost: %s", exc)
 

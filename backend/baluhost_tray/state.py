@@ -37,8 +37,8 @@ class TrayState:
     def set_paired(self, paired: bool) -> None:
         """Remember that the device was revoked.
 
-        One way only in practice: nothing re-pairs at runtime, that needs
-        `baluhost-tray --pair` and a restart of the service.
+        Back to True once wait_for_pairing sees new tokens (`--pair` ran in
+        another process); no restart of the service is needed.
         """
         self.paired = paired
 
@@ -93,7 +93,7 @@ class TrayState:
         the popup that said so is long gone by the time anyone hovers.
         """
         if not self.paired:
-            return "BaluHost — nicht gekoppelt: baluhost-tray --pair"
+            return "BaluHost — nicht gekoppelt. Einmalig ausführen: baluhost-tray --pair"
         if not self.connected:
             return "BaluHost — nicht erreichbar"
         count = self.unread_count()

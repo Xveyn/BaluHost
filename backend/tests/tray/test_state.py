@@ -211,3 +211,11 @@ def test_second_release_empty():
     released, summary = queue.release()
     assert released == []
     assert summary is None
+
+
+def test_tooltip_when_unpaired():
+    state = TrayState()
+    state.set_paired(False)
+    assert state.tooltip() == (
+        "BaluHost — nicht gekoppelt. Einmalig ausführen: baluhost-tray --pair"
+    )

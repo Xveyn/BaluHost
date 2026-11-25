@@ -220,7 +220,6 @@
     "deviceUpdated": "Device updated",
     "deviceDeleted": "Device deleted",
     "selectDevice": "Please select a device",
-    "desktopDeleteNotImplemented": "Desktop device deletion not yet implemented",
     "scheduleCreated": "Schedule created",
     "scheduleFailed": "Failed to create schedule",
     "scheduleDisabled": "Schedule disabled",

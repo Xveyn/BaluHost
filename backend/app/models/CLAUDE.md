@@ -12,7 +12,7 @@ SQLAlchemy 2.0 ORM models. All models inherit from `Base` (declarative base in `
 
 ## Model Groups
 
-**Auth & Users**: `user.py`, `refresh_token.py`, `api_key.py`, `desktop_pairing.py`, `auth_policy.py`
+**Auth & Users**: `user.py`, `refresh_token.py`, `api_key.py`, `desktop_pairing.py`, `auth_policy.py`, `session_handoff.py` (Einmal-Codes Tray → Web-UI, nur SHA-256 gespeichert, #847)
 
 **Files & Storage**: `file_metadata.py`, `file_share.py`, `file_activity.py`, `ssd_file_cache.py`, `migration_job.py`
 

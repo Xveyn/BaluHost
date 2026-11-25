@@ -7,6 +7,8 @@ half a minute and the tray would sign itself out.
 
 from __future__ import annotations
 
+import threading
+
 import httpx
 
 from baluhost_tray import config as tray_config
@@ -37,6 +39,8 @@ class Session:
         # resolve_transport() falls back to /run/baluhost/local.sock — the
         # companion channel this design deliberately does not use.
         self._client = BackendClient(server=self._base_url)
+        # RLock: spaetere Aufrufer halten ihn schon, wenn sie refreshen.
+        self._lock = threading.RLock()
         if tokens:
             self._client.set_token(tokens.access)
 
@@ -71,47 +75,68 @@ class Session:
             raise PairingLost(f"ws-token refused: {code}")
         raise TemporaryFailure(f"ws-token unavailable: {code}")
 
+    def reload(self) -> bool:
+        """Re-read the token file (e.g. after a new pairing); True if tokens exist."""
+        with self._lock:
+            tokens = tray_config.load_tokens()
+            if tokens:
+                self._client.set_token(tokens.access)
+                return True
+            self._client.clear_token()
+            return False
+
+    def current_refresh_token(self) -> str | None:
+        with self._lock:
+            tokens = tray_config.load_tokens()
+            return tokens.refresh if tokens else None
+
     def refresh_access(self) -> None:
         """Exchange the refresh token for a fresh access token.
 
-        The server does not rotate the refresh token (see TokenResponse), so
-        the stored one is kept. Only 401 and 403 mean the pairing is gone;
+        Sends rotate=true: in the second half of its lifetime the server
+        answers with a new refresh token, which is stored atomically. The old
+        one stays valid until the new one is first used, so a failed save
+        loses nothing. Without a new token the stored one is kept. Runs under
+        a lock and reads the tokens fresh from disk, so a second caller uses
+        what the first one just saved. Only 401 and 403 mean the pairing is gone;
         everything else is temporary and must not delete credentials.
 
         The old `if code != 200: forget()` was far wider than the spec ("a
         refresh rejected with 401"): a 404 from a proxy that does not pass the
         path through, or a 422 after a schema change, wiped
-        ~/.baluhost/tray-tokens.json. That same file is the unit's
-        ConditionPathExists, so the next start reports "condition failed" and
-        it looks as though the tray had never been set up — recoverable only
-        by a human running --pair again.
+        ~/.baluhost/tray-tokens.json. Losing that file drops the tray
+        into the pairing wait — recoverable only by a human running --pair
+        again.
         """
-        tokens = tray_config.load_tokens()
-        if not tokens:
-            raise PairingLost("no tokens stored")
+        with self._lock:
+            tokens = tray_config.load_tokens()
+            if not tokens:
+                raise PairingLost("no tokens stored")
 
-        try:
-            response = self._client.post(
-                REFRESH_PATH, json={"refresh_token": tokens.refresh}
+            try:
+                response = self._client.post(
+                    REFRESH_PATH,
+                    json={"refresh_token": tokens.refresh, "rotate": True},
+                )
+            except httpx.HTTPError as exc:
+                raise TemporaryFailure(f"refresh unavailable: {exc}") from exc
+            code = response.status_code
+
+            if code in (401, 403):
+                self.forget()
+                raise PairingLost(f"refresh refused: {code}")
+            if code != 200:
+                raise TemporaryFailure(f"refresh unavailable: {code}")
+
+            data = response.json()
+            new_tokens = tray_config.Tokens(
+                access=data["access_token"],
+                refresh=data.get("refresh_token") or tokens.refresh,
             )
-        except httpx.HTTPError as exc:
-            raise TemporaryFailure(f"refresh unavailable: {exc}") from exc
-        code = response.status_code
-
-        if code in (401, 403):
-            self.forget()
-            raise PairingLost(f"refresh refused: {code}")
-        if code != 200:
-            raise TemporaryFailure(f"refresh unavailable: {code}")
-
-        data = response.json()
-        new_tokens = tray_config.Tokens(
-            access=data["access_token"],
-            refresh=tokens.refresh,
-        )
-        tray_config.save_tokens(new_tokens)
-        self._client.set_token(new_tokens.access)
+            tray_config.save_tokens(new_tokens)
+            self._client.set_token(new_tokens.access)
 
     def forget(self) -> None:
-        tray_config.clear_tokens()
-        self._client.clear_token()
+        with self._lock:
+            tray_config.clear_tokens()
+            self._client.clear_token()

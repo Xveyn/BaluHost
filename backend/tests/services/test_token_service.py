@@ -146,6 +146,20 @@ class TestRevokeDeviceTokens:
     def test_returns_zero_for_unknown_device(self, db_session: Session):
         assert TokenService.revoke_device_tokens(db_session, "no-device") == 0
 
+    def test_user_scope_leaves_other_users_alone(
+        self, db_session: Session, regular_user: User, another_user: User
+    ):
+        mine = _store_token(db_session, regular_user.id, device_id="3")
+        theirs = _store_token(db_session, another_user.id, device_id="3")
+
+        count = TokenService.revoke_device_tokens(
+            db_session, "3", user_id=regular_user.id, reason="reuse_detected"
+        )
+
+        assert count == 1
+        assert TokenService.get_token_by_jti(db_session, mine).revoked is True
+        assert TokenService.get_token_by_jti(db_session, theirs).revoked is False
+
 
 class TestUpdateTokenUsage:
     def test_updates_timestamp_and_ip(self, db_session: Session, regular_user: User):
@@ -222,3 +236,40 @@ class TestVerifyTokenOwnership:
 
     def test_returns_false_for_unknown_token(self, db_session: Session):
         assert TokenService.verify_token_ownership(db_session, "unknown", 1) is False
+
+
+class TestCommitFreeVariants:
+    def test_store_refresh_token_keeps_parent_jti(self, db_session: Session, regular_user: User):
+        jti = _store_token(db_session, regular_user.id, parent_jti="p-1")
+        assert TokenService.get_token_by_jti(db_session, jti).parent_jti == "p-1"
+
+    def test_store_without_commit_is_rolled_back_with_the_session(
+        self, db_session: Session, regular_user: User
+    ):
+        jti = _make_jti()
+        TokenService.store_refresh_token(
+            db_session,
+            jti=jti,
+            user_id=regular_user.id,
+            token="t",
+            expires_at=_future(),
+            commit=False,
+        )
+        db_session.rollback()
+        assert TokenService.get_token_by_jti(db_session, jti) is None
+
+    def test_revoke_without_commit_is_rolled_back_with_the_session(
+        self, db_session: Session, regular_user: User
+    ):
+        jti = _store_token(db_session, regular_user.id)
+        assert TokenService.revoke_token(db_session, jti, reason="x", commit=False) is True
+        db_session.rollback()
+        assert TokenService.get_token_by_jti(db_session, jti).revoked is False
+
+    def test_revoke_device_tokens_without_commit_is_rolled_back(
+        self, db_session: Session, regular_user: User
+    ):
+        jti = _store_token(db_session, regular_user.id, device_id="dev-x")
+        assert TokenService.revoke_device_tokens(db_session, "dev-x", reason="x", commit=False) == 1
+        db_session.rollback()
+        assert TokenService.get_token_by_jti(db_session, jti).revoked is False

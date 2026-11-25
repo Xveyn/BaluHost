@@ -8,10 +8,12 @@ from app.core.database import get_db
 from app.api.deps import get_current_user
 from app.core.rate_limiter import user_limiter, get_limit
 from app.schemas.user import UserPublic
+from app.services.audit.logger_db import get_audit_logger_db
 from app.services.mobile import (
     list_all_devices,
     update_mobile_device_name as svc_update_mobile_name,
     update_desktop_device_name as svc_update_desktop_name,
+    remove_desktop_device as svc_remove_desktop_device,
 )
 
 router = APIRouter(prefix="/devices", tags=["devices"])
@@ -98,3 +100,39 @@ async def update_desktop_device_name(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
 
     return result
+
+
+@router.delete("/desktop/{device_id}", status_code=status.HTTP_204_NO_CONTENT)
+@user_limiter.limit(get_limit("admin_operations"))
+async def remove_desktop_device(
+    request: Request, response: Response,
+    device_id: str,
+    db: Session = Depends(get_db),
+    current_user: UserPublic = Depends(get_current_user)
+):
+    """
+    Remove a desktop sync device and revoke its pairing (refresh tokens).
+
+    Users can only remove their own devices. Admins can remove any device.
+    """
+    try:
+        result = svc_remove_desktop_device(
+            db, device_id, current_user.id, current_user.role == "admin"
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+
+    if result is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
+
+    get_audit_logger_db().log_security_event(
+        action="desktop_device_removed",
+        user=current_user.username,
+        resource=device_id,
+        details={"user": current_user.username, "device_id": device_id},
+        success=True,
+        ip_address=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent"),
+        db=db,
+    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

@@ -112,6 +112,8 @@ class RateLimitConfigService:
             ("vpn_operations", "10/minute", "VPN configuration operations"),
             ("auth_password_change", "5/minute", "Password change endpoint"),
             ("auth_refresh", "10/minute", "Token refresh endpoint"),
+            ("auth_handoff", "10/minute", "Tray session handoff code issue"),
+            ("auth_handoff_redeem", "10/minute", "Session handoff code redeem (public)"),
             ("file_write", "30/minute", "File write operations (rename, move, mkdir)"),
             ("file_chunked", "1000/minute", "Chunked upload operations"),
             ("backup_operations", "10/minute", "Backup create/restore operations"),

@@ -94,6 +94,8 @@ All API routes are prefixed with `/api`:
 - `/api/users/*` - User management (admin only)
 - `/api/system/*` - System info, RAID, SMART, telemetry
 - `/api/system/restart-all` - Sammelneustart aller BaluHost-Units (Admin, lokales Netz **und** Step-up, keine API-Keys — siehe `security-agent.md`)
+- `/api/auth/handoff`, `/api/auth/handoff/redeem` - Tray-Auto-Login per 30-s-Einmal-Code (Ausstellen nur aus privaten Netzen, PIN Pflicht falls gesetzt — siehe `security-agent.md`)
+- `DELETE /api/devices/desktop/{device_id}` - Desktop-Kopplung widerrufen (Besitzer oder Admin)
 - `/api/logging/*` - Audit logs
 - `/api/shares/*` - File sharing
 - `/api/backup/*` - Backup/restore

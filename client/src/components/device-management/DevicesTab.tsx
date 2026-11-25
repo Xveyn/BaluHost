@@ -146,6 +146,7 @@ export function DevicesTab({
                     device={device}
                     colorTheme="emerald"
                     onEdit={onEdit}
+                    onDelete={onDelete}
                   />
                 ))}
               </div>

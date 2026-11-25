@@ -20,6 +20,7 @@ import httpx
 HEALTH_PATH = "/api/health"
 ME_PATH = "/api/auth/me"
 TOTP_STATUS_PATH = "/api/auth/2fa/status"
+PIN_STATUS_PATH = "/api/auth/pin"
 RESTART_ALL_PATH = "/api/system/restart-all"
 
 # Long enough that a busy backend still counts as alive, short enough that the
@@ -56,6 +57,7 @@ class AccountFacts:
 
     is_admin: bool | None
     totp_enabled: bool
+    pin_enabled: bool = False
 
 
 _UNKNOWN = AccountFacts(is_admin=None, totp_enabled=False)
@@ -123,7 +125,17 @@ def fetch_account_facts(
         # carries `totp_required` anyway.
         pass
 
-    return AccountFacts(is_admin=is_admin, totp_enabled=totp_enabled)
+    pin_enabled = False
+    try:
+        pin_response = client.get(PIN_STATUS_PATH, timeout=PROBE_TIMEOUT)
+        if pin_response.status_code == 200:
+            pin_enabled = bool(pin_response.json().get("pin_enabled"))
+    except Exception:       # noqa: BLE001 — fehlt der Stand, fragt das Backend selbst (pin_required)
+        pass
+
+    return AccountFacts(
+        is_admin=is_admin, totp_enabled=totp_enabled, pin_enabled=pin_enabled
+    )
 
 
 def menu_visible(is_admin: bool | None, api_reachable: bool) -> bool:
