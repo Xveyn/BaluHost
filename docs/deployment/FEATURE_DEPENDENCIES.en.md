@@ -61,7 +61,7 @@ sudo /opt/baluhost/deploy/install/install.sh --module 14-optional-features
 ```
 
 Available flags: `ENABLE_RAID`, `ENABLE_SMART`, `ENABLE_VPN`, `ENABLE_CLOUD`,
-`ENABLE_SAMBA`, `ENABLE_NFS`, `ENABLE_WSDD`, `ENABLE_MDNS`. Unset = `false`.
+`ENABLE_SAMBA`, `ENABLE_NFS`, `ENABLE_WSDD`, `ENABLE_MDNS`, `ENABLE_LEGO` (lego for the `local_tls` plugin). Unset = `false`.
 
 ### Manual alternative
 

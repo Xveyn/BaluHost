@@ -14,7 +14,7 @@ set -euo pipefail
 FEATURES_DEPLOY_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 # Ordered feature keys — drives iteration, prompts, and the docs matrix.
-FEATURE_KEYS=(RAID SMART VPN CLOUD SAMBA NFS WSDD MDNS)
+FEATURE_KEYS=(RAID SMART VPN CLOUD SAMBA NFS WSDD MDNS LEGO)
 
 # Human-readable label for prompts and the summary report.
 feature_label() {
@@ -27,6 +27,7 @@ feature_label() {
         NFS)   echo "NFS file sharing";;
         WSDD)  echo "Windows network discovery (WS-Discovery)";;
         MDNS)  echo "mDNS / Bonjour hostname (avahi)";;
+        LEGO)  echo "Local TLS certificate client (lego, trixie-backports)";;
         *)     echo "$1";;
     esac
 }
@@ -123,6 +124,10 @@ feature_setup() {
             ;;
         MDNS)
             _run_script "$FEATURES_DEPLOY_DIR/scripts/install-avahi.sh"
+            ;;
+        LEGO)
+            # Optional: only for the local_tls plugin (needs lego >= 4.35).
+            _run_script "$FEATURES_DEPLOY_DIR/scripts/install-lego.sh"
             ;;
         *)
             log_error "Unknown feature: $1"

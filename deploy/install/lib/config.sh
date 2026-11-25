@@ -51,6 +51,7 @@ unset _balu_dir_owner _balu_dir_group
 : "${ENABLE_NFS:=false}"
 : "${ENABLE_WSDD:=false}"
 : "${ENABLE_MDNS:=false}"
+: "${ENABLE_LEGO:=false}"
 
 # ─── Load Config ─────────────────────────────────────────────────────
 
@@ -87,7 +88,7 @@ save_config() {
         SECRET_KEY TOKEN_SECRET VPN_ENCRYPTION_KEY CLOUD_ENCRYPTION_KEY TOTP_ENCRYPTION_KEY
         GIT_REPO GIT_BRANCH
         ENABLE_RAID ENABLE_SMART ENABLE_VPN ENABLE_CLOUD
-        ENABLE_SAMBA ENABLE_NFS ENABLE_WSDD ENABLE_MDNS
+        ENABLE_SAMBA ENABLE_NFS ENABLE_WSDD ENABLE_MDNS ENABLE_LEGO
     )
 
     # Write to a temp file and move into place: an interrupted write must not
