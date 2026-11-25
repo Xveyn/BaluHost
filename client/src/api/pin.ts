@@ -80,3 +80,25 @@ export async function getSessionPolicy(): Promise<SessionPolicy> {
   const res = await apiClient.get<SessionPolicy>('/api/auth/session-policy');
   return res.data;
 }
+
+/**
+ * Redeem the one-time handoff code from the desktop tray (#847). Public
+ * endpoint; any failure is a generic 401, so the caller shows one message.
+ */
+export async function redeemHandoff(
+  code: string,
+): Promise<{ access_token: string; user: User }> {
+  const res = await fetch(buildApiUrl('/api/auth/handoff/redeem'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code }),
+  });
+  const data = (await res.json().catch(() => ({}))) as {
+    access_token?: string;
+    user?: User;
+  };
+  if (!res.ok || typeof data.access_token !== 'string' || !data.user) {
+    throw new Error(`Handoff failed (${res.status})`);
+  }
+  return { access_token: data.access_token, user: data.user };
+}

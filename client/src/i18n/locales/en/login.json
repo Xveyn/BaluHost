@@ -50,5 +50,8 @@
   "defaultCredentials": "Default credentials",
   "systemStatus": "System Status",
   "optimal": "Optimal",
-  "firmware": "Firmware"
+  "firmware": "Firmware",
+  "handoff": {
+    "failed": "Automatic sign-in failed — please sign in normally."
+  }
 }

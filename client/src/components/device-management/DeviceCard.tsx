@@ -67,7 +67,7 @@ export function DeviceCard({ device, colorTheme, onEdit, onDelete }: DeviceCardP
             <button
               onClick={() => onDelete(device)}
               className="rounded-lg border border-rose-500/30 bg-rose-500/10 p-2 text-rose-200 transition hover:border-rose-500/50 hover:bg-rose-500/20"
-              title="Delete device"
+              title={device.type === 'desktop' ? t('remove') : 'Delete device'}
             >
               <Trash2 className="h-4 w-4" />
             </button>

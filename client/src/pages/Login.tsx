@@ -6,7 +6,9 @@ import logoMark from '../assets/baluhost-logo.png';
 import { localApi } from '../lib/localApi';
 import { buildApiUrl, isTauri } from '../lib/api';
 import { sanitizeTwoFactorCode, isTwoFactorCodeComplete } from '../lib/twoFactorCode';
-import { loginWithPin } from '../api/pin';
+import { loginWithPin, redeemHandoff } from '../api/pin';
+import { takeHandoffCode } from '../lib/sessionHandoff';
+import { useNavigate } from 'react-router-dom';
 import { ForgotPasswordForm } from '../components/auth/ForgotPasswordForm';
 import { useVersion } from '../contexts/VersionContext';
 import { DeveloperBadge } from '../components/ui/DeveloperBadge';
@@ -14,6 +16,7 @@ import { useAuth } from '../contexts/AuthContext';
 
 export default function Login() {
   const { login } = useAuth();
+  const navigate = useNavigate();
   const { t } = useTranslation('login');
   const { version, loading: versionLoading } = useVersion();
   const [username, setUsername] = useState('');
@@ -36,6 +39,26 @@ export default function Login() {
   const [pinMode, setPinMode] = useState(false);
   const [pin, setPin] = useState('');
   const [forgotMode, setForgotMode] = useState(false);
+
+  // Tray-Handoff (#847): Code aus dem Fragment holen, Fragment sofort entfernen,
+  // dann einloesen. Der Ref verhindert ein zweites Einloesen bei StrictMode-
+  // Doppelmount (der Code ist einmalig); bewusst ohne Cleanup-Abbruch.
+  const handoffStarted = useRef(false);
+  useEffect(() => {
+    if (handoffStarted.current) return;
+    handoffStarted.current = true;
+    const code = takeHandoffCode(window.location, window.history);
+    if (!code) return;
+    setLoading(true);
+    redeemHandoff(code)
+      .then(({ user, access_token }) => {
+        login(user, access_token);
+        navigate('/', { replace: true });
+      })
+      .catch(() => setError(t('handoff.failed')))
+      .finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Check if local backend is available on component mount
   useEffect(() => {

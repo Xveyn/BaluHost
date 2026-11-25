@@ -200,5 +200,8 @@
     "running": "Importiere…",
     "errorTitle": "Import fehlgeschlagen",
     "resultSummary": "{{inserted}} Samples geschrieben. {{skippedIdempotent}} bereits importiert, {{skippedLive}} wegen Live-Daten übersprungen, {{deletedLive}} Live-Samples gelöscht."
-  }
+  },
+  "remove": "Entfernen",
+  "removeConfirmTitle": "Desktop-Gerät entfernen",
+  "removeConfirmText": "{{name}} entfernen? Die Kopplung wird widerrufen, das Gerät muss neu gekoppelt werden."
 }

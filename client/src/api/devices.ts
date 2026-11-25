@@ -55,6 +55,13 @@ export async function deleteMobileDevice(deviceId: string): Promise<void> {
   await apiClient.delete(`/api/mobile/devices/${deviceId}`);
 }
 
+/**
+ * Remove desktop device (revokes its pairing)
+ */
+export async function removeDesktopDevice(deviceId: string): Promise<void> {
+  await apiClient.delete(`/api/devices/desktop/${deviceId}`);
+}
+
 // ---------------------------------------------------------------------------
 // Desktop Pairing (Device Code Flow)
 // ---------------------------------------------------------------------------

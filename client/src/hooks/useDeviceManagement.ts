@@ -10,6 +10,7 @@ import {
   updateMobileDeviceName,
   updateDesktopDeviceName,
   deleteMobileDevice,
+  removeDesktopDevice,
   type Device,
 } from '../api/devices';
 import {
@@ -216,20 +217,27 @@ export function useDeviceManagement() {
 
   const handleDeleteDevice = useCallback(
     async (device: Device) => {
+      const isDesktop = device.type === 'desktop';
       const confirmed = await confirm(
-        t('modal.deleteConfirm', { name: device.name }),
-        { title: t('modal.deleteTitle'), variant: 'danger', confirmLabel: t('buttons.delete'), cancelLabel: t('buttons.cancel') },
+        isDesktop
+          ? t('removeConfirmText', { name: device.name })
+          : t('modal.deleteConfirm', { name: device.name }),
+        {
+          title: isDesktop ? t('removeConfirmTitle') : t('modal.deleteTitle'),
+          variant: 'danger',
+          confirmLabel: isDesktop ? t('remove') : t('buttons.delete'),
+          cancelLabel: t('buttons.cancel'),
+        },
       );
       if (!confirmed) return;
 
       try {
-        if (device.type === 'mobile') {
-          await deleteMobileDevice(device.id);
-          toast.success(t('common:toast.deviceDeleted'));
+        if (isDesktop) {
+          await removeDesktopDevice(device.id);
         } else {
-          toast.error(t('common:toast.desktopDeleteNotImplemented'));
-          return;
+          await deleteMobileDevice(device.id);
         }
+        toast.success(t('common:toast.deviceDeleted'));
         refetchDevices();
       } catch {
         toast.error(t('common:toast.deleteFailed'));

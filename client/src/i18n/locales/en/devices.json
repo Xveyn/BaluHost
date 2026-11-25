@@ -200,5 +200,8 @@
     "running": "Importing…",
     "errorTitle": "Import failed",
     "resultSummary": "{{inserted}} samples inserted. {{skippedIdempotent}} already imported, {{skippedLive}} skipped due to live data, {{deletedLive}} live samples deleted."
-  }
+  },
+  "remove": "Remove",
+  "removeConfirmTitle": "Remove desktop device",
+  "removeConfirmText": "Remove {{name}}? Its pairing is revoked and it must be paired again to access BaluHost."
 }

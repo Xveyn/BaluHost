@@ -3,6 +3,7 @@ import { renderHook, waitFor, act } from '@testing-library/react';
 import { createQueryWrapper } from '../helpers/queryClient';
 import { useDeviceManagement } from '../../hooks/useDeviceManagement';
 import type { Device } from '../../api/devices';
+import { removeDesktopDevice } from '../../api/devices';
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -32,6 +33,7 @@ vi.mock('../../api/devices', () => ({
   updateMobileDeviceName: vi.fn(),
   updateDesktopDeviceName: vi.fn(),
   deleteMobileDevice: vi.fn(),
+  removeDesktopDevice: vi.fn(),
 }));
 
 vi.mock('../../api/sync', () => ({
@@ -109,6 +111,24 @@ describe('useDeviceManagement', () => {
     });
 
     expect(updateDesktopDeviceName).toHaveBeenCalledWith('2', 'Work MacBook');
+  });
+
+  it('handleDeleteDevice entfernt ein Desktop-Geraet nach Bestaetigung', async () => {
+    vi.mocked(removeDesktopDevice).mockResolvedValue(undefined as any);
+    const { result } = renderHook(() => useDeviceManagement(), { wrapper: createQueryWrapper() });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    let p: Promise<void> | undefined;
+    act(() => {
+      p = result.current.handleDeleteDevice(mockDevices[1]);
+    });
+    // ConfirmDialog ist ein React-Element; Bestaetigung ueber dessen Props
+    await waitFor(() => expect((result.current.confirmDialog as any).props.open).toBe(true));
+    await act(async () => {
+      (result.current.confirmDialog as any).props.onConfirm();
+      await p;
+    });
+    expect(removeDesktopDevice).toHaveBeenCalledWith('2');
   });
 
   it('handleSaveDeviceName rejects empty name', async () => {
