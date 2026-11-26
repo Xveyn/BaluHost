@@ -528,7 +528,7 @@ async def restart_all_services(
 
 @router.get("/smart/status", response_model=SmartStatusResponse)
 @user_limiter.limit(get_limit("system_monitor"))
-async def get_smart_status(request: Request, response: Response, _: UserPublic = Depends(deps.get_current_user)) -> SmartStatusResponse:
+def get_smart_status(request: Request, response: Response, _: UserPublic = Depends(deps.get_current_user)) -> SmartStatusResponse:
     return smart_service.get_smart_status()
 
 

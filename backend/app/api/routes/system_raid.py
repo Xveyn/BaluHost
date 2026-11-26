@@ -269,7 +269,7 @@ async def delete_array(
 
 @router.get("/health", response_model=SystemHealthResponse)
 @user_limiter.limit(get_limit("system_monitor"))
-async def get_system_health(request: Request, response: Response, _: UserPublic = Depends(deps.get_current_user)) -> SystemHealthResponse:
+def get_system_health(request: Request, response: Response, _: UserPublic = Depends(deps.get_current_user)) -> SystemHealthResponse:
     """Aggregated health summary combining system, SMART, RAID and disk I/O info."""
     from app.services import disk_monitor
 
