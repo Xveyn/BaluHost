@@ -6,20 +6,24 @@ from typing import Optional
 
 from app.core.config import settings
 from app.services.hardware import smart as smart_service
-from app.services import system as system_service
 
 logger = logging.getLogger(__name__)
 
 _health_task: Optional[asyncio.Task] = None
 
 
+def run_health_checks() -> None:
+    """One health check pass (blocking: smartctl). Never raises."""
+    try:
+        smart_service.get_smart_status()
+    except Exception as exc:
+        logger.debug("Health check iteration failed: %s", exc)
+
+
 async def _health_check_loop(interval_seconds: int) -> None:
     while True:
-        try:
-            system_service.get_system_info()
-            smart_service.get_smart_status()
-        except Exception as exc:  # pragma: no cover - diagnostics logging only
-            logger.debug("Health check iteration failed: %s", exc)
+        # Blocking smartctl calls: keep them off the event loop (#872).
+        await asyncio.to_thread(run_health_checks)
         await asyncio.sleep(interval_seconds)
 
 

@@ -264,6 +264,7 @@ _SYNC_SUBPROCESS_HELPERS = {
     },
     "services/benchmark/lifecycle.py": {"kill_orphan_fio_processes"},
     "core/lifespan.py": {"kill_orphan_fio_processes"},
+    "services/jobs.py": {"get_smart_status", "get_system_info"},
 }
 
 
