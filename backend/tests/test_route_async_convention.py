@@ -13,7 +13,9 @@ from pathlib import Path
 APP_DIR = Path(__file__).resolve().parents[1] / "app"
 ALLOWLIST_PATH = Path(__file__).resolve().parent / "fixtures" / "async_db_route_allowlist.txt"
 
-_ROUTE_METHODS = {"get", "post", "put", "delete", "patch", "api_route"}
+MAX_ALLOWLIST_ENTRIES = 291
+
+_ROUTE_METHODS ={"get", "post", "put", "delete", "patch", "api_route"}
 _OWN_AWAIT_TYPES = (ast.Await, ast.AsyncWith, ast.AsyncFor)
 _SCOPE_BOUNDARIES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)
 
@@ -49,6 +51,8 @@ def _has_own_await(fn: ast.AST) -> bool:
         node = stack.pop()
         if isinstance(node, _OWN_AWAIT_TYPES):
             return True
+        if isinstance(node, ast.comprehension) and node.is_async:
+            return True
         if isinstance(node, _SCOPE_BOUNDARIES):
             continue
         stack.extend(ast.iter_child_nodes(node))
@@ -68,22 +72,19 @@ def find_awaitless_async_db_handlers(source: str, rel: str) -> list[str]:
 
 
 def scan_app() -> set[str]:
+    """Scan all of `backend/app`, so a route in any module is covered."""
     found: set[str] = set()
-    for sub in ("api/routes", "plugins/installed"):
-        for path in sorted((APP_DIR / sub).rglob("*.py")):
-            rel = path.relative_to(APP_DIR).as_posix()
-            found.update(
-                find_awaitless_async_db_handlers(path.read_text(encoding="utf-8"), rel)
-            )
+    for path in sorted(APP_DIR.rglob("*.py")):
+        rel = path.relative_to(APP_DIR).as_posix()
+        found.update(
+            find_awaitless_async_db_handlers(path.read_text(encoding="utf-8"), rel)
+        )
     return found
 
 
 def load_allowlist() -> set[str]:
-    return {
-        line.strip()
-        for line in ALLOWLIST_PATH.read_text(encoding="utf-8").splitlines()
-        if line.strip() and not line.startswith("#")
-    }
+    lines = (l.strip() for l in ALLOWLIST_PATH.read_text(encoding="utf-8").splitlines())
+    return {l for l in lines if l and not l.startswith("#")}
 
 
 SRC = '''
@@ -116,6 +117,10 @@ async def ws(db: Session = Depends(get_db)):
 @router.get("/g")
 async def annotated(db: Annotated[Session, Depends(get_db)]):
     return 1
+
+@router.get("/h")
+async def async_comprehension(db: Session = Depends(get_db)):
+    return [x async for x in source()]
 '''
 
 
@@ -140,5 +145,13 @@ def test_allowlist_has_no_stale_entries():
 
 
 def test_allowlist_is_sorted_and_unique():
-    entries = [l for l in ALLOWLIST_PATH.read_text(encoding="utf-8").splitlines() if l and not l.startswith("#")]
-    assert entries == sorted(set(entries))
+    lines = (l.strip() for l in ALLOWLIST_PATH.read_text(encoding="utf-8").splitlines())
+    entries = [l for l in lines if l and not l.startswith("#")]
+    assert entries == sorted(set(entries)), "Allowlist sortiert und ohne Duplikate halten"
+
+
+def test_allowlist_never_grows():
+    assert len(load_allowlist()) <= MAX_ALLOWLIST_ENTRIES, (
+        "Die Ausnahmeliste darf nur schrumpfen. Wurden Einträge entfernt, "
+        "MAX_ALLOWLIST_ENTRIES senken - niemals erhöhen."
+    )

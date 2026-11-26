@@ -1,6 +1,7 @@
 # Route-Handler, die `async def` sind, Depends(get_db) nehmen und nie awaiten (#300).
 # Diese Liste darf nur schrumpfen. Neue Handler dieser Form sind `def`.
 # Wer einen Eintrag umstellt, entfernt ihn hier (test_allowlist_has_no_stale_entries).
+# Umbenennen oder Verschieben eines gelisteten Handlers darf seinen Eintrag anpassen; neue Einträge sind nicht erlaubt.
 api/routes/activity.py::get_recent_activities
 api/routes/activity.py::get_recent_files
 api/routes/activity.py::report_activities
