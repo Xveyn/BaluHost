@@ -128,7 +128,7 @@ def _parse_time_range(time_range: TimeRangeEnum) -> timedelta:
 
 @router.get("/cpu/current", response_model=CurrentCpuResponse)
 @user_limiter.limit(get_limit("system_monitor"))
-async def get_cpu_current(
+def get_cpu_current(
     request: Request,
     response: Response,
     current_user: User = Depends(get_current_user),
@@ -156,7 +156,7 @@ async def get_cpu_current(
 
 @router.get("/cpu/history", response_model=CpuHistoryResponse)
 @user_limiter.limit(get_limit("system_monitor"))
-async def get_cpu_history(
+def get_cpu_history(
     request: Request,
     response: Response,
     time_range: TimeRangeEnum = Query(default=TimeRangeEnum.ONE_HOUR),
@@ -197,7 +197,7 @@ async def get_cpu_history(
 
 @router.get("/memory/current", response_model=CurrentMemoryResponse)
 @user_limiter.limit(get_limit("system_monitor"))
-async def get_memory_current(
+def get_memory_current(
     request: Request,
     response: Response,
     current_user: User = Depends(get_current_user),
@@ -223,7 +223,7 @@ async def get_memory_current(
 
 @router.get("/memory/history", response_model=MemoryHistoryResponse)
 @user_limiter.limit(get_limit("system_monitor"))
-async def get_memory_history(
+def get_memory_history(
     request: Request,
     response: Response,
     time_range: TimeRangeEnum = Query(default=TimeRangeEnum.ONE_HOUR),
@@ -264,7 +264,7 @@ async def get_memory_history(
 
 @router.get("/network/current", response_model=CurrentNetworkResponse)
 @user_limiter.limit(get_limit("system_monitor"))
-async def get_network_current(
+def get_network_current(
     request: Request,
     response: Response,
     current_user: User = Depends(get_current_user),
@@ -290,7 +290,7 @@ async def get_network_current(
 
 @router.get("/network/history", response_model=NetworkHistoryResponse)
 @user_limiter.limit(get_limit("system_monitor"))
-async def get_network_history(
+def get_network_history(
     request: Request,
     response: Response,
     time_range: TimeRangeEnum = Query(default=TimeRangeEnum.ONE_HOUR),
@@ -331,7 +331,7 @@ async def get_network_history(
 
 @router.get("/disk-io/current", response_model=CurrentDiskIoResponse)
 @user_limiter.limit(get_limit("system_monitor"))
-async def get_disk_io_current(
+def get_disk_io_current(
     request: Request,
     response: Response,
     current_user: User = Depends(get_current_user),
@@ -346,7 +346,7 @@ async def get_disk_io_current(
 
 @router.get("/disk-io/history", response_model=DiskIoHistoryResponse)
 @user_limiter.limit(get_limit("system_monitor"))
-async def get_disk_io_history(
+def get_disk_io_history(
     request: Request,
     response: Response,
     disk_name: Optional[str] = Query(default=None, description="Filter by disk name"),
@@ -439,7 +439,7 @@ async def get_processes_current(
 
 @router.get("/processes/history", response_model=ProcessHistoryResponse)
 @user_limiter.limit(get_limit("system_monitor"))
-async def get_processes_history(
+def get_processes_history(
     request: Request,
     response: Response,
     process_name: Optional[str] = Query(default=None, description="Filter by process name"),
@@ -511,7 +511,7 @@ async def get_processes_history(
 
 @router.get("/uptime/current", response_model=CurrentUptimeResponse)
 @user_limiter.limit(get_limit("system_monitor"))
-async def get_uptime_current(
+def get_uptime_current(
     request: Request,
     response: Response,
     current_user: User = Depends(get_current_user),
@@ -563,7 +563,7 @@ async def get_uptime_current(
 
 @router.get("/uptime/history", response_model=UptimeHistoryResponse)
 @user_limiter.limit(get_limit("system_monitor"))
-async def get_uptime_history(
+def get_uptime_history(
     request: Request,
     response: Response,
     time_range: TimeRangeEnum = Query(default=TimeRangeEnum.ONE_HOUR),
@@ -634,7 +634,7 @@ async def get_uptime_history(
 
 @router.get("/config/retention", response_model=RetentionConfigListResponse)
 @user_limiter.limit(get_limit("admin_operations"))
-async def get_retention_config(
+def get_retention_config(
     request: Request,
     response: Response,
     db: Session = Depends(get_db),
@@ -695,7 +695,7 @@ async def update_retention_config(
 
 @router.get("/stats/database", response_model=DatabaseStatsResponse)
 @user_limiter.limit(get_limit("admin_operations"))
-async def get_database_stats(
+def get_database_stats(
     request: Request,
     response: Response,
     db: Session = Depends(get_db),
