@@ -126,6 +126,7 @@ Business logic layer. Routes delegate to services — services contain the actua
 **`sync/`** — Desktop sync client coordination, sync schedules, bandwidth limits. `progressive.py` no longer does uploads: the `/api/sync/upload/*` routes were removed in #632 (no client, no ownership check, no destination-path validation); it keeps the bandwidth-limit API and the expiry cleanup for leftover `chunked_uploads` rows. Chunked uploads go through `/api/files` (`routes/chunked_upload.py`)
 
 **`scheduler/`** — Unified scheduler: config, execution history, worker process
+- `power_demand.py` — Scheduler jobs register power demands by writing `power_demands` directly; the primary applies them on its next 5 s tick. No HTTP, no token — scheduler jobs never wake soft sleep
 
 **`notifications/`** — Firebase push notifications, in-app events
 - `labels.py` — German display names for scheduler job ids and backup types; `events.py` applies them in the `emit_scheduler_*` / `emit_backup_*` helpers so templates never show `sync_check` or `database_only`. A new scheduler or backup type needs an entry here (a test enforces it)

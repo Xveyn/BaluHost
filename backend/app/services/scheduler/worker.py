@@ -29,6 +29,7 @@ from app.models.scheduler_state import SchedulerState
 from app.schemas.scheduler import SCHEDULER_REGISTRY
 
 from .execution import log_scheduler_execution, complete_scheduler_execution
+from .power_demand import register_scheduler_demand, unregister_scheduler_demand
 
 logger = logging.getLogger(__name__)
 
@@ -37,20 +38,6 @@ def _ensure_aware(dt: datetime) -> datetime:
     """Ensure a datetime is timezone-aware (SQLite returns naive datetimes)."""
     return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
-
-# Power level mapping per scheduler
-SCHEDULER_POWER_LEVELS: dict[str, str] = {
-    "backup": "surge",
-    "raid_scrub": "surge",
-    "smart_scan": "medium",
-    "sync_check": "low",
-    "notification_check": "idle",
-    "upload_cleanup": "low",
-    "auto_update": "low",
-    "cloud_sync": "medium",
-    "file_activity_cleanup": "low",
-    "plugin_update_check": "low",
-}
 
 # How often to poll for requested executions (seconds)
 POLL_INTERVAL = 2
@@ -186,62 +173,12 @@ class SchedulerWorker:
             db.close()
 
     def _register_power_demand(self, name: str) -> bool:
-        """Register a power demand for the given scheduler via the backend API."""
-        level = SCHEDULER_POWER_LEVELS.get(name)
-        if not level or level == "idle":
-            return False  # No demand needed for idle-level jobs
-
-        try:
-            import requests as http_requests
-
-            port = settings.port
-            url = f"http://127.0.0.1:{port}/api/power/demands"
-            payload = {
-                "source": f"scheduler:{name}",
-                "level": level,
-                "timeout_seconds": 3600,  # 1h safety timeout
-                "description": f"Scheduler job: {name}",
-            }
-            headers = {"X-Service-Token": settings.scheduler_service_token}
-            resp = http_requests.post(url, json=payload, headers=headers, timeout=5)
-            if resp.status_code < 300:
-                logger.debug("Registered power demand for %s (level=%s)", name, level)
-                return True
-            else:
-                logger.warning(
-                    "Power demand registration failed for %s: %d %s",
-                    name, resp.status_code, resp.text[:200],
-                )
-        except Exception as e:
-            logger.warning("Could not register power demand for %s: %s", name, e)
-        return False
+        """Write the power demand for the given scheduler job directly to the DB."""
+        return register_scheduler_demand(name)
 
     def _unregister_power_demand(self, name: str) -> None:
-        """Unregister a power demand for the given scheduler via the backend API."""
-        level = SCHEDULER_POWER_LEVELS.get(name)
-        if not level or level == "idle":
-            return
-
-        try:
-            import requests as http_requests
-
-            port = settings.port
-            url = f"http://127.0.0.1:{port}/api/power/demands"
-            payload = {"source": f"scheduler:{name}"}
-            headers = {
-                "X-Service-Token": settings.scheduler_service_token,
-                "Content-Type": "application/json",
-            }
-            resp = http_requests.delete(url, json=payload, headers=headers, timeout=5)
-            if resp.status_code < 300:
-                logger.debug("Unregistered power demand for %s", name)
-            else:
-                logger.debug(
-                    "Power demand unregistration returned %d for %s",
-                    resp.status_code, name,
-                )
-        except Exception as e:
-            logger.warning("Could not unregister power demand for %s: %s", name, e)
+        """Remove the power demand of the given scheduler job."""
+        unregister_scheduler_demand(name)
 
     def _execute_job(self, execution_id: int, name: str) -> None:
         """Run a scheduler job and update the execution record."""
