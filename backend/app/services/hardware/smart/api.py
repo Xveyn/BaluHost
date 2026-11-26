@@ -18,21 +18,34 @@ logger = logging.getLogger(__name__)
 
 
 def _check_smart_for_notifications(status: SmartStatusResponse) -> None:
-    """Check SMART status for issues and emit notifications."""
+    """Check SMART status for issues and emit notifications.
+
+    Each device is checked on its own: a failure while reporting one disk is
+    logged and does not stop the remaining disks from being checked.
+
+    Per device at most one FAILING warning and one reallocated-sector warning
+    are emitted, FAILING first. Both go through ``emit_smart_warning_sync``,
+    whose cooldown is keyed on event type and disk, so in practice an admin
+    receives one SMART warning per disk per 24 h per process.
+    """
     try:
         from app.services.notifications.events import (
             emit_smart_failure_sync,
             emit_smart_warning_sync,
         )
+    except Exception as exc:
+        logger.warning("SMART notification check unavailable: %s", exc)
+        return
 
-        for device in status.devices:
+    for device in status.devices:
+        try:
             if device.status == "FAILED":
                 emit_smart_failure_sync(device.name, details=f"Status: FAILED, Modell: {device.model}")
                 continue
 
             # Check for failing attributes
             for attr in device.attributes:
-                if getattr(attr, "when_failed", None) == "FAILING_NOW":
+                if attr.status == "FAILING":
                     emit_smart_warning_sync(
                         device.name,
                         details=f"Attribut '{attr.name}' ist im FAILING-Zustand",
@@ -41,20 +54,19 @@ def _check_smart_for_notifications(status: SmartStatusResponse) -> None:
 
             # Check for reallocated sectors
             for attr in device.attributes:
-                if attr.name and "reallocated" in attr.name.lower() and attr.raw_value:
+                if attr.name and "reallocated" in attr.name.lower():
                     try:
-                        count = int(str(attr.raw_value).split()[0])
-                        if count > 0:
-                            emit_smart_warning_sync(
-                                device.name,
-                                details=f"{count} reallocated Sektoren erkannt",
-                            )
+                        count = int(attr.raw.split()[0])
                     except (ValueError, IndexError):
-                        pass
+                        break
+                    if count > 0:
+                        emit_smart_warning_sync(
+                            device.name,
+                            details=f"{count} reallocated Sektoren erkannt",
+                        )
                     break
-
-    except Exception as exc:
-        logger.debug("Failed to check SMART notifications: %s", exc)
+        except Exception as exc:
+            logger.warning("SMART notification check failed for %s: %s", device.name, exc)
 
 
 def _empty_status() -> SmartStatusResponse:

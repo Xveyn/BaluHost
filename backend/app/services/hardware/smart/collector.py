@@ -26,6 +26,20 @@ logger = logging.getLogger(__name__)
 _device_type_overrides: dict[str, str] = {}
 
 
+def _attribute_status(when_failed: object) -> str:
+    """Map smartctl's ``when_failed`` to ``OK`` / ``PAST`` / ``FAILING``.
+
+    ``PAST`` means the attribute failed once but is fine now; unknown
+    non-empty values count as ``FAILING`` so they still warn (fail-safe).
+    """
+    text = "" if when_failed is None else str(when_failed).strip()
+    if text in ("", "-"):
+        return "OK"
+    if "past" in text.lower():
+        return "PAST"
+    return "FAILING"
+
+
 def _read_real_smart_data() -> SmartStatusResponse:
     """Optimierte SMART-Erfassung mit paralleler Verarbeitung und reduzierten Flags."""
     import json
@@ -128,7 +142,7 @@ def _read_real_smart_data() -> SmartStatusResponse:
                 if not isinstance(attr, dict):
                     continue
                 when_failed = attr.get('when_failed', '')
-                attr_status = 'FAILING' if when_failed and when_failed != '-' else 'OK'
+                attr_status = _attribute_status(when_failed)
                 attributes.append(SmartAttribute(
                     id=attr.get('id', 0),
                     name=attr.get('name', 'Unknown'),
