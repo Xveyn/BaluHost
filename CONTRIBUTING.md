@@ -99,7 +99,7 @@ def list_files(path: str, owner_id: int) -> List[FileItem]:
 - Services in `app/services/` - Business logic
 - Routes in `app/api/routes/` - API endpoints
 - Schemas in `app/schemas/` - Pydantic models
-- Use async/await for I/O operations
+- `async def` only when the function awaits — synchronous I/O (DB session, files, subprocess) goes in a plain `def` handler or through `asyncio.to_thread` (see `.claude/rules/backend/coding-style.md`)
 
 **Linting:**
 ```bash

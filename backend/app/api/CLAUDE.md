@@ -33,6 +33,7 @@ Supports both JWT (`Bearer <token>`) and API key (`balu_...` prefix) authenticat
 3. Add rate limiting: `@limiter.limit(get_limit("my_feature"))`
 4. Use Pydantic schemas for request/response bodies
 5. Register in `routes/__init__.py`: `api_router.include_router(my_feature.router, prefix="/my-feature", tags=["my-feature"])`
+6. A handler that takes `Depends(get_db)` and awaits nothing is `def`, not `async def` — FastAPI runs it in the threadpool. `tests/test_route_async_convention.py` fails for a new `async def` of that shape.
 
 ## Conventions
 

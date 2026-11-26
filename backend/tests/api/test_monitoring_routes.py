@@ -7,6 +7,8 @@ Tests:
 - Monitoring status endpoint
 - Admin-only retention configuration
 """
+import threading
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -425,3 +427,21 @@ class TestCleanupEndpoint:
         assert "message" in data
         assert "deleted" in data
         assert "total" in data
+
+
+async def test_cpu_history_db_read_runs_off_event_loop(async_client, user_headers, monkeypatch):
+    from app.services.monitoring.orchestrator import get_monitoring_orchestrator
+    orch = get_monitoring_orchestrator()
+    seen: list[int] = []
+    def fake_history_db(db, start=None, limit=None, **kw):
+        seen.append(threading.get_ident())
+        return []
+    monkeypatch.setattr(orch.cpu_collector, "get_history_db", fake_history_db)
+    r = await async_client.get(
+        "/api/monitoring/cpu/history",
+        params={"time_range": "24h", "source": "database"},
+        headers=user_headers,
+    )
+    assert r.status_code == 200
+    assert seen, "get_history_db wurde nicht aufgerufen"
+    assert threading.get_ident() not in seen, "DB-Lesen lief im Event-Loop-Thread"
