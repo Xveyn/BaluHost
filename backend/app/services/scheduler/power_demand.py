@@ -56,14 +56,15 @@ def register_scheduler_demand(name: str) -> bool:
         expires_at=now + timedelta(seconds=DEMAND_TIMEOUT_S),
         description=description,
     )
-    config_store.persist_demand_log(
-        action="registered",
-        source=source,
-        level=level,
-        description=description,
-        resulting_profile="pending",
-        timeout_seconds=DEMAND_TIMEOUT_S,
-    )
+    if ok:
+        config_store.persist_demand_log(
+            action="registered",
+            source=source,
+            level=level,
+            description=description,
+            resulting_profile="pending",
+            timeout_seconds=DEMAND_TIMEOUT_S,
+        )
     return ok
 
 

@@ -54,3 +54,15 @@ def test_worker_methods_delegate(monkeypatch):
     w._register_power_demand("backup")
     w._unregister_power_demand("backup")
     assert calls == [("reg", "backup"), ("unreg", "backup")]
+
+
+def test_failed_upsert_writes_no_registered_log_row(monkeypatch):
+    import app.services.scheduler.power_demand as power_demand
+
+    calls = []
+    monkeypatch.setattr(power_demand.config_store, "upsert_demand", lambda **kw: False)
+    monkeypatch.setattr(
+        power_demand.config_store, "persist_demand_log", lambda **kw: calls.append(kw)
+    )
+    assert register_scheduler_demand("backup") is False
+    assert calls == []
