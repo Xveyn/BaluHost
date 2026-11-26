@@ -25,5 +25,5 @@ Application foundation: configuration, database, security, and cross-cutting inf
 
 - **Config**: All settings have env var equivalents (uppercase). `NAS_MODE=dev` enables dev mode with mock backends
 - **Multi-worker**: Production runs 4 Uvicorn workers in `baluhost-backend` plus 2 in `baluhost-backend-local`. Only one process becomes primary: the local channel never volunteers (`settings.channel == "local"` → False), the rest race for the file lock in `/tmp/baluhost-primary.lock`. Hardware services (fans, power, mDNS, monitoring) only run on primary. Before #685 each unit had its own `PrivateTmp` view of that lock and **both** elected one, running every hardware loop twice
-- **DB sessions**: Always use `get_db()` dependency in routes or `SessionLocal()` context manager in services. Never hold sessions across async boundaries
+- **DB sessions**: Always use `get_db()` dependency in routes or `SessionLocal()` context manager in services. Never hold sessions across async boundaries. A route that only does sync DB work is a `def` handler; in `async def` code, sync DB work goes through `asyncio.to_thread`.
 - **Token types**: `decode_token(token, token_type="access")` enforces type claim — prevents using refresh tokens as access tokens

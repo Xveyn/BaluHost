@@ -5,7 +5,7 @@ paths:
 # Backend Coding Style (Python)
 
 ## Standards
-- **Async/await** for all I/O operations
+- **`async def` only with a real `await`**: no synchronous I/O (DB session, files, `subprocess`, sync HTTP clients) directly inside `async def` — it blocks the event loop of the whole worker. A route handler that takes `Depends(get_db)` and awaits nothing is a plain `def` (FastAPI runs it in the threadpool); blocking calls inside async code go through `asyncio.to_thread(...)`. Guards: `tests/test_route_async_convention.py` (allowlist only shrinks), `tests/test_async_subprocess_offloop.py`.
 - **Type hints** required on all functions
 - **Pydantic models** for request/response validation
 - **Docstrings** for all services
@@ -15,7 +15,7 @@ paths:
 
 ## Example Service Function
 ```python
-async def get_file_list(
+def get_file_list(
     path: str,
     current_user: User,
     db: Session

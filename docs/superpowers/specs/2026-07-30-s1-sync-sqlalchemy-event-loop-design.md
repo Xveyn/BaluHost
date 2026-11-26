@@ -2,7 +2,7 @@
 
 **Datum:** 2026-07-30
 **Issue:** [#300](https://github.com/Xveyn/BaluHost/issues/300) (`[S1] 🟠 Sync-SQLAlchemy blockiert den Event-Loop in async-Routen`), Teil von [#298](https://github.com/Xveyn/BaluHost/issues/298)
-**Status:** Design freigegeben, Umsetzung ausstehend
+**Status:** PR1 (Sonde, #496) umgesetzt. PR2 (Sweep) am 2026-11-26 nach Messung verworfen — kaum gleichzeitige Requests, kein Handler-Lag messbar. Ersetzt durch Wächter + Monitoring-GETs: `docs/superpowers/plans/2026-11-26-s1-abschluss-und-5min-loop-stall.md`.
 
 ---
 
