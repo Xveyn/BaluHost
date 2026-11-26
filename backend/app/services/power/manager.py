@@ -552,7 +552,7 @@ class PowerManagerService:
         try:
             fresh = {d.source: d for d in list_active_demands(strict=True)}
         except Exception as exc:
-            logger.debug(f"Demand cache refresh failed: {exc}")
+            logger.warning(f"Demand cache refresh failed: {exc}")
             return False
         old_levels = {s: d.level for s, d in self._demands.items()}
         new_levels = {s: d.level for s, d in fresh.items()}

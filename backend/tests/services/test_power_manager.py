@@ -871,7 +871,9 @@ class TestDemandsWrittenByOtherProcesses:
         assert service._current_profile == PowerProfile.SURGE
 
         def broken(*, strict=False):
-            raise OperationalError("SELECT", {}, Exception("db weg"))
+            if strict:
+                raise OperationalError("SELECT", {}, Exception("db weg"))
+            return []
 
         monkeypatch.setattr(manager_module, "list_active_demands", broken)
         spy = AsyncMock()
@@ -880,6 +882,17 @@ class TestDemandsWrittenByOtherProcesses:
         spy.assert_not_awaited()
         assert "scheduler:backup" in service._demands
         assert service._current_profile == PowerProfile.SURGE
+
+    def test_list_active_demands_strict_raises_default_swallows(self, monkeypatch):
+        import app.services.power.config_store as config_store
+
+        def boom():
+            raise OperationalError("SELECT", {}, Exception("db weg"))
+
+        monkeypatch.setattr(config_store, "SessionLocal", boom)
+        assert config_store.list_active_demands() == []
+        with pytest.raises(OperationalError):
+            config_store.list_active_demands(strict=True)
 
     def test_monitor_loop_uses_the_sync(self):
         src = inspect.getsource(PowerManagerService._monitor_loop)
