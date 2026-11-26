@@ -19,8 +19,9 @@ def _patch_session_local(db_session, monkeypatch):
     """Patch ``SessionLocal`` so code that bypasses DI uses the test DB.
 
     Code in the power routes that opens ``SessionLocal()`` itself (bypassing
-    FastAPI dependency injection) would otherwise hit the wrong database.  In CI the app engine points to an empty SQLite file with no
-    tables, causing "no such table: users" errors.  This fixture replaces
+    FastAPI dependency injection) would otherwise hit the wrong database.
+    In CI the app engine points to an empty SQLite file with no tables,
+    causing "no such table: users" errors.  This fixture replaces
     ``SessionLocal`` with a factory bound to the test engine so all code paths
     share the same database that already has tables and seed users.
     """
@@ -165,6 +166,15 @@ class TestPowerDemands:
         response = client.post(
             "/api/power/demands",
             json={"source": "x", "level": "medium"},
+            headers={"X-Service-Token": "irgendwas"},
+        )
+        assert response.status_code == 401
+
+    def test_delete_with_only_service_token_is_401(self, client: TestClient):
+        response = client.request(
+            "DELETE",
+            "/api/power/demands",
+            json={"source": "x"},
             headers={"X-Service-Token": "irgendwas"},
         )
         assert response.status_code == 401
