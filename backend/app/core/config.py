@@ -166,9 +166,6 @@ class Settings(BaseSettings):
     monitoring_default_retention_hours: int = 168  # 7 days default retention
     monitoring_cleanup_interval_hours: int = 6  # Run cleanup every N hours
 
-    # Scheduler worker service token (auto-generated if empty)
-    scheduler_service_token: str = ""  # Service token for scheduler-worker -> backend API calls
-
     # Power management configuration (CPU frequency scaling)
     power_management_enabled: bool = True  # Enable/disable power management
     power_force_dev_backend: bool = False  # Force dev backend even on Linux
@@ -328,11 +325,6 @@ class Settings(BaseSettings):
                 self.nas_quota_bytes = None
             if not self.plugins_external_dir:
                 self.plugins_external_dir = "/var/lib/baluhost/plugins"
-
-        # Auto-generate scheduler service token if not set
-        if not self.scheduler_service_token:
-            import secrets
-            self.scheduler_service_token = secrets.token_urlsafe(32)
 
         return self
 

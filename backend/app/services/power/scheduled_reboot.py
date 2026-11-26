@@ -90,7 +90,8 @@ def displays_block() -> bool:
         return True
 
 
-def _another_scheduler_job_running(db: Session, own_execution_id: Optional[int]) -> bool:
+def another_scheduler_job_running(db: Session, own_execution_id: Optional[int] = None) -> bool:
+    """True, wenn ein Scheduler-Job läuft (außer `own_execution_id`)."""
     query = db.query(SchedulerExecution).filter(
         SchedulerExecution.status == SchedulerStatus.RUNNING.value
     )
@@ -149,7 +150,7 @@ def gates_blocking(
     #    Schritt 0 bereits abgedeckt; dieses except bleibt als Netz für
     #    andere, unerwartete Fehler.
     try:
-        if _another_scheduler_job_running(db, own_execution_id):
+        if another_scheduler_job_running(db, own_execution_id):
             return SKIP_SCHEDULER_JOB
     except Exception as exc:
         logger.warning("Scheduler-Zustand nicht lesbar — Neustart verschoben: %s", exc)

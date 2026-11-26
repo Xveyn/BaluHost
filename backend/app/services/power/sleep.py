@@ -1065,6 +1065,20 @@ class SleepManagerService:
                 self._last_error_at = datetime.now(timezone.utc)
                 logger.warning("Error in schedule check loop: %s", e)
 
+    def _scheduler_job_running(self) -> bool:
+        """Whether a scheduler job is running; fail-closed (True) on any error."""
+        try:
+            db = SessionLocal()
+            try:
+                return scheduled_reboot.another_scheduler_job_running(db)
+            finally:
+                db.close()
+        except Exception as exc:
+            logger.warning(
+                "Scheduler state unreadable - treating a job as running: %s", exc
+            )
+            return True
+
     async def _escalation_monitor(self) -> None:
         """Monitor soft sleep duration and escalate to suspend if configured."""
         try:
@@ -1108,6 +1122,12 @@ class SleepManagerService:
                     "Auto-escalation skipped: %s blocks sleep (%s)",
                     foreign.who, foreign.why,
                 )
+                return
+
+            # Skip escalation while a scheduler job runs (same gate as the
+            # scheduled reboot). Sync DB query -> off the event loop.
+            if await asyncio.to_thread(self._scheduler_job_running):
+                logger.info("Auto-escalation skipped: scheduler job running")
                 return
 
             logger.info("Auto-escalation: soft sleep -> true suspend after %d minutes",
