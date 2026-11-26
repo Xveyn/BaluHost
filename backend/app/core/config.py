@@ -166,8 +166,6 @@ class Settings(BaseSettings):
     monitoring_default_retention_hours: int = 168  # 7 days default retention
     monitoring_cleanup_interval_hours: int = 6  # Run cleanup every N hours
 
-    # Scheduler worker service token (auto-generated if empty)
-
     # Power management configuration (CPU frequency scaling)
     power_management_enabled: bool = True  # Enable/disable power management
     power_force_dev_backend: bool = False  # Force dev backend even on Linux

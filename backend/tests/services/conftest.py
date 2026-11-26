@@ -7,7 +7,7 @@ def power_tables_in_global_db():
     """
     Ensure the multi-worker power tables exist in the global SessionLocal-backed DB.
 
-    Tests in this module construct ``PowerManagerService`` directly and bypass
+    Tests that use this fixture construct ``PowerManagerService`` directly and bypass
     ``conftest.db_session``; the manager calls ``SessionLocal()`` for DB-backed
     helpers (runtime state, demands), so we need the schema available there.
     Cleans up after each test so state does not leak between cases.

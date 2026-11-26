@@ -62,6 +62,8 @@ zum Backend läuft über die Datenbank (`scheduler_executions`,
 `SleepManagerService`-Instanz und weiß nichts über Kernbetriebszeit, Displays
 oder Suspend-Zustand.
 
+> Nachtrag 2026-11-26: Loopback und `X-Service-Token` sind entfernt. Der Scheduler schreibt Power-Demands direkt in `power_demands` (`services/scheduler/power_demand.py`), der Primary übernimmt sie beim nächsten Tick.
+
 **`scheduler_configs` hat bereits ein JSON-Feld `extra_config`** für
 schedulerspezifische Konfiguration; `SchedulerService.update_scheduler_config()`
 schreibt es generisch.
