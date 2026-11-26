@@ -266,7 +266,12 @@ _SYNC_SUBPROCESS_HELPERS = {
     "core/lifespan.py": {"kill_orphan_fio_processes"},
     "services/jobs.py": {"get_smart_status", "get_system_info"},
     "api/routes/system.py": {"get_smart_status"},
-    "api/routes/system_raid.py": {"get_smart_status", "get_system_info"},
+    "api/routes/system_raid.py": {
+        "get_smart_status",
+        "get_system_info",
+        "get_smart_device_models",
+        "get_smart_device_order",
+    },
 }
 
 

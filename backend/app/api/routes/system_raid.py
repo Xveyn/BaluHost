@@ -81,7 +81,7 @@ async def finalize_raid_rebuild(
 
 @router.get("/disk-io/history", response_model=DiskIOResponse)
 @user_limiter.limit(get_limit("system_monitor"))
-async def get_disk_io_history(request: Request, response: Response, _: UserPublic = Depends(deps.get_current_user)) -> DiskIOResponse:
+def get_disk_io_history(request: Request, response: Response, _: UserPublic = Depends(deps.get_current_user)) -> DiskIOResponse:
     """Get real-time disk I/O history for all physical disks."""
     history = disk_monitor.get_disk_io_history()
     from app.schemas.system import DiskIOHistory, DiskIOSample
