@@ -28,6 +28,7 @@ PRIMARY_ONLY_SERVICES = [
     "sleep_mode",
     "network_discovery",
     "pihole_query_collector",
+    "health_monitor",
 ]
 
 # Monitoring services that are offloaded to monitoring_worker in prod mode.
@@ -278,13 +279,22 @@ def register_all_services(
         config_enabled_fn=lambda: settings.backup_auto_enabled,
     )
 
-    # Health Monitor
+    # Health Monitor — primary only (#872). start_fn closes over
+    # is_primary_worker so an admin restart served by a secondary worker
+    # starts nothing (same pattern as fan control, #555/#817).
+    _is_primary_worker_for_health = is_primary_worker
+
+    async def _start_health_monitor_for_worker():
+        if not _is_primary_worker_for_health:
+            return
+        await jobs.start_health_monitor()
+
     register_service(
         name="health_monitor",
         display_name="Health Monitor",
         get_status_fn=jobs.get_status,
         stop_fn=jobs.stop_health_monitor,
-        start_fn=jobs.start_health_monitor,
+        start_fn=_start_health_monitor_for_worker,
         config_enabled_fn=lambda: not settings.is_dev_mode,
     )
 

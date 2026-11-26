@@ -633,6 +633,22 @@ def _start_chunked_upload_cleanup_if_primary() -> None:
     get_chunked_upload_manager().start_cleanup_loop()
 
 
+async def _start_health_monitor_if_primary() -> None:
+    """Start the SMART health-check loop — primary worker only.
+
+    The SMART cooldown lives in process memory only, so a monitor in every
+    worker meant 4-6 concurrent smartctl runs per interval (#872). The primary
+    refreshes the SMART cache and runs the notification check; secondaries
+    read its status through the heartbeat. Must be called after
+    `_try_become_primary()`.
+    """
+    if not IS_PRIMARY_WORKER:
+        return
+    from app.services import jobs
+
+    await jobs.start_health_monitor()
+
+
 async def _startup(app: FastAPI) -> None:
     """Run all startup initialization steps."""
     global _discovery_service, _websocket_manager, _plugin_manager, IS_PRIMARY_WORKER
@@ -643,7 +659,7 @@ async def _startup(app: FastAPI) -> None:
 
     from app.core.database import init_db, SessionLocal, engine
     from app.services.users import ensure_admin_user, ensure_user_home_directories
-    from app.services import jobs, seed
+    from app.services import seed
     from app.services.power import manager as power_manager
     from app.services.power import fan_control
     from app.services.power import sleep as sleep_mode
@@ -687,8 +703,6 @@ async def _startup(app: FastAPI) -> None:
     ensure_user_home_directories()
     logger.info("User home directories ensured")
 
-    await jobs.start_health_monitor()
-
     # Acquire primary-worker lock *after* fork (lifespan runs per-worker).
     IS_PRIMARY_WORKER = _try_become_primary()
     logger.info("Primary worker: %s (PID %d)", IS_PRIMARY_WORKER, os.getpid())
@@ -698,6 +712,9 @@ async def _startup(app: FastAPI) -> None:
 
     # Janitor for abandoned chunked uploads (shared directory, one cleaner)
     _start_chunked_upload_cleanup_if_primary()
+
+    # SMART health check (primary only, see helper)
+    await _start_health_monitor_if_primary()
 
     # Lifecycle notification: emit startup with downtime context
     await _emit_lifecycle_startup()
