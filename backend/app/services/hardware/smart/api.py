@@ -22,6 +22,11 @@ def _check_smart_for_notifications(status: SmartStatusResponse) -> None:
 
     Each device is checked on its own: a failure while reporting one disk is
     logged and does not stop the remaining disks from being checked.
+
+    Per device at most one FAILING warning and one reallocated-sector warning
+    are emitted, FAILING first. Both go through ``emit_smart_warning_sync``,
+    whose cooldown is keyed on event type and disk, so in practice an admin
+    receives one SMART warning per disk per 24 h per process.
     """
     try:
         from app.services.notifications.events import (

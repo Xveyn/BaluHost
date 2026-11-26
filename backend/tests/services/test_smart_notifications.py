@@ -86,12 +86,31 @@ def test_reallocated_count_is_the_first_token(emitted):
     assert emitted == [("WARNING", "/dev/sda", "12 reallocated Sektoren erkannt")]
 
 
-def test_unparseable_raw_is_skipped_quietly(emitted):
+@pytest.mark.parametrize("raw", ["n/a", ""])
+def test_unparseable_raw_is_skipped_quietly(emitted, raw):
     _check_smart_for_notifications(_status(
-        _device("/dev/sda", "PASSED", [_attr("Reallocated_Sector_Ct", raw="n/a")]),
+        _device("/dev/sda", "PASSED", [_attr("Reallocated_Sector_Ct", raw=raw)]),
         _device("/dev/sdb", "FAILED", []),
     ))
     assert emitted == [("FAILURE", "/dev/sdb", "Status: FAILED, Modell: m")]
+
+
+def test_past_failure_does_not_warn(emitted):
+    _check_smart_for_notifications(_status(
+        _device("/dev/sda", "PASSED", [_attr("Airflow_Temperature_Cel", status="PAST", id=190)])
+    ))
+    assert emitted == []
+
+
+def test_failing_and_reallocated_on_one_device_emit_both_failing_first(emitted):
+    _check_smart_for_notifications(_status(_device("/dev/sda", "PASSED", [
+        _attr("Raw_Read_Error_Rate", status="FAILING", id=1),
+        _attr("Reallocated_Sector_Ct", raw="8"),
+    ])))
+    assert emitted == [
+        ("WARNING", "/dev/sda", "Attribut 'Raw_Read_Error_Rate' ist im FAILING-Zustand"),
+        ("WARNING", "/dev/sda", "8 reallocated Sektoren erkannt"),
+    ]
 
 
 def test_nvme_without_ata_attributes_is_silent(emitted):
