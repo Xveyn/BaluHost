@@ -6,10 +6,12 @@ Tests:
 - PowerManagerService: profile management, demand registration, auto-scaling
 """
 import asyncio
+import inspect
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from app.schemas.power import (
@@ -19,6 +21,8 @@ from app.schemas.power import (
     PowerProfileConfig,
     ServicePowerProperty,
 )
+import app.services.power.manager as manager_module
+from app.services.power.config_store import delete_demand, upsert_demand
 from app.services.power.manager import (
     CpuPowerBackend,
     DevCpuPowerBackend,
@@ -28,54 +32,7 @@ from app.services.power.manager import (
 )
 
 
-@pytest.fixture(autouse=True)
-def _power_tables_in_global_db():
-    """
-    Ensure the multi-worker power tables exist in the global SessionLocal-backed DB.
-
-    Tests in this module construct ``PowerManagerService`` directly and bypass
-    ``conftest.db_session``; the manager calls ``SessionLocal()`` for DB-backed
-    helpers (runtime state, demands), so we need the schema available there.
-    Cleans up after each test so state does not leak between cases.
-    """
-    from sqlalchemy import inspect
-
-    from app.core.database import engine
-    from app.models.power import PowerCommand, PowerDemand, PowerRuntimeState
-
-    tables = [PowerRuntimeState.__table__, PowerDemand.__table__, PowerCommand.__table__]
-
-    inspector = inspect(engine)
-    created = [t for t in tables if not inspector.has_table(t.name)]
-    for table in created:
-        table.create(bind=engine, checkfirst=True)
-
-    # Seed singleton runtime-state row
-    from sqlalchemy.orm import sessionmaker
-
-    Session = sessionmaker(bind=engine, autoflush=False, autocommit=False)
-    db = Session()
-    try:
-        existing = db.query(PowerRuntimeState).filter(PowerRuntimeState.id == 1).first()
-        if existing is None:
-            db.add(PowerRuntimeState(id=1, current_profile="idle"))
-            db.commit()
-    finally:
-        db.close()
-
-    yield
-
-    db = Session()
-    try:
-        db.query(PowerDemand).delete()
-        db.query(PowerCommand).delete()
-        db.query(PowerRuntimeState).delete()
-        db.add(PowerRuntimeState(id=1, current_profile="idle"))
-        db.commit()
-    except Exception:
-        db.rollback()
-    finally:
-        db.close()
+pytestmark = pytest.mark.usefixtures("power_tables_in_global_db")
 
 
 class TestDevCpuPowerBackend:
@@ -852,3 +809,78 @@ class TestPowerManagerBackendSelection:
 
         assert success is True
         assert new == "Dev"
+
+
+def _write_backup_demand():
+    now = datetime.now(timezone.utc)
+    upsert_demand(
+        source="scheduler:backup",
+        level=PowerProfile.SURGE,
+        power_property=ServicePowerProperty.SURGE,
+        registered_at=now,
+        expires_at=now + timedelta(hours=1),
+        description="x",
+    )
+
+
+class TestDemandsWrittenByOtherProcesses:
+    """The primary applies demand rows that another process wrote to the DB."""
+
+    @pytest.fixture(autouse=True)
+    def reset_singleton(self):
+        PowerManagerService._instance = None
+        yield
+        PowerManagerService._instance = None
+
+    @pytest.fixture
+    def service(self):
+        service = PowerManagerService()
+        service._backend = DevCpuPowerBackend()
+        service._is_running = True
+        service._primary = True
+        service._current_profile = PowerProfile.IDLE
+        return service
+
+    @pytest.mark.asyncio
+    async def test_primary_applies_a_demand_another_process_wrote(self, service):
+        _write_backup_demand()
+        await service._sync_demands_from_db()
+        assert service._current_profile == PowerProfile.SURGE
+
+    @pytest.mark.asyncio
+    async def test_primary_drops_back_when_the_row_is_deleted(self, service):
+        _write_backup_demand()
+        await service._sync_demands_from_db()
+        delete_demand("scheduler:backup")
+        await service._sync_demands_from_db()
+        assert service._current_profile == PowerProfile.IDLE
+
+    @pytest.mark.asyncio
+    async def test_unchanged_demands_do_not_recalculate(self, service, monkeypatch):
+        _write_backup_demand()
+        await service._sync_demands_from_db()
+        spy = AsyncMock()
+        monkeypatch.setattr(service, "_recalculate_profile", spy)
+        await service._sync_demands_from_db()
+        spy.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_db_error_keeps_cache_and_profile(self, service, monkeypatch):
+        _write_backup_demand()
+        await service._sync_demands_from_db()
+        assert service._current_profile == PowerProfile.SURGE
+
+        def broken(*, strict=False):
+            raise OperationalError("SELECT", {}, Exception("db weg"))
+
+        monkeypatch.setattr(manager_module, "list_active_demands", broken)
+        spy = AsyncMock()
+        monkeypatch.setattr(service, "_recalculate_profile", spy)
+        await service._sync_demands_from_db()
+        spy.assert_not_awaited()
+        assert "scheduler:backup" in service._demands
+        assert service._current_profile == PowerProfile.SURGE
+
+    def test_monitor_loop_uses_the_sync(self):
+        src = inspect.getsource(PowerManagerService._monitor_loop)
+        assert "_sync_demands_from_db" in src and "_refresh_demand_cache" not in src

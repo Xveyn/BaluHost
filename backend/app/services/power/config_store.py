@@ -415,8 +415,13 @@ def delete_demand(source: str) -> bool:
         return False
 
 
-def list_active_demands() -> List[PowerDemandInfo]:
-    """Return all power_demands rows as PowerDemandInfo objects."""
+def list_active_demands(*, strict: bool = False) -> List[PowerDemandInfo]:
+    """Return all power_demands rows as PowerDemandInfo objects.
+
+    By default a DB error is logged and ``[]`` is returned. With
+    ``strict=True`` the error propagates, so a caller can tell "no demands"
+    from "could not read".
+    """
     try:
         db = SessionLocal()
         try:
@@ -435,6 +440,8 @@ def list_active_demands() -> List[PowerDemandInfo]:
         finally:
             db.close()
     except Exception as exc:
+        if strict:
+            raise
         logger.warning(f"Failed to list power demands: {exc}")
         return []
 

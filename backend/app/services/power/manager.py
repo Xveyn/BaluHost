@@ -530,9 +530,9 @@ class PowerManagerService:
                 # updated by another worker via PUT /api/power/auto-scaling.
                 self._auto_scaling_config = load_auto_scaling_config()
 
-                # Refresh demand cache from DB so demands registered on
-                # other workers are visible to recalculation.
-                self._refresh_demand_cache()
+                # Pick up demands written by other processes and apply
+                # them (recalculates only if the set changed).
+                await self._sync_demands_from_db()
 
                 await self._check_expired_demands()
                 await self._check_auto_scaling()
@@ -542,12 +542,28 @@ class PowerManagerService:
 
             await asyncio.sleep(5)  # Check every 5 seconds
 
-    def _refresh_demand_cache(self) -> None:
-        """Reload the in-memory demand cache from the DB (primary worker only)."""
+    def _refresh_demand_cache(self) -> bool:
+        """Reload the in-memory demand cache from the DB (primary worker only).
+
+        Reads strictly, so a DB error is not mistaken for "all demands gone".
+        Returns True iff ``{source: level}`` differs from the previous cache;
+        on a read error returns False and leaves the cache untouched.
+        """
         try:
-            self._demands = {d.source: d for d in list_active_demands()}
+            fresh = {d.source: d for d in list_active_demands(strict=True)}
         except Exception as exc:
             logger.debug(f"Demand cache refresh failed: {exc}")
+            return False
+        old_levels = {s: d.level for s, d in self._demands.items()}
+        new_levels = {s: d.level for s, d in fresh.items()}
+        self._demands = fresh
+        return old_levels != new_levels
+
+    async def _sync_demands_from_db(self) -> None:
+        """Refresh the demand cache and recalculate the profile if it changed."""
+        async with self._state_lock:
+            if self._refresh_demand_cache():
+                await self._recalculate_profile("demand_sync")
 
     async def _write_status_shm(self) -> None:
         """
