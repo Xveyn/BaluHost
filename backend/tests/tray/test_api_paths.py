@@ -26,7 +26,8 @@ WEBSOCKET = "WEBSOCKET"
 # *_PATH-Konstante unter /api/ ohne Eintrag hier laesst
 # test_every_tray_api_path_is_declared fehlschlagen — Absicht.
 EXPECTED: dict[str, set[str]] = {
-    "awake.SLEEP_CONFIG_PATH": {"GET", "PUT"},
+    "awake.SLEEP_CONFIG_PATH": {"PUT"},
+    "awake.SLEEP_STATUS_PATH": {"GET"},
     "handoff.HANDOFF_PATH": {"POST"},
     "loop.GAMING_PATH": {"GET"},
     "pairing.DEVICE_CODE_PATH": {"POST"},

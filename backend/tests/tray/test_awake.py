@@ -46,21 +46,51 @@ def test_payload_permanent():
     }
 
 
+def _status(enabled=False, until=None, core=None) -> dict:
+    """Antwort von /api/system/sleep/status, nur die Teile, die das Tray liest."""
+    return {
+        "current_state": "awake",
+        "always_awake": {"enabled": enabled, "until": until, "expires_in_seconds": None},
+        "core_uptime": core or {"enabled": False, "active": False},
+    }
+
+
 @pytest.mark.parametrize("stamp", ["2026-11-25T13:00:00Z", "2026-11-25T13:00:00+00:00"])
 def test_parse_state_accepts_z_and_offset(stamp):
-    state = awake.parse_state(
-        {"always_awake_enabled": True, "always_awake_until": stamp}
-    )
+    state = awake.parse_state(_status(True, stamp))
     assert state == AwakeState(True, datetime(2026, 11, 25, 13, 0, tzinfo=timezone.utc))
 
 
 def test_parse_state_without_until():
-    assert awake.parse_state({"always_awake_enabled": False}) == AwakeState(False, None)
+    assert awake.parse_state(_status(False)) == AwakeState(False, None)
+
+
+def test_parse_state_reads_active_core_window():
+    state = awake.parse_state(_status(core={
+        "enabled": True,
+        "active": True,
+        "current_window_label": "Arbeitszeit",
+        "current_window_ends_at": "2026-11-25T18:00:00",   # Ortszeit, ohne Zone
+    }))
+    assert state.core_active is True
+    assert state.core_label == "Arbeitszeit"
+    assert state.core_until == datetime(2026, 11, 25, 18, 0)
+
+
+def test_parse_state_ignores_inactive_core_window():
+    state = awake.parse_state(_status(core={
+        "enabled": True,
+        "active": False,
+        "current_window_label": None,
+        "current_window_ends_at": None,
+        "next_start": "2026-11-26T08:00:00",
+    }))
+    assert (state.core_active, state.core_label, state.core_until) == (False, None, None)
 
 
 def test_parse_state_garbage_raises():
     with pytest.raises(AwakeError):
-        awake.parse_state({"always_awake_enabled": True, "always_awake_until": "kaputt"})
+        awake.parse_state(_status(True, "kaputt"))
 
 
 def test_checked_choice():
@@ -69,38 +99,83 @@ def test_checked_choice():
     assert awake.checked_choice(AwakeState(True, NOW)) is None
 
 
+def test_deadline_text_for_any_deadline():
+    """Auch eine frei gewaehlte Frist aus der Web-UI bekommt einen Eintrag."""
+    custom = NOW + timedelta(hours=3, minutes=17)
+    assert awake.deadline_text(AwakeState(True, custom), NOW) == (
+        f"Bis {custom.astimezone():%H:%M}"
+    )
+    assert awake.deadline_text(AwakeState(True, None), NOW) is None
+    assert awake.deadline_text(AwakeState(False, None), NOW) is None
+
+
+def test_deadline_text_on_another_day_names_the_date():
+    later = NOW + timedelta(days=3)
+    assert awake.deadline_text(AwakeState(True, later), NOW) == (
+        f"Bis {later.astimezone():%d.%m. %H:%M}"
+    )
+
+
+def test_core_text():
+    ends = datetime(2026, 11, 25, 18, 0)        # naiv = Ortszeit
+    now = ends.astimezone() - timedelta(hours=2)
+    assert awake.core_text(AwakeState(False, None), now) is None
+    assert awake.core_text(
+        AwakeState(False, None, core_active=True, core_until=ends), now
+    ) == "Kernzeit bis 18:00"
+    assert awake.core_text(
+        AwakeState(False, None, core_active=True, core_label="Büro", core_until=ends), now
+    ) == "Kernzeit „Büro“ bis 18:00"
+    assert awake.core_text(AwakeState(False, None, core_active=True), now) == "Kernzeit aktiv"
+
+
 def test_submenu_title():
-    assert awake.submenu_title(AwakeState(False, None)) == "Always Awake"
-    assert awake.submenu_title(AwakeState(True, None)) == "Always Awake"
+    assert awake.submenu_title(AwakeState(False, None), NOW) == "Always Awake"
+    assert awake.submenu_title(AwakeState(True, None), NOW) == "Always Awake"
     local = NOW.astimezone()
     assert (
-        awake.submenu_title(AwakeState(True, NOW))
+        awake.submenu_title(AwakeState(True, NOW), NOW)
         == f"Always Awake — bis {local:%H:%M}"
     )
 
 
-def test_fetch_state_ok():
-    client = MagicMock()
-    client.get.return_value = _response(
-        200, {"always_awake_enabled": True, "always_awake_until": None}
+def test_submenu_title_shows_core_window_when_off():
+    ends = NOW + timedelta(hours=2)
+    state = AwakeState(False, None, core_active=True, core_until=ends)
+    assert awake.submenu_title(state, NOW) == (
+        f"Always Awake — Kernzeit bis {ends.astimezone():%H:%M}"
     )
+    # Eine eigene Frist hat Vorrang im Titel, die Kernzeit steht dann im Menue.
+    own = NOW + timedelta(hours=1)
+    assert awake.submenu_title(
+        AwakeState(True, own, core_active=True, core_until=ends), NOW
+    ) == f"Always Awake — bis {own.astimezone():%H:%M}"
+
+
+def test_fetch_state_reads_the_status():
+    client = MagicMock()
+    client.get.return_value = _response(200, _status(True))
     assert awake.fetch_state(client, MagicMock()) == AwakeState(True, None)
-    assert client.get.call_args.args[0] == awake.SLEEP_CONFIG_PATH
+    assert client.get.call_args.args[0] == awake.SLEEP_STATUS_PATH
 
 
-def test_apply_uses_the_response_not_the_assumption():
-    """Das Backend kuerzt die Frist auf das Kernzeitfenster."""
+def test_apply_uses_the_status_not_the_assumption():
+    """Das Backend kuerzt die Frist auf das Kernzeitfenster; angezeigt wird der
+    Status nach dem Setzen."""
     shortened = NOW + timedelta(minutes=20)
     client = MagicMock()
     client.put.return_value = _response(
         200,
         {"always_awake_enabled": True, "always_awake_until": shortened.isoformat()},
     )
+    client.get.return_value = _response(200, _status(True, shortened.isoformat()))
     state = awake.apply(client, AwakeChoice.EIGHT_HOURS, NOW, MagicMock())
     assert state == AwakeState(True, shortened)
+    assert client.put.call_args.args[0] == awake.SLEEP_CONFIG_PATH
     assert client.put.call_args.kwargs["json"] == awake.payload_for(
         AwakeChoice.EIGHT_HOURS, NOW
     )
+    assert client.get.call_args.args[0] == awake.SLEEP_STATUS_PATH
 
 
 def test_401_refreshes_once_then_succeeds():
@@ -109,6 +184,7 @@ def test_401_refreshes_once_then_succeeds():
         _response(401),
         _response(200, {"always_awake_enabled": False, "always_awake_until": None}),
     ]
+    client.get.return_value = _response(200, _status(False))
     refresh = MagicMock()
     assert awake.apply(client, AwakeChoice.OFF, NOW, refresh) == AwakeState(False, None)
     refresh.assert_called_once()
