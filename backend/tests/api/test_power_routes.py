@@ -8,6 +8,8 @@ Tests:
 - Power demands management
 - Auto-scaling configuration
 """
+from pathlib import Path
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -16,9 +18,8 @@ from fastapi.testclient import TestClient
 def _patch_session_local(db_session, monkeypatch):
     """Patch ``SessionLocal`` so code that bypasses DI uses the test DB.
 
-    The ``_get_admin_or_service_token`` dependency in the power routes module
-    creates its own ``SessionLocal()`` session (bypassing FastAPI dependency
-    injection).  In CI the app engine points to an empty SQLite file with no
+    Code in the power routes that opens ``SessionLocal()`` itself (bypassing
+    FastAPI dependency injection) would otherwise hit the wrong database.  In CI the app engine points to an empty SQLite file with no
     tables, causing "no such table: users" errors.  This fixture replaces
     ``SessionLocal`` with a factory bound to the test engine so all code paths
     share the same database that already has tables and seed users.
@@ -159,6 +160,21 @@ class TestPowerDemands:
             headers=admin_headers
         )
         assert response.status_code == 404
+
+    def test_service_token_header_no_longer_authenticates(self, client: TestClient):
+        response = client.post(
+            "/api/power/demands",
+            json={"source": "x", "level": "medium"},
+            headers={"X-Service-Token": "irgendwas"},
+        )
+        assert response.status_code == 401
+
+
+def test_no_service_token_path_left():
+    root = Path(__file__).resolve().parents[2] / "app"
+    for rel in ("api/routes/power.py", "core/config.py", "services/scheduler/worker.py"):
+        src = (root / rel).read_text(encoding="utf-8")
+        assert "X-Service-Token" not in src and "scheduler_service_token" not in src, rel
 
 
 class TestPowerHistory:

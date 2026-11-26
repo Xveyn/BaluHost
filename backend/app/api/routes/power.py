@@ -5,66 +5,15 @@ Provides endpoints for CPU power profile management and monitoring.
 """
 
 import logging
-import secrets
 from datetime import datetime, timezone
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from fastapi.security import OAuth2PasswordBearer
 
 from app.api import deps
-from app.core.config import settings
 from app.core.rate_limiter import user_limiter, get_limit
 
 logger = logging.getLogger(__name__)
 
-_oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.api_prefix}/auth/login", auto_error=False)
-
-
-async def _get_admin_or_service_token(
-    request: Request,
-    token: Optional[str] = Depends(_oauth2_scheme),
-) -> None:
-    """
-    Accept either a valid admin JWT or the scheduler service token.
-
-    The service token is sent as ``X-Service-Token`` header by the
-    scheduler worker process.  This avoids having to create a fake
-    user session for internal IPC.
-    """
-    # 1. Check X-Service-Token header
-    service_token = request.headers.get("X-Service-Token")
-    if service_token and secrets.compare_digest(
-        service_token.encode("utf-8"), settings.scheduler_service_token.encode("utf-8")
-    ):
-        return  # Service token valid
-
-    # 2. Fall back to normal admin JWT auth
-    if not token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required",
-        )
-    # Delegate to the standard admin dependency (re-uses get_current_admin logic)
-    from app.services import auth as auth_service, users as user_service
-    from app.core.database import SessionLocal
-    try:
-        payload = auth_service.decode_token(token)
-    except auth_service.InvalidTokenError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token",
-        )
-    db = SessionLocal()
-    try:
-        user = user_service.get_user(payload.sub, db=db)
-        if not user:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
-        user_pub = user_service.serialize_user(user)
-        if user_pub.role != "admin":
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin required")
-    finally:
-        db.close()
 from app.schemas.power import (
     AutoScalingConfig,
     AutoScalingConfigResponse,
@@ -197,10 +146,10 @@ async def get_power_demands(
 async def register_power_demand(
     request: Request, response: Response,
     body: RegisterDemandRequest,
-    _auth: None = Depends(_get_admin_or_service_token),
+    current_user: UserPublic = Depends(deps.get_current_admin),
 ) -> RegisterDemandResponse:
     """
-    Register a power demand programmatically (admin or service token).
+    Register a power demand programmatically (admin only).
 
     Use this for custom integrations that need to request
     specific power levels for their operations.
@@ -229,10 +178,10 @@ async def register_power_demand(
 async def unregister_power_demand(
     request: Request, response: Response,
     body: UnregisterDemandRequest,
-    _auth: None = Depends(_get_admin_or_service_token),
+    current_user: UserPublic = Depends(deps.get_current_admin),
 ) -> UnregisterDemandResponse:
     """
-    Unregister a power demand (admin or service token).
+    Unregister a power demand (admin only).
 
     Removes a previously registered demand, potentially allowing
     the system to scale down to a lower power profile.
